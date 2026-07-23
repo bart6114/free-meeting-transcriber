@@ -4,19 +4,14 @@ import type { DownloadProgress, ToastCondition, ToastType } from "./types";
 
 import type { DevtoolsToastPreview } from "~/store/zustand/devtools-toast-preview";
 
-const ANARLOG_ICON_SRC = "/assets/anarlog-icon.png";
-
 type ToastRegistryEntry = {
   toast: ToastType;
   condition: ToastCondition;
 };
 
 type ToastRegistryParams = {
-  isAuthenticated: boolean;
-  isAuthLoading: boolean;
   hasLLMConfigured: boolean;
   hasSttConfigured: boolean;
-  hasProLlmConfigured: boolean;
   isAiTranscriptionTabActive: boolean;
   isAiIntelligenceTabActive: boolean;
   isBatchTranscribingInActiveTranscriptTab: boolean;
@@ -26,24 +21,19 @@ type ToastRegistryParams = {
   activeDownloads: DownloadProgress[];
   localSttStatus: ServerStatus | null;
   isLocalSttModel: boolean;
-  onSignIn: () => void | Promise<void>;
   onOpenLLMSettings: () => void;
   onOpenSTTSettings: () => void;
 };
 
 type DevtoolsToastPreviewParams = {
   preview: DevtoolsToastPreview;
-  onSignIn: () => void | Promise<void>;
   onOpenLLMSettings: () => void;
   onOpenSTTSettings: () => void;
 };
 
 export function createToastRegistry({
-  isAuthenticated,
-  isAuthLoading,
   hasLLMConfigured,
   hasSttConfigured,
-  hasProLlmConfigured,
   isAiTranscriptionTabActive,
   isAiIntelligenceTabActive,
   isBatchTranscribingInActiveTranscriptTab,
@@ -53,7 +43,6 @@ export function createToastRegistry({
   activeDownloads,
   localSttStatus,
   isLocalSttModel,
-  onSignIn,
   onOpenLLMSettings,
   onOpenSTTSettings,
 }: ToastRegistryParams): ToastRegistryEntry[] {
@@ -137,45 +126,6 @@ export function createToastRegistry({
       condition: () =>
         hasSttConfigured && !hasLLMConfigured && !isAiIntelligenceTabActive,
     },
-    {
-      toast: {
-        id: "pro-requires-login",
-        icon: (
-          <img
-            src={ANARLOG_ICON_SRC}
-            alt="Anarlog Pro"
-            className="size-5 object-contain object-center"
-          />
-        ),
-        description: "Sign in required",
-        primaryAction: {
-          label: "Sign in",
-          onClick: onSignIn,
-        },
-        dismissible: true,
-      },
-      // suppress until auth resolves to avoid flash on startup
-      condition: () =>
-        !isAuthLoading && !isAuthenticated && hasProLlmConfigured,
-    },
-    {
-      toast: {
-        id: "upgrade-to-pro",
-        description: "Pro features available",
-        primaryAction: {
-          label: "Upgrade",
-          onClick: onSignIn,
-        },
-        dismissible: true,
-      },
-      // suppress until auth resolves to avoid flash on startup
-      condition: () =>
-        !isAuthLoading &&
-        !isAuthenticated &&
-        hasLLMConfigured &&
-        hasSttConfigured &&
-        !hasProLlmConfigured,
-    },
   ];
 }
 
@@ -193,7 +143,6 @@ export function getToastToShow(
 
 export function createDevtoolsToastPreview({
   preview,
-  onSignIn,
   onOpenLLMSettings,
   onOpenSTTSettings,
 }: DevtoolsToastPreviewParams): ToastType {
@@ -235,16 +184,6 @@ export function createDevtoolsToastPreview({
         description: "Downloading model",
         dismissible: false,
         loading: true,
-      };
-    case "pro":
-      return {
-        id: "devtools-upgrade-to-pro",
-        description: "Pro features available",
-        primaryAction: {
-          label: "Upgrade",
-          onClick: onSignIn,
-        },
-        dismissible: true,
       };
   }
 }

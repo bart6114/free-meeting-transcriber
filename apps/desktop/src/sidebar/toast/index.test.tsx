@@ -2,7 +2,6 @@ import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  signIn: vi.fn(),
   dismissToast: vi.fn(),
   openNew: vi.fn(),
   updateSettingsTabState: vi.fn(),
@@ -48,10 +47,6 @@ vi.mock("@hypr/ui/components/ui/toast", () => ({
     loading: mocks.loading,
     dismiss: mocks.dismiss,
   },
-}));
-
-vi.mock("~/auth", () => ({
-  useAuth: () => ({ session: null, signIn: mocks.signIn }),
 }));
 
 vi.mock("~/contexts/notifications", () => ({
@@ -115,7 +110,6 @@ import { ToastNotifications } from "./index";
 describe("ToastNotifications", () => {
   beforeEach(() => {
     vi.useFakeTimers();
-    mocks.signIn.mockClear();
     mocks.dismissToast.mockClear();
     mocks.message.mockClear();
     mocks.error.mockClear();
@@ -142,36 +136,59 @@ describe("ToastNotifications", () => {
   });
 
   it("routes registry notifications through Sonner", () => {
+    mocks.config.current_llm_provider = null;
+    mocks.config.current_llm_model = null;
+
     render(<ToastNotifications />);
 
     act(() => vi.advanceTimersByTime(500));
 
     expect(mocks.message).toHaveBeenCalledWith(
-      "Pro features available",
+      "Language model needed",
       expect.objectContaining({
-        id: "upgrade-to-pro",
+        id: "missing-llm",
         duration: Infinity,
         closeButton: true,
-        action: expect.objectContaining({ label: "Upgrade" }),
+        action: expect.objectContaining({ label: "Add" }),
       }),
     );
 
     const options = mocks.message.mock.calls[0][1];
     options.action.onClick();
-    expect(mocks.signIn).toHaveBeenCalledOnce();
+    expect(mocks.openNew).toHaveBeenCalledWith({
+      type: "settings",
+      state: { tab: "intelligence" },
+    });
 
     options.onDismiss();
     expect(mocks.dismissToast).not.toHaveBeenCalled();
   });
 
   it("persists explicit Sonner dismissals", () => {
+    mocks.config.current_llm_provider = null;
+    mocks.config.current_llm_model = null;
+
     render(<ToastNotifications />);
 
     act(() => vi.advanceTimersByTime(500));
 
     const options = mocks.message.mock.calls[0][1];
     options.onDismiss();
-    expect(mocks.dismissToast).toHaveBeenCalledWith("upgrade-to-pro");
+    expect(mocks.dismissToast).toHaveBeenCalledWith("missing-llm");
+  });
+
+  it("never surfaces a hosted-subscription toast for a fully-configured install", () => {
+    // Regression guard: with LLM+STT both configured, the removed
+    // pro-requires-login/upgrade-to-pro branches used to fire here because
+    // auth is permanently signed-out — there must be no toast at all now.
+    render(<ToastNotifications />);
+
+    act(() => vi.advanceTimersByTime(500));
+
+    expect(mocks.message).not.toHaveBeenCalled();
+    expect(mocks.error).not.toHaveBeenCalled();
+    expect(mocks.warning).not.toHaveBeenCalled();
+    expect(mocks.loading).not.toHaveBeenCalled();
   });
 
   it("uses a Sonner loading toast for model downloads", () => {

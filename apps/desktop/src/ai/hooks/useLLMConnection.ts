@@ -42,14 +42,18 @@ type LLMConnectionResult = {
   status: LLMConnectionStatus;
 };
 
-export const useLanguageModel = (task?: CharTask): LanguageModelV3 | null => {
+// `_task` is unused now that createLanguageModel no longer varies by task
+// (the hosted per-task tracing fetch it fed was removed in Task 7); kept as
+// a parameter since ~11 call sites already pass "chat"/"title"/"enhance"
+// and a future provider may need task-scoped routing again.
+export const useLanguageModel = (_task?: CharTask): LanguageModelV3 | null => {
   const { conn } = useLLMConnection();
 
   return useMemo(() => {
     if (!conn) return null;
 
     return createLanguageModel(conn);
-  }, [conn, task]);
+  }, [conn]);
 };
 
 export const useLLMConnection = (): LLMConnectionResult => {

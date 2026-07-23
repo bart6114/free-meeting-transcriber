@@ -292,9 +292,6 @@ function useDevtoolsPanelActions() {
         case "toasts:preview:download":
           void showToastPreviewInMainWindow("download");
           return;
-        case "toasts:preview:pro":
-          void showToastPreviewInMainWindow("pro");
-          return;
         case "toasts:clear":
           clearToastPreview();
           return;

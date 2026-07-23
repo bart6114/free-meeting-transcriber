@@ -10,7 +10,6 @@ import {
 import type { ToastType } from "./types";
 import { useDismissedToasts } from "./useDismissedToasts";
 
-import { useAuth } from "~/auth";
 import { useNotifications } from "~/contexts/notifications";
 import { useConfigValues } from "~/shared/config";
 import { useLatestRef } from "~/shared/hooks/useLatestRef";
@@ -22,7 +21,6 @@ import { isConfiguredSttModel } from "~/stt/capabilities";
 import { useListener } from "~/stt/contexts";
 
 export function ToastNotifications() {
-  const auth = useAuth();
   // Cloud sync was removed with accounts/billing (Task 4) — there is never
   // an initial sync in progress to surface as a toast.
   const cloudsyncInitialSyncToastId: string | null = null;
@@ -36,8 +34,6 @@ export function ToastNotifications() {
     isLocalSttModel,
   } = useNotifications();
 
-  const isAuthenticated = !!auth?.session;
-  const isAuthLoading = auth.session === undefined;
   const {
     current_llm_provider,
     current_llm_model,
@@ -54,9 +50,6 @@ export function ToastNotifications() {
     current_stt_provider,
     current_stt_model,
   );
-  // STT is on-device only now — there is no "pro"/cloud STT state anymore,
-  // only the LLM side can still be hosted (hyprnote).
-  const hasProLlmConfigured = current_llm_provider === "hyprnote";
 
   const currentTab = useTabs((state) => state.currentTab);
   const devtoolsPreview = useDevtoolsToastPreview((state) => state.preview);
@@ -85,10 +78,6 @@ export function ToastNotifications() {
   );
   const setToastActionTarget = useToastAction((state) => state.setTarget);
 
-  const handleSignIn = useCallback(async () => {
-    await auth?.signIn();
-  }, [auth]);
-
   const openAiTab = useCallback(
     (tab: "intelligence" | "transcription") => {
       if (currentTab?.type === "settings") {
@@ -112,11 +101,8 @@ export function ToastNotifications() {
   const registry = useMemo(
     () =>
       createToastRegistry({
-        isAuthenticated,
-        isAuthLoading,
         hasLLMConfigured,
         hasSttConfigured,
-        hasProLlmConfigured,
         isAiTranscriptionTabActive,
         isAiIntelligenceTabActive,
         isBatchTranscribingInActiveTranscriptTab,
@@ -126,16 +112,12 @@ export function ToastNotifications() {
         activeDownloads,
         localSttStatus,
         isLocalSttModel,
-        onSignIn: handleSignIn,
         onOpenLLMSettings: handleOpenLLMSettings,
         onOpenSTTSettings: handleOpenSTTSettings,
       }),
     [
-      isAuthenticated,
-      isAuthLoading,
       hasLLMConfigured,
       hasSttConfigured,
-      hasProLlmConfigured,
       isAiTranscriptionTabActive,
       isAiIntelligenceTabActive,
       isBatchTranscribingInActiveTranscriptTab,
@@ -145,7 +127,6 @@ export function ToastNotifications() {
       activeDownloads,
       localSttStatus,
       isLocalSttModel,
-      handleSignIn,
       handleOpenLLMSettings,
       handleOpenSTTSettings,
     ],
@@ -160,17 +141,11 @@ export function ToastNotifications() {
       devtoolsPreview
         ? createDevtoolsToastPreview({
             preview: devtoolsPreview.type,
-            onSignIn: handleSignIn,
             onOpenLLMSettings: handleOpenLLMSettings,
             onOpenSTTSettings: handleOpenSTTSettings,
           })
         : null,
-    [
-      devtoolsPreview,
-      handleSignIn,
-      handleOpenLLMSettings,
-      handleOpenSTTSettings,
-    ],
+    [devtoolsPreview, handleOpenLLMSettings, handleOpenSTTSettings],
   );
 
   const registryPriorityToast =

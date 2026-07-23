@@ -7,11 +7,8 @@ import {
 } from "./registry";
 
 const baseParams = {
-  isAuthenticated: true,
-  isAuthLoading: false,
   hasLLMConfigured: true,
   hasSttConfigured: true,
-  hasProLlmConfigured: false,
   isAiTranscriptionTabActive: false,
   isAiIntelligenceTabActive: false,
   isBatchTranscribingInActiveTranscriptTab: false,
@@ -21,7 +18,6 @@ const baseParams = {
   activeDownloads: [],
   localSttStatus: null,
   isLocalSttModel: false,
-  onSignIn: vi.fn(),
   onOpenLLMSettings: vi.fn(),
   onOpenSTTSettings: vi.fn(),
 };
@@ -98,37 +94,26 @@ describe("sidebar toast registry", () => {
     expect(toast?.loading).toBe(true);
   });
 
-  it("renders the pro upgrade toast without an icon", () => {
-    const toast = getToastToShow(
-      createToastRegistry({
-        ...baseParams,
-        isAuthenticated: false,
-      }),
-      () => false,
-    );
-    const previewToast = createDevtoolsToastPreview({
-      preview: "pro",
-      onSignIn: vi.fn(),
-      onOpenLLMSettings: vi.fn(),
-      onOpenSTTSettings: vi.fn(),
-    });
+  it("no longer offers a hosted-subscription upgrade toast", () => {
+    // Regression guard for the removed pro-requires-login/upgrade-to-pro
+    // branches: a fully-configured install must never surface either id,
+    // even in the "signed out" shape auth is permanently stuck in now that
+    // accounts/billing are gone.
+    const toast = getToastToShow(createToastRegistry(baseParams), () => false);
 
-    expect(toast?.id).toBe("upgrade-to-pro");
-    expect(toast?.description).toBe("Pro features available");
-    expect(toast?.icon).toBeUndefined();
-    expect(previewToast.icon).toBeUndefined();
+    expect(toast?.id).not.toBe("upgrade-to-pro");
+    expect(toast?.id).not.toBe("pro-requires-login");
+    expect(toast).toBeNull();
   });
 
   it("creates devtools previews with app toast content", () => {
     const languageModelToast = createDevtoolsToastPreview({
       preview: "language-model",
-      onSignIn: vi.fn(),
       onOpenLLMSettings: vi.fn(),
       onOpenSTTSettings: vi.fn(),
     });
     const downloadToast = createDevtoolsToastPreview({
       preview: "download",
-      onSignIn: vi.fn(),
       onOpenLLMSettings: vi.fn(),
       onOpenSTTSettings: vi.fn(),
     });
