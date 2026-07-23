@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/react";
 import {
   type ErrorRouteComponent,
   NotFoundRouteComponent,
@@ -13,7 +12,7 @@ import { Button } from "@hypr/ui/components/ui/button";
 
 export const ErrorComponent: ErrorRouteComponent = ({ error }) => {
   useEffect(() => {
-    Sentry.captureException(error);
+    console.error(error);
   }, [error]);
 
   const handleRestart = async () => {

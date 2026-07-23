@@ -372,19 +372,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "analytics"
-version = "0.1.0"
-dependencies = [
- "posthog-rs",
- "serde",
- "serde_json",
- "specta",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "anarlog-cli"
 version = "0.1.0"
 dependencies = [
@@ -980,18 +967,6 @@ dependencies = [
  "event-listener-strategy",
  "futures-core",
  "pin-project-lite",
-]
-
-[[package]]
-name = "async-compression"
-version = "0.4.41"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0f9ee0f6e02ffd7ad5816e9464499fba7b3effd01123b515c41d1697c43dad1"
-dependencies = [
- "compression-codecs",
- "compression-core",
- "pin-project-lite",
- "tokio",
 ]
 
 [[package]]
@@ -3283,23 +3258,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "compression-codecs"
-version = "0.4.37"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb7b51a7d9c967fc26773061ba86150f19c50c0d65c887cb1fbe295fd16619b7"
-dependencies = [
- "compression-core",
- "flate2",
- "memchr",
-]
-
-[[package]]
-name = "compression-core"
-version = "0.4.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75984efb6ed102a0d42db99afb6c1948f0380d1d91808d5529916e6c08b49d8d"
-
-[[package]]
 name = "concurrent-queue"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4465,7 +4423,6 @@ dependencies = [
  "intercept",
  "pico-args",
  "ractor",
- "sentry",
  "serde",
  "serde_json",
  "specta",
@@ -4494,7 +4451,6 @@ dependencies = [
  "tauri-plugin-dictation",
  "tauri-plugin-dock",
  "tauri-plugin-export",
- "tauri-plugin-flag",
  "tauri-plugin-fs-sync",
  "tauri-plugin-fs2",
  "tauri-plugin-git",
@@ -4521,7 +4477,6 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-relay",
  "tauri-plugin-screen",
- "tauri-plugin-sentry",
  "tauri-plugin-settings",
  "tauri-plugin-sfx",
  "tauri-plugin-shell",
@@ -13012,25 +12967,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "posthog-rs"
-version = "0.5.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3862eb754386a1273612a885e961b19be0bb08e6d99e483557af41236d0dac12"
-dependencies = [
- "chrono",
- "derive_builder",
- "regex",
- "reqwest 0.13.2",
- "semver",
- "serde",
- "serde_json",
- "sha1",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
 name = "potential_utf"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -17292,18 +17228,12 @@ dependencies = [
 name = "tauri-plugin-analytics"
 version = "0.1.0"
 dependencies = [
- "analytics",
- "host",
  "serde",
  "serde_json",
  "specta",
  "specta-typescript",
- "strum 0.28.0",
  "tauri",
  "tauri-plugin",
- "tauri-plugin-misc",
- "tauri-plugin-store",
- "tauri-plugin-store2",
  "tauri-specta",
  "thiserror 2.0.18",
  "tokio",
@@ -17612,23 +17542,6 @@ dependencies = [
  "serde",
  "specta",
  "specta-typescript",
- "tauri",
- "tauri-plugin",
- "tauri-specta",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
-name = "tauri-plugin-flag"
-version = "0.1.0"
-dependencies = [
- "analytics",
- "host",
- "serde",
- "specta",
- "specta-typescript",
- "strum 0.28.0",
  "tauri",
  "tauri-plugin",
  "tauri-specta",
@@ -19518,18 +19431,13 @@ version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
 dependencies = [
- "async-compression",
  "bitflags 2.11.1",
  "bytes",
- "futures-core",
  "futures-util",
  "http 1.4.0",
  "http-body 1.0.1",
- "http-body-util",
  "iri-string",
  "pin-project-lite",
- "tokio",
- "tokio-util",
  "tower 0.5.3",
  "tower-layer",
  "tower-service",

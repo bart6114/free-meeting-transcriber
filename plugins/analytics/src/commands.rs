@@ -1,10 +1,10 @@
-use crate::AnalyticsPluginExt;
+use crate::{AnalyticsPayload, AnalyticsPluginExt, PropertiesPayload};
 
 #[tauri::command]
 #[specta::specta]
 pub(crate) fn event_fire_and_forget<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    payload: hypr_analytics::AnalyticsPayload,
+    payload: AnalyticsPayload,
 ) {
     app.analytics().event_fire_and_forget(payload);
 }
@@ -13,7 +13,7 @@ pub(crate) fn event_fire_and_forget<R: tauri::Runtime>(
 #[specta::specta]
 pub(crate) async fn event<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    payload: hypr_analytics::AnalyticsPayload,
+    payload: AnalyticsPayload,
 ) -> Result<(), String> {
     app.analytics()
         .event(payload)
@@ -25,7 +25,7 @@ pub(crate) async fn event<R: tauri::Runtime>(
 #[specta::specta]
 pub(crate) async fn set_properties<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
-    payload: hypr_analytics::PropertiesPayload,
+    payload: PropertiesPayload,
 ) -> Result<(), String> {
     app.analytics()
         .set_properties(payload)
@@ -57,7 +57,7 @@ pub(crate) async fn is_disabled<R: tauri::Runtime>(
 pub(crate) async fn identify<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     user_id: String,
-    payload: hypr_analytics::PropertiesPayload,
+    payload: PropertiesPayload,
 ) -> Result<(), String> {
     app.analytics()
         .identify(user_id, payload)

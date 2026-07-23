@@ -76,7 +76,6 @@
     "export:default",
     "autostart:default",
     "js:default",
-    "flag:default",
     "relay:default",
     "shortcut:default",
     "dictation:default",

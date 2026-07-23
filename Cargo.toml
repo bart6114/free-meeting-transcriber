@@ -30,7 +30,6 @@ hypr-agent-access = { path = "crates/agent-access", package = "agent-access" }
 hypr-agent-core = { path = "crates/agent-core", package = "agent-core" }
 hypr-am = { path = "crates/am", package = "am" }
 hypr-amp = { path = "crates/amp", package = "amp" }
-hypr-analytics = { path = "crates/analytics", package = "analytics" }
 hypr-api-agent = { path = "crates/api-agent", package = "api-agent" }
 hypr-api-claw = { path = "crates/api-claw", package = "api-claw" }
 hypr-api-client = { path = "crates/api-client", package = "api-client" }
@@ -169,7 +168,6 @@ keyring = "4.1.4"
 legacy-db-core = { path = "legacy/db-core", package = "legacy-db-core" }
 legacy-db-parser = { path = "legacy/db-parser", package = "db-parser" }
 legacy-db-user = { path = "legacy/db-user", package = "db-user" }
-posthog-rs = "0.5"
 progenitor-client = "0.13"
 
 openai-transcription = { path = "crates/openai-transcription", package = "openai-transcription" }
@@ -210,7 +208,6 @@ tauri-plugin-detect = { path = "plugins/detect" }
 tauri-plugin-dictation = { path = "plugins/dictation" }
 tauri-plugin-dock = { path = "plugins/dock" }
 tauri-plugin-export = { path = "plugins/export" }
-tauri-plugin-flag = { path = "plugins/flag" }
 tauri-plugin-fs-sync = { path = "plugins/fs-sync" }
 tauri-plugin-fs2 = { path = "plugins/fs2" }
 tauri-plugin-git = { path = "plugins/git" }

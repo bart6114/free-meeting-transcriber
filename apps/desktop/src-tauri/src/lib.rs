@@ -67,43 +67,6 @@ pub async fn main() {
             None => (None, None),
         };
 
-    let sentry_client = {
-        let dsn = option_env!("SENTRY_DSN");
-
-        if let Some(dsn) = dsn {
-            let release =
-                option_env!("APP_VERSION").map(|v| format!("hyprnote-desktop@{}", v).into());
-
-            let client = sentry::init((
-                dsn,
-                sentry::ClientOptions {
-                    release,
-                    traces_sample_rate: 1.0,
-                    auto_session_tracking: false,
-                    ..Default::default()
-                },
-            ));
-
-            sentry::configure_scope(|scope| {
-                scope.set_tag("service.namespace", "hyprnote");
-                scope.set_tag("service.name", "desktop");
-                scope.set_tag("enduser.pseudo.id", hypr_host::fingerprint());
-                scope.set_user(Some(sentry::User {
-                    id: Some(hypr_host::fingerprint()),
-                    ..Default::default()
-                }));
-            });
-
-            Some(client)
-        } else {
-            None
-        }
-    };
-
-    let _guard = sentry_client
-        .as_ref()
-        .map(|client| tauri_plugin_sentry::minidump::init(client));
-
     let audio: std::sync::Arc<dyn hypr_audio_actual::AudioProvider> =
         create_audio_provider(&context.config().identifier);
 
@@ -192,7 +155,6 @@ pub async fn main() {
         .plugin(tauri_plugin_dictation::init())
         .plugin(tauri_plugin_windows::init())
         .plugin(tauri_plugin_js::init())
-        .plugin(tauri_plugin_flag::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_transcription::init())
         .plugin(tauri_plugin_tantivy::init())
@@ -209,10 +171,6 @@ pub async fn main() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--background"]),
         ));
-
-    if let Some(client) = sentry_client.as_ref() {
-        builder = builder.plugin(tauri_plugin_sentry::init_with_no_injection(client));
-    }
 
     #[cfg(any(debug_assertions, feature = "devtools"))]
     {
@@ -386,7 +344,6 @@ fn exit_after_startup_failure(error: &impl std::fmt::Display) -> ! {
     let message = startup_failure_message(error);
     eprintln!("{message}");
     tracing::error!(error = %error, "desktop startup failed");
-    sentry::capture_message(&message, sentry::Level::Error);
 
     #[cfg(target_os = "macos")]
     {

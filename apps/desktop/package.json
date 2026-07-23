@@ -74,7 +74,6 @@
     "@lobehub/icons": "^3.0.2",
     "@openrouter/ai-sdk-provider": "^2.5.1",
     "@pierre/diffs": "^1.1.15",
-    "@sentry/react": "^8.55.1",
     "@supabase/supabase-js": "^2.103.0",
     "@t3-oss/env-core": "^0.13.11",
     "@tanstack/react-form": "^1.29.0",

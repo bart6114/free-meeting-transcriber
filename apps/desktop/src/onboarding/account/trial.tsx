@@ -1,4 +1,3 @@
-import * as Sentry from "@sentry/react";
 import { useMutation } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
 
@@ -51,7 +50,7 @@ export function useTrialFlow(onContinue: () => void) {
       onContinue();
     },
     onError: async (e) => {
-      Sentry.captureException(e);
+      console.error(e);
       void analyticsCommands.event({
         event: "trial_flow_client_error",
         properties: { error: String(e) },

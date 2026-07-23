@@ -1,17 +1,11 @@
-use tauri::Manager;
-
 mod commands;
 mod error;
 mod ext;
-mod store;
+mod types;
 
 pub use error::{Error, Result};
 pub use ext::*;
-use store::*;
-
-pub use hypr_analytics::*;
-
-pub type ManagedState = hypr_analytics::AnalyticsClient;
+pub use types::*;
 
 const PLUGIN_NAME: &str = "analytics";
 
@@ -29,38 +23,16 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }
 
+// This is a no-phone-home fork: analytics is permanently disabled. The
+// plugin is kept as a no-op (rather than deleted) so the Tauri command
+// surface it exposes — names, argument/return types, permission files —
+// stays identical, which keeps the many `analyticsCommands.*` call sites in
+// `apps/desktop/src` compiling untouched.
 pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
     let specta_builder = make_specta_builder();
 
     tauri::plugin::Builder::new(PLUGIN_NAME)
         .invoke_handler(specta_builder.invoke_handler())
-        .setup(|app, _api| {
-            let posthog_key = {
-                #[cfg(not(debug_assertions))]
-                {
-                    let v = env!("POSTHOG_API_KEY");
-                    assert!(v.starts_with("phc_"));
-                    Some(v)
-                }
-
-                #[cfg(debug_assertions)]
-                {
-                    option_env!("POSTHOG_API_KEY")
-                }
-            };
-
-            let client = {
-                let mut builder = hypr_analytics::AnalyticsClientBuilder::default();
-                if let Some(key) = posthog_key {
-                    builder = builder.with_posthog(key);
-                }
-
-                builder.build()
-            };
-
-            assert!(app.manage(client));
-            Ok(())
-        })
         .build()
 }
 
@@ -90,38 +62,19 @@ mod test {
         ctx.config_mut().identifier = "com.hyprnote.dev".to_string();
         ctx.config_mut().version = Some("0.0.1".to_string());
 
-        builder
-            .plugin(tauri_plugin_store::Builder::default().build())
-            .plugin(tauri_plugin_store2::init())
-            .plugin(tauri_plugin_misc::init())
-            .plugin(init())
-            .build(ctx)
-            .unwrap()
+        builder.plugin(init()).build(ctx).unwrap()
     }
 
     #[tokio::test]
     async fn test_analytics() {
         let app = create_app(tauri::test::mock_builder());
+
         let result = app
             .analytics()
-            .event(hypr_analytics::AnalyticsPayload::builder("test_event").build())
+            .event(AnalyticsPayload::builder("test_event").build())
             .await;
         assert!(result.is_ok());
 
-        {
-            use tauri_plugin_misc::MiscPluginExt;
-            let git_hash = app.misc().get_git_hash();
-            println!("git_hash: {}", git_hash);
-        }
-
-        {
-            let version = app.config().version.clone();
-            println!("version: {}", version.unwrap_or_default());
-        }
-
-        {
-            let bundle_id = app.config().identifier.clone();
-            println!("bundle_id: {}", bundle_id);
-        }
+        assert!(app.analytics().is_disabled().unwrap());
     }
 }
