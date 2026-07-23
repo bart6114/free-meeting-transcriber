@@ -56,19 +56,19 @@ mod tests {
 
     #[test]
     fn test_reset_audio_capture_permission() {
-        let result = reset_audio_capture_permission("com.hyprnote.nightly");
+        let result = reset_audio_capture_permission("org.freemeetingtranscriber.dev");
         println!("reset_audio_capture_permission: {}", result);
     }
 
     #[test]
     fn test_reset_screen_capture_permission() {
-        let result = reset_screen_capture_permission("com.hyprnote.nightly");
+        let result = reset_screen_capture_permission("org.freemeetingtranscriber.dev");
         println!("reset_screen_capture_permission: {}", result);
     }
 
     #[test]
     fn test_reset_microphone_permission() {
-        let result = reset_microphone_permission("com.hyprnote.nightly");
+        let result = reset_microphone_permission("org.freemeetingtranscriber.dev");
         println!("reset_microphone_permission: {}", result);
     }
 }

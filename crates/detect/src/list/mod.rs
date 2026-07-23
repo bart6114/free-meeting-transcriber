@@ -16,6 +16,9 @@ pub fn list_installed_apps() -> Vec<InstalledApp> {
 }
 
 const SELF_BUNDLE_IDS: &[&str] = &[
+    "org.freemeetingtranscriber.dev",
+    "org.freemeetingtranscriber.stable",
+    "org.freemeetingtranscriber.staging",
     "com.hyprnote.dev",
     "com.hyprnote.stable",
     "com.hyprnote.staging",
@@ -23,6 +26,8 @@ const SELF_BUNDLE_IDS: &[&str] = &[
 ];
 
 const SELF_APP_NAMES: &[&str] = &[
+    "free meeting transcriber",
+    "free meeting transcriber staging",
     "anarlog",
     "anarlog staging",
     "anarlog nightly",
@@ -35,6 +40,8 @@ const SELF_APP_NAMES: &[&str] = &[
 ];
 
 const SELF_APP_PATH_SEGMENTS: &[&str] = &[
+    "/free meeting transcriber.app/",
+    "/free meeting transcriber staging.app/",
     "/anarlog.app/",
     "/anarlog staging.app/",
     "/anarlog nightly.app/",
@@ -96,12 +103,21 @@ mod tests {
 
     #[test]
     fn test_is_self_app_matches_known_bundle_ids() {
+        assert!(is_self_app(&app(
+            "org.freemeetingtranscriber.stable",
+            "Free Meeting Transcriber"
+        )));
         assert!(is_self_app(&app("com.hyprnote.stable", "Anarlog")));
         assert!(is_self_app(&app("com.hyprnote.Hyprnote", "Hyprnote")));
     }
 
     #[test]
     fn test_is_self_app_matches_renamed_app_names() {
+        assert!(is_self_app(&app("pid:41", "Free Meeting Transcriber")));
+        assert!(is_self_app(&app(
+            "pid:45",
+            "Free Meeting Transcriber Staging"
+        )));
         assert!(is_self_app(&app("pid:42", "Anarlog")));
         assert!(is_self_app(&app("pid:43", "Char Nightly")));
         assert!(is_self_app(&app("pid:44", "Hyprnote Staging")));
@@ -109,6 +125,10 @@ mod tests {
 
     #[test]
     fn test_is_self_app_matches_path_fallbacks() {
+        assert!(is_self_app(&app(
+            "/Applications/Free Meeting Transcriber.app/Contents/MacOS/free-meeting-transcriber",
+            "Unknown",
+        )));
         assert!(is_self_app(&app(
             "/Applications/Anarlog.app/Contents/MacOS/anarlog",
             "Unknown",

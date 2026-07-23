@@ -29,9 +29,15 @@ fn validate_secret_coordinate(caller: SecretCaller, scope: &str, key: &str) -> R
 
 fn secure_store_service(identifier: &str) -> String {
     let identifier = match identifier {
-        "com.hyprnote.dev" => "com.anarlog.dev",
-        "com.hyprnote.staging" => "com.anarlog.staging",
-        "com.hyprnote.stable" | "com.hyprnote.Hyprnote" => "com.anarlog.stable",
+        // The keychain service name has stayed `com.anarlog.*` across the
+        // Hyprnote -> Anarlog -> Free Meeting Transcriber identifier
+        // changes so upgraders keep finding their secrets without adding
+        // another legacy-lookup hop each rebrand.
+        "org.freemeetingtranscriber.dev" | "com.hyprnote.dev" => "com.anarlog.dev",
+        "org.freemeetingtranscriber.staging" | "com.hyprnote.staging" => "com.anarlog.staging",
+        "org.freemeetingtranscriber.stable" | "com.hyprnote.stable" | "com.hyprnote.Hyprnote" => {
+            "com.anarlog.stable"
+        }
         identifier => identifier,
     };
 
@@ -40,7 +46,7 @@ fn secure_store_service(identifier: &str) -> String {
 
 fn secure_store_account(identifier: &str, scope: &str, key: &str) -> String {
     let account = format!("{scope}:{key}");
-    if identifier == "com.hyprnote.dev" {
+    if identifier == "org.freemeetingtranscriber.dev" || identifier == "com.hyprnote.dev" {
         // Rotate away from dev items whose ACLs captured unstable ad-hoc signatures.
         format!("v2:{account}")
     } else {
@@ -416,6 +422,22 @@ mod tests {
     }
 
     #[test]
+    fn uses_anarlog_service_names_for_the_current_rebranded_identifiers_too() {
+        assert_eq!(
+            secure_store_service("org.freemeetingtranscriber.dev"),
+            "com.anarlog.dev.secure-store"
+        );
+        assert_eq!(
+            secure_store_service("org.freemeetingtranscriber.staging"),
+            "com.anarlog.staging.secure-store"
+        );
+        assert_eq!(
+            secure_store_service("org.freemeetingtranscriber.stable"),
+            "com.anarlog.stable.secure-store"
+        );
+    }
+
+    #[test]
     fn preserves_unknown_service_identifiers() {
         assert_eq!(
             secure_store_service("com.example.app"),
@@ -433,6 +455,14 @@ mod tests {
             secure_store_account("com.hyprnote.stable", "provider", "deepgram"),
             "provider:deepgram"
         );
+        assert_eq!(
+            secure_store_account("org.freemeetingtranscriber.dev", "provider", "deepgram"),
+            "v2:provider:deepgram"
+        );
+        assert_eq!(
+            secure_store_account("org.freemeetingtranscriber.stable", "provider", "deepgram"),
+            "provider:deepgram"
+        );
     }
 
     #[test]
@@ -446,6 +476,23 @@ mod tests {
                 ),
                 (
                     "com.hyprnote.dev.secure-store".to_string(),
+                    "provider:deepgram".to_string(),
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn migrates_dev_secret_locations_for_the_current_rebranded_identifier() {
+        assert_eq!(
+            legacy_secret_locations("org.freemeetingtranscriber.dev", "provider", "deepgram"),
+            vec![
+                (
+                    "com.anarlog.dev.secure-store".to_string(),
+                    "provider:deepgram".to_string(),
+                ),
+                (
+                    "org.freemeetingtranscriber.dev.secure-store".to_string(),
                     "provider:deepgram".to_string(),
                 ),
             ]

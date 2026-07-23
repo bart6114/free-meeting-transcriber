@@ -13,7 +13,10 @@ pub enum ShareOpenRequest {
 
 impl ShareOpenRequest {
     pub(crate) fn parse(parsed: &url::Url) -> Result<Self, crate::Error> {
-        if !matches!(parsed.scheme(), "hyprnote" | "hyprnote-staging")
+        if !matches!(
+            parsed.scheme(),
+            "freemeetingtranscriber" | "freemeetingtranscriber-staging"
+        )
             || parsed.host_str() != Some("share")
             || parsed.path() != "/open"
             || !parsed.username().is_empty()
@@ -105,7 +108,7 @@ mod tests {
 
     #[test]
     fn parses_only_account_and_handoff_routes() {
-        for scheme in ["hyprnote", "hyprnote-staging"] {
+        for scheme in ["freemeetingtranscriber", "freemeetingtranscriber-staging"] {
             assert!(matches!(
                 parse(&format!(
                     "{scheme}://share/open?mode=account&share_id={SHARE_ID}"
@@ -126,20 +129,33 @@ mod tests {
         let invalid = [
             format!("hypr://share/open?mode=account&share_id={SHARE_ID}"),
             format!("char://share/open?mode=account&share_id={SHARE_ID}"),
-            format!("hyprnote://share/open/?mode=account&share_id={SHARE_ID}"),
-            format!("hyprnote://share/open?mode=account&share_id={SHARE_ID}#fragment"),
-            format!("hyprnote://share/open?mode=account&share_id={SHARE_ID}&extra=1"),
-            format!("hyprnote://share/open?mode=account&share_id={SHARE_ID}&"),
-            format!("hyprnote://share/open?mode=account&share_id={SHARE_ID}&extra"),
-            format!("hyprnote://share/open?mode=account&mode=handoff&share_id={SHARE_ID}"),
-            format!("hyprnote://share/open?mode=account&request_id={REQUEST_ID}"),
-            format!("hyprnote://share/open?mode=handoff&share_id={SHARE_ID}"),
-            format!("hyprnote://share/open?mode=public&public_slug=s_deadbeef"),
-            format!("hyprnote://share/open?mode=link&token=secret&share_id={SHARE_ID}"),
-            "hyprnote://share/open?mode=account&share_id=00000000-0000-0000-0000-000000000000"
+            format!("hyprnote://share/open?mode=account&share_id={SHARE_ID}"),
+            format!("freemeetingtranscriber://share/open/?mode=account&share_id={SHARE_ID}"),
+            format!(
+                "freemeetingtranscriber://share/open?mode=account&share_id={SHARE_ID}#fragment"
+            ),
+            format!(
+                "freemeetingtranscriber://share/open?mode=account&share_id={SHARE_ID}&extra=1"
+            ),
+            format!("freemeetingtranscriber://share/open?mode=account&share_id={SHARE_ID}&"),
+            format!(
+                "freemeetingtranscriber://share/open?mode=account&share_id={SHARE_ID}&extra"
+            ),
+            format!(
+                "freemeetingtranscriber://share/open?mode=account&mode=handoff&share_id={SHARE_ID}"
+            ),
+            format!(
+                "freemeetingtranscriber://share/open?mode=account&request_id={REQUEST_ID}"
+            ),
+            format!("freemeetingtranscriber://share/open?mode=handoff&share_id={SHARE_ID}"),
+            format!("freemeetingtranscriber://share/open?mode=public&public_slug=s_deadbeef"),
+            format!(
+                "freemeetingtranscriber://share/open?mode=link&token=secret&share_id={SHARE_ID}"
+            ),
+            "freemeetingtranscriber://share/open?mode=account&share_id=00000000-0000-0000-0000-000000000000"
                 .to_string(),
             format!(
-                "hyprnote://share/open?mode=account&share_id={}",
+                "freemeetingtranscriber://share/open?mode=account&share_id={}",
                 SHARE_ID.to_uppercase()
             ),
         ];
@@ -152,11 +168,11 @@ mod tests {
     #[test]
     fn debug_output_redacts_external_identifiers() {
         let account = parse(&format!(
-            "hyprnote://share/open?mode=account&share_id={SHARE_ID}"
+            "freemeetingtranscriber://share/open?mode=account&share_id={SHARE_ID}"
         ))
         .unwrap();
         let handoff = parse(&format!(
-            "hyprnote://share/open?mode=handoff&request_id={REQUEST_ID}"
+            "freemeetingtranscriber://share/open?mode=handoff&request_id={REQUEST_ID}"
         ))
         .unwrap();
 

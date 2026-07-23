@@ -6,11 +6,11 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-const DEV_BUNDLE_ID: &str = "com.hyprnote.dev";
+const DEV_BUNDLE_ID: &str = "org.freemeetingtranscriber.dev";
 #[cfg(target_os = "macos")]
-const MANAGED_CLI_DIR: &str = ".anarlog-cli";
-const STABLE_BUNDLE_ID: &str = "com.hyprnote.stable";
-const STAGING_BUNDLE_ID: &str = "com.hyprnote.staging";
+const MANAGED_CLI_DIR: &str = ".fmtr-cli";
+const STABLE_BUNDLE_ID: &str = "org.freemeetingtranscriber.stable";
+const STAGING_BUNDLE_ID: &str = "org.freemeetingtranscriber.staging";
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, specta::Type)]
@@ -120,10 +120,10 @@ fn unavailable_status(command_name: &str, details: &str) -> EmbeddedCliStatus {
 
 fn command_name_from_identifier(identifier: &str) -> &'static str {
     match identifier {
-        STABLE_BUNDLE_ID => "anarlog",
-        STAGING_BUNDLE_ID => "anarlog-staging",
-        DEV_BUNDLE_ID => "anarlog-dev",
-        _ => "anarlog-dev",
+        STABLE_BUNDLE_ID => "fmtr",
+        STAGING_BUNDLE_ID => "fmtr-staging",
+        DEV_BUNDLE_ID => "fmtr-dev",
+        _ => "fmtr-dev",
     }
 }
 
@@ -302,7 +302,12 @@ fn is_legacy_app_cli_target(target: &Path) -> bool {
 
     matches!(
         app_name,
-        "Anarlog.app" | "Anarlog Staging.app" | "Anarlog Dev.app"
+        "Free Meeting Transcriber.app"
+            | "Free Meeting Transcriber Staging.app"
+            | "Free Meeting Transcriber Dev.app"
+            | "Anarlog.app"
+            | "Anarlog Staging.app"
+            | "Anarlog Dev.app"
     )
 }
 
@@ -489,13 +494,13 @@ mod tests {
 
     #[test]
     fn maps_bundle_id_to_command_name() {
-        assert_eq!(command_name_from_identifier(STABLE_BUNDLE_ID), "anarlog");
+        assert_eq!(command_name_from_identifier(STABLE_BUNDLE_ID), "fmtr");
         assert_eq!(
             command_name_from_identifier(STAGING_BUNDLE_ID),
-            "anarlog-staging"
+            "fmtr-staging"
         );
-        assert_eq!(command_name_from_identifier(DEV_BUNDLE_ID), "anarlog-dev");
-        assert_eq!(command_name_from_identifier("unknown"), "anarlog-dev");
+        assert_eq!(command_name_from_identifier(DEV_BUNDLE_ID), "fmtr-dev");
+        assert_eq!(command_name_from_identifier("unknown"), "fmtr-dev");
     }
 
     #[cfg(target_os = "macos")]
@@ -588,6 +593,25 @@ mod tests {
         let managed_path = dir.path().join(".anarlog-cli/anarlog/1.2.0");
         let app_executable_path = dir.path().join("Anarlog.app/Contents/MacOS/anarlog-cli");
         let install_path = dir.path().join("anarlog");
+        std::fs::create_dir_all(app_executable_path.parent().unwrap()).unwrap();
+        std::fs::write(&app_executable_path, "cli").unwrap();
+        std::os::unix::fs::symlink(&app_executable_path, &install_path).unwrap();
+
+        assert_eq!(
+            classify_installation(&install_path, &managed_path).unwrap(),
+            EmbeddedCliState::Missing
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn classifies_renamed_app_executable_symlink_as_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let managed_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
+        let app_executable_path = dir
+            .path()
+            .join("Free Meeting Transcriber.app/Contents/MacOS/anarlog-cli");
+        let install_path = dir.path().join("fmtr");
         std::fs::create_dir_all(app_executable_path.parent().unwrap()).unwrap();
         std::fs::write(&app_executable_path, "cli").unwrap();
         std::os::unix::fs::symlink(&app_executable_path, &install_path).unwrap();

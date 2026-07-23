@@ -37,17 +37,22 @@ fn resolve_default_path(data_dir: &Path) -> PathBuf {
 
 fn resolve_default_path_for_command(data_dir: &Path, command_name: Option<&OsStr>) -> PathBuf {
     let channel_identifier = match command_name.and_then(OsStr::to_str) {
-        Some("anarlog-dev") => Some("com.hyprnote.dev"),
-        Some("anarlog-staging") => Some("com.hyprnote.staging"),
+        Some("fmtr-dev") => Some("org.freemeetingtranscriber.dev"),
+        Some("fmtr-staging") => Some("org.freemeetingtranscriber.staging"),
         _ => None,
     };
     if let Some(identifier) = channel_identifier {
         return data_dir.join(identifier).join("app.db");
     }
 
-    let current = data_dir.join("anarlog").join("app.db");
+    let current = data_dir.join("free-meeting-transcriber").join("app.db");
     if current.is_file() {
         return current;
+    }
+
+    let legacy_anarlog = data_dir.join("anarlog").join("app.db");
+    if legacy_anarlog.is_file() {
+        return legacy_anarlog;
     }
 
     let legacy = data_dir.join("hyprnote").join("app.db");
@@ -68,30 +73,38 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_path_prefers_current_then_legacy_then_identifier() {
+    fn default_path_prefers_current_then_anarlog_then_hyprnote_then_identifier() {
         let dir = tempfile::tempdir().unwrap();
-        let current = dir.path().join("anarlog/app.db");
+        let current = dir.path().join("free-meeting-transcriber/app.db");
+        let anarlog = dir.path().join("anarlog/app.db");
         let legacy = dir.path().join("hyprnote/app.db");
         let identifier = dir.path().join("com.hyprnote.stable/app.db");
 
         std::fs::create_dir_all(identifier.parent().unwrap()).unwrap();
         std::fs::write(&identifier, "").unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("anarlog"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
             identifier
         );
 
         std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
         std::fs::write(&legacy, "").unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("anarlog"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
             legacy
+        );
+
+        std::fs::create_dir_all(anarlog.parent().unwrap()).unwrap();
+        std::fs::write(&anarlog, "").unwrap();
+        assert_eq!(
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
+            anarlog
         );
 
         std::fs::create_dir_all(current.parent().unwrap()).unwrap();
         std::fs::write(&current, "").unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("anarlog"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
             current
         );
     }
@@ -100,25 +113,25 @@ mod tests {
     fn default_path_targets_current_location_for_new_installs() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("anarlog"))),
-            dir.path().join("anarlog/app.db")
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
+            dir.path().join("free-meeting-transcriber/app.db")
         );
     }
 
     #[test]
     fn channel_commands_target_their_channel_database() {
         let dir = tempfile::tempdir().unwrap();
-        let stable = dir.path().join("anarlog/app.db");
+        let stable = dir.path().join("free-meeting-transcriber/app.db");
         std::fs::create_dir_all(stable.parent().unwrap()).unwrap();
         std::fs::write(stable, "").unwrap();
 
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("anarlog-dev"))),
-            dir.path().join("com.hyprnote.dev/app.db")
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr-dev"))),
+            dir.path().join("org.freemeetingtranscriber.dev/app.db")
         );
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("anarlog-staging"))),
-            dir.path().join("com.hyprnote.staging/app.db")
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr-staging"))),
+            dir.path().join("org.freemeetingtranscriber.staging/app.db")
         );
     }
 }

@@ -46,9 +46,9 @@ mod tests {
 
     #[test]
     fn dev_uses_an_isolated_persistent_database() {
-        let db_dir = desktop_db_dir("com.hyprnote.dev").unwrap();
+        let db_dir = desktop_db_dir("org.freemeetingtranscriber.dev").unwrap();
 
-        assert!(db_dir.ends_with("com.hyprnote.dev"));
+        assert!(db_dir.ends_with("org.freemeetingtranscriber.dev"));
     }
 
     // Serializes mutation of the ANARLOG_CLOUDSYNC_* env vars below, since

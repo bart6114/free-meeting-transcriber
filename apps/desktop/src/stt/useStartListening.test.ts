@@ -1041,7 +1041,7 @@ describe("useStartListening", () => {
     listMicUsingApplicationsMock.mockResolvedValue({
       status: "ok",
       data: [
-        { id: "com.hyprnote.dev", name: "Anarlog Dev" },
+        { id: "org.freemeetingtranscriber.dev", name: "Anarlog Dev" },
         { id: "com.tinyspeck.slackmacgap", name: "Slack" },
       ],
     });
@@ -1056,7 +1056,7 @@ describe("useStartListening", () => {
     await waitFor(() => {
       expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
         expect.stringContaining("https://anarlog.so"),
-        ["com.hyprnote.dev", "com.tinyspeck.slackmacgap"],
+        ["org.freemeetingtranscriber.dev", "com.tinyspeck.slackmacgap"],
       );
     });
   });

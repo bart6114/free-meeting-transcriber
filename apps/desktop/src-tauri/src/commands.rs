@@ -1,6 +1,6 @@
 use crate::{AppExt, embedded_cli::EmbeddedCliStatus};
 
-const STAGING_BUNDLE_ID: &str = "com.hyprnote.staging";
+const STAGING_BUNDLE_ID: &str = "org.freemeetingtranscriber.staging";
 
 #[tauri::command]
 #[specta::specta]

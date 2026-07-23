@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Anarlog Dev",
-  "mainBinaryName": "anarlog-dev",
-  "identifier": "com.hyprnote.dev",
+  "productName": "Free Meeting Transcriber Dev",
+  "mainBinaryName": "free-meeting-transcriber-dev",
+  "identifier": "org.freemeetingtranscriber.dev",
   "build": {
     "beforeDevCommand": "pnpm -F desktop dev",
     "devUrl": "http://localhost:1422",
@@ -24,7 +24,7 @@
     }
   },
   "bundle": {
-    "publisher": "Fastrepl",
+    "publisher": "Bart Smeets",
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
@@ -75,8 +75,7 @@
     "deep-link": {
       "desktop": {
         "schemes": [
-          "hyprnote",
-          "char"
+          "freemeetingtranscriber"
         ]
       }
     },

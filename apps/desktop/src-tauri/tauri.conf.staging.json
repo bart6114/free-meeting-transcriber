@@ -1,11 +1,11 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Anarlog Staging",
-  "mainBinaryName": "anarlog-staging",
-  "identifier": "com.hyprnote.staging",
+  "productName": "Free Meeting Transcriber Staging",
+  "mainBinaryName": "free-meeting-transcriber-staging",
+  "identifier": "org.freemeetingtranscriber.staging",
   "plugins": {
     "deep-link": {
-      "desktop": { "schemes": ["hyprnote-staging"] }
+      "desktop": { "schemes": ["freemeetingtranscriber-staging"] }
     },
     "updater": {
       "active": false
