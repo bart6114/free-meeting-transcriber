@@ -33,13 +33,13 @@ import {
 describe("buildMcpConfiguration", () => {
   it("uses the exact installed CLI path", () => {
     const configuration = JSON.parse(
-      buildMcpConfiguration("/Users/test/.local/bin/anarlog"),
+      buildMcpConfiguration("/Users/test/.local/bin/fmtr"),
     );
 
     expect(configuration).toEqual({
       mcpServers: {
-        anarlog: {
-          command: "/Users/test/.local/bin/anarlog",
+        fmtr: {
+          command: "/Users/test/.local/bin/fmtr",
           args: ["mcp"],
         },
       },
@@ -52,12 +52,12 @@ describe("getCliInstallNotification", () => {
     expect(
       getCliInstallNotification({
         supported: true,
-        commandName: "anarlog",
-        installPath: "/Users/test/.local/bin/anarlog",
+        commandName: "fmtr",
+        installPath: "/Users/test/.local/bin/fmtr",
         state: "installed",
         details: "Installed.",
       }),
-    ).toEqual({ type: "success", message: "anarlog is ready to use" });
+    ).toEqual({ type: "success", message: "fmtr is ready to use" });
   });
 
   it.each(["resource_missing", "unsupported"] as const)(
@@ -66,8 +66,8 @@ describe("getCliInstallNotification", () => {
       expect(
         getCliInstallNotification({
           supported: false,
-          commandName: "anarlog",
-          installPath: "/Users/test/.local/bin/anarlog",
+          commandName: "fmtr",
+          installPath: "/Users/test/.local/bin/fmtr",
           state,
           details: "The CLI is unavailable in this build.",
         }),
@@ -96,11 +96,11 @@ describe("SettingsDevelopers", () => {
       status: "ok",
       data: {
         supported: true,
-        commandName: "anarlog",
-        installPath: "/Users/test/.local/bin/anarlog",
+        commandName: "fmtr",
+        installPath: "/Users/test/.local/bin/fmtr",
         state: "installed",
         details:
-          "Installed at /Users/test/.local/bin/anarlog and managed by Anarlog.",
+          "Installed at /Users/test/.local/bin/fmtr and managed by Free Meeting Transcriber.",
       },
     });
 
@@ -115,7 +115,7 @@ describe("SettingsDevelopers", () => {
 
     expect(await screen.findByText("Reinstall")).toBeTruthy();
     expect(
-      screen.getAllByText(/\/Users\/test\/\.local\/bin\/anarlog/).length,
+      screen.getAllByText(/\/Users\/test\/\.local\/bin\/fmtr/).length,
     ).toBeGreaterThan(0);
   });
 
@@ -124,8 +124,8 @@ describe("SettingsDevelopers", () => {
       status: "ok",
       data: {
         supported: false,
-        commandName: "anarlog-dev",
-        installPath: "/Users/test/.local/bin/anarlog-dev",
+        commandName: "fmtr-dev",
+        installPath: "/Users/test/.local/bin/fmtr-dev",
         state: "unsupported",
         details: "Bundled CLI installation is currently available on macOS.",
       },
@@ -143,7 +143,7 @@ describe("SettingsDevelopers", () => {
     const copyButton = await screen.findByRole("button", { name: "Copy" });
     expect(copyButton.hasAttribute("disabled")).toBe(true);
     expect(
-      screen.queryByText(/\/Users\/test\/\.local\/bin\/anarlog-dev/),
+      screen.queryByText(/\/Users\/test\/\.local\/bin\/fmtr-dev/),
     ).toBeNull();
   });
 });

@@ -1,9 +1,9 @@
 ---
 source: apps/cli/src/cli.rs
-expression: contract
+expression: canonicalize_json(contract)
 ---
 {
-  "about": "Query local Anarlog meeting data",
+  "about": "Query local Free Meeting Transcriber meeting data",
   "global_options": [
     {
       "flags": "--base",
@@ -23,7 +23,7 @@ expression: contract
       "required": false
     }
   ],
-  "name": "anarlog",
+  "name": "fmtr",
   "options": [
     {
       "flags": "-h, --help",
@@ -41,7 +41,7 @@ expression: contract
   "subcommands": [
     {
       "about": "Check the local CLI and database connection without changing data",
-      "name": "anarlog doctor",
+      "name": "fmtr doctor",
       "options": [
         {
           "flags": "-h, --help",
@@ -50,11 +50,11 @@ expression: contract
           "required": false
         }
       ],
-      "synopsis": "anarlog doctor [-h]"
+      "synopsis": "fmtr doctor [-h]"
     },
     {
       "about": "Browse and export meetings",
-      "name": "anarlog meetings",
+      "name": "fmtr meetings",
       "options": [
         {
           "flags": "-h, --help",
@@ -66,7 +66,7 @@ expression: contract
       "subcommands": [
         {
           "about": "List meetings, optionally filtered by text or recurring series",
-          "name": "anarlog meetings list",
+          "name": "fmtr meetings list",
           "options": [
             {
               "flags": "-q, --query",
@@ -103,7 +103,7 @@ expression: contract
               "required": false
             }
           ],
-          "synopsis": "anarlog meetings list [-q] [--series-id] [--limit] [--offset] [-h]"
+          "synopsis": "fmtr meetings list [-q] [--series-id] [--limit] [--offset] [-h]"
         },
         {
           "about": "Show meeting metadata, notes, summaries, people, and action items",
@@ -113,7 +113,7 @@ expression: contract
               "required": true
             }
           ],
-          "name": "anarlog meetings get",
+          "name": "fmtr meetings get",
           "options": [
             {
               "flags": "-h, --help",
@@ -122,7 +122,7 @@ expression: contract
               "required": false
             }
           ],
-          "synopsis": "anarlog meetings get [-h] <id>"
+          "synopsis": "fmtr meetings get [-h] <id>"
         },
         {
           "about": "Show the note or generated summaries for a meeting",
@@ -132,7 +132,7 @@ expression: contract
               "required": true
             }
           ],
-          "name": "anarlog meetings note",
+          "name": "fmtr meetings note",
           "options": [
             {
               "default": "note",
@@ -153,7 +153,7 @@ expression: contract
               "required": false
             }
           ],
-          "synopsis": "anarlog meetings note [--kind] [-h] <id>"
+          "synopsis": "fmtr meetings note [--kind] [-h] <id>"
         },
         {
           "about": "Show a bounded page of a meeting transcript",
@@ -163,7 +163,7 @@ expression: contract
               "required": true
             }
           ],
-          "name": "anarlog meetings transcript",
+          "name": "fmtr meetings transcript",
           "options": [
             {
               "default": "200",
@@ -188,7 +188,7 @@ expression: contract
               "required": false
             }
           ],
-          "synopsis": "anarlog meetings transcript [--limit] [--offset] [-h] <id>"
+          "synopsis": "fmtr meetings transcript [--limit] [--offset] [-h] <id>"
         },
         {
           "about": "List meetings from the same recurring series",
@@ -198,7 +198,7 @@ expression: contract
               "required": true
             }
           ],
-          "name": "anarlog meetings history",
+          "name": "fmtr meetings history",
           "options": [
             {
               "default": "20",
@@ -223,7 +223,7 @@ expression: contract
               "required": false
             }
           ],
-          "synopsis": "anarlog meetings history [--limit] [--offset] [-h] <id>"
+          "synopsis": "fmtr meetings history [--limit] [--offset] [-h] <id>"
         },
         {
           "about": "Export a meeting to Markdown or JSON",
@@ -233,7 +233,7 @@ expression: contract
               "required": true
             }
           ],
-          "name": "anarlog meetings export",
+          "name": "fmtr meetings export",
           "options": [
             {
               "default": "markdown",
@@ -265,14 +265,14 @@ expression: contract
               "required": false
             }
           ],
-          "synopsis": "anarlog meetings export [--format] [-o] [--force] [-h] <id>"
+          "synopsis": "fmtr meetings export [--format] [-o] [--force] [-h] <id>"
         }
       ],
-      "synopsis": "anarlog meetings [-h] <command>"
+      "synopsis": "fmtr meetings [-h] <command>"
     },
     {
-      "about": "Run the read-only Anarlog MCP server over stdio",
-      "name": "anarlog mcp",
+      "about": "Run the read-only Free Meeting Transcriber MCP server over stdio",
+      "name": "fmtr mcp",
       "options": [
         {
           "flags": "-h, --help",
@@ -281,8 +281,8 @@ expression: contract
           "required": false
         }
       ],
-      "synopsis": "anarlog mcp [-h]"
+      "synopsis": "fmtr mcp [-h]"
     }
   ],
-  "synopsis": "anarlog [--base] [--db-path] [--json] [-h] [-V] <command>"
+  "synopsis": "fmtr [--base] [--db-path] [--json] [-h] [-V] <command>"
 }

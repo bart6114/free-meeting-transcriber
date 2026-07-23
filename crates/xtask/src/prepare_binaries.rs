@@ -51,11 +51,11 @@ pub(crate) fn prepare_binaries() -> Result<()> {
         .join("target")
         .join(&triple)
         .join("release")
-        .join(format!("anarlog{ext}"));
-    let dst = embedded_cli_dir.join(format!("anarlog-cli-{triple}{ext}"));
+        .join(format!("fmtr{ext}"));
+    let dst = embedded_cli_dir.join(format!("fmtr-{triple}{ext}"));
     fs::copy(&src, &dst).with_context(|| format!("copy {} -> {}", src.display(), dst.display()))?;
 
-    println!("prepare-binaries: resources/cli/anarlog-cli-{triple}{ext}");
+    println!("prepare-binaries: resources/cli/fmtr-{triple}{ext}");
     Ok(())
 }
 

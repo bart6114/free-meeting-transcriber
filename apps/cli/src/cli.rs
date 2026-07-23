@@ -5,7 +5,11 @@ use clap::{Parser, Subcommand, ValueEnum};
 use hypr_agent_access::{DEFAULT_TRANSCRIPT_LIMIT, MAX_TRANSCRIPT_LIMIT};
 
 #[derive(Debug, Parser)]
-#[command(name = "anarlog", version, about = "Query local Anarlog meeting data")]
+#[command(
+    name = "fmtr",
+    version,
+    about = "Query local Free Meeting Transcriber meeting data"
+)]
 pub struct Args {
     #[arg(
         long,
@@ -41,7 +45,7 @@ pub enum Command {
         #[command(subcommand)]
         command: MeetingCommand,
     },
-    /// Run the read-only Anarlog MCP server over stdio
+    /// Run the read-only Free Meeting Transcriber MCP server over stdio
     Mcp,
 }
 
@@ -117,7 +121,7 @@ mod tests {
     #[test]
     fn parses_meeting_list_filters() {
         let args = Args::parse_from([
-            "anarlog", "--json", "meetings", "list", "--query", "planning", "--limit", "10",
+            "fmtr", "--json", "meetings", "list", "--query", "planning", "--limit", "10",
         ]);
 
         assert!(args.json);
@@ -139,7 +143,7 @@ mod tests {
         assert!(help.contains("doctor"));
 
         let Command::Meetings { command } = Args::parse_from([
-            "anarlog",
+            "fmtr",
             "meetings",
             "export",
             "meeting-1",
@@ -162,7 +166,7 @@ mod tests {
     #[test]
     fn parses_transcript_and_history_pagination() {
         let Command::Meetings { command } = Args::parse_from([
-            "anarlog",
+            "fmtr",
             "meetings",
             "transcript",
             "meeting-1",
@@ -184,15 +188,9 @@ mod tests {
             }
         ));
 
-        let Command::Meetings { command } = Args::parse_from([
-            "anarlog",
-            "meetings",
-            "history",
-            "meeting-1",
-            "--offset",
-            "10",
-        ])
-        .command
+        let Command::Meetings { command } =
+            Args::parse_from(["fmtr", "meetings", "history", "meeting-1", "--offset", "10"])
+                .command
         else {
             panic!("expected meetings command");
         };
@@ -205,8 +203,7 @@ mod tests {
     #[test]
     fn export_force_requires_an_output_path() {
         assert!(
-            Args::try_parse_from(["anarlog", "meetings", "export", "meeting-1", "--force"])
-                .is_err()
+            Args::try_parse_from(["fmtr", "meetings", "export", "meeting-1", "--force"]).is_err()
         );
     }
 

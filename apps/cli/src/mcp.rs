@@ -12,7 +12,7 @@ use crate::Error;
 use hypr_agent_access as access;
 
 #[derive(Clone)]
-struct AnarlogMcpServer {
+struct FmtrMcpServer {
     db: Arc<hypr_db_core::Db>,
 }
 
@@ -31,16 +31,16 @@ enum ResourceRequest {
     },
 }
 
-impl AnarlogMcpServer {
+impl FmtrMcpServer {
     fn new(db: Arc<hypr_db_core::Db>) -> Self {
         Self { db }
     }
 }
 
 #[tool_router]
-impl AnarlogMcpServer {
+impl FmtrMcpServer {
     #[tool(
-        description = "List recent Anarlog meetings with pagination metadata. Use query to narrow by title or meeting id, then pass next_offset as offset to continue.",
+        description = "List recent Free Meeting Transcriber meetings with pagination metadata. Use query to narrow by title or meeting id, then pass next_offset as offset to continue.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -59,7 +59,7 @@ impl AnarlogMcpServer {
     }
 
     #[tool(
-        description = "Get one Anarlog meeting with its canonical note, summaries, participants, and action items. Use get_meeting_transcript separately for transcript words.",
+        description = "Get one Free Meeting Transcriber meeting with its canonical note, summaries, participants, and action items. Use get_meeting_transcript separately for transcript words.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -78,7 +78,7 @@ impl AnarlogMcpServer {
     }
 
     #[tool(
-        description = "Get a bounded page of transcript words and readable text for an Anarlog meeting. Pass pagination.next_offset as offset to continue.",
+        description = "Get a bounded page of transcript words and readable text for a Free Meeting Transcriber meeting. Pass pagination.next_offset as offset to continue.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -117,7 +117,7 @@ impl AnarlogMcpServer {
 }
 
 #[tool_handler]
-impl ServerHandler for AnarlogMcpServer {
+impl ServerHandler for FmtrMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(
             ServerCapabilities::builder()
@@ -127,11 +127,11 @@ impl ServerHandler for AnarlogMcpServer {
         )
         .with_protocol_version(ProtocolVersion::V_2024_11_05)
         .with_server_info(Implementation::new(
-            "anarlog",
+            "fmtr",
             env!("CARGO_PKG_VERSION"),
         ))
         .with_instructions(
-            "Read-only, local access to Anarlog meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, participants, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use get_recurring_meeting_history for series context. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://docs.anarlog.so",
+            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, participants, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use get_recurring_meeting_history for series context. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
         )
     }
 
@@ -173,7 +173,7 @@ impl ServerHandler for AnarlogMcpServer {
                     meeting.title
                 };
                 RawResource::new(format!("anarlog://meetings/{}", meeting.id), name)
-                    .with_description("Anarlog meeting context")
+                    .with_description("Free Meeting Transcriber meeting context")
                     .with_mime_type("text/markdown")
                     .no_annotation()
             })
@@ -194,21 +194,27 @@ impl ServerHandler for AnarlogMcpServer {
         use rmcp::model::AnnotateAble;
 
         Ok(ListResourceTemplatesResult::with_all_items(vec![
-            RawResourceTemplate::new("anarlog://meetings/{meeting_id}", "Anarlog meeting")
-                .with_description("Meeting metadata, note, summaries, people, and action items")
-                .with_mime_type("text/markdown")
-                .no_annotation(),
+            RawResourceTemplate::new(
+                "anarlog://meetings/{meeting_id}",
+                "Free Meeting Transcriber meeting",
+            )
+            .with_description("Meeting metadata, note, summaries, people, and action items")
+            .with_mime_type("text/markdown")
+            .no_annotation(),
             RawResourceTemplate::new(
                 "anarlog://meetings/{meeting_id}/transcript{?offset,limit}",
-                "Anarlog meeting transcript",
+                "Free Meeting Transcriber meeting transcript",
             )
             .with_description("A bounded page of meeting transcript text")
             .with_mime_type("text/plain")
             .no_annotation(),
-            RawResourceTemplate::new("anarlog://series/{series_id}", "Anarlog meeting series")
-                .with_description("Recurring meeting history")
-                .with_mime_type("text/markdown")
-                .no_annotation(),
+            RawResourceTemplate::new(
+                "anarlog://series/{series_id}",
+                "Free Meeting Transcriber meeting series",
+            )
+            .with_description("Recurring meeting history")
+            .with_mime_type("text/markdown")
+            .no_annotation(),
         ]))
     }
 
@@ -283,7 +289,7 @@ impl ServerHandler for AnarlogMcpServer {
 }
 
 pub async fn serve(db: Arc<hypr_db_core::Db>) -> crate::Result<()> {
-    let running = AnarlogMcpServer::new(db)
+    let running = FmtrMcpServer::new(db)
         .serve(rmcp::transport::stdio())
         .await
         .map_err(|error| Error::operation("start MCP server", error.to_string()))?;
@@ -295,8 +301,8 @@ pub async fn serve(db: Arc<hypr_db_core::Db>) -> crate::Result<()> {
 }
 
 fn parse_resource_uri(uri: &str) -> std::result::Result<ResourceRequest, McpError> {
-    let url = url::Url::parse(uri)
-        .map_err(|_| McpError::invalid_params("invalid Anarlog resource URI", None))?;
+    let url =
+        url::Url::parse(uri).map_err(|_| McpError::invalid_params("invalid resource URI", None))?;
     if url.scheme() != "anarlog" {
         return Err(McpError::invalid_params(
             "resource URI must use the anarlog scheme",
@@ -346,10 +352,7 @@ fn parse_resource_uri(uri: &str) -> std::result::Result<ResourceRequest, McpErro
         ("series", [series_id]) => Ok(ResourceRequest::Series {
             series_id: (*series_id).to_string(),
         }),
-        _ => Err(McpError::invalid_params(
-            "unsupported Anarlog resource URI",
-            None,
-        )),
+        _ => Err(McpError::invalid_params("unsupported resource URI", None)),
     }
 }
 
@@ -400,12 +403,12 @@ mod tests {
     #[tokio::test]
     async fn server_advertises_tools_and_resources() {
         let db = Arc::new(hypr_db_core::Db::connect_memory_plain().await.unwrap());
-        let info = AnarlogMcpServer::new(db).get_info();
+        let info = FmtrMcpServer::new(db).get_info();
         assert!(info.capabilities.tools.is_some());
         assert!(info.capabilities.resources.is_some());
         let instructions = info.instructions.unwrap();
         assert!(instructions.contains("Start with list_meetings"));
-        assert!(instructions.contains("https://docs.anarlog.so"));
+        assert!(instructions.contains("https://github.com/bart6114/free-meeting-transcriber"));
         assert!(instructions.contains("performs no writes"));
     }
 
@@ -419,7 +422,7 @@ mod tests {
         .execute(db.pool())
         .await
         .unwrap();
-        let server = AnarlogMcpServer::new(Arc::new(db));
+        let server = FmtrMcpServer::new(Arc::new(db));
 
         let result = server
             .list_meetings(Parameters(access::ListMeetingsInput {
@@ -449,7 +452,7 @@ mod tests {
         .await
         .unwrap();
         let (server_transport, client_transport) = tokio::io::duplex(64 * 1024);
-        let server = AnarlogMcpServer::new(Arc::new(db));
+        let server = FmtrMcpServer::new(Arc::new(db));
         let info = server.get_info();
         let server_handle = tokio::spawn(async move { server.serve(server_transport).await });
 
@@ -527,17 +530,17 @@ mod tests {
             template_contract,
             [
                 (
-                    "Anarlog meeting".to_string(),
+                    "Free Meeting Transcriber meeting".to_string(),
                     "anarlog://meetings/{meeting_id}".to_string(),
                     None,
                 ),
                 (
-                    "Anarlog meeting transcript".to_string(),
+                    "Free Meeting Transcriber meeting transcript".to_string(),
                     "anarlog://meetings/{meeting_id}/transcript{?offset,limit}".to_string(),
                     None,
                 ),
                 (
-                    "Anarlog meeting series".to_string(),
+                    "Free Meeting Transcriber meeting series".to_string(),
                     "anarlog://series/{series_id}".to_string(),
                     None,
                 ),

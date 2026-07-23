@@ -68,11 +68,11 @@ async fn inspect(args: &Args) -> Result<DoctorReport> {
 
 async fn schema_check(db: &hypr_db_core::Db) -> std::result::Result<(), String> {
     tokio::try_join!(
-        hypr_db_app::get_session(db.pool(), "__anarlog_doctor__"),
-        hypr_db_app::list_session_documents(db.pool(), "__anarlog_doctor__"),
-        hypr_db_app::list_session_transcripts(db.pool(), "__anarlog_doctor__"),
-        hypr_db_app::list_session_participants(db.pool(), "__anarlog_doctor__"),
-        hypr_db_app::list_session_action_items(db.pool(), "__anarlog_doctor__"),
+        hypr_db_app::get_session(db.pool(), "__fmtr_doctor__"),
+        hypr_db_app::list_session_documents(db.pool(), "__fmtr_doctor__"),
+        hypr_db_app::list_session_transcripts(db.pool(), "__fmtr_doctor__"),
+        hypr_db_app::list_session_participants(db.pool(), "__fmtr_doctor__"),
+        hypr_db_app::list_session_action_items(db.pool(), "__fmtr_doctor__"),
     )
     .map(|_| ())
     .map_err(|error| format!("schema check failed: {error}"))
@@ -81,7 +81,7 @@ async fn schema_check(db: &hypr_db_core::Db) -> std::result::Result<(), String> 
 fn render(report: &DoctorReport) -> String {
     let status = |value| if value { "yes" } else { "no" };
     let mut lines = vec![
-        format!("Anarlog CLI {}", report.cli_version),
+        format!("fmtr CLI {}", report.cli_version),
         format!("Ready: {}", status(report.ready)),
         format!("Database: {}", report.database.path.display()),
         format!("Exists: {}", status(report.database.exists)),

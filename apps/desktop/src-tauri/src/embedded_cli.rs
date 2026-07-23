@@ -36,7 +36,10 @@ pub struct EmbeddedCliStatus {
 pub fn check<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -> EmbeddedCliStatus {
     let command_name = command_name_from_identifier(manager.config().identifier.as_ref());
     let Some(install_path) = install_path_for_command(command_name) else {
-        return unavailable_status(command_name, "Anarlog could not find your home directory.");
+        return unavailable_status(
+            command_name,
+            "Free Meeting Transcriber could not find your home directory.",
+        );
     };
 
     #[cfg(not(target_os = "macos"))]
@@ -59,7 +62,10 @@ pub fn check<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -> EmbeddedCl
                 command_name: command_name.to_string(),
                 install_path: install_path.display().to_string(),
                 state: EmbeddedCliState::ResourceMissing,
-                details: Some("The CLI is not included in this build of Anarlog.".to_string()),
+                details: Some(
+                    "The CLI is not included in this build of Free Meeting Transcriber."
+                        .to_string(),
+                ),
             };
         };
         let app_version = manager.package_info().version.to_string();
@@ -86,7 +92,7 @@ pub fn install<R: tauri::Runtime, T: tauri::Manager<R>>(
             }
             EmbeddedCliState::Conflict => {
                 return Err(format!(
-                    "Another file already exists at {}. Move it before installing the Anarlog CLI.",
+                    "Another file already exists at {}. Move it before installing the fmtr CLI.",
                     status.install_path
                 ));
             }
@@ -137,7 +143,7 @@ fn resolve_resource_path<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -
 
     if let Some(sidecar_path) = std::env::current_exe()
         .ok()
-        .and_then(|path| path.parent().map(|parent| parent.join("anarlog-cli")))
+        .and_then(|path| path.parent().map(|parent| parent.join("fmtr")))
         .filter(|path| path.is_file())
     {
         return Some(sidecar_path);
@@ -165,12 +171,12 @@ fn resolve_resource_path<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -
 fn bundled_binary_name() -> Option<&'static str> {
     #[cfg(target_arch = "aarch64")]
     {
-        return Some("anarlog-cli-aarch64-apple-darwin");
+        return Some("fmtr-aarch64-apple-darwin");
     }
 
     #[cfg(target_arch = "x86_64")]
     {
-        return Some("anarlog-cli-x86_64-apple-darwin");
+        return Some("fmtr-x86_64-apple-darwin");
     }
 
     #[allow(unreachable_code)]
@@ -315,7 +321,7 @@ fn is_legacy_app_cli_target(target: &Path) -> bool {
 fn details_for_state(state: EmbeddedCliState, install_path: &Path) -> Option<String> {
     match state {
         EmbeddedCliState::Installed => Some(format!(
-            "Installed at {} and managed by Anarlog.",
+            "Installed at {} and managed by Free Meeting Transcriber.",
             install_path.display()
         )),
         EmbeddedCliState::Missing => Some(format!(
