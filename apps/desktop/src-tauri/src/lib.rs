@@ -8,6 +8,7 @@ mod search_index;
 mod store;
 mod supervisor;
 mod vault_export;
+mod vault_watch;
 
 use db::{cloudsync_runtime_config_from_env, open_desktop_db};
 use ext::*;
@@ -257,7 +258,15 @@ pub async fn main() {
             // DB-to-vault mirror starts draining — reconcile first, mirror
             // second. See `vault_export.rs`'s module doc for the full
             // loop-prevention analysis.
-            vault_export::spawn(app_handle, db.clone());
+            vault_export::spawn(app_handle.clone(), db.clone());
+            // Spawned last, after both the startup reconcile (above, via the
+            // db plugin's own `setup()`) and the export worker: an external
+            // edit's import only needs to account for vault state from here
+            // on, since everything the vault held (or the export worker had
+            // queued) at launch is already reconciled. See
+            // `vault_watch.rs`'s module doc for the full ordering + loop
+            // prevention rationale.
+            vault_watch::spawn(app_handle, db.clone());
 
             Ok(())
         })

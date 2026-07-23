@@ -58,7 +58,11 @@ use hypr_fs_sync_core::export;
 /// `PROJECTION_VERSION`). The marker's mere presence, not its value, is what
 /// gates the one-time first-run export today.
 const EXPORT_MARKER_VERSION: &str = "1";
-const EXPORT_MARKER_FILENAME: &str = ".fmt-export-version";
+/// `pub(crate)`: `vault_watch.rs` also needs this name to exclude the marker
+/// file from what it hands to `import_paths` (it's a plain top-level file
+/// `classify_source` would already reject, but named here explicitly rather
+/// than relying on that incidentally).
+pub(crate) const EXPORT_MARKER_FILENAME: &str = ".fmt-export-version";
 const BATCH_SIZE: i64 = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 const DEBOUNCE_WINDOW: Duration = Duration::from_millis(500);
