@@ -70,14 +70,6 @@ async getLegacyImportReport() : Promise<Result<LegacyImportReport, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async runLegacyImport(dryRun: boolean) : Promise<Result<string, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|run_legacy_import", { dryRun }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async getE2eeIdentityStatus(accountUserId: string) : Promise<Result<E2eeIdentityStatus, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:db|get_e2ee_identity_status", { accountUserId }) };

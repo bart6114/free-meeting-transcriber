@@ -7,7 +7,6 @@ const COMMANDS: &[&str] = &[
     "get_recurring_meeting_history",
     "get_legacy_import_report",
     "list_meetings",
-    "run_legacy_import",
     "get_e2ee_identity_status",
     "inspect_e2ee_recovery_key",
     "create_e2ee_identity",

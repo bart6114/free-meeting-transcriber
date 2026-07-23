@@ -17,6 +17,18 @@ use sqlx::SqlitePool;
 static IMPORT_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 const RECOVERED_MISSING_SESSION_METADATA: &str = "recovered_missing_session_metadata";
 const RECOVERED_DUPLICATE_DOCUMENT_ID: &str = "recovered_duplicate_document_id";
+/// Marker embedded in conflict-backup filenames written by
+/// `unique_conflict_backup_path` (e.g. `_memo.conflict-2026-07-23T12-00-00Z.md`).
+/// `classify_source` must reject any file whose name contains this marker —
+/// a backup is a point-in-time export of what the DB *used to* hold, never a
+/// live source to be scanned/re-imported. Without this, a backup sharing the
+/// live document's frontmatter `id` would be discovered as another
+/// `SessionDocument`, and depending on sort order could either fork into a
+/// spurious "recovered duplicate" or — worse — win the duplicate-id dedup
+/// and then get force-applied back onto the canonical row by
+/// `reconcile_vault_conflicts`, silently reverting the very conflict it was
+/// meant to preserve evidence of.
+const CONFLICT_BACKUP_MARKER: &str = ".conflict-";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum SourceKind {
@@ -569,6 +581,11 @@ enum ConflictBackup {
     Json(Value),
 }
 
+/// The backup is the last line of defense against data loss — a crash right
+/// after writing it (before the caller's follow-up `UPDATE` commits) must
+/// still leave the backup readable on disk, so it's written through an
+/// explicit `File` handle and `sync_all()`'d before returning rather than
+/// relying on `std::fs::write`'s buffered, unflushed write.
 fn export_conflict_backup(file_path: &Path, backup: ConflictBackup) -> crate::Result<PathBuf> {
     let rendered = match backup {
         ConflictBackup::Markdown { frontmatter, content } => ParsedDocument { frontmatter, content }
@@ -579,7 +596,12 @@ fn export_conflict_backup(file_path: &Path, backup: ConflictBackup) -> crate::Re
     };
 
     let backup_path = unique_conflict_backup_path(file_path);
-    std::fs::write(&backup_path, rendered)?;
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&backup_path)?;
+    std::io::Write::write_all(&mut file, &rendered)?;
+    file.sync_all()?;
     Ok(backup_path)
 }
 
@@ -599,11 +621,14 @@ fn unique_conflict_backup_path(file_path: &Path) -> PathBuf {
         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
         .replace(':', "-");
 
-    let mut candidate = file_path.with_file_name(format!("{stem}.conflict-{timestamp}.{extension}"));
+    let mut candidate = file_path.with_file_name(format!(
+        "{stem}{CONFLICT_BACKUP_MARKER}{timestamp}.{extension}"
+    ));
     let mut suffix = 1;
     while candidate.exists() {
-        candidate =
-            file_path.with_file_name(format!("{stem}.conflict-{timestamp}-{suffix}.{extension}"));
+        candidate = file_path.with_file_name(format!(
+            "{stem}{CONFLICT_BACKUP_MARKER}{timestamp}-{suffix}.{extension}"
+        ));
         suffix += 1;
     }
     candidate
@@ -882,6 +907,14 @@ fn documents_share_variant(left: &LegacyDocument, right: &LegacyDocument) -> boo
 fn classify_source(relative_path: &str) -> Option<SourceKind> {
     let parts = relative_path.split('/').collect::<Vec<_>>();
     let filename = parts.last().copied()?;
+
+    // Conflict backups are point-in-time exports of what the DB used to
+    // hold, written beside the live file they conflicted with — never a
+    // live source. Reject them outright, before any other classification
+    // rule (including attachments) gets a chance to pick them up.
+    if filename.contains(CONFLICT_BACKUP_MARKER) {
+        return None;
+    }
 
     match parts.as_slice() {
         ["calendars.json"] => return Some(SourceKind::Calendar),

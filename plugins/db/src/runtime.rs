@@ -276,11 +276,6 @@ impl PluginDbRuntime {
         Ok(self.executor.execute_proxy(sql, params, method).await?)
     }
 
-    pub async fn rerun_legacy_import(&self, dry_run: bool) -> Result<String> {
-        let _write_guard = self.synced_write_barrier.read().await;
-        Ok(crate::import::rerun_legacy_import(self.db.pool(), dry_run).await?)
-    }
-
     pub async fn subscribe(
         &self,
         sql: String,

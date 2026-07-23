@@ -94,21 +94,6 @@ pub(crate) async fn legacy_migration_verified(pool: &SqlitePool) -> Result<bool,
     .await
 }
 
-pub async fn rerun_legacy_import(pool: &SqlitePool, dry_run: bool) -> crate::Result<String> {
-    let source_root = sqlx::query_scalar::<_, String>(
-        "SELECT source_root
-         FROM migration_import_runs
-         WHERE dry_run = 0 AND source_root <> ''
-         ORDER BY started_at DESC
-         LIMIT 1",
-    )
-    .fetch_optional(pool)
-    .await?
-    .ok_or_else(|| std::io::Error::other("no legacy import source has been recorded"))?;
-
-    legacy_vault::import_legacy_vault(pool, std::path::Path::new(&source_root), dry_run).await
-}
-
 pub async fn get_legacy_import_report(
     pool: &SqlitePool,
 ) -> crate::Result<crate::LegacyImportReport> {

@@ -151,10 +151,6 @@ export async function getLegacyImportReport(): Promise<LegacyImportReport> {
   return invoke("plugin:db|get_legacy_import_report");
 }
 
-export async function runLegacyImport(dryRun = false): Promise<string> {
-  return invoke("plugin:db|run_legacy_import", { dryRun });
-}
-
 export async function getE2eeIdentityStatus(
   accountUserId: string,
 ): Promise<E2eeIdentityStatus> {

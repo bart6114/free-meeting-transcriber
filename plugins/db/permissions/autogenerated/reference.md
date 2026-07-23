@@ -12,7 +12,6 @@ Default permissions for the plugin
 - `allow-get-meeting-transcript`
 - `allow-get-recurring-meeting-history`
 - `allow-get-legacy-import-report`
-- `allow-run-legacy-import`
 - `allow-get-e2ee-identity-status`
 - `allow-inspect-e2ee-recovery-key`
 - `allow-create-e2ee-identity`
@@ -446,32 +445,6 @@ Enables the list_meetings command without any pre-configured scope.
 <td>
 
 Denies the list_meetings command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:allow-run-legacy-import`
-
-</td>
-<td>
-
-Enables the run_legacy_import command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:deny-run-legacy-import`
-
-</td>
-<td>
-
-Denies the run_legacy_import command without any pre-configured scope.
 
 </td>
 </tr>

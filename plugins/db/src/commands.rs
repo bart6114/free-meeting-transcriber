@@ -120,18 +120,6 @@ pub(crate) async fn get_legacy_import_report(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn run_legacy_import(
-    state: tauri::State<'_, ManagedState>,
-    dry_run: bool,
-) -> Result<String, String> {
-    state
-        .rerun_legacy_import(dry_run)
-        .await
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub(crate) async fn get_e2ee_identity_status<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     account_user_id: String,

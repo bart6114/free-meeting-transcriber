@@ -188,7 +188,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::execute_transaction,
             commands::execute_proxy,
             commands::get_legacy_import_report,
-            commands::run_legacy_import,
             commands::get_e2ee_identity_status<tauri::Wry>,
             commands::inspect_e2ee_recovery_key,
             commands::create_e2ee_identity<tauri::Wry>,
@@ -297,9 +296,7 @@ mod test {
     fn default_permissions_include_legacy_migration_workflow() {
         let permissions = include_str!("../permissions/default.toml");
 
-        for permission in ["allow-get-legacy-import-report", "allow-run-legacy-import"] {
-            assert!(permissions.contains(permission), "missing {permission}");
-        }
+        assert!(permissions.contains("allow-get-legacy-import-report"));
     }
 
     #[test]
@@ -307,6 +304,10 @@ mod test {
         let permissions = include_str!("../permissions/default.toml");
 
         assert!(!permissions.contains("legacy-cleanup"));
+        // Only sync_from_vault's conflict semantics should be reachable at
+        // runtime now — the old direct-import-with-DB-wins retry command is
+        // gone, not just unused.
+        assert!(!permissions.contains("run-legacy-import"));
     }
 
     fn capture_channel() -> (Channel<QueryEvent>, Arc<Mutex<Vec<QueryEvent>>>) {
