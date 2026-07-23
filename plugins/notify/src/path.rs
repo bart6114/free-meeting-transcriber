@@ -20,6 +20,10 @@ pub fn should_skip_path(relative_path: &str, path: &Path) -> bool {
         return true;
     }
 
+    // Legacy location only: the search index now lives in the app-data dir,
+    // not the vault. This guards users whose vault still has a stale
+    // `search_index/` dir left over from before the move (cleaned up manually
+    // per Task 16's runbook, not deleted automatically here).
     if relative_path.starts_with("search_index") {
         return true;
     }
