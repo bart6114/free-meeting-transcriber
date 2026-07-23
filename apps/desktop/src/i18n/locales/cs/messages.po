@@ -31,14 +31,6 @@ msgstr ""
 msgid "{model} can't transcribe all selected languages together. Try another model or use fewer spoken languages."
 msgstr ""
 
-#: src/settings/general/account.tsx
-msgid "{trialDaysRemaining} day left"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "{trialDaysRemaining} days left"
-msgstr ""
-
 #: src/settings/general/app-settings.tsx
 msgid "1 day"
 msgstr ""
@@ -62,12 +54,6 @@ msgstr ""
 #: src/onboarding/permissions.tsx
 #: src/settings/general/permissions.tsx
 msgid "Accessibility"
-msgstr ""
-
-#: src/onboarding/index.tsx
-#: src/settings/general/account.tsx
-#: src/sidebar/settings.tsx
-msgid "Account"
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -130,6 +116,10 @@ msgstr ""
 msgid "Add spoken language"
 msgstr "Přidat mluvený jazyk"
 
+#: src/session/components/note-input/enhanced/config-error.tsx
+msgid "Add your own LLM API key to generate a summary from this transcript."
+msgstr ""
+
 #: src/settings/general/spoken-languages.tsx
 msgid "Additional spoken languages"
 msgstr "Další mluvené jazyky"
@@ -170,10 +160,6 @@ msgstr ""
 msgid "Anarlog can read meeting details"
 msgstr ""
 
-#: src/settings/general/account.tsx
-msgid "Anarlog couldn't sign you out. Try again."
-msgstr ""
-
 #: src/onboarding/index.tsx
 msgid "Anarlog needs access to your microphone and system audio to record and transcribe your meetings"
 msgstr ""
@@ -184,10 +170,6 @@ msgstr ""
 
 #: src/templates/auto-form.tsx
 msgid "Anarlog sends these separately, so editing the prompt cannot remove the meeting source material."
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Anarlog will keep retrying"
 msgstr ""
 
 #: src/settings/general/storage/legacy-cleanup.tsx
@@ -276,27 +258,14 @@ msgstr "Automaticky začít poslouchat, když poznámka podporovaná událostí 
 msgid "Automatically stop listening when the meeting app releases the microphone."
 msgstr "Automaticky přestat poslouchat, když schůzková aplikace uvolní mikrofon."
 
-#: src/main/sync-status.tsx
-msgid "Available with Anarlog Pro"
-msgstr ""
-
-#: src/settings/general/app-settings.tsx
-msgid "Available with Anarlog Pro."
-msgstr ""
-
 #: src/calendar/components/apple/permission.tsx
 #: src/instruction/index.tsx
-#: src/settings/general/e2ee-setup.tsx
 #: src/sidebar/custom-sidebar-header.tsx
 msgid "Back"
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx
 msgid "Base URL"
-msgstr ""
-
-#: src/instruction/index.tsx
-msgid "Browser handoff not working? Paste the callback link instead"
 msgstr ""
 
 #: src/calendar/components/sidebar.tsx
@@ -314,8 +283,6 @@ msgstr ""
 msgid "Can transcribe while the meeting is happening."
 msgstr ""
 
-#: src/settings/general/account.tsx
-#: src/settings/general/e2ee-setup.tsx
 #: src/settings/general/storage/legacy-cleanup.tsx
 #: src/settings/todo/github.tsx
 msgid "Cancel"
@@ -339,10 +306,6 @@ msgstr ""
 
 #: src/settings/general/storage/legacy-cleanup.tsx
 msgid "Checking migration..."
-msgstr ""
-
-#: src/onboarding/account/after-login.tsx
-msgid "Checking trial eligibility..."
 msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
@@ -404,20 +367,6 @@ msgstr ""
 msgid "Closed"
 msgstr ""
 
-#: src/main/sync-status.tsx
-#: src/settings/general/app-settings.tsx
-msgid "Cloud sync"
-msgstr ""
-
-#: src/auth/cloudsync.ts
-msgid "Cloud sync is limited to 5 devices. Remove another device to sync here."
-msgstr ""
-
-#. placeholder {0}: view.label
-#: src/main/sync-status.tsx
-msgid "Cloud sync status: {0}"
-msgstr ""
-
 #: src/task/resource-view.tsx
 msgid "comment"
 msgstr ""
@@ -432,22 +381,6 @@ msgstr ""
 
 #: src/contacts/details.tsx
 msgid "Company"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Compare Free and Pro before you sign in."
-msgstr ""
-
-#: src/instruction/index.tsx
-msgid "Complete sign-in in your browser, then return to Anarlog."
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Complete the sign-in flow in your browser, then come back here if Anarlog does not reconnect automatically."
-msgstr ""
-
-#: src/instruction/index.tsx
-msgid "Complete your purchase"
 msgstr ""
 
 #: src/session/components/floating/options-menu.tsx
@@ -492,10 +425,6 @@ msgstr ""
 msgid "Connect your integration"
 msgstr ""
 
-#: src/main/sync-status.tsx
-msgid "Connecting..."
-msgstr ""
-
 #: src/sidebar/contacts.tsx
 #: src/sidebar/settings.tsx
 msgid "Contacts"
@@ -513,28 +442,8 @@ msgstr ""
 msgid "Continue"
 msgstr ""
 
-#: src/onboarding/account/after-login.tsx
-msgid "Continuing without trial"
-msgstr ""
-
 #: src/chat/components/message/normal.tsx
 msgid "Copy message"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Copy recovery key"
-msgstr ""
-
-#: src/onboarding/account/after-login.tsx
-msgid "Could not start trial"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Create a recovery key"
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Create account"
 msgstr ""
 
 #: src/templates/details.tsx
@@ -620,10 +529,6 @@ msgstr ""
 msgid "Developers"
 msgstr ""
 
-#: src/main/sync-status.tsx
-msgid "Device limit reached"
-msgstr ""
-
 #: src/settings/dictionary/index.tsx
 #: src/sidebar/settings.tsx
 msgid "Dictionary"
@@ -649,10 +554,6 @@ msgstr ""
 msgid "Download"
 msgstr ""
 
-#: src/settings/general/e2ee-setup.tsx
-msgid "Download recovery key (.txt)"
-msgstr ""
-
 #: src/templates/details.tsx
 #: src/templates/template-form.tsx
 msgid "Duplicate"
@@ -670,10 +571,6 @@ msgstr ""
 msgid "Edit the complete system prompt used when Auto generates a summary."
 msgstr ""
 
-#: src/onboarding/account/after-login.tsx
-msgid "Eligible for free trial"
-msgstr ""
-
 #: src/contacts/details.tsx
 msgid "Email"
 msgstr ""
@@ -685,10 +582,6 @@ msgstr ""
 #. placeholder {0}: permissionName.toLowerCase()
 #: src/onboarding/permissions.tsx
 msgid "Enable {0}"
-msgstr ""
-
-#: src/settings/general/app-settings.tsx
-msgid "End-to-end encrypted across your signed-in devices. Anarlog cannot read your synced notes."
 msgstr ""
 
 #: src/session/components/outer-header/metadata/participants/chip.tsx
@@ -709,10 +602,6 @@ msgstr ""
 
 #: src/templates/template-form.tsx
 msgid "Enter template title"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Enter the recovery key from an existing Anarlog device."
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx
@@ -777,14 +666,6 @@ msgstr ""
 msgid "Find a note..."
 msgstr ""
 
-#: src/instruction/index.tsx
-msgid "Finish checkout in your browser, then return to Anarlog."
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Finish sign-in"
-msgstr ""
-
 #: src/settings/general/week-start.tsx
 msgid "First day of the week in the calendar view"
 msgstr ""
@@ -809,10 +690,6 @@ msgstr ""
 msgid "Forever"
 msgstr ""
 
-#: src/settings/general/account.tsx
-msgid "Free"
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr ""
@@ -828,15 +705,6 @@ msgstr ""
 
 #: src/settings/general/notification.tsx
 msgid "Get notified 5 minutes before calendar events start"
-msgstr ""
-
-#: src/session/components/note-input/enhanced/config-error.tsx
-msgid "Get Pro"
-msgstr ""
-
-#: src/onboarding/account/before-login.tsx
-#: src/settings/general/account.tsx
-msgid "Get started"
 msgstr ""
 
 #: src/sidebar/timeline/index.tsx
@@ -895,16 +763,8 @@ msgstr ""
 msgid "Human"
 msgstr ""
 
-#: src/settings/general/e2ee-setup.tsx
-msgid "I saved it"
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Icons"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "If the browser does not reopen Anarlog, use the paste-link fallback in the sign-in instruction window."
 msgstr ""
 
 #: src/sidebar/timeline/upcoming-meeting.ts
@@ -968,11 +828,6 @@ msgstr "Jazyk pro shrnutí, chaty a odpovědi generované umělou inteligencí"
 msgid "Language model is needed to make Anarlog summarize and chat about your conversations."
 msgstr ""
 
-#. placeholder {0}: formatDistanceToNow( new Date(status.last_sync_at_ms), { addSuffix: true }, )
-#: src/main/sync-status.tsx
-msgid "Last synced {0}"
-msgstr ""
-
 #: src/chat/components/message/error.tsx
 msgid "Learn how to fix this"
 msgstr ""
@@ -1010,10 +865,6 @@ msgstr ""
 msgid "Loading..."
 msgstr ""
 
-#: src/onboarding/account/before-login.tsx
-msgid "Login"
-msgstr ""
-
 #: src/settings/ai/shared/index.tsx
 msgid "macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Anarlog retries this API key."
 msgstr ""
@@ -1021,10 +872,6 @@ msgstr ""
 #: src/settings/general/main-language.tsx
 msgid "Main language"
 msgstr "Hlavní jazyk"
-
-#: src/settings/general/account.tsx
-msgid "Manage billing"
-msgstr ""
 
 #: src/session/components/note-input/search/bar.tsx
 msgid "Match case"
@@ -1334,14 +1181,6 @@ msgstr ""
 msgid "Participants"
 msgstr ""
 
-#: src/instruction/index.tsx
-msgid "Paste the browser URL here if the browser button did not reopen Anarlog."
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Pause sync"
-msgstr ""
-
 #: src/contacts/organization-details.tsx
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "People"
@@ -1364,14 +1203,6 @@ msgstr ""
 msgid "Phone"
 msgstr ""
 
-#: src/settings/general/account.tsx
-msgid "Plan & Billing"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Plans"
-msgstr ""
-
 #: src/settings/general/app-settings.tsx
 msgid "Post recording disclosure in meeting chat"
 msgstr ""
@@ -1386,14 +1217,6 @@ msgstr ""
 
 #: src/settings/ai/stt/select.tsx
 msgid "Pro"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Pro trial"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Protect cloud sync"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
@@ -1415,10 +1238,6 @@ msgstr ""
 
 #: src/session/components/outer-header/index.tsx
 msgid "Record"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Refresh billing status"
 msgstr ""
 
 #: src/calendar/components/calendar-selection.tsx
@@ -1446,15 +1265,7 @@ msgid "Remove repository"
 msgstr ""
 
 #: src/instruction/index.tsx
-msgid "Reopen checkout page"
-msgstr ""
-
-#: src/instruction/index.tsx
 msgid "Reopen in browser"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Reopen sign-in page"
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx
@@ -1527,10 +1338,6 @@ msgstr ""
 msgid "Resume listening"
 msgstr ""
 
-#: src/main/sync-status.tsx
-msgid "Resume sync"
-msgstr ""
-
 #: src/chat/components/message/error.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 #: src/settings/general/storage/legacy-cleanup.tsx
@@ -1548,10 +1355,6 @@ msgstr ""
 
 #: src/session/components/outer-header/metadata/date.tsx
 msgid "Save date"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Save this key in a password manager. You need it to add a new device, and it will not be shown again."
 msgstr ""
 
 #: src/contacts/shared.tsx
@@ -1687,10 +1490,6 @@ msgstr ""
 msgid "Set up AI summaries"
 msgstr ""
 
-#: src/main/sync-status.tsx
-msgid "Setting up cloud sync"
-msgstr ""
-
 #: src/main/empty.tsx
 #: src/sidebar/settings.tsx
 msgid "Settings"
@@ -1741,20 +1540,8 @@ msgstr ""
 msgid "Show tray icon"
 msgstr ""
 
-#: src/settings/general/account.tsx
-msgid "Sign in"
-msgstr ""
-
 #: src/settings/todo/github.tsx
 msgid "Sign in for private repo access."
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Sign in for Pro"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Sign in to Anarlog"
 msgstr ""
 
 #: src/onboarding/calendar.tsx
@@ -1766,38 +1553,8 @@ msgstr ""
 msgid "Sign in to connect {0}"
 msgstr ""
 
-#: src/settings/general/account.tsx
-msgid "Sign in to unlock cloud transcription and AI models, plus Pro features like sharing."
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Sign in to unlock powerful AI models, sync across devices, and personalization."
-msgstr ""
-
-#: src/instruction/index.tsx
-msgid "Sign in to your account"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Sign out"
-msgstr ""
-
-#: src/onboarding/account/after-login.tsx
-#: src/onboarding/index.tsx
-#: src/settings/general/account.tsx
-msgid "Signed in"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Signing out..."
-msgstr ""
-
 #: src/onboarding/shared.tsx
 msgid "Skip"
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Skipped"
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -1820,10 +1577,6 @@ msgstr ""
 msgid "SQLite migration verification is incomplete"
 msgstr ""
 
-#: src/session/components/note-input/enhanced/config-error.tsx
-msgid "Start a Pro trial or add your own LLM API key to generate a summary from this transcript."
-msgstr ""
-
 #: src/settings/general/app-settings.tsx
 msgid "Start Anarlog at login"
 msgstr "Spustit Anarlog při přihlášení"
@@ -1842,10 +1595,6 @@ msgstr ""
 
 #: src/settings/ai/stt/select.tsx
 msgid "Starting"
-msgstr ""
-
-#: src/onboarding/account/after-login.tsx
-msgid "Starting your trial..."
 msgstr ""
 
 #: src/session/components/outer-header/index.tsx
@@ -1882,10 +1631,6 @@ msgstr ""
 msgid "Storage Updated"
 msgstr ""
 
-#: src/instruction/index.tsx
-msgid "Submit callback URL"
-msgstr ""
-
 #: src/contacts/details.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Summary"
@@ -1897,34 +1642,6 @@ msgstr ""
 
 #: src/templates/template-icon-picker.tsx
 msgid "Symbols"
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Sync issue"
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Sync now"
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Sync paused"
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Sync settings"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Sync your changes before signing out."
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Synced"
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Syncing..."
 msgstr ""
 
 #: src/settings/general/theme.tsx
@@ -1966,10 +1683,6 @@ msgstr "Pro přepis je vždy zahrnut hlavní jazyk"
 msgid "Thinking..."
 msgstr ""
 
-#: src/main/sync-status.tsx
-msgid "This account already syncs on 5 devices. Remove another device to sync here."
-msgstr ""
-
 #. placeholder {0}: status.fileCount
 #. placeholder {1}: formatBytes(status.totalBytes)
 #: src/settings/general/storage/legacy-cleanup.tsx
@@ -2007,24 +1720,12 @@ msgstr ""
 msgid "Travel & Places"
 msgstr ""
 
-#: src/settings/general/account.tsx
-msgid "Trial"
-msgstr ""
-
-#: src/onboarding/account/after-login.tsx
-msgid "Trial activated - {trialDays} days of Pro"
-msgstr ""
-
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "Unknown"
 msgstr ""
 
 #: src/session/components/outer-header/metadata/date.tsx
 msgid "Unknown date"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Unlock sync"
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx
@@ -2058,7 +1759,6 @@ msgid "Upgrade to connect"
 msgstr ""
 
 #: src/calendar/components/sidebar.tsx
-#: src/main/sync-status.tsx
 msgid "Upgrade to Pro"
 msgstr ""
 
@@ -2084,10 +1784,6 @@ msgstr ""
 #: src/session/components/floating/options-menu.tsx
 #: src/session/components/outer-header/overflow/index.tsx
 msgid "Upload transcript"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Use an existing key"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
@@ -2136,30 +1832,6 @@ msgstr ""
 
 #: src/calendar/components/apple/permission.tsx
 msgid "You can"
-msgstr ""
-
-#: src/onboarding/account/after-login.tsx
-msgid "You have an active plan"
-msgstr ""
-
-#: src/onboarding/account/after-login.tsx
-msgid "You're on a Pro trial"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "You're on the <0>{planLabel}</0> plan"
-msgstr ""
-
-#: src/settings/general/account.tsx
-msgid "Your Account"
-msgstr ""
-
-#: src/main/sync-status.tsx
-msgid "Your notes are stored on this device only"
-msgstr ""
-
-#: src/settings/general/e2ee-setup.tsx
-msgid "Your recovery key encrypts synced notes before they leave this device. Anarlog cannot read or recover it."
 msgstr ""
 
 #: src/templates/template-sidebar.tsx
