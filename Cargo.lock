@@ -544,52 +544,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "api"
-version = "0.1.0"
-dependencies = [
- "analytics",
- "api-auth",
- "api-calendar",
- "api-env",
- "api-mail",
- "api-nango",
- "api-pyannote",
- "api-research",
- "api-subscription",
- "api-support",
- "api-sync",
- "api-ticket",
- "axum 0.8.9",
- "dotenvy",
- "envy",
- "governor",
- "jsonwebtoken",
- "linear",
- "llm-proxy",
- "observability",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
- "owhisper-client",
- "reqwest 0.13.2",
- "rustls 0.23.38",
- "sentry",
- "serde",
- "serde_json",
- "tokio",
- "tokio-util",
- "tower 0.5.3",
- "tower-http 0.6.8",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "transcribe-proxy",
- "url",
- "utoipa",
- "wiremock",
-]
-
-[[package]]
 name = "api-agent"
 version = "0.1.0"
 dependencies = [
@@ -599,48 +553,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
-]
-
-[[package]]
-name = "api-auth"
-version = "0.1.0"
-dependencies = [
- "axum 0.8.9",
- "supabase-auth",
- "tokio",
-]
-
-[[package]]
-name = "api-bot"
-version = "0.1.0"
-dependencies = [
- "api-error",
- "axum 0.8.9",
- "recall",
- "sentry",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tracing",
- "urlencoding",
- "utoipa",
-]
-
-[[package]]
-name = "api-calendar"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "api-error",
- "api-nango",
- "axum 0.8.9",
- "chrono",
- "google-calendar",
- "nango",
- "outlook-calendar",
- "serde",
- "thiserror 2.0.18",
- "utoipa",
 ]
 
 [[package]]
@@ -694,21 +606,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "api-mail"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "api-error",
- "api-nango",
- "axum 0.8.9",
- "google-mail",
- "nango",
- "serde",
- "thiserror 2.0.18",
- "utoipa",
-]
-
-[[package]]
 name = "api-messenger"
 version = "0.1.0"
 dependencies = [
@@ -720,197 +617,6 @@ dependencies = [
  "slack-web",
  "teems",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "api-nango"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "api-env",
- "api-error",
- "axum 0.8.9",
- "chrono",
- "futures-util",
- "hex",
- "hmac 0.13.0",
- "nango",
- "reqwest 0.13.2",
- "sentry",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
- "urlencoding",
- "utoipa",
- "wiremock",
-]
-
-[[package]]
-name = "api-pyannote"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "api-env",
- "api-error",
- "axum 0.8.9",
- "pyannote-cloud",
- "reqwest 0.13.2",
- "serde",
- "serde_json",
- "tokio",
- "tower 0.5.3",
- "tracing",
- "utoipa",
- "wiremock",
-]
-
-[[package]]
-name = "api-research"
-version = "0.1.0"
-dependencies = [
- "askama 0.15.6",
- "axum 0.8.9",
- "exa",
- "jina",
- "mcp",
- "rmcp",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
-]
-
-[[package]]
-name = "api-storage"
-version = "0.1.0"
-dependencies = [
- "api-error",
- "api-nango",
- "axum 0.8.9",
- "google-drive",
- "nango",
- "sentry",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tracing",
- "utoipa",
-]
-
-[[package]]
-name = "api-subscription"
-version = "0.1.0"
-dependencies = [
- "analytics",
- "api-auth",
- "api-env",
- "api-error",
- "async-stripe",
- "async-stripe-billing",
- "async-stripe-core",
- "axum 0.8.9",
- "backon",
- "chrono",
- "futures-util",
- "loops",
- "observability",
- "reqwest 0.13.2",
- "sentry",
- "serde",
- "serde_json",
- "supabase-storage",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "tower 0.5.3",
- "tracing",
- "urlencoding",
- "utoipa",
- "uuid",
- "wiremock",
-]
-
-[[package]]
-name = "api-support"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "api-env",
- "async-stream",
- "async-stripe",
- "async-stripe-billing",
- "axum 0.8.9",
- "chatwoot",
- "futures-util",
- "jsonwebtoken",
- "llm-proxy",
- "mcp",
- "octocrab",
- "openrouter",
- "regex",
- "reqwest 0.13.2",
- "rmcp",
- "sentry",
- "serde",
- "serde_json",
- "sqlx",
- "strum 0.28.0",
- "template-support",
- "thiserror 2.0.18",
- "tokio",
- "tokio-tungstenite 0.29.0",
- "tokio-util",
- "tracing",
- "urlencoding",
- "utoipa",
-]
-
-[[package]]
-name = "api-sync"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "api-error",
- "axum 0.8.9",
- "chrono",
- "futures-util",
- "hmac 0.13.0",
- "loops",
- "reqwest 0.13.2",
- "sentry",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "supabase-storage",
- "thiserror 2.0.18",
- "tokio",
- "tower 0.5.3",
- "tracing",
- "utoipa",
- "uuid",
- "wiremock",
-]
-
-[[package]]
-name = "api-ticket"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "api-error",
- "api-nango",
- "axum 0.8.9",
- "github-issues",
- "linear",
- "nango",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "ticket-interface",
- "utoipa",
 ]
 
 [[package]]
@@ -1423,97 +1129,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
-]
-
-[[package]]
-name = "async-stripe"
-version = "1.0.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "03ec8493f89fb9d9ac1848988955ec192df8e0ebf4d4bbd85fd93df9f681e890"
-dependencies = [
- "async-stripe-client-core",
- "async-stripe-shared",
- "bytes",
- "http-body-util",
- "hyper 1.9.0",
- "hyper-tls",
- "hyper-util",
- "miniserde",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
-name = "async-stripe-billing"
-version = "1.0.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e2340b289cd5e34bb9b8b3eebed4e7a9729831ebee01388965ad4d88fd7a5a3b"
-dependencies = [
- "async-stripe-client-core",
- "async-stripe-shared",
- "async-stripe-types",
- "miniserde",
- "serde",
- "smol_str",
- "tracing",
-]
-
-[[package]]
-name = "async-stripe-client-core"
-version = "1.0.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10f095837711eb1c3ee02604b4e1d44b117014fb74da99ad4f2d70e907dbdc41"
-dependencies = [
- "async-stripe-shared",
- "async-stripe-types",
- "bytes",
- "futures-util",
- "miniserde",
- "serde",
- "serde_json",
- "serde_qs",
- "thiserror 2.0.18",
- "tracing",
-]
-
-[[package]]
-name = "async-stripe-core"
-version = "1.0.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ee9710c3d64db48dda1ec0b4976d091b7f40cabc8ed7bcab9e93b608b70b405c"
-dependencies = [
- "async-stripe-client-core",
- "async-stripe-shared",
- "async-stripe-types",
- "miniserde",
- "serde",
- "smol_str",
- "tracing",
-]
-
-[[package]]
-name = "async-stripe-shared"
-version = "1.0.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a352c5e36a92aa8bdd4326c8211b9a26e822e6cb4b7516a47282396a4938a231"
-dependencies = [
- "async-stripe-types",
- "miniserde",
- "serde",
- "smol_str",
- "tracing",
-]
-
-[[package]]
-name = "async-stripe-types"
-version = "1.0.0-rc.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8e1ec9960b89b1f556bf885403dd208d173a8c42d028fcd7baeca9ad2bfb13f6"
-dependencies = [
- "miniserde",
- "serde",
- "smol_str",
 ]
 
 [[package]]
@@ -2817,16 +2432,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
 
 [[package]]
-name = "borsh"
-version = "1.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfd1e3f8955a5d7de9fab72fc8373fade9fb8a703968cb200ae3dc6cf08e185a"
-dependencies = [
- "bytes",
- "cfg_aliases 0.2.1",
-]
-
-[[package]]
 name = "brotli"
 version = "8.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3075,37 +2680,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "cargo-platform"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "87a0c0e6148f11f01f32650a2ea02d532b2ad4e81d8bd41e6e565b5adc5e6082"
-dependencies = [
- "serde",
- "serde_core",
-]
-
-[[package]]
 name = "cargo_metadata"
 version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd5eb614ed4c27c5d706420e4320fbe3216ab31fa1c33cd8246ac36dae4479ba"
 dependencies = [
  "camino",
- "cargo-platform 0.1.9",
- "semver",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "cargo_metadata"
-version = "0.23.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ef987d17b0a113becdd19d3d0022d04d7ef41f9efe4f3fb63ac44ba61df3ade9"
-dependencies = [
- "camino",
- "cargo-platform 0.3.2",
+ "cargo-platform",
  "semver",
  "serde",
  "serde_json",
@@ -5620,15 +5201,6 @@ dependencies = [
  "env_filter",
  "jiff",
  "log",
-]
-
-[[package]]
-name = "envy"
-version = "0.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f47e0157f2cb54f5ae1bd371b30a2ae4311e1c028f575cd4e81de7353215965"
-dependencies = [
- "serde",
 ]
 
 [[package]]
@@ -8351,29 +7923,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "governor"
-version = "0.10.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9efcab3c1958580ff1f25a2a41be1668f7603d849bb63af523b208a3cc1223b8"
-dependencies = [
- "cfg-if",
- "dashmap",
- "futures-sink",
- "futures-timer",
- "futures-util",
- "getrandom 0.3.4",
- "hashbrown 0.16.1",
- "nonzero_ext",
- "parking_lot",
- "portable-atomic",
- "quanta",
- "rand 0.9.4",
- "smallvec 1.15.1",
- "spinning_top",
- "web-time",
-]
-
-[[package]]
 name = "granola"
 version = "0.1.0"
 dependencies = [
@@ -9110,7 +8659,6 @@ dependencies = [
  "http 1.4.0",
  "hyper 1.9.0",
  "hyper-util",
- "log",
  "rustls 0.23.38",
  "rustls-native-certs 0.8.3",
  "tokio",
@@ -9129,19 +8677,6 @@ dependencies = [
  "pin-project-lite",
  "tokio",
  "tokio-io-timeout",
-]
-
-[[package]]
-name = "hyper-timeout"
-version = "0.5.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b90d566bffbce6a75bd8b09a05aa8c2cb1fabb6cb348f8840c9e4c90a0d83b0"
-dependencies = [
- "hyper 1.9.0",
- "hyper-util",
- "pin-project-lite",
- "tokio",
- "tower-service",
 ]
 
 [[package]]
@@ -10473,7 +10008,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tonic 0.11.0",
+ "tonic",
  "tonic-web",
  "tower 0.4.13",
  "tower-http 0.4.4",
@@ -10572,7 +10107,7 @@ dependencies = [
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tonic 0.11.0",
+ "tonic",
  "tracing",
  "uuid",
  "zerocopy 0.7.35",
@@ -10761,33 +10296,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "11d3d7f243d5c5a8b9bb5d6dd2b1602c0cb0b9db1621bafc7ed66e35ff9fe092"
 
 [[package]]
-name = "llm-proxy"
-version = "0.1.0"
-dependencies = [
- "analytics",
- "api-env",
- "async-stream",
- "axum 0.8.9",
- "backon",
- "bytes",
- "futures-util",
- "observability",
- "openrouter",
- "reqwest 0.13.2",
- "sentry",
- "serde",
- "serde_json",
- "strum 0.28.0",
- "thiserror 2.0.18",
- "tokio",
- "tower 0.5.3",
- "tracing",
- "tracing-subscriber",
- "utoipa",
- "wiremock",
-]
-
-[[package]]
 name = "llm-types"
 version = "0.1.0"
 dependencies = [
@@ -10879,18 +10387,6 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
-
-[[package]]
-name = "loops"
-version = "0.1.0"
-dependencies = [
- "reqwest 0.13.2",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "url",
-]
 
 [[package]]
 name = "lru"
@@ -11106,16 +10602,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mcp"
-version = "0.1.0"
-dependencies = [
- "api-auth",
- "askama 0.15.6",
- "axum 0.8.9",
- "rmcp",
-]
-
-[[package]]
 name = "md-5"
 version = "0.10.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11198,17 +10684,6 @@ checksum = "f7c44f8e672c00fe5308fa235f821cb4198414e1c77935c1ab6948d3fd78550e"
 dependencies = [
  "mime",
  "unicase",
-]
-
-[[package]]
-name = "mini-internal"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2a8df435db5df1dd82a74f77e3c3addf6ab7665079c31e222a64f34f7475d87e"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -11307,17 +10782,6 @@ name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
-
-[[package]]
-name = "miniserde"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8c48e83ec09ab8a51d4e6be46608bf2a1293a79e2f7ea60246a2ce50eaef44ba"
-dependencies = [
- "itoa",
- "mini-internal",
- "zmij",
-]
 
 [[package]]
 name = "minisign-verify"
@@ -11616,12 +11080,6 @@ checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
 ]
-
-[[package]]
-name = "nonzero_ext"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38bf9645c8b145698bb0b18a4637dcacbc421ea49bef2317e4fd8065a387cf21"
 
 [[package]]
 name = "normalize-line-endings"
@@ -12392,48 +11850,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "octocrab"
-version = "0.49.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "63f6687a23731011d0117f9f4c3cdabaa7b5e42ca671f42b5cc0657c492540e3"
-dependencies = [
- "arc-swap",
- "async-trait",
- "base64 0.22.1",
- "bytes",
- "cargo_metadata 0.23.1",
- "cfg-if",
- "chrono",
- "either",
- "futures",
- "futures-util",
- "getrandom 0.2.17",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.9.0",
- "hyper-rustls 0.27.9",
- "hyper-timeout 0.5.2",
- "hyper-util",
- "jsonwebtoken",
- "once_cell",
- "percent-encoding",
- "pin-project",
- "secrecy",
- "serde",
- "serde_json",
- "serde_path_to_error",
- "serde_urlencoded",
- "snafu",
- "tokio",
- "tower 0.5.3",
- "tower-http 0.6.8",
- "tracing",
- "url",
- "web-time",
-]
-
-[[package]]
 name = "ogg_next_sys"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12607,18 +12023,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "openstatus"
-version = "0.1.0"
-dependencies = [
- "reqwest 0.13.2",
- "serde",
- "serde_json",
- "thiserror 2.0.18",
- "tokio",
- "url",
-]
-
-[[package]]
 name = "opentelemetry"
 version = "0.30.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -12630,50 +12034,6 @@ dependencies = [
  "pin-project-lite",
  "thiserror 2.0.18",
  "tracing",
-]
-
-[[package]]
-name = "opentelemetry-http"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50f6639e842a97dbea8886e3439710ae463120091e2e064518ba8e716e6ac36d"
-dependencies = [
- "async-trait",
- "bytes",
- "http 1.4.0",
- "opentelemetry",
- "reqwest 0.12.28",
-]
-
-[[package]]
-name = "opentelemetry-otlp"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "dbee664a43e07615731afc539ca60c6d9f1a9425e25ca09c57bc36c87c55852b"
-dependencies = [
- "http 1.4.0",
- "opentelemetry",
- "opentelemetry-http",
- "opentelemetry-proto",
- "opentelemetry_sdk",
- "prost 0.13.5",
- "reqwest 0.12.28",
- "thiserror 2.0.18",
- "tokio",
- "tonic 0.13.1",
- "tracing",
-]
-
-[[package]]
-name = "opentelemetry-proto"
-version = "0.30.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2e046fd7660710fe5a05e8748e70d9058dc15c94ba914e7c4faa7c728f0e8ddc"
-dependencies = [
- "opentelemetry",
- "opentelemetry_sdk",
- "prost 0.13.5",
- "tonic 0.13.1",
 ]
 
 [[package]]
@@ -14077,22 +13437,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e0c5ccf5294c6ccd63a74f1565028353830a9c2f5eb0c682c355c471726a6e3f"
 
 [[package]]
-name = "pyannote-cloud"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "progenitor-client 0.13.0",
- "progenitor-utils",
- "regress",
- "reqwest 0.13.2",
- "serde",
- "serde_json",
- "tokio",
- "utoipa",
- "wiremock",
-]
-
-[[package]]
 name = "pyannote-local"
 version = "0.1.0"
 dependencies = [
@@ -14113,21 +13457,6 @@ name = "qcms"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "edecfcd5d755a5e5d98e24cf43113e7cdaec5a070edd0f6b250c03a573da30fa"
-
-[[package]]
-name = "quanta"
-version = "0.12.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f3ab5a9d756f0d97bdc89019bd2e4ea098cf9cde50ee7564dde6b81ccc8f06c7"
-dependencies = [
- "crossbeam-utils",
- "libc",
- "once_cell",
- "raw-cpuid",
- "wasi 0.11.1+wasi-snapshot-preview1",
- "web-sys",
- "winapi",
-]
 
 [[package]]
 name = "quick-error"
@@ -14161,28 +13490,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "958f21e8e7ceb5a1aa7fa87fab28e7c75976e0bfe7e23ff069e0a260f894067d"
 dependencies = [
  "memchr",
-]
-
-[[package]]
-name = "quickcheck"
-version = "1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95c589f335db0f6aaa168a7cd27b1fc6920f5e1470c804f814d9cd6e62a0f70b"
-dependencies = [
- "env_logger",
- "log",
- "rand 0.10.1",
-]
-
-[[package]]
-name = "quickcheck_macros"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9a28b8493dd664c8b171dd944da82d933f7d456b829bfb236738e1fe06c5ba4"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
 ]
 
 [[package]]
@@ -14437,15 +13744,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "12a5a2d6c7039059af621472a4389be1215a816df61aa4d531cfe85264aee95f"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "raw-cpuid"
-version = "11.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "498cd0dc59d73224351ee52a95fee0f1a617a2eae0e7d9d720cc622c73a54186"
-dependencies = [
- "bitflags 2.11.1",
 ]
 
 [[package]]
@@ -14915,28 +14213,19 @@ checksum = "67d69668de0b0ccd9cc435f700f3b39a7861863cf37a15e1f304ea78688a4826"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
- "bytes",
  "chrono",
  "futures",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
  "pastey",
  "pin-project-lite",
- "rand 0.10.1",
  "rmcp-macros",
  "schemars 1.2.1",
  "serde",
  "serde_json",
- "sse-stream",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",
  "tokio-util",
- "tower-service",
  "tracing",
- "url",
- "uuid",
 ]
 
 [[package]]
@@ -15253,7 +14542,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "69f9466fb2c14ea04357e91413efb882e2a6d4a406e625449bc0a5d360d53a21"
 dependencies = [
  "aws-lc-rs",
- "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -15736,7 +15024,6 @@ dependencies = [
  "sentry-core",
  "sentry-debug-images",
  "sentry-panic",
- "sentry-tower",
  "sentry-tracing",
  "tokio",
  "ureq",
@@ -15822,21 +15109,6 @@ dependencies = [
  "minidumper-child",
  "sentry",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "sentry-tower"
-version = "0.42.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4a303d0127d95ae928a937dcc0886931d28b4186e7338eea7d5786827b69b002"
-dependencies = [
- "axum 0.8.9",
- "http 1.4.0",
- "pin-project",
- "sentry-core",
- "tower-layer",
- "tower-service",
- "url",
 ]
 
 [[package]]
@@ -16497,37 +15769,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b7c388c1b5e93756d0c740965c41e8822f866621d41acbdf6336a6a168f8840c"
 
 [[package]]
-name = "smol_str"
-version = "0.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9676b89cd56310a87b93dec47b11af744f34d5fc9f367b829474eec0a891350d"
-dependencies = [
- "borsh",
- "serde",
-]
-
-[[package]]
-name = "snafu"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6e84b3f4eacbf3a1ce05eac6763b4d629d60cbc94d632e4092c54ade71f1e1a2"
-dependencies = [
- "snafu-derive",
-]
-
-[[package]]
-name = "snafu-derive"
-version = "0.8.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c1c97747dbf44bb1ca44a561ece23508e99cb592e862f22222dcf42f51d1e451"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "socket2"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16673,15 +15914,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "spinning_top"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d96d2d1d716fb500937168cc09353ffdc7a012be8475ac7308e1bdf0e3923300"
-dependencies = [
- "lock_api",
-]
-
-[[package]]
 name = "spki"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16737,7 +15969,6 @@ dependencies = [
  "log",
  "memchr",
  "percent-encoding",
- "rustls 0.23.38",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -16747,7 +15978,6 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "url",
- "webpki-roots 0.26.11",
 ]
 
 [[package]]
@@ -16780,8 +16010,6 @@ dependencies = [
  "serde_json",
  "sha2 0.10.9",
  "sqlx-core",
- "sqlx-mysql",
- "sqlx-postgres",
  "sqlx-sqlite",
  "syn 2.0.117",
  "thiserror 2.0.18",
@@ -16819,7 +16047,6 @@ dependencies = [
  "percent-encoding",
  "rand 0.8.6",
  "rsa",
- "serde",
  "sha1",
  "sha2 0.10.9",
  "smallvec 1.15.1",
@@ -16888,19 +16115,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tracing",
  "url",
-]
-
-[[package]]
-name = "sse-stream"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c5e6deb40826033bd7b11c7ef25ef71193fabd71f680f40dd16538a2704d2f4"
-dependencies = [
- "bytes",
- "futures-util",
- "http-body 1.0.1",
- "http-body-util",
- "pin-project-lite",
 ]
 
 [[package]]
@@ -17203,22 +16417,6 @@ dependencies = [
  "storage",
  "thiserror 2.0.18",
  "tokio",
- "wiremock",
-]
-
-[[package]]
-name = "supabase-storage"
-version = "0.1.0"
-dependencies = [
- "futures-util",
- "observability",
- "reqwest 0.13.2",
- "serde",
- "serde_json",
- "sha2 0.11.0",
- "thiserror 2.0.18",
- "tokio",
- "urlencoding",
  "wiremock",
 ]
 
@@ -19464,7 +18662,7 @@ checksum = "219a1f983a2af3653f75b5747f76733b0da7ff03069c7a41901a5eb3ace4557d"
 dependencies = [
  "anyhow",
  "brotli",
- "cargo_metadata 0.19.2",
+ "cargo_metadata",
  "ctor",
  "dunce",
  "glob",
@@ -20225,39 +19423,13 @@ dependencies = [
  "http 0.2.12",
  "http-body 0.4.6",
  "hyper 0.14.32",
- "hyper-timeout 0.4.1",
+ "hyper-timeout",
  "percent-encoding",
  "pin-project",
  "prost 0.12.6",
  "tokio",
  "tokio-stream",
  "tower 0.4.13",
- "tower-layer",
- "tower-service",
- "tracing",
-]
-
-[[package]]
-name = "tonic"
-version = "0.13.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7e581ba15a835f4d9ea06c55ab1bd4dce26fc53752c69a04aac00703bfb49ba9"
-dependencies = [
- "async-trait",
- "base64 0.22.1",
- "bytes",
- "http 1.4.0",
- "http-body 1.0.1",
- "http-body-util",
- "hyper 1.9.0",
- "hyper-timeout 0.5.2",
- "hyper-util",
- "percent-encoding",
- "pin-project",
- "prost 0.13.5",
- "tokio",
- "tokio-stream",
- "tower 0.5.3",
  "tower-layer",
  "tower-service",
  "tracing",
@@ -20276,7 +19448,7 @@ dependencies = [
  "hyper 0.14.32",
  "pin-project",
  "tokio-stream",
- "tonic 0.11.0",
+ "tonic",
  "tower-http 0.4.4",
  "tower-layer",
  "tower-service",
@@ -20311,9 +19483,7 @@ checksum = "ebe5ef63511595f1344e2d5cfa636d973292adc0eec1f0ad45fae9f0851ab1d4"
 dependencies = [
  "futures-core",
  "futures-util",
- "indexmap 2.14.0",
  "pin-project-lite",
- "slab",
  "sync_wrapper 1.0.2",
  "tokio",
  "tokio-util",
@@ -20364,7 +19534,6 @@ dependencies = [
  "tower-layer",
  "tower-service",
  "tracing",
- "uuid",
 ]
 
 [[package]]
@@ -20496,52 +19665,6 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
-]
-
-[[package]]
-name = "transcribe-proxy"
-version = "0.1.0"
-dependencies = [
- "analytics",
- "api-auth",
- "api-env",
- "audio-mime",
- "audio-utils",
- "axum 0.8.9",
- "backon",
- "base64 0.22.1",
- "bytes",
- "codes-iso-639",
- "data",
- "futures-util",
- "insta",
- "itertools 0.14.0",
- "language",
- "observability",
- "owhisper-client",
- "owhisper-interface",
- "quickcheck",
- "quickcheck_macros",
- "reqwest 0.13.2",
- "reqwest-middleware",
- "rodio",
- "sentry",
- "serde",
- "serde_html_form 0.4.0",
- "serde_json",
- "supabase-storage",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-stream",
- "tokio-tungstenite 0.29.0",
- "tower 0.5.3",
- "tracing",
- "tracing-subscriber",
- "url",
- "urlencoding",
- "utoipa",
- "uuid",
 ]
 
 [[package]]
@@ -21365,7 +20488,7 @@ checksum = "3291800a6b06569f7d3e15bdb6dc235e0f0c8bd3eb07177f430057feb076415f"
 dependencies = [
  "anyhow",
  "camino",
- "cargo_metadata 0.19.2",
+ "cargo_metadata",
  "clap",
  "uniffi_bindgen 0.29.5",
  "uniffi_core 0.29.5",
@@ -21380,7 +20503,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dc5f2297ee5b893405bed1a6929faec4713a061df158ecf5198089f23910d470"
 dependencies = [
  "anyhow",
- "cargo_metadata 0.19.2",
+ "cargo_metadata",
  "uniffi_bindgen 0.31.1",
  "uniffi_core 0.31.1",
  "uniffi_macros 0.31.1",
@@ -21403,7 +20526,7 @@ dependencies = [
  "anyhow",
  "askama 0.13.1",
  "camino",
- "cargo_metadata 0.19.2",
+ "cargo_metadata",
  "fs-err",
  "glob",
  "goblin",
@@ -21429,7 +20552,7 @@ dependencies = [
  "anyhow",
  "askama 0.14.0",
  "camino",
- "cargo_metadata 0.19.2",
+ "cargo_metadata",
  "fs-err",
  "glob",
  "goblin",
@@ -22303,7 +21426,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5a6580f308b1fad9207618087a65c04e7a10bc77e02c8e84e9b00dd4b12fa0bb"
 dependencies = [
  "js-sys",
- "serde",
  "wasm-bindgen",
 ]
 

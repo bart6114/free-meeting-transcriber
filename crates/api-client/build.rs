@@ -1,14 +1,5 @@
 use progenitor_utils::OpenApiSpec;
 
-const ALLOWED_PATH_PREFIXES: &[&str] = &[
-    "/calendar",
-    "/feedback",
-    "/nango",
-    "/subscription",
-    "/support",
-    "/ticket",
-];
-
 const TYPE_REPLACEMENTS: &[(&str, &str)] = &[
     (
         "GoogleListCalendarsResponse",
@@ -30,19 +21,18 @@ const TYPE_REPLACEMENTS: &[(&str, &str)] = &[
     ("TicketPage", "hypr_ticket_interface::TicketPage"),
 ];
 
+// NOTE(fork): this used to re-derive `openapi.gen.json` on every build from
+// the hosted backend's master spec at `apps/api/openapi.gen.json`. `apps/api`
+// was deleted (see chore: remove server-side apps, backend crates, and
+// deploy configs) since this is now a fully local app. `crates/calendar` and
+// `plugins/todo` still depend on the generated client types below, so instead
+// of deriving from source we build directly off the already-filtered,
+// already-3.0-converted spec that was last generated and is committed
+// alongside this crate. Regenerate that file (via the old pipeline, against
+// a real backend spec) if these types ever need to change.
 fn main() {
-    let src = concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../../apps/api/openapi.gen.json"
-    );
+    let src = concat!(env!("CARGO_MANIFEST_DIR"), "/openapi.gen.json");
     println!("cargo:rerun-if-changed={src}");
 
-    OpenApiSpec::from_path(src)
-        .retain_paths(ALLOWED_PATH_PREFIXES)
-        .normalize_responses()
-        .flatten_all_of()
-        .convert_31_to_30()
-        .remove_unreferenced_schemas()
-        .write_filtered(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("openapi.gen.json"))
-        .generate_with_replacements("codegen.rs", TYPE_REPLACEMENTS);
+    OpenApiSpec::from_path(src).generate_with_replacements("codegen.rs", TYPE_REPLACEMENTS);
 }

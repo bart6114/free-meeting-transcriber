@@ -1,17 +1,10 @@
 version: "3"
 dotenv: [".env"]
-includes:
-  web:
-    taskfile: ./apps/web
 
 tasks:
   py:init: POETRY_VIRTUALENVS_IN_PROJECT=true poetry install --no-cache --no-interaction --all-extras
   py:run: poetry run python3 {{.CLI_ARGS}}
 
-  stripe:
-    cmds:
-      - stripe listen --print-secret | tr -d '\r\n' | (echo -n 'STRIPE_WEBHOOK_SECRET="'; cat; echo '"') > .env.stripe
-      - stripe listen --skip-verify --forward-to http://localhost:8788/webhook/stripe
   bacon: bacon {{.CLI_ARGS}}
 
   cli:ui:
@@ -79,98 +72,6 @@ tasks:
       OUTPUT_ENV: '{{.OUTPUT_ENV | default ".env.sample"}}'
     cmds:
       - sed -E '/^[A-Z_][A-Z0-9_]*=/s/=.*/=""/' {{.INPUT_ENV}} > {{.OUTPUT_ENV}}
-
-  supabase:
-    cmds:
-      - pnpm exec supabase {{.CLI_ARGS}}
-
-  supabase-stop:
-    cmds:
-      - pnpm exec supabase stop
-      - task: supabase-tunnel-stop
-
-  supabase-tunnel-start:
-    platforms: [darwin]
-    cmds:
-      - bash scripts/supabase-tunnel-start.sh
-
-  supabase-expose:
-    platforms: [darwin]
-    cmds:
-      - task: supabase-tunnel-stop
-      - task: supabase-env
-      - task: supabase-tunnel-start
-
-  supabase-no-expose:
-    platforms: [darwin]
-    cmds:
-      - task: supabase-tunnel-stop
-      - task: supabase-env
-
-  supabase-tunnel-stop:
-    platforms: [darwin]
-    cmds:
-      - bash scripts/supabase-tunnel-stop.sh
-
-  supabase-env:
-    internal: true
-    cmds:
-      - |
-          pnpm exec supabase status --output=env | awk -F= '
-            /^ANON_KEY=/ { print "SUPABASE_ANON_KEY=" $2; print "VITE_SUPABASE_ANON_KEY=" $2 }
-            /^API_URL=/ { print "SUPABASE_URL=" $2; print "VITE_SUPABASE_URL=" $2 }
-            /^DB_URL=/ { print "DATABASE_URL=" $2 }
-            /^FUNCTIONS_URL=/ { print "SUPABASE_FUNCTIONS_URL=" $2; print "VITE_SUPABASE_FUNCTIONS_URL=" $2 }
-            /^GRAPHQL_URL=/ { print "SUPABASE_GRAPHQL_URL=" $2; print "VITE_SUPABASE_GRAPHQL_URL=" $2 }
-            /^INBUCKET_URL=/ { print "SUPABASE_INBUCKET_URL=" $2 }
-            /^JWT_SECRET=/ { print "SUPABASE_JWT_SECRET=" $2 }
-            /^MAILPIT_URL=/ { print "SUPABASE_MAILPIT_URL=" $2 }
-            /^MCP_URL=/ { print "SUPABASE_MCP_URL=" $2 }
-            /^PUBLISHABLE_KEY=/ { print "SUPABASE_PUBLISHABLE_KEY=" $2; print "VITE_SUPABASE_PUBLISHABLE_KEY=" $2 }
-            /^REST_URL=/ { print "SUPABASE_REST_URL=" $2; print "VITE_SUPABASE_REST_URL=" $2 }
-            /^SECRET_KEY=/ { print "SUPABASE_SECRET_KEY=" $2 }
-            /^SERVICE_ROLE_KEY=/ { print "SUPABASE_SERVICE_ROLE_KEY=" $2 }
-            /^STUDIO_URL=/ { print "SUPABASE_STUDIO_URL=" $2 }
-          ' > .env.supabase
-
-  supabase-storage-seed-config:
-    internal: true
-    vars:
-      SUPABASE_STORAGE_ASSETS_DIR: '{{.SUPABASE_STORAGE_ASSETS_DIR | default "./.seed/storage/assets"}}'
-      SUPABASE_STORAGE_ASSETS_BUCKET: '{{.SUPABASE_STORAGE_ASSETS_BUCKET | default "assets"}}'
-      SUPABASE_STORAGE_MODELS_DIR: '{{.SUPABASE_STORAGE_MODELS_DIR | default "./.seed/storage/models"}}'
-      SUPABASE_STORAGE_MODELS_BUCKET: '{{.SUPABASE_STORAGE_MODELS_BUCKET | default "models"}}'
-      SUPABASE_STORAGE_AUDIO_FILES_DIR: '{{.SUPABASE_STORAGE_AUDIO_FILES_DIR | default "./.seed/storage/audio-files"}}'
-      SUPABASE_STORAGE_AUDIO_FILES_BUCKET: '{{.SUPABASE_STORAGE_AUDIO_FILES_BUCKET | default "audio-files"}}'
-    cmds:
-      - mkdir -p supabase/{{.SUPABASE_STORAGE_ASSETS_DIR}} supabase/{{.SUPABASE_STORAGE_MODELS_DIR}} supabase/{{.SUPABASE_STORAGE_AUDIO_FILES_DIR}}
-      - |
-          cargo xtask toml-set supabase/config.toml \
-            storage.buckets.{{.SUPABASE_STORAGE_ASSETS_BUCKET}}.public true \
-            storage.buckets.{{.SUPABASE_STORAGE_ASSETS_BUCKET}}.file_size_limit '"5GiB"' \
-            storage.buckets.{{.SUPABASE_STORAGE_ASSETS_BUCKET}}.allowed_mime_types '[]' \
-            storage.buckets.{{.SUPABASE_STORAGE_ASSETS_BUCKET}}.objects_path '"{{.SUPABASE_STORAGE_ASSETS_DIR}}"' \
-            storage.buckets.{{.SUPABASE_STORAGE_MODELS_BUCKET}}.public true \
-            storage.buckets.{{.SUPABASE_STORAGE_MODELS_BUCKET}}.file_size_limit '"5GiB"' \
-            storage.buckets.{{.SUPABASE_STORAGE_MODELS_BUCKET}}.allowed_mime_types '[]' \
-            storage.buckets.{{.SUPABASE_STORAGE_MODELS_BUCKET}}.objects_path '"{{.SUPABASE_STORAGE_MODELS_DIR}}"' \
-            storage.buckets.{{.SUPABASE_STORAGE_AUDIO_FILES_BUCKET}}.public true \
-            storage.buckets.{{.SUPABASE_STORAGE_AUDIO_FILES_BUCKET}}.file_size_limit '"5GiB"' \
-            storage.buckets.{{.SUPABASE_STORAGE_AUDIO_FILES_BUCKET}}.allowed_mime_types '[]' \
-            storage.buckets.{{.SUPABASE_STORAGE_AUDIO_FILES_BUCKET}}.objects_path '"{{.SUPABASE_STORAGE_AUDIO_FILES_DIR}}"'
-
-  # infisical run --env=dev --projectId=87dad7b5-72a6-4791-9228-b3b86b169db1 --path="/supabase" -- task supabase-start
-  supabase-start:
-    cmds:
-      - curl -o supabase/config.toml https://gist.githubusercontent.com/yujonglee/c0704ebe0818621a64753d663c4fcaff/raw/b82572dfcb6ffa4d20c332a8dd7650e5b82b99c3/supabase-default.toml
-      - cargo xtask supabase-patch
-      # - task: supabase-storage-seed-config
-      # - '[ ! -f supabase/signing_keys.json ] && pnpm exec supabase gen signing-key --algorithm ES256 | jq -s ''.'' > supabase/signing_keys.json || true'
-      # - cargo xtask toml-set supabase/config.toml auth.signing_keys_path '"./signing_keys.json"'
-      - pnpm exec dprint fmt supabase/config.toml
-      - pnpm exec supabase start -x realtime,logflare
-      - task: supabase-env
-      - pnpm exec supabase migration up --local
 
   nango-dev-connection:
     silent: true
