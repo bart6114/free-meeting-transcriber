@@ -23,18 +23,12 @@ import { type Provider, PROVIDERS } from "./shared";
 
 import { useBillingAccess } from "~/auth/billing-context";
 import { providerRowId, ProviderIconSlot } from "~/settings/ai/shared";
-import {
-  getProviderSelectionBlockers,
-  requiresEntitlement,
-} from "~/settings/ai/shared/eligibility";
+import { getProviderSelectionBlockers } from "~/settings/ai/shared/eligibility";
 import { listAnthropicModels } from "~/settings/ai/shared/list-anthropic";
 import { listAzureAIModels } from "~/settings/ai/shared/list-azure-ai";
 import { listAzureOpenAIModels } from "~/settings/ai/shared/list-azure-openai";
 import { listCloudflareWorkersAIModels } from "~/settings/ai/shared/list-cloudflare-workers-ai";
-import {
-  type InputModality,
-  type ListModelsResult,
-} from "~/settings/ai/shared/list-common";
+import { type ListModelsResult } from "~/settings/ai/shared/list-common";
 import { listGoogleModels } from "~/settings/ai/shared/list-google";
 import { listLMStudioModels } from "~/settings/ai/shared/list-lmstudio";
 import { listMistralModels } from "~/settings/ai/shared/list-mistral";
@@ -61,7 +55,6 @@ export function SelectProviderAndModel() {
   const { providers: configuredProviders, isReady: providerSettingsReady } =
     useConfiguredMapping();
   const settingsReady = useSettingsReady();
-  const billing = useBillingAccess();
   const queryClient = useQueryClient();
   const { setAccordionValue } = useLlmSettings();
   const [pendingSelection, setPendingSelection] = useState<{
@@ -240,11 +233,6 @@ export function SelectProviderAndModel() {
       : undefined;
 
   const handleProviderChange = (provider: string) => {
-    if (provider === "hyprnote" && !billing.isPaid) {
-      billing.upgradeToPro();
-      return;
-    }
-
     const requestId = ++selectionRequestRef.current;
 
     const status = configuredProviders[provider];
@@ -362,11 +350,6 @@ export function SelectProviderAndModel() {
             </SelectTrigger>
             <SelectContent>
               {providerOptions.map((provider) => {
-                const requiresPro = requiresEntitlement(
-                  provider.requirements,
-                  "pro",
-                );
-                const locked = requiresPro && !billing.isPaid;
                 const configured =
                   configuredProviders[provider.id]?.configured ?? false;
 
@@ -374,22 +357,15 @@ export function SelectProviderAndModel() {
                   <SelectItem
                     key={provider.id}
                     value={provider.id}
-                    disabled={locked || !configured}
+                    disabled={!configured}
                     className={cn([
                       "data-disabled:text-muted-foreground data-disabled:!opacity-100",
-                      !configured && !locked && "text-muted-foreground",
+                      !configured && "text-muted-foreground",
                     ])}
                   >
-                    <div className="flex flex-col gap-0.5">
-                      <div className="flex items-center gap-2">
-                        <ProviderIconSlot>{provider.icon}</ProviderIconSlot>
-                        <span>{provider.displayName}</span>
-                      </div>
-                      {locked ? (
-                        <span className="text-muted-foreground text-[11px]">
-                          <Trans>Upgrade to Pro to use this provider.</Trans>
-                        </span>
-                      ) : null}
+                    <div className="flex items-center gap-2">
+                      <ProviderIconSlot>{provider.icon}</ProviderIconSlot>
+                      <span>{provider.displayName}</span>
                     </div>
                   </SelectItem>
                 );
@@ -453,19 +429,6 @@ export function getLlmProviderStatus({
 
   if (!eligible) {
     return { configured: false };
-  }
-
-  if (provider.id === "hyprnote") {
-    const result: ListModelsResult = {
-      models: ["Auto"],
-      ignored: [],
-      metadata: {
-        Auto: {
-          input_modalities: ["text", "image"] as InputModality[],
-        },
-      },
-    };
-    return { configured: true, listModels: async () => result };
   }
 
   let listModelsFunc: () => Promise<ListModelsResult>;

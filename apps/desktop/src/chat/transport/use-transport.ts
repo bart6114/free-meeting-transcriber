@@ -26,11 +26,6 @@ Context and local meeting tool guidance:
 - Do not ask the user to open or share a meeting until list_meetings, search_meetings, search_meeting_content, and get_meeting cannot find enough local context.
 - Use typed meeting tools instead of constructing shell commands, crawling files, or accessing SQLite directly.
 - Do not assume meeting contents from chat history when a typed tool can read the current source of truth.
-
-Web search guidance:
-- Use web_search for public websites, URLs, companies, products, people, news, or current facts that may be outside local notes.
-- Include source URLs in the final answer when web_search results are used.
-- Do not use web_search for questions that only need local notes or contacts.
 `.trim();
 
 export function appendMeetingContextToolGuidance(

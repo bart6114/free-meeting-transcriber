@@ -23,7 +23,7 @@ describe("configurePaidSettings", () => {
     mocks.getStoredAiProvider.mockResolvedValue(undefined);
   });
 
-  it("selects hosted AI when no language model is configured", async () => {
+  it("defaults to OpenRouter with no model when no language model is configured", async () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {},
       hasValues: new Set(),
@@ -34,8 +34,7 @@ describe("configurePaidSettings", () => {
     expect(mocks.setSettingValues).toHaveBeenCalledWith({
       current_stt_provider: "hyprnote",
       current_stt_model: "soniqo-parakeet-batch",
-      current_llm_provider: "hyprnote",
-      current_llm_model: "Auto",
+      current_llm_provider: "openrouter",
     });
   });
 
@@ -53,12 +52,11 @@ describe("configurePaidSettings", () => {
     await configurePaidSettings();
 
     expect(mocks.setSettingValues).toHaveBeenCalledWith({
-      current_llm_provider: "hyprnote",
-      current_llm_model: "Auto",
+      current_llm_provider: "openrouter",
     });
   });
 
-  it("repairs hosted defaults when secure provider lookup fails", async () => {
+  it("repairs to the OpenRouter default when secure provider lookup fails", async () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {
         current_llm_provider: "anthropic",
@@ -75,8 +73,7 @@ describe("configurePaidSettings", () => {
     expect(mocks.setSettingValues).toHaveBeenCalledWith({
       current_stt_provider: "hyprnote",
       current_stt_model: "soniqo-parakeet-batch",
-      current_llm_provider: "hyprnote",
-      current_llm_model: "Auto",
+      current_llm_provider: "openrouter",
     });
   });
 

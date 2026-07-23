@@ -27,5 +27,7 @@ describe("chat transport prompt guidance", () => {
     expect(prompt).not.toContain("search_sessions");
     expect(prompt).not.toContain("read_note");
     expect(prompt).not.toContain("read_current_note");
+    // web_search only ever called the deleted hosted /research/search proxy.
+    expect(prompt).not.toContain("web_search");
   });
 });

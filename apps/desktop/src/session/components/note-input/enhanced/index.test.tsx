@@ -27,8 +27,7 @@ const hoisted = vi.hoisted(() => ({
     | undefined,
   llmStatus: {
     status: "success",
-    providerId: "hyprnote",
-    isHosted: true,
+    providerId: "openrouter",
   } as LLMConnectionStatus,
   content: "",
   noteExists: true,
@@ -137,8 +136,7 @@ describe("Enhanced", () => {
     hoisted.titleTask = undefined;
     hoisted.llmStatus = {
       status: "success",
-      providerId: "hyprnote",
-      isHosted: true,
+      providerId: "openrouter",
     };
     hoisted.content = "";
     hoisted.noteExists = true;
@@ -320,32 +318,6 @@ describe("Enhanced", () => {
     render(<Enhanced sessionId="session-1" enhancedNoteId="note-1" />);
 
     expect(screen.getByText("Enhanced editor")).not.toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
-  });
-
-  it("shows config errors for hosted subscription blockers", () => {
-    hoisted.llmStatus = {
-      status: "error",
-      reason: "not_pro",
-      providerId: "hyprnote",
-    };
-
-    render(<Enhanced sessionId="session-1" enhancedNoteId="note-1" />);
-
-    expect(screen.getByText("Config error")).not.toBeNull();
-    expect(screen.queryByRole("status")).toBeNull();
-  });
-
-  it("shows config errors when hosted generation requires authentication", () => {
-    hoisted.llmStatus = {
-      status: "error",
-      reason: "unauthenticated",
-      providerId: "hyprnote",
-    };
-
-    render(<Enhanced sessionId="session-1" enhancedNoteId="note-1" />);
-
-    expect(screen.getByText("Config error")).not.toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
   });
 

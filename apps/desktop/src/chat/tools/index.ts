@@ -23,12 +23,7 @@ import {
 import { buildSearchContactsTool } from "./search-contacts";
 import { buildSearchMeetingsTool } from "./search-meetings";
 import { buildApplySessionCorrectionTool } from "./session-correction";
-import type {
-  ContactSearchResult,
-  WebSearchResponse,
-  ToolDependencies,
-} from "./types";
-import { buildWebSearchTool } from "./web-search";
+import type { ContactSearchResult, ToolDependencies } from "./types";
 
 import type { SearchFilters } from "~/search/contexts/engine/types";
 
@@ -93,7 +88,6 @@ export const buildChatTools = (deps: ToolDependencies) => ({
     "search_contacts",
     buildSearchContactsTool(deps),
   ),
-  web_search: withToolLogging("web_search", buildWebSearchTool(deps)),
   edit_summary: withToolLogging("edit_summary", buildEditSummaryTool(deps)),
   apply_session_correction: withToolLogging(
     "apply_session_correction",
@@ -181,15 +175,6 @@ type LocalTools = {
       query: string;
       results: ContactSearchResult[];
     };
-  };
-  web_search: {
-    input: {
-      query: string;
-      includeDomains?: string[];
-      excludeDomains?: string[];
-      limit?: number;
-    };
-    output: WebSearchResponse;
   };
   edit_summary: {
     input: { sessionId?: string; enhancedNoteId?: string; content: string };

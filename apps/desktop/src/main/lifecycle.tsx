@@ -2,7 +2,6 @@ import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useLanguageModel, useLLMConnection } from "~/ai/hooks";
-import { useAuth } from "~/auth";
 import { useSessionTab } from "~/chat/components/use-session-tab";
 import { buildChatTools } from "~/chat/tools";
 import { searchContacts } from "~/contacts/queries";
@@ -47,13 +46,11 @@ export function ClassicMainServices() {
 }
 
 function ToolRegistration() {
-  const auth = useAuth();
   const { search } = useSearchEngine();
 
   const getContactSearchResults = searchContacts;
 
   const { getSessionId, getEnhancedNoteId } = useSessionTab();
-  const getAuthHeaders = useCallback(() => auth?.getHeaders(), [auth]);
   const openEditTab = useCallback((requestId: string) => {
     useTabs.getState().openNew({ type: "edit", requestId });
   }, []);
@@ -67,16 +64,8 @@ function ToolRegistration() {
         getSessionId,
         getEnhancedNoteId,
         openEditTab,
-        getAuthHeaders,
       }),
-    [
-      search,
-      getContactSearchResults,
-      getSessionId,
-      getEnhancedNoteId,
-      openEditTab,
-      getAuthHeaders,
-    ],
+    [search, getContactSearchResults, getSessionId, getEnhancedNoteId, openEditTab],
   );
 
   return null;

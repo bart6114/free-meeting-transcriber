@@ -11,8 +11,6 @@ import {
 } from "@lobehub/icons";
 import type { ReactNode } from "react";
 
-import { HOSTED_API_URL } from "~/env";
-import { AnarlogProviderIcon } from "~/settings/ai/shared";
 import { type ProviderRequirement } from "~/settings/ai/shared/eligibility";
 import {
   checkLMStudioAvailability,
@@ -35,18 +33,7 @@ export type Provider = {
   };
 };
 
-const _PROVIDERS = [
-  {
-    id: "hyprnote",
-    displayName: "Anarlog",
-    badge: "Recommended",
-    icon: <AnarlogProviderIcon />,
-    baseUrl: new URL("/llm", HOSTED_API_URL).toString(),
-    requirements: [
-      { kind: "requires_auth" },
-      { kind: "requires_entitlement", entitlement: "pro" },
-    ],
-  },
+export const _PROVIDERS = [
   {
     id: "lmstudio",
     displayName: "LM Studio",

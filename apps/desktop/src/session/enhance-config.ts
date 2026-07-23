@@ -11,9 +11,5 @@ export function shouldShowEmptySummaryConfigError(status: LLMConnectionStatus) {
     return false;
   }
 
-  return (
-    status.reason === "unauthenticated" ||
-    status.reason === "not_pro" ||
-    status.reason === "missing_config"
-  );
+  return status.reason === "missing_config";
 }

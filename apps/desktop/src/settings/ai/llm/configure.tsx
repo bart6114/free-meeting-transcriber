@@ -22,17 +22,15 @@ export function ConfigureProviders() {
         value={accordionValue}
         onValueChange={setAccordionValue}
       >
-        {PROVIDERS.filter((provider) => provider.id !== "hyprnote").map(
-          (provider) => (
-            <NonHyprProviderCard
-              key={provider.id}
-              config={provider}
-              providerType="llm"
-              providers={PROVIDERS}
-              providerContext={<ProviderContext providerId={provider.id} />}
-            />
-          ),
-        )}
+        {PROVIDERS.map((provider) => (
+          <NonHyprProviderCard
+            key={provider.id}
+            config={provider}
+            providerType="llm"
+            providers={PROVIDERS}
+            providerContext={<ProviderContext providerId={provider.id} />}
+          />
+        ))}
       </Accordion>
     </div>
   );

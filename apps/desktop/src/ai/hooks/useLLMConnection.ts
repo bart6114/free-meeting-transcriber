@@ -6,22 +6,13 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createOpenRouter } from "@openrouter/ai-sdk-provider";
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { extractReasoningMiddleware, wrapLanguageModel } from "ai";
-import { useMemo, useRef } from "react";
+import { useMemo } from "react";
 
 import type { CharTask } from "@hypr/api-client";
 import type { AIProviderStorage } from "@hypr/store";
 
-import { createAuthFetch } from "../auth-fetch";
-import { createTracedFetch, tracedFetch } from "../traced-fetch";
-
-import { useAuth } from "~/auth";
-import { useBillingAccess } from "~/auth/billing-context";
-import { HOSTED_API_URL } from "~/env";
 import { type ProviderId, PROVIDERS } from "~/settings/ai/llm/shared";
-import {
-  getProviderSelectionBlockers,
-  type ProviderEligibilityContext,
-} from "~/settings/ai/shared/eligibility";
+import { getProviderSelectionBlockers } from "~/settings/ai/shared/eligibility";
 import { useAiProvider } from "~/settings/providers";
 import { useConfigValues } from "~/shared/config";
 
@@ -38,15 +29,13 @@ export type LLMConnectionStatus =
   | { status: "pending"; reason: "missing_provider" }
   | { status: "pending"; reason: "missing_model"; providerId: ProviderId }
   | { status: "error"; reason: "provider_not_found"; providerId: string }
-  | { status: "error"; reason: "unauthenticated"; providerId: "hyprnote" }
-  | { status: "error"; reason: "not_pro"; providerId: "hyprnote" }
   | {
       status: "error";
       reason: "missing_config";
       providerId: ProviderId;
       missing: Array<"base_url" | "api_key">;
     }
-  | { status: "success"; providerId: ProviderId; isHosted: boolean };
+  | { status: "success"; providerId: ProviderId };
 
 type LLMConnectionResult = {
   conn: LLMConnectionInfo | null;
@@ -55,32 +44,15 @@ type LLMConnectionResult = {
 
 export const useLanguageModel = (task?: CharTask): LanguageModelV3 | null => {
   const { conn } = useLLMConnection();
-  const { session } = useAuth();
-
-  // Auth is resolved at fetch time (not model construction) so token
-  // refreshes take effect without recreating the chat transport chain.
-  const accessTokenRef = useRef(session?.access_token);
-  accessTokenRef.current = session?.access_token;
 
   return useMemo(() => {
     if (!conn) return null;
 
-    const hostedFetch =
-      conn.providerId === "hyprnote"
-        ? createAuthFetch(
-            task ? createTracedFetch(task) : tracedFetch,
-            () => accessTokenRef.current,
-          )
-        : undefined;
-
-    return createLanguageModel(conn, task, hostedFetch);
+    return createLanguageModel(conn);
   }, [conn, task]);
 };
 
 export const useLLMConnection = (): LLMConnectionResult => {
-  const auth = useAuth();
-  const billing = useBillingAccess();
-
   const { current_llm_provider, current_llm_model } = useConfigValues([
     "current_llm_provider",
     "current_llm_model",
@@ -95,16 +67,8 @@ export const useLLMConnection = (): LLMConnectionResult => {
         providerId: current_llm_provider,
         modelId: current_llm_model,
         providerConfig,
-        session: auth?.session,
-        isPaid: billing.isPaid,
       }),
-    [
-      auth,
-      billing.isPaid,
-      current_llm_model,
-      current_llm_provider,
-      providerConfig,
-    ],
+    [current_llm_model, current_llm_provider, providerConfig],
   );
 };
 
@@ -117,16 +81,8 @@ const resolveLLMConnection = (params: {
   providerId: string | undefined;
   modelId: string | undefined;
   providerConfig: AIProviderStorage | undefined;
-  session: { access_token: string } | null | undefined;
-  isPaid: boolean;
 }): LLMConnectionResult => {
-  const {
-    providerId: rawProviderId,
-    modelId,
-    providerConfig,
-    session,
-    isPaid,
-  } = params;
+  const { providerId: rawProviderId, modelId, providerConfig } = params;
 
   if (!rawProviderId) {
     return {
@@ -163,31 +119,18 @@ const resolveLLMConnection = (params: {
     "";
   const apiKey = providerConfig?.api_key?.trim() || "";
 
-  const context: ProviderEligibilityContext = {
-    isAuthenticated: !!session,
-    isPaid,
+  // There is no hosted provider left, so `isAuthenticated`/`isPaid` never
+  // gate anything here (every remaining provider only ever declares
+  // `requires_config`) — these are placeholders to satisfy the shared
+  // eligibility context shape.
+  const blockers = getProviderSelectionBlockers(providerDefinition.requirements, {
+    isAuthenticated: false,
+    isPaid: true,
     config: { base_url: baseUrl, api_key: apiKey },
-  };
-
-  const blockers = getProviderSelectionBlockers(
-    providerDefinition.requirements,
-    context,
-  );
+  });
 
   if (blockers.length > 0) {
     const blocker = blockers[0];
-    if (blocker.code === "requires_auth" && providerId === "hyprnote") {
-      return {
-        conn: null,
-        status: { status: "error", reason: "unauthenticated", providerId },
-      };
-    }
-    if (blocker.code === "requires_entitlement" && providerId === "hyprnote") {
-      return {
-        conn: null,
-        status: { status: "error", reason: "not_pro", providerId },
-      };
-    }
     if (blocker.code === "missing_config") {
       return {
         conn: null,
@@ -201,21 +144,9 @@ const resolveLLMConnection = (params: {
     }
   }
 
-  if (providerId === "hyprnote" && session) {
-    return {
-      conn: {
-        providerId,
-        modelId,
-        baseUrl: baseUrl ?? new URL("/llm", HOSTED_API_URL).toString(),
-        apiKey: session.access_token,
-      },
-      status: { status: "success", providerId, isHosted: true },
-    };
-  }
-
   return {
     conn: { providerId, modelId, baseUrl, apiKey },
-    status: { status: "success", providerId, isHosted: false },
+    status: { status: "success", providerId },
   };
 };
 
@@ -231,21 +162,8 @@ const wrapWithThinkingMiddleware = (
   });
 };
 
-const createLanguageModel = (
-  conn: LLMConnectionInfo,
-  task?: CharTask,
-  hostedFetch?: typeof fetch,
-): LanguageModelV3 => {
+const createLanguageModel = (conn: LLMConnectionInfo): LanguageModelV3 => {
   switch (conn.providerId) {
-    case "hyprnote": {
-      const provider = createOpenRouter({
-        fetch: hostedFetch ?? (task ? createTracedFetch(task) : tracedFetch),
-        baseURL: conn.baseUrl,
-        apiKey: conn.apiKey,
-      });
-      return wrapWithThinkingMiddleware(provider.chat(conn.modelId));
-    }
-
     case "anthropic": {
       const provider = createAnthropic({
         fetch: tauriFetch,

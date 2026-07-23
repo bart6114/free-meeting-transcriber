@@ -11,7 +11,6 @@ function dependencies(): ToolDependencies {
     getSessionId: vi.fn(),
     getEnhancedNoteId: vi.fn(),
     openEditTab: vi.fn(),
-    getAuthHeaders: vi.fn(),
   };
 }
 
@@ -36,6 +35,8 @@ describe("chat tool registration", () => {
     expect(tools).not.toHaveProperty("read_note");
     expect(tools).not.toHaveProperty("read_current_note");
     expect(tools).not.toHaveProperty("list_related_notes");
+    // web_search only ever called the deleted hosted /research/search proxy.
+    expect(tools).not.toHaveProperty("web_search");
   });
 
   it("does not log meeting tool inputs or outputs", async () => {

@@ -1554,10 +1554,6 @@ msgstr ""
 msgid "Untitled Note"
 msgstr ""
 
-#: src/settings/ai/llm/select.tsx
-msgid "Upgrade to Pro to use this provider."
-msgstr ""
-
 #: src/session/components/floating/options-menu.tsx
 #: src/session/components/outer-header/overflow/index.tsx
 msgid "Upload audio"

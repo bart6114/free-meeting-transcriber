@@ -15,15 +15,19 @@ export async function configurePaidSettings(): Promise<void> {
     updates.current_stt_model = "soniqo-parakeet-batch";
   }
 
-  if (await shouldUseHostedLlm(values)) {
-    updates.current_llm_provider = "hyprnote";
-    updates.current_llm_model = "Auto";
+  if (await needsDefaultLlmProvider(values)) {
+    // No hosted provider exists anymore: default to OpenRouter with no model
+    // selected, so the user configures an API key (or picks a different BYO
+    // provider) themselves.
+    updates.current_llm_provider = "openrouter";
   }
 
   await setSettingValues(updates);
 }
 
-async function shouldUseHostedLlm(values: SettingValues): Promise<boolean> {
+async function needsDefaultLlmProvider(
+  values: SettingValues,
+): Promise<boolean> {
   const providerId = values.current_llm_provider;
   if (!providerId || !values.current_llm_model) return true;
 
