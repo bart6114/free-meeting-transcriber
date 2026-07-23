@@ -147,6 +147,10 @@ msgstr ""
 msgid "App"
 msgstr "Aip"
 
+#: src/settings/general/storage/change-location.tsx
+msgid "App restarts to apply. Existing files are copied, not moved."
+msgstr ""
+
 #: src/settings/general/theme.tsx
 msgid "Appearance"
 msgstr ""
@@ -221,6 +225,7 @@ msgstr ""
 msgid "Can transcribe while the meeting is happening."
 msgstr ""
 
+#: src/settings/general/storage/change-location.tsx
 #: src/settings/general/storage/legacy-cleanup.tsx
 msgid "Cancel"
 msgstr ""
@@ -234,7 +239,16 @@ msgid "Capture meeting chat in Memos"
 msgstr ""
 
 #: src/onboarding/folder-location.tsx
+#: src/settings/general/storage/change-location.tsx
 msgid "Change"
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Change storage location?"
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Changing..."
 msgstr ""
 
 #: src/chat/components/toolbar-controls.tsx
@@ -258,6 +272,7 @@ msgid "Choose light, dark, or match your system setting."
 msgstr ""
 
 #: src/onboarding/folder-location.tsx
+#: src/settings/general/storage/change-location.tsx
 msgid "Choose storage location"
 msgstr ""
 
@@ -1485,6 +1500,10 @@ msgstr "Cuirtear an phríomhtheanga san áireamh le tras-scríobh i gcónaí"
 
 #: src/chat/components/message/loading.tsx
 msgid "Thinking..."
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "This folder already contains files. Copied vault files will be mixed in with them."
 msgstr ""
 
 #. placeholder {0}: status.fileCount

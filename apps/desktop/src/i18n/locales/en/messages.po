@@ -147,6 +147,10 @@ msgstr "API Key"
 msgid "App"
 msgstr "App"
 
+#: src/settings/general/storage/change-location.tsx
+msgid "App restarts to apply. Existing files are copied, not moved."
+msgstr "App restarts to apply. Existing files are copied, not moved."
+
 #: src/settings/general/theme.tsx
 msgid "Appearance"
 msgstr "Appearance"
@@ -221,6 +225,7 @@ msgstr "Base URL"
 msgid "Can transcribe while the meeting is happening."
 msgstr "Can transcribe while the meeting is happening."
 
+#: src/settings/general/storage/change-location.tsx
 #: src/settings/general/storage/legacy-cleanup.tsx
 msgid "Cancel"
 msgstr "Cancel"
@@ -234,8 +239,17 @@ msgid "Capture meeting chat in Memos"
 msgstr "Capture meeting chat in Memos"
 
 #: src/onboarding/folder-location.tsx
+#: src/settings/general/storage/change-location.tsx
 msgid "Change"
 msgstr "Change"
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Change storage location?"
+msgstr "Change storage location?"
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Changing..."
+msgstr "Changing..."
 
 #: src/chat/components/toolbar-controls.tsx
 msgid "Chat history"
@@ -258,6 +272,7 @@ msgid "Choose light, dark, or match your system setting."
 msgstr "Choose light, dark, or match your system setting."
 
 #: src/onboarding/folder-location.tsx
+#: src/settings/general/storage/change-location.tsx
 msgid "Choose storage location"
 msgstr "Choose storage location"
 
@@ -1486,6 +1501,10 @@ msgstr "The main language is always included for transcription"
 #: src/chat/components/message/loading.tsx
 msgid "Thinking..."
 msgstr "Thinking..."
+
+#: src/settings/general/storage/change-location.tsx
+msgid "This folder already contains files. Copied vault files will be mixed in with them."
+msgstr "This folder already contains files. Copied vault files will be mixed in with them."
 
 #. placeholder {0}: status.fileCount
 #. placeholder {1}: formatBytes(status.totalBytes)
