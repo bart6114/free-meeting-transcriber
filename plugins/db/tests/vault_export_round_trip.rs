@@ -814,3 +814,77 @@ async fn session_tags_round_trip_through_meta_json() {
     tag_names.sort();
     assert_eq!(tag_names, vec!["follow-up".to_string(), "urgent".to_string()]);
 }
+
+// ---------------------------------------------------------------------------
+// Controller re-drill: "empty aggregates write no file at all" — confirms
+// this is the *intended*, importer-consistent behavior, not an omission.
+// `vault_export.rs`'s `export_calendars_file`/`export_events_file`/
+// `export_daily_notes_file`/`export_tasks_file`/`export_settings_file` all
+// write nothing (and trash any stale file) when their table is empty, rather
+// than writing an empty `{}`/`[]` placeholder. That's only safe if the
+// *importer* treats a missing aggregate file identically to an empty one —
+// this test proves it does, directly against `sync_from_vault`, for every
+// aggregate kind at once: `discover_sources` walks the files that actually
+// exist on disk, so a `calendars.json` that was never written is simply
+// never discovered, never classified, and never parsed — the same "zero
+// rows" outcome as parsing an empty `{}`. No special missing-file handling
+// exists (or is needed) on the reconcile side.
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn missing_aggregate_files_import_as_empty_not_as_an_error() {
+    let vault = vault();
+    // A vault with session content but none of the five aggregate files at
+    // all — the common case for a fresh install that has never used
+    // calendars, daily notes, tasks, or hit the legacy settings sentinel.
+    let session = export::SessionMeta {
+        id: "session-1".to_string(),
+        owner_user_id: "user-1".to_string(),
+        title: "Planning".to_string(),
+        created_at: "2026-07-01T00:00:00Z".to_string(),
+        started_at: String::new(),
+        ended_at: String::new(),
+        event_id: String::new(),
+        external_event_id: String::new(),
+        series_id: String::new(),
+        event_json: String::new(),
+    };
+    let meta_value = export::render_session_meta(&session, &[], &[], None);
+    write_json(
+        vault.path(),
+        &vault.path().join("sessions/session-1/_meta.json"),
+        &meta_value,
+    );
+    assert!(!vault.path().join("calendars.json").exists());
+    assert!(!vault.path().join("events.json").exists());
+    assert!(!vault.path().join("daily_notes.json").exists());
+    assert!(!vault.path().join("tasks.json").exists());
+    assert!(!vault.path().join("settings.json").exists());
+
+    let target = fresh_db().await;
+    let report = tauri_plugin_db::sync_from_vault(target.pool(), vault.path())
+        .await
+        .expect("sync_from_vault must not error when aggregate files are simply absent");
+    assert_eq!(report.conflict_count, 0);
+
+    let session_title: String =
+        sqlx::query_scalar("SELECT title FROM sessions WHERE id = 'session-1'")
+            .fetch_one(target.pool())
+            .await
+            .unwrap();
+    assert_eq!(session_title, "Planning");
+
+    for (table, query) in [
+        ("calendars", "SELECT COUNT(*) FROM calendars"),
+        ("events", "SELECT COUNT(*) FROM events"),
+        ("daily_notes", "SELECT COUNT(*) FROM daily_notes"),
+        ("action_items", "SELECT COUNT(*) FROM action_items"),
+        (
+            "app_settings (legacy_settings_document)",
+            "SELECT COUNT(*) FROM app_settings WHERE id = 'legacy_settings_document'",
+        ),
+    ] {
+        let count: i64 = sqlx::query_scalar(query).fetch_one(target.pool()).await.unwrap();
+        assert_eq!(count, 0, "{table} should have zero rows when its vault file is absent");
+    }
+}
