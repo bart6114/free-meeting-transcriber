@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
   canRunBatchTranscription,
-  getBatchFallbackTarget,
   getBatchProvider,
   getSessionSpeakerCount,
 } from "./useRunBatch";
@@ -15,9 +14,6 @@ const {
   useSessionMock,
   useSessionParticipantsMock,
   useSTTConnectionMock,
-  useAuthMock,
-  refreshSessionMock,
-  useBillingAccessMock,
   useConfigValueMock,
   isSupportedLanguagesBatchMock,
   sonnerToastWarningMock,
@@ -31,9 +27,6 @@ const {
   useSessionMock: vi.fn(),
   useSessionParticipantsMock: vi.fn(),
   useSTTConnectionMock: vi.fn(),
-  useAuthMock: vi.fn(),
-  refreshSessionMock: vi.fn(),
-  useBillingAccessMock: vi.fn(),
   useConfigValueMock: vi.fn(),
   isSupportedLanguagesBatchMock: vi.fn(),
   sonnerToastWarningMock: vi.fn(),
@@ -60,18 +53,6 @@ vi.mock("@hypr/ui/components/ui/toast", () => ({
   sonnerToast: {
     warning: sonnerToastWarningMock,
   },
-}));
-
-vi.mock("~/auth", () => ({
-  useAuth: useAuthMock,
-}));
-
-vi.mock("~/auth/billing-context", () => ({
-  useBillingAccess: useBillingAccessMock,
-}));
-
-vi.mock("~/env", () => ({
-  HOSTED_API_URL: "https://api.test",
 }));
 
 vi.mock("~/services/audio-retention", () => ({
@@ -131,30 +112,23 @@ vi.mock("~/stt/queries", () => ({
 }));
 
 describe("getBatchProvider", () => {
-  test("maps pyannote to the batch transcription provider", () => {
-    expect(getBatchProvider("pyannote", "parakeet-tdt-0.6b-v3")).toBe(
-      "pyannote",
-    );
-  });
-
-  test("keeps openai mapped to the batch transcription provider", () => {
-    expect(getBatchProvider("openai", "gpt-4o-transcribe")).toBe("openai");
-  });
-
-  test("keeps cartesia mapped to the batch transcription provider", () => {
-    expect(getBatchProvider("cartesia", "ink-2")).toBe("cartesia");
-  });
-
-  test("maps Cloudflare Workers AI to the Deepgram-compatible batch provider", () => {
-    expect(getBatchProvider("cloudflare_workers_ai", "nova-3")).toBe(
-      "deepgram",
-    );
-  });
-
-  test("maps local soniqo models to soniqo batch provider", () => {
+  test("maps local soniqo models to the soniqo batch provider", () => {
     expect(getBatchProvider("hyprnote", "soniqo-parakeet-batch")).toBe(
       "soniqo",
     );
+  });
+
+  test("maps local Argmax models to the am batch provider", () => {
+    expect(getBatchProvider("hyprnote", "am-parakeet-v3")).toBe("am");
+  });
+
+  test("falls back to the hyprnote batch provider for other local models", () => {
+    expect(getBatchProvider("hyprnote", "QuantizedSmallEn")).toBe("hyprnote");
+  });
+
+  test("returns null for any non-on-device provider — STT is on-device only", () => {
+    expect(getBatchProvider("deepgram", "nova-3-general")).toBeNull();
+    expect(getBatchProvider("custom", "whisper-large-v3")).toBeNull();
   });
 });
 
@@ -163,44 +137,10 @@ describe("canRunBatchTranscription", () => {
     expect(canRunBatchTranscription(null)).toBe(true);
     expect(
       canRunBatchTranscription({
-        provider: "custom",
-        model: "realtime-only",
+        provider: "hyprnote",
+        model: "soniqo-parakeet-streaming",
       }),
     ).toBe(true);
-  });
-});
-
-describe("getBatchFallbackTarget", () => {
-  test("uses hosted cloud transcription for paid users with a session", () => {
-    expect(
-      getBatchFallbackTarget({
-        isPaid: true,
-        accessToken: "token",
-        apiBaseUrl: "https://api.test",
-      }),
-    ).toEqual({
-      provider: "hyprnote",
-      model: "cloud",
-      baseUrl: "https://api.test/stt",
-      apiKey: "token",
-      label: "Pro cloud transcription",
-    });
-  });
-
-  test("uses local Soniqo batch transcription otherwise", () => {
-    expect(
-      getBatchFallbackTarget({
-        isPaid: false,
-        accessToken: null,
-        apiBaseUrl: "https://api.test",
-      }),
-    ).toEqual({
-      provider: "soniqo",
-      model: "soniqo-parakeet-batch",
-      baseUrl: "soniqo://local",
-      apiKey: "",
-      label: "Soniqo batch transcription",
-    });
   });
 });
 
@@ -223,24 +163,15 @@ describe("useRunBatch", () => {
       raw_md: "Existing memo",
     });
     useSessionParticipantsMock.mockReturnValue([]);
+    // STT is on-device only: useSTTConnection() only ever returns a
+    // "hyprnote" + local-model connection (or null) — never a hosted one.
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "deepgram",
-        model: "nova-3",
-        baseUrl: "https://api.deepgram.com/v1/listen",
-        apiKey: "test-key",
+        provider: "hyprnote",
+        model: "soniqo-parakeet-batch",
+        baseUrl: "soniqo://local",
+        apiKey: "",
       },
-    });
-    useAuthMock.mockReturnValue({
-      session: {
-        access_token: "paid-token",
-        user: { id: "user-1" },
-      },
-      refreshSession: refreshSessionMock,
-    });
-    refreshSessionMock.mockResolvedValue(null);
-    useBillingAccessMock.mockReturnValue({
-      isPaid: false,
     });
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language" ? "en" : [],
@@ -357,15 +288,16 @@ describe("useRunBatch", () => {
     );
   });
 
-  test("falls back to local Soniqo when the selected provider is not batch-capable", async () => {
+  test("falls back to local Soniqo batch when the selected on-device model is not batch-capable", async () => {
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "custom",
-        model: "realtime-only",
-        baseUrl: "https://custom.test",
-        apiKey: "custom-key",
+        provider: "hyprnote",
+        model: "soniqo-parakeet-streaming",
+        baseUrl: "soniqo://local",
+        apiKey: "",
       },
     });
+    isSupportedLanguagesBatchMock.mockResolvedValue(false);
     startTranscriptionMock.mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useRunBatch("session-1"));
@@ -387,16 +319,15 @@ describe("useRunBatch", () => {
       "Using a batch transcription provider",
       expect.objectContaining({
         description:
-          "realtime-only is not available for batch transcription. Using Soniqo batch transcription instead.",
+          "soniqo-parakeet-streaming is not available for batch transcription. Using Soniqo batch transcription instead.",
       }),
     );
   });
 
-  test("falls back to hosted cloud transcription for paid users", async () => {
-    isSupportedLanguagesBatchMock.mockResolvedValue(false);
-    useBillingAccessMock.mockReturnValue({
-      isPaid: true,
-    });
+  // STT is on-device only: there is no cloud/hosted fallback left, so an
+  // absent connection always resolves to the local Soniqo batch target.
+  test("always falls back to the local Soniqo target when there is no STT connection", async () => {
+    useSTTConnectionMock.mockReturnValue({ conn: null });
     startTranscriptionMock.mockResolvedValue(undefined);
 
     const { result } = renderHook(() => useRunBatch("session-1"));
@@ -407,58 +338,11 @@ describe("useRunBatch", () => {
 
     expect(startTranscriptionMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        provider: "hyprnote",
-        model: "cloud",
-        base_url: "https://api.test/stt",
-        api_key: "paid-token",
+        provider: "soniqo",
+        model: "soniqo-parakeet-batch",
+        base_url: "soniqo://local",
+        api_key: "",
       }),
-      expect.any(Object),
-    );
-    expect(sonnerToastWarningMock).toHaveBeenCalledWith(
-      "Using a batch transcription provider",
-      expect.objectContaining({
-        description:
-          "nova-3 is not available for batch transcription. Using Pro cloud transcription instead.",
-      }),
-    );
-  });
-
-  test("refreshes an expired cloud token and retries transcription once", async () => {
-    useSTTConnectionMock.mockReturnValue({
-      conn: {
-        provider: "hyprnote",
-        model: "cloud",
-        baseUrl: "https://api.test/stt",
-        apiKey: "stale-token",
-      },
-    });
-    useAuthMock.mockReturnValue({
-      session: {
-        access_token: "stale-token",
-        user: { id: "user-1" },
-      },
-      refreshSession: refreshSessionMock,
-    });
-    refreshSessionMock.mockResolvedValue({ access_token: "fresh-token" });
-    startTranscriptionMock
-      .mockRejectedValueOnce(
-        new Error(
-          "Authentication failed. Please check your API key in settings.",
-        ),
-      )
-      .mockResolvedValueOnce(undefined);
-
-    const { result } = renderHook(() => useRunBatch("session-1"));
-
-    await act(async () => {
-      await result.current("/tmp/session.wav");
-    });
-
-    expect(refreshSessionMock).toHaveBeenCalledTimes(1);
-    expect(startTranscriptionMock).toHaveBeenCalledTimes(2);
-    expect(startTranscriptionMock).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({ api_key: "fresh-token" }),
       expect.any(Object),
     );
   });

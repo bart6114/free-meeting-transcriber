@@ -7,9 +7,6 @@ import { useListener } from "./contexts";
 import { getSessionKeywords } from "./useKeywords";
 import { useSTTConnection } from "./useSTTConnection";
 
-import { useAuth } from "~/auth";
-import { useBillingAccess } from "~/auth/billing-context";
-import { HOSTED_API_URL } from "~/env";
 import {
   deleteProcessedAudioForRetention,
   normalizeAudioRetention,
@@ -45,21 +42,9 @@ type BatchTarget = {
   label: string;
 };
 
-const DIRECT_BATCH_PROVIDERS: Set<TranscriptionParams["provider"]> = new Set([
-  "deepgram",
-  "cartesia",
-  "soniox",
-  "assemblyai",
-  "openai",
-  "gladia",
-  "elevenlabs",
-  "mistral",
-  "fireworks",
-  "pyannote",
-  "aquavoice",
-]);
-
 export const STOPPED_TRANSCRIPTION_ERROR_MESSAGE = "Transcription stopped.";
+// STT is on-device only: this is the sole batch fallback target now — there
+// is no cloud/hosted alternative to fall back to.
 const LOCAL_SONIQO_BATCH_TARGET = {
   provider: "soniqo",
   model: "soniqo-parakeet-batch",
@@ -68,23 +53,19 @@ const LOCAL_SONIQO_BATCH_TARGET = {
   label: "Soniqo batch transcription",
 } satisfies BatchTarget;
 
+// The only STT provider left is on-device "hyprnote", so this just maps its
+// local model id prefix to the Rust-side batch provider identifier.
 export function getBatchProvider(
   provider: string,
   model: string,
 ): TranscriptionParams["provider"] | null {
-  if (provider === "cloudflare_workers_ai") {
-    return "deepgram";
+  if (provider !== "hyprnote") {
+    return null;
   }
 
-  if (provider === "hyprnote") {
-    if (model.startsWith("soniqo-")) return "soniqo";
-    if (model.startsWith("am-")) return "am";
-    return "hyprnote";
-  }
-  if (DIRECT_BATCH_PROVIDERS.has(provider as TranscriptionParams["provider"])) {
-    return provider as TranscriptionParams["provider"];
-  }
-  return null;
+  if (model.startsWith("soniqo-")) return "soniqo";
+  if (model.startsWith("am-")) return "am";
+  return "hyprnote";
 }
 
 export function canRunBatchTranscription(
@@ -92,28 +73,6 @@ export function canRunBatchTranscription(
   _modelOverride?: string,
 ) {
   return true;
-}
-
-export function getBatchFallbackTarget({
-  isPaid,
-  accessToken,
-  apiBaseUrl,
-}: {
-  isPaid: boolean;
-  accessToken?: string | null;
-  apiBaseUrl: string;
-}): BatchTarget {
-  if (isPaid && accessToken) {
-    return {
-      provider: "hyprnote",
-      model: "cloud",
-      baseUrl: new URL("/stt", apiBaseUrl).toString(),
-      apiKey: accessToken,
-      label: "Pro cloud transcription",
-    };
-  }
-
-  return LOCAL_SONIQO_BATCH_TARGET;
 }
 
 async function canUseBatchTarget(
@@ -149,13 +108,6 @@ export function isStoppedTranscriptionError(error: unknown) {
   );
 }
 
-export function isTranscriptionAuthenticationError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  return /authentication failed|invalid_token|unauthorized|\b401\b/i.test(
-    message,
-  );
-}
-
 export function getSessionSpeakerCount(
   participantHumanIds: Iterable<string>,
   selfHumanId?: string | null,
@@ -177,8 +129,6 @@ export const useRunBatch = (sessionId: string) => {
 
   const startTranscription = useListener((state) => state.startTranscription);
   const { conn } = useSTTConnection();
-  const auth = useAuth();
-  const billing = useBillingAccess();
   const aiLanguage = useConfigValue("ai_language");
   const spokenLanguages = useConfigValue("spoken_languages");
   const dictionaryTerms = useConfigValue("personalization_dictionary_terms");
@@ -219,11 +169,7 @@ export const useRunBatch = (sessionId: string) => {
             languages,
           )
         : false;
-      const fallbackTarget = getBatchFallbackTarget({
-        isPaid: billing.isPaid,
-        accessToken: auth?.session?.access_token,
-        apiBaseUrl: HOSTED_API_URL,
-      });
+      const fallbackTarget = LOCAL_SONIQO_BATCH_TARGET;
       const shouldUseSelectedTarget =
         selectedTargetSupported ||
         sameBatchTarget(selectedTarget, fallbackTarget);
@@ -371,27 +317,7 @@ export const useRunBatch = (sessionId: string) => {
       };
 
       try {
-        try {
-          await startTranscription(params, { handlePersist: persist });
-        } catch (error) {
-          if (
-            target.provider !== "hyprnote" ||
-            target.model !== "cloud" ||
-            !isTranscriptionAuthenticationError(error)
-          ) {
-            throw error;
-          }
-
-          const refreshedSession = await auth.refreshSession();
-          if (!refreshedSession?.access_token) {
-            throw error;
-          }
-
-          await startTranscription(
-            { ...params, api_key: refreshedSession.access_token },
-            { handlePersist: persist },
-          );
-        }
+        await startTranscription(params, { handlePersist: persist });
       } finally {
         await lastTranscriptWrite;
       }
@@ -402,11 +328,8 @@ export const useRunBatch = (sessionId: string) => {
     },
     [
       conn,
-      auth,
-      auth?.session?.access_token,
       aiLanguage,
       audioRetention,
-      billing.isPaid,
       dictionaryTerms,
       session,
       participants,
