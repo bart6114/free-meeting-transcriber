@@ -134,34 +134,6 @@ msgstr "Always ready without manually launching."
 msgid "Analyzing structure..."
 msgstr "Analyzing structure..."
 
-#: src/onboarding/permissions.tsx
-msgid "Anarlog can hear others"
-msgstr "Anarlog can hear others"
-
-#: src/onboarding/permissions.tsx
-msgid "Anarlog can hear your voice"
-msgstr "Anarlog can hear your voice"
-
-#: src/onboarding/permissions.tsx
-msgid "Anarlog can read meeting details"
-msgstr "Anarlog can read meeting details"
-
-#: src/onboarding/index.tsx
-msgid "Anarlog needs access to your microphone and system audio to record and transcribe your meetings"
-msgstr "Anarlog needs access to your microphone and system audio to record and transcribe your meetings"
-
-#: src/onboarding/index.tsx
-msgid "Anarlog needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
-msgstr "Anarlog needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
-
-#: src/templates/auto-form.tsx
-msgid "Anarlog sends these separately, so editing the prompt cannot remove the meeting source material."
-msgstr "Anarlog sends these separately, so editing the prompt cannot remove the meeting source material."
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Anarlog will retry automatically. This does not affect your notes."
-msgstr "Anarlog will retry automatically. This does not affect your notes."
-
 #: src/templates/template-icon-picker.tsx
 msgid "Animals & Nature"
 msgstr "Animals & Nature"
@@ -188,8 +160,8 @@ msgid "Ask & search about anything, or be creative!"
 msgstr "Ask & search about anything, or be creative!"
 
 #: src/shared/chat-cta.tsx
-msgid "Ask Anarlog anything"
-msgstr "Ask Anarlog anything"
+msgid "Ask AI anything"
+msgstr "Ask AI anything"
 
 #: src/chat/components/input/index.tsx
 #: src/shared/chat-cta.tsx
@@ -585,6 +557,34 @@ msgstr "For enabled notifications"
 msgid "Forever"
 msgstr "Forever"
 
+#: src/onboarding/permissions.tsx
+msgid "Free Meeting Transcriber can hear others"
+msgstr "Free Meeting Transcriber can hear others"
+
+#: src/onboarding/permissions.tsx
+msgid "Free Meeting Transcriber can hear your voice"
+msgstr "Free Meeting Transcriber can hear your voice"
+
+#: src/onboarding/permissions.tsx
+msgid "Free Meeting Transcriber can read meeting details"
+msgstr "Free Meeting Transcriber can read meeting details"
+
+#: src/onboarding/index.tsx
+msgid "Free Meeting Transcriber needs access to your microphone and system audio to record and transcribe your meetings"
+msgstr "Free Meeting Transcriber needs access to your microphone and system audio to record and transcribe your meetings"
+
+#: src/onboarding/index.tsx
+msgid "Free Meeting Transcriber needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
+msgstr "Free Meeting Transcriber needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
+
+#: src/templates/auto-form.tsx
+msgid "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
+msgstr "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
+
+#: src/settings/general/storage/legacy-cleanup.tsx
+msgid "Free Meeting Transcriber will retry automatically. This does not affect your notes."
+msgstr "Free Meeting Transcriber will retry automatically. This does not affect your notes."
+
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr "Frequently used"
@@ -627,16 +627,16 @@ msgid "Having trouble?"
 msgstr "Having trouble?"
 
 #: src/onboarding/permissions.tsx
-msgid "Help Anarlog listen to others"
-msgstr "Help Anarlog listen to others"
+msgid "Help Free Meeting Transcriber listen to others"
+msgstr "Help Free Meeting Transcriber listen to others"
 
 #: src/onboarding/permissions.tsx
-msgid "Help Anarlog listen to you"
-msgstr "Help Anarlog listen to you"
+msgid "Help Free Meeting Transcriber listen to you"
+msgstr "Help Free Meeting Transcriber listen to you"
 
 #: src/onboarding/permissions.tsx
-msgid "Help Anarlog read meeting activity"
-msgstr "Help Anarlog read meeting activity"
+msgid "Help Free Meeting Transcriber read meeting activity"
+msgstr "Help Free Meeting Transcriber read meeting activity"
 
 #: src/sidebar/timeline/index.tsx
 msgid "Hide Deleted Events"
@@ -704,8 +704,8 @@ msgid "Join scheduled meetings"
 msgstr "Join scheduled meetings"
 
 #: src/settings/general/app-settings.tsx
-msgid "Keep Anarlog available from the menu bar."
-msgstr "Keep Anarlog available from the menu bar."
+msgid "Keep Free Meeting Transcriber available from the menu bar."
+msgstr "Keep Free Meeting Transcriber available from the menu bar."
 
 #: src/settings/general/index.tsx
 msgid "Language & Region"
@@ -716,8 +716,8 @@ msgid "Language for summaries, chats, and AI-generated responses"
 msgstr "Language for summaries, chats, and AI-generated responses"
 
 #: src/settings/ai/llm/select.tsx
-msgid "Language model is needed to make Anarlog summarize and chat about your conversations."
-msgstr "Language model is needed to make Anarlog summarize and chat about your conversations."
+msgid "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
+msgstr "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
 
 #: src/chat/components/message/error.tsx
 msgid "Learn how to fix this"
@@ -753,8 +753,8 @@ msgid "Loading..."
 msgstr "Loading..."
 
 #: src/settings/ai/shared/index.tsx
-msgid "macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Anarlog retries this API key."
-msgstr "macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Anarlog retries this API key."
+msgid "macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Free Meeting Transcriber retries this API key."
+msgstr "macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Free Meeting Transcriber retries this API key."
 
 #: src/settings/general/main-language.tsx
 msgid "Main language"
@@ -996,13 +996,13 @@ msgstr "Open"
 msgid "Open {0} settings"
 msgstr "Open {0} settings"
 
-#: src/onboarding/final.tsx
-msgid "Open Anarlog"
-msgstr "Open Anarlog"
-
 #: src/session/components/outer-header/overflow/index.tsx
 msgid "Open floating panel"
 msgstr "Open floating panel"
+
+#: src/onboarding/final.tsx
+msgid "Open Free Meeting Transcriber"
+msgstr "Open Free Meeting Transcriber"
 
 #: src/session/components/outer-header/overflow/index.tsx
 #: src/sidebar/timeline/item.tsx
@@ -1152,8 +1152,8 @@ msgid "Reset"
 msgstr "Reset"
 
 #: src/templates/auto-form.tsx
-msgid "Reset to Anarlog default"
-msgstr "Reset to Anarlog default"
+msgid "Reset to default"
+msgstr "Reset to default"
 
 #: src/settings/general/notification.tsx
 msgid "Respect Do-Not-Disturb mode"
@@ -1279,8 +1279,8 @@ msgid "Select..."
 msgstr "Select..."
 
 #: src/settings/general/app-settings.tsx
-msgid "Send anonymous usage analytics to help improve Anarlog."
-msgstr "Send anonymous usage analytics to help improve Anarlog."
+msgid "Send anonymous usage analytics to help improve Free Meeting Transcriber."
+msgstr "Send anonymous usage analytics to help improve Free Meeting Transcriber."
 
 #: src/contacts/organization-details.tsx
 msgid "Send email"
@@ -1325,10 +1325,6 @@ msgid "Show All Recurring Events"
 msgstr "Show All Recurring Events"
 
 #: src/settings/general/app-settings.tsx
-msgid "Show Anarlog in the Dock and app switcher."
-msgstr "Show Anarlog in the Dock and app switcher."
-
-#: src/settings/general/app-settings.tsx
 msgid "Show app in Dock"
 msgstr "Show app in Dock"
 
@@ -1343,6 +1339,10 @@ msgstr "Show Event"
 #: src/settings/general/app-settings.tsx
 msgid "Show floating bar"
 msgstr "Show floating bar"
+
+#: src/settings/general/app-settings.tsx
+msgid "Show Free Meeting Transcriber in the Dock and app switcher."
+msgstr "Show Free Meeting Transcriber in the Dock and app switcher."
 
 #: src/settings/ai/stt/select.tsx
 #: src/sidebar/timeline/item.tsx
@@ -1386,8 +1386,8 @@ msgid "SQLite migration verification is incomplete"
 msgstr "SQLite migration verification is incomplete"
 
 #: src/settings/general/app-settings.tsx
-msgid "Start Anarlog at login"
-msgstr "Start Anarlog at login"
+msgid "Start Free Meeting Transcriber at login"
+msgstr "Start Free Meeting Transcriber at login"
 
 #: src/main/empty.tsx
 msgid "Start Recording"
@@ -1502,8 +1502,8 @@ msgid "Timezone"
 msgstr "Timezone"
 
 #: src/session/components/note-input/enhanced/streaming.tsx
-msgid "Tip: The Anarlog team loves our users!"
-msgstr "Tip: The Anarlog team loves our users!"
+msgid "Tip: The Free Meeting Transcriber team loves our users!"
+msgstr "Tip: The Free Meeting Transcriber team loves our users!"
 
 #: src/session/components/note-input/header.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx
@@ -1517,8 +1517,8 @@ msgid "Transcription"
 msgstr "Transcription"
 
 #: src/settings/ai/stt/select.tsx
-msgid "Transcription model is needed to make Anarlog listen to your conversations."
-msgstr "Transcription model is needed to make Anarlog listen to your conversations."
+msgid "Transcription model is needed to make Free Meeting Transcriber listen to your conversations."
+msgstr "Transcription model is needed to make Free Meeting Transcriber listen to your conversations."
 
 #: src/templates/template-icon-picker.tsx
 msgid "Travel & Places"
@@ -1533,8 +1533,8 @@ msgid "Unknown date"
 msgstr "Unknown date"
 
 #: src/settings/ai/shared/index.tsx
-msgid "Unlock your login Keychain in the macOS prompt. Anarlog will retry saving this API key automatically."
-msgstr "Unlock your login Keychain in the macOS prompt. Anarlog will retry saving this API key automatically."
+msgid "Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically."
+msgstr "Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically."
 
 #: src/contacts/organization-details.tsx
 msgid "Unnamed"
@@ -1585,8 +1585,8 @@ msgid "View LinkedIn profile"
 msgstr "View LinkedIn profile"
 
 #: src/onboarding/index.tsx
-msgid "Welcome to Anarlog"
-msgstr "Welcome to Anarlog"
+msgid "Welcome to Free Meeting Transcriber"
+msgstr "Welcome to Free Meeting Transcriber"
 
 #: src/changelog/index.tsx
 msgid "What's new in {version}?"
