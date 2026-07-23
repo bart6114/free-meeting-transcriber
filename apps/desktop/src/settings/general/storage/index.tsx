@@ -1,6 +1,7 @@
 import { Trans } from "@lingui/react/macro";
 
 import { ChangeLocationRow } from "./change-location";
+import { ReExportAllFilesRow } from "./reexport-all";
 
 export function StorageSettingsView() {
   return (
@@ -10,6 +11,7 @@ export function StorageSettingsView() {
       </h2>
       <div className="flex flex-col gap-3">
         <ChangeLocationRow />
+        <ReExportAllFilesRow />
       </div>
     </div>
   );
