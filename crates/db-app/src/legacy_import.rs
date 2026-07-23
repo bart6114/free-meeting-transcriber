@@ -456,7 +456,7 @@ pub async fn apply_legacy_import_item(
             insert_row_if_missing(&mut transaction, row).await?
         };
         match outcome {
-            InsertOutcome::Inserted => imported_count += 1,
+            InsertOutcome::Inserted | InsertOutcome::Revived => imported_count += 1,
             InsertOutcome::Matched
             | InsertOutcome::FilledFromLegacy
             | InsertOutcome::RetainedExisting => matched_count += 1,
@@ -651,6 +651,10 @@ enum InsertOutcome {
     Matched,
     FilledFromLegacy,
     RetainedExisting,
+    /// A soft-deleted row (currently: only `sessions`) was revived because
+    /// its canonical source file (`_meta.json`) is present again — see
+    /// `revive_soft_deleted_session`.
+    Revived,
     Conflict,
     MissingDependency,
     DryRun,
@@ -663,6 +667,7 @@ impl InsertOutcome {
             Self::Matched => "matched",
             Self::FilledFromLegacy => "filled_from_legacy",
             Self::RetainedExisting => "retained_existing",
+            Self::Revived => "revived",
             Self::Conflict => "conflict",
             Self::MissingDependency => "missing_dependency",
             Self::DryRun => "dry_run",
@@ -1066,7 +1071,12 @@ async fn reconcile_content_conflict(
             else {
                 return Ok(None);
             };
-            if deleted_at.is_some() || !is_recovered_session_placeholder(&metadata_json) {
+
+            if deleted_at.is_some() {
+                return revive_soft_deleted_session(transaction, row).await;
+            }
+
+            if !is_recovered_session_placeholder(&metadata_json) {
                 return Ok(None);
             }
 
@@ -1276,6 +1286,51 @@ async fn reconcile_content_conflict(
         }
         _ => Ok(None),
     }
+}
+
+/// Revives a soft-deleted `sessions` row the moment its `_meta.json` is
+/// imported again — whether via the live watcher's `import_paths` (Task 14:
+/// a session is soft-hidden when its `_meta.json` is found missing, e.g. a
+/// delete-then-recreate a couple of seconds apart from a sync client) or the
+/// next full `sync_from_vault` startup rescan, since both funnel through
+/// `insert_row_if_missing` -> `reconcile_content_conflict`. Without this,
+/// `deleted_at` could only ever be set and never cleared: `row_matches_existing`
+/// requires `deleted_at IS NULL` to consider a row a match, and
+/// `import_target_exists` filters `deleted_at IS NULL` too, so a soft-deleted
+/// session fell all the way through to `MissingDependency` and was
+/// permanently hidden — even the file reappearing with identical content
+/// couldn't heal it.
+///
+/// Only the fields `_meta.json` actually carries are refreshed — the same
+/// files-win field list `reconcile_session_target`
+/// (`plugins/db/src/import/legacy_vault.rs`) uses for a live (not
+/// soft-deleted) session's conflict reconcile. Identity fields
+/// (`owner_user_id`/`created_at`/`folder_path`/`metadata_json`/
+/// `external_provider`) are left untouched, matching that same precedent —
+/// this is a revival, not a re-creation.
+async fn revive_soft_deleted_session(
+    transaction: &mut Transaction<'_, Sqlite>,
+    row: &LegacySession,
+) -> Result<Option<InsertOutcome>, sqlx::Error> {
+    let result = sqlx::query(
+        "UPDATE sessions
+         SET title = ?, started_at = ?, ended_at = ?, event_id = ?, external_event_id = ?,
+             series_id = ?, event_json = ?, deleted_at = NULL,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE id = ? AND deleted_at IS NOT NULL",
+    )
+    .bind(&row.title)
+    .bind(&row.started_at)
+    .bind(&row.ended_at)
+    .bind(&row.event_id)
+    .bind(&row.external_event_id)
+    .bind(&row.series_id)
+    .bind(&row.event_json)
+    .bind(&row.id)
+    .execute(&mut **transaction)
+    .await?;
+
+    Ok((result.rows_affected() == 1).then_some(InsertOutcome::Revived))
 }
 
 fn document_bodies_are_equivalent(

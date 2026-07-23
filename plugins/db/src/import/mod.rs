@@ -99,6 +99,23 @@ pub async fn sync_from_vault(pool: &SqlitePool, vault_base: &std::path::Path) ->
 /// no cheap, unambiguous way to map a gone file back to which DB row it was
 /// without risking a wrong guess, and this task didn't ask for new granular
 /// per-document delete UX.
+/// Reads a file's bytes on tokio's blocking thread pool rather than the
+/// shared async runtime — the same whole-branch-review fix Task 13 applied
+/// to `vault_export.rs`'s filesystem writes (`spawn_blocking!` there): a
+/// synchronous `std::fs::read` run directly on an async task blocks
+/// whichever runtime worker thread picked it up, which is also servicing
+/// the rest of the app's async work (including this same DB pool's other
+/// connections) for as long as the read takes. A panic inside the blocking
+/// closure surfaces as an `io::Error` (via `JoinError`'s `Display`) instead
+/// of silently killing the calling task.
+async fn read_file_off_runtime(path: &std::path::Path) -> std::io::Result<Vec<u8>> {
+    let path = path.to_path_buf();
+    match tokio::task::spawn_blocking(move || std::fs::read(&path)).await {
+        Ok(result) => result,
+        Err(join_error) => Err(std::io::Error::other(join_error.to_string())),
+    }
+}
+
 pub async fn import_paths(
     pool: &SqlitePool,
     vault_base: &std::path::Path,
@@ -116,7 +133,7 @@ pub async fn import_paths(
             continue;
         };
 
-        match std::fs::read(path) {
+        match read_file_off_runtime(path).await {
             Ok(bytes) => {
                 let source_sha256 = legacy_vault::sha256(&bytes);
 
@@ -1116,5 +1133,123 @@ mod tests {
         .unwrap();
         assert!(session_deleted_at.is_none());
         assert!(document_deleted_at.is_none());
+    }
+
+    /// Regression for a real bug found in code review: soft-hiding on a
+    /// missing `_meta.json` must be reversible. A sync client can deliver a
+    /// delete-then-recreate more than the 2s coalesce window apart (or a
+    /// user can `rm` then restore a file), so `import_paths` will see the
+    /// deletion and the recreation as two separate calls. Before the
+    /// `revive_soft_deleted_session` fix in `crates/db-app`, nothing ever
+    /// cleared `deleted_at` again: `row_matches_existing`/`import_target_exists`
+    /// both require `deleted_at IS NULL` and `reconcile_content_conflict`
+    /// bailed on a soft-deleted row, so re-importing a present `_meta.json`
+    /// fell through to `MissingDependency` forever.
+    #[tokio::test]
+    async fn import_paths_revives_a_soft_deleted_session_when_meta_json_reappears() {
+        let db = test_db().await;
+        sqlx::query(
+            "INSERT INTO sessions
+             (id, owner_user_id, title, created_at, started_at, ended_at, event_id,
+              external_event_id, external_provider, series_id, event_json, folder_path)
+             VALUES ('session-7', 'user-1', 'Comes back', '2026-07-20T00:00:00Z',
+                     '', '', '', '', '', '', '', '')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let vault = tempfile::tempdir().unwrap();
+        let session_dir = vault.path().join("sessions/session-7");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        let meta_path = session_dir.join("_meta.json");
+        std::fs::write(
+            &meta_path,
+            r#"{"id":"session-7","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Comes back"}"#,
+        )
+        .unwrap();
+
+        // First call: the watcher saw the deletion (file briefly gone) —
+        // soft-hides the session, exactly like
+        // `import_paths_soft_hides_a_session_whose_meta_json_was_deleted`.
+        std::fs::remove_file(&meta_path).unwrap();
+        let deletion_report = import_paths(db.pool(), vault.path(), &[meta_path.clone()])
+            .await
+            .unwrap();
+        assert_eq!(deletion_report.deleted_count, 1);
+        let deleted_at_after_hide: Option<String> =
+            sqlx::query_scalar("SELECT deleted_at FROM sessions WHERE id = 'session-7'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert!(deleted_at_after_hide.is_some());
+
+        // A sync client (or the user) recreates the file more than the
+        // watcher's coalesce window later — a second, independent
+        // `import_paths` call.
+        std::fs::write(
+            &meta_path,
+            r#"{"id":"session-7","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Comes back"}"#,
+        )
+        .unwrap();
+        let revival_report = import_paths(db.pool(), vault.path(), &[meta_path]).await.unwrap();
+
+        let (title, deleted_at_after_revival): (String, Option<String>) = sqlx::query_as(
+            "SELECT title, deleted_at FROM sessions WHERE id = 'session-7'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert!(
+            deleted_at_after_revival.is_none(),
+            "session should be visible again once _meta.json reappears"
+        );
+        assert_eq!(title, "Comes back");
+        assert_eq!(revival_report.imported_count, 1);
+    }
+
+    /// Same fix, exercised through the startup-reconcile path
+    /// (`sync_from_vault`, not the live watcher's `import_paths`) — the
+    /// revival lives in the shared `insert_row_if_missing` ->
+    /// `reconcile_content_conflict` machinery both call, so a session
+    /// soft-hidden while the app was running must also come back the next
+    /// time the app launches and reconciles the whole vault, not just via a
+    /// live watcher event.
+    #[tokio::test]
+    async fn sync_from_vault_revives_a_soft_deleted_session_on_the_next_startup_reconcile() {
+        let db = test_db().await;
+        sqlx::query(
+            "INSERT INTO sessions
+             (id, owner_user_id, title, created_at, started_at, ended_at, event_id,
+              external_event_id, external_provider, series_id, event_json, folder_path,
+              deleted_at)
+             VALUES ('session-8', 'user-1', 'Also comes back', '2026-07-20T00:00:00Z',
+                     '', '', '', '', '', '', '', '', '2026-07-21T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let vault = tempfile::tempdir().unwrap();
+        let session_dir = vault.path().join("sessions/session-8");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        std::fs::write(
+            session_dir.join("_meta.json"),
+            r#"{"id":"session-8","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Also comes back"}"#,
+        )
+        .unwrap();
+
+        sync_from_vault(db.pool(), vault.path()).await.unwrap();
+
+        let (title, deleted_at): (String, Option<String>) =
+            sqlx::query_as("SELECT title, deleted_at FROM sessions WHERE id = 'session-8'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert!(
+            deleted_at.is_none(),
+            "startup reconcile should revive a soft-deleted session whose _meta.json is present"
+        );
+        assert_eq!(title, "Also comes back");
     }
 }

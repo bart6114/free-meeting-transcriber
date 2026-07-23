@@ -32,6 +32,31 @@
 //! the three links above only guard against *importing an export's own
 //! output*, not a ping-pong between the two workers.
 //!
+//! # What happens to the file after an external edit is imported
+//!
+//! Importing a live edit writes DB rows straight from the file's bytes,
+//! which (via the `vault_export_dirty` triggers) queues that entity for the
+//! Task 13 export worker to re-render. That render is a *subset projection*
+//! of the DB's own fields (title/body/kind/template_id/...), **not** a copy
+//! of the file's bytes — it will not, in general, reproduce whatever exact
+//! frontmatter shape, key order, or trailing whitespace the user's editor or
+//! a sync client wrote. So the export worker commonly *does* rewrite the
+//! file to its own canonical rendering, overwriting the user's original
+//! on-disk bytes (still recoverable from the DB, just not necessarily
+//! byte-for-byte as they sat on disk). **This is expected, not a bug.**
+//! Safety against a live re-import ping-pong comes entirely from
+//! `mark_own_writes` — called unconditionally before that write, regardless
+//! of whether the render happens to come out byte-identical — so the
+//! watcher never sees it as external and never re-triggers `import_paths`
+//! for it. `write_file_atomic`'s skip-if-byte-identical behavior (link 2
+//! above) is an optimization for the common *unchanged* case (editing body
+//! text below intact frontmatter often *does* round-trip identically), not
+//! the mechanism that prevents the loop in general — that's link 1's
+//! own-write mark, unconditionally. Either way — rewritten or left alone —
+//! the vault settles at a fixed point: file content equal to the DB's
+//! canonical rendering, which any later check (another live edit, or the
+//! next full `sync_from_vault` startup reconcile) sees as unchanged.
+//!
 //! # Ignore list
 //!
 //! Beyond whatever `classify_source` itself declines to classify (already
@@ -69,11 +94,18 @@ use tauri_specta::Event;
 
 /// How long to wait for the *next* `FileChanged` event before treating a
 /// burst of external edits as finished and importing everything seen so
-/// far. Wider than `plugins/notify`'s own ~900ms internal debounce (which
-/// only coalesces raw filesystem events into one `FileChanged` emission per
-/// path) because a sync client or an editor's save-then-touch-metadata
-/// sequence can still spread related events across a couple of emissions a
-/// few hundred ms apart.
+/// far. This is a **sliding quiet-window**, not a fixed tick: `run`'s inner
+/// loop resets a fresh `COALESCE_WINDOW` timeout after every event it
+/// receives (see the `tokio::time::timeout(COALESCE_WINDOW, ...)` call), so
+/// a batch is only flushed once `COALESCE_WINDOW` has elapsed with *no*
+/// new events — an active, ongoing burst (e.g. a sync client delivering
+/// several files back-to-back) keeps extending the wait rather than being
+/// cut off at a fixed 2s mark from the first event. Wider than
+/// `plugins/notify`'s own ~900ms internal debounce (which only coalesces
+/// raw filesystem events into one `FileChanged` emission per path) because
+/// a sync client or an editor's save-then-touch-metadata sequence can still
+/// spread related events across a couple of emissions a few hundred ms
+/// apart.
 const COALESCE_WINDOW: Duration = Duration::from_secs(2);
 
 const AUDIO_EXTENSIONS: &[&str] = &["aac", "m4a", "mp3", "wav", "webm", "ogg"];
