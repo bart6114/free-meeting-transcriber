@@ -165,15 +165,6 @@ jobs:
         run: pnpm -F ui build
       - if: github.event_name == 'workflow_dispatch'
         run: pnpm -F desktop tauri build --ci --bundles nsis --no-sign --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.conf.staging.json --features devtools --verbose
-        env:
-          POSTHOG_API_KEY: phc_windows_ci
-          VITE_POSTHOG_API_KEY: phc_windows_ci
-          SENTRY_DSN: ${{ secrets.SENTRY_DSN_HYPRNOTE_2 }}
-          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
-          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
-          VITE_APP_URL: https://anarlog.so
-          VITE_API_URL: https://api.anarlog.so
-          VITE_PRO_PRODUCT_ID: ${{ secrets.VITE_PRO_PRODUCT_ID }}
       - if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: |

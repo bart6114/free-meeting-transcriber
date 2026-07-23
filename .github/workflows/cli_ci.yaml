@@ -11,8 +11,6 @@ on:
       - .cargo/**
       - .agents/skills/**
       - apps/cli/**
-      - apps/web/netlify.toml
-      - apps/web/public/llms.txt
       - crates/agent-access/**
       - crates/cloudsync/**
       - crates/cli-docs/**
@@ -35,8 +33,6 @@ on:
       - .cargo/**
       - .agents/skills/**
       - apps/cli/**
-      - apps/web/netlify.toml
-      - apps/web/public/llms.txt
       - crates/agent-access/**
       - crates/cloudsync/**
       - crates/cli-docs/**

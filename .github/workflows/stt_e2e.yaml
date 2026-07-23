@@ -15,11 +15,9 @@ on:
     branches:
       - main
     paths:
-      - crates/transcribe-proxy/**
       - crates/owhisper-client/src/adapter/**
   pull_request:
     paths:
-      - crates/transcribe-proxy/**
       - crates/owhisper-client/src/adapter/**
 
 jobs:
@@ -34,8 +32,6 @@ jobs:
         id: filter
         with:
           filters: |
-            transcribe_proxy:
-              - 'crates/transcribe-proxy/**'
             deepgram:
               - 'crates/owhisper-client/src/adapter/deepgram/**'
             assemblyai:
@@ -65,11 +61,7 @@ jobs:
           if [ "${{ steps.filter.outputs.elevenlabs }}" == "true" ]; then providers+=("elevenlabs"); fi
 
           if [ ${#providers[@]} -eq 0 ]; then
-            if [ "${{ steps.filter.outputs.transcribe_proxy }}" == "true" ]; then
-              providers=("deepgram" "soniox")
-            else
-              providers=("deepgram")
-            fi
+            providers=("deepgram")
           fi
 
           json="$(printf '%s\n' "${providers[@]}" | jq -Rsc 'split("\n")[:-1] | unique')"
@@ -140,65 +132,6 @@ jobs:
 
             echo "Running direct provider batch e2e for $provider"
             cargo test -p owhisper-client --test provider_batch_e2e "direct_batch::${provider}" -- --ignored --nocapture
-          '
-        env:
-          PROVIDER: ${{ matrix.provider }}
-          INFISICAL_TOKEN: ${{ secrets.INFISICAL_TOKEN }}
-          INFISICAL_PROJECT_ID: ${{ secrets.INFISICAL_PROJECT_ID }}
-
-  proxy-provider-e2e:
-    needs: setup
-    if: needs.setup.outputs.providers != ''
-    runs-on: depot-ubuntu-24.04-8
-    strategy:
-      fail-fast: false
-      matrix:
-        provider: ${{ fromJson(needs.setup.outputs.providers) }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ./.github/actions/rust_install
-        with:
-          platform: linux
-      - uses: ./.github/actions/infisical_install
-      - run: |
-          infisical run --token="$INFISICAL_TOKEN" --env=dev --projectId="$INFISICAL_PROJECT_ID" --path="/anarlog/stt" -- bash -lc '
-            set -euo pipefail
-
-            provider="${PROVIDER}"
-
-            case "$provider" in
-              deepgram)
-                : "${DEEPGRAM_API_KEY:?DEEPGRAM_API_KEY is required}"
-                ;;
-              assemblyai)
-                : "${ASSEMBLYAI_API_KEY:?ASSEMBLYAI_API_KEY is required}"
-                ;;
-              soniox)
-                : "${SONIOX_API_KEY:?SONIOX_API_KEY is required}"
-                ;;
-              gladia)
-                : "${GLADIA_API_KEY:?GLADIA_API_KEY is required}"
-                ;;
-              fireworks)
-                : "${FIREWORKS_API_KEY:?FIREWORKS_API_KEY is required}"
-                ;;
-              openai)
-                : "${OPENAI_API_KEY:?OPENAI_API_KEY is required}"
-                ;;
-              elevenlabs)
-                : "${ELEVENLABS_API_KEY:?ELEVENLABS_API_KEY is required}"
-                ;;
-              *)
-                echo "Unknown provider: $provider"
-                exit 1
-                ;;
-            esac
-
-            echo "Running transcribe-proxy provider e2e tests for $provider"
-
-            for suite in passthrough::live passthrough::batch hyprnote::live hyprnote::batch; do
-              cargo test -p transcribe-proxy --test proxy_provider_e2e "${suite}::${provider}" -- --ignored --nocapture
-            done
           '
         env:
           PROVIDER: ${{ matrix.provider }}
