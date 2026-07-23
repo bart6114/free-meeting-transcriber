@@ -16889,6 +16889,7 @@ version = "0.1.0"
 dependencies = [
  "agent-access",
  "anyhow",
+ "chrono",
  "db-app",
  "db-core",
  "db-execute",
@@ -16912,6 +16913,7 @@ dependencies = [
  "tauri-utils 0.1.0",
  "tempfile",
  "thiserror 2.0.18",
+ "tiptap",
  "tokio",
  "tracing",
  "uuid",

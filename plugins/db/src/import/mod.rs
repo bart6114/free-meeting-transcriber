@@ -1,5 +1,4 @@
 mod calendars;
-mod cleanup;
 mod events;
 mod legacy_vault;
 mod templates;
@@ -8,59 +7,76 @@ use std::path::PathBuf;
 
 use sqlx::SqlitePool;
 
+/// Outcome of a single `sync_from_vault` pass: how many vault files were
+/// newly imported / left unchanged / reconciled by the files-win conflict
+/// rule, on top of the raw `migration_import_runs` counters.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SyncReport {
+    pub run_id: String,
+    pub discovered_count: i64,
+    pub imported_count: i64,
+    pub matched_count: i64,
+    pub skipped_count: i64,
+    pub conflict_count: i64,
+    /// Conflicts that were force-resolved in favor of the vault file
+    /// (already folded into `imported_count` / subtracted from
+    /// `conflict_count` above).
+    pub reconciled_count: i64,
+}
+
+/// Reconcile `app.db` from the vault's files. Idempotent and safe to call on
+/// every startup: unchanged files (matching sha256 of the last successful
+/// import) are skipped, new files are imported, and changed files are
+/// re-imported with the vault file winning any content conflict. A fresh or
+/// empty database (no prior run rows) imports everything — this is the
+/// "delete app.db and relaunch" rebuild path.
+pub async fn sync_from_vault(pool: &SqlitePool, vault_base: &std::path::Path) -> crate::Result<SyncReport> {
+    let run_id = legacy_vault::import_legacy_vault(pool, vault_base, false).await?;
+    let reconciled_count = legacy_vault::reconcile_vault_conflicts(pool, vault_base, &run_id).await?;
+
+    let (discovered_count, imported_count, matched_count, skipped_count, conflict_count): (
+        i64,
+        i64,
+        i64,
+        i64,
+        i64,
+    ) = sqlx::query_as(
+        "SELECT discovered_count, imported_count, matched_count, skipped_count, conflict_count
+         FROM migration_import_runs
+         WHERE id = ?",
+    )
+    .bind(&run_id)
+    .fetch_one(pool)
+    .await?;
+
+    Ok(SyncReport {
+        run_id,
+        discovered_count,
+        imported_count,
+        matched_count,
+        skipped_count,
+        conflict_count,
+        reconciled_count,
+    })
+}
+
 pub async fn import_legacy_data<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     pool: &SqlitePool,
 ) -> crate::Result<()> {
-    if !legacy_import_attempt_required(pool).await? {
-        return Ok(());
-    }
-
     let vault_base = resolve_startup_vault_base(app)?;
-    let run_id = match legacy_vault::import_legacy_vault(pool, &vault_base, false).await {
-        Ok(run_id) => run_id,
+
+    match sync_from_vault(pool, &vault_base).await {
+        Ok(_report) => Ok(()),
         Err(crate::Error::Io(error)) => {
             tracing::warn!(
                 %error,
-                "legacy import could not read its source files; continuing with recovery copies intact"
+                "vault reconcile could not read its source files; continuing with recovery copies intact"
             );
-            return Ok(());
+            Ok(())
         }
-        Err(error) => return Err(error),
-    };
-
-    if !legacy_migration_verified(pool).await? {
-        tracing::warn!(
-            %run_id,
-            "legacy import needs attention; continuing with recovery copies intact"
-        );
+        Err(error) => Err(error),
     }
-
-    Ok(())
-}
-
-async fn legacy_import_attempt_required(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
-    let attempted: bool = sqlx::query_scalar(
-        "SELECT EXISTS(
-           SELECT 1
-           FROM storage_migration_state AS state
-           JOIN migration_import_runs AS run ON run.id = state.latest_run_id
-           WHERE state.id = 'legacy_v1'
-             AND run.importer_version = ?
-             AND run.dry_run = 0
-             AND run.status IN (
-               'completed',
-               'completed_with_conflicts',
-               'completed_with_issues',
-               'failed'
-             )
-         )",
-    )
-    .bind(hypr_db_app::LEGACY_IMPORTER_VERSION)
-    .fetch_one(pool)
-    .await?;
-
-    Ok(!attempted)
 }
 
 pub(crate) async fn legacy_migration_verified(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
@@ -156,16 +172,6 @@ pub async fn get_legacy_import_report(
     })
 }
 
-pub async fn get_legacy_cleanup_status(
-    pool: &SqlitePool,
-) -> crate::Result<crate::LegacyCleanupStatus> {
-    cleanup::get_status(pool).await
-}
-
-pub async fn cleanup_legacy_files(pool: &SqlitePool) -> crate::Result<crate::LegacyCleanupResult> {
-    cleanup::execute(pool).await
-}
-
 fn resolve_startup_vault_base<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
 ) -> crate::Result<PathBuf> {
@@ -183,37 +189,6 @@ fn resolve_startup_vault_base<R: tauri::Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    async fn finish_issue_run(
-        pool: &SqlitePool,
-        run_id: &str,
-        item_status: &str,
-        skipped_count: i64,
-        conflict_count: i64,
-    ) -> String {
-        hypr_db_app::begin_legacy_import_run(pool, run_id, "/vault", false)
-            .await
-            .unwrap();
-        sqlx::query(
-            "INSERT INTO migration_import_items
-             (id, run_id, source_path, source_kind, source_sha256, status,
-              discovered_count, skipped_count, conflict_count, error, completed_at)
-             VALUES (?, ?, 'source.json', 'test', 'hash', ?, 1, ?, ?, '',
-                     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
-        )
-        .bind(format!("item-{run_id}"))
-        .bind(run_id)
-        .bind(item_status)
-        .bind(skipped_count)
-        .bind(conflict_count)
-        .execute(pool)
-        .await
-        .unwrap();
-
-        hypr_db_app::finish_legacy_import_run(pool, run_id)
-            .await
-            .unwrap()
-    }
 
     #[tokio::test]
     async fn migration_verification_uses_current_importer_version() {
@@ -244,81 +219,6 @@ mod tests {
         .unwrap();
 
         assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-    }
-
-    #[tokio::test]
-    async fn completed_issue_run_is_not_repeated_automatically() {
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-
-        assert!(legacy_import_attempt_required(db.pool()).await.unwrap());
-        assert_eq!(
-            finish_issue_run(db.pool(), "issue-run", "partial", 1, 0).await,
-            "completed_with_issues"
-        );
-
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
-        assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-    }
-
-    #[tokio::test]
-    async fn failed_source_scan_is_left_for_explicit_retry() {
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-
-        hypr_db_app::begin_legacy_import_run(db.pool(), "failed-run", "/vault", false)
-            .await
-            .unwrap();
-        hypr_db_app::fail_legacy_import_run(db.pool(), "failed-run", "permission denied")
-            .await
-            .unwrap();
-
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
-        assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-    }
-
-    #[tokio::test]
-    async fn conflict_only_import_preserves_cleanup_guard() {
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-
-        assert_eq!(
-            finish_issue_run(db.pool(), "conflict-run", "conflict", 0, 1).await,
-            "completed_with_conflicts"
-        );
-
-        let parity_verified: bool = sqlx::query_scalar(
-            "SELECT parity_verified FROM storage_migration_state WHERE id = 'legacy_v1'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-        assert!(!parity_verified);
-        assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
-
-        let cleanup_status = cleanup::get_status(db.pool()).await.unwrap();
-        assert!(!cleanup_status.migration_verified);
-        assert!(!cleanup_status.available);
-        assert!(cleanup_status.blocking_reason.is_some());
-    }
-
-    #[tokio::test]
-    async fn legacy_completed_with_issues_conflicts_remain_unverified() {
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        finish_issue_run(db.pool(), "legacy-conflict-run", "conflict", 0, 1).await;
-        sqlx::query(
-            "UPDATE migration_import_runs SET status = 'completed_with_issues' WHERE id = ?",
-        )
-        .bind("legacy-conflict-run")
-        .execute(db.pool())
-        .await
-        .unwrap();
-
-        assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
     }
 
     #[tokio::test]
@@ -457,44 +357,7 @@ mod tests {
             transcript
         );
 
-        let cleanup_status = cleanup::get_status(db.pool()).await.unwrap();
-        assert!(!cleanup_status.migration_verified);
-        assert!(!cleanup_status.available);
-        assert!(cleanup_status.blocking_reason.is_some());
-
         assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
-        let run_count_before_second_startup: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM migration_import_runs")
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        let run_count_after_second_startup: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM migration_import_runs")
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        assert_eq!(
-            run_count_after_second_startup,
-            run_count_before_second_startup
-        );
-    }
-
-    #[tokio::test]
-    async fn skipped_and_error_imports_remain_unverified_for_explicit_retry() {
-        for (run_id, item_status, skipped_count) in
-            [("skipped-run", "partial", 1), ("error-run", "error", 0)]
-        {
-            let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-            hypr_db_app::prepare_schema(&db).await.unwrap();
-
-            assert_eq!(
-                finish_issue_run(db.pool(), run_id, item_status, skipped_count, 0).await,
-                "completed_with_issues"
-            );
-            assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-            assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
-        }
     }
 
     #[tokio::test]
@@ -533,7 +396,6 @@ mod tests {
         assert_eq!(run, ("completed_with_issues".to_string(), 1, 0, 1));
         assert_eq!(target_status, "missing_dependency");
         assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
     }
 
     #[tokio::test]
@@ -650,12 +512,6 @@ mod tests {
         .unwrap();
         assert!(!parity_verified);
         assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
-
-        let cleanup_status = cleanup::get_status(db.pool()).await.unwrap();
-        assert!(!cleanup_status.migration_verified);
-        assert!(!cleanup_status.available);
-        assert!(cleanup_status.blocking_reason.is_some());
     }
 
     #[tokio::test]
@@ -746,8 +602,12 @@ mod tests {
         assert_eq!(event_title, "Updated title");
     }
 
+    /// `app.db` is a disposable cache: unlike the old run-once gate, every
+    /// startup reconciles from the vault, so an edit made to a vault file
+    /// while the app was closed is picked up on the next open — not frozen
+    /// in place by whatever was imported first.
     #[tokio::test]
-    async fn verified_file_import_survives_cloudsync_reopen_without_rerun() {
+    async fn sync_from_vault_reconciles_vault_edits_on_every_startup() {
         let dir = tempfile::tempdir().unwrap();
         let db_path = dir.path().join("app.db");
         let vault = dir.path().join("vault");
@@ -761,66 +621,39 @@ mod tests {
 
         let db = crate::runtime::open_app_db(Some(&db_path)).await.unwrap();
         assert!(db.cloudsync_enabled());
-        assert!(!legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(legacy_import_attempt_required(db.pool()).await.unwrap());
 
-        let run_id = legacy_vault::import_legacy_vault(db.pool(), &vault, false)
-            .await
-            .unwrap();
-        let run_status: String =
-            sqlx::query_scalar("SELECT status FROM migration_import_runs WHERE id = ?")
-                .bind(&run_id)
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        let state_before: (String, bool, i64) = sqlx::query_as(
-            "SELECT latest_run_id, parity_verified, importer_version
-             FROM storage_migration_state WHERE id = 'legacy_v1'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
+        let first = sync_from_vault(db.pool(), &vault).await.unwrap();
+        assert_eq!(first.conflict_count, 0);
         let run_count_before: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM migration_import_runs")
                 .fetch_one(db.pool())
                 .await
                 .unwrap();
-
-        assert_eq!(run_status, "completed");
-        assert_eq!(state_before.0, run_id);
-        assert!(state_before.1);
-        assert_eq!(state_before.2, hypr_db_app::LEGACY_IMPORTER_VERSION);
-        assert!(legacy_migration_verified(db.pool()).await.unwrap());
-        assert!(!legacy_import_attempt_required(db.pool()).await.unwrap());
+        let stored_title: String =
+            sqlx::query_scalar("SELECT title FROM sessions WHERE id = 'session-1'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(stored_title, "Imported before restart");
 
         db.pool().close().await;
         drop(db);
 
+        // A user (or another device sharing the vault) edits the file
+        // directly while the app is closed.
         std::fs::write(
             session_dir.join("_meta.json"),
-            r#"{"id":"session-1","user_id":"user-1","created_at":"2026-07-10T01:00:00Z","title":"Changed after verified import"}"#,
+            r#"{"id":"session-1","user_id":"user-1","created_at":"2026-07-10T01:00:00Z","title":"Changed after restart"}"#,
         )
         .unwrap();
 
         let reopened = crate::runtime::open_app_db(Some(&db_path)).await.unwrap();
         assert!(reopened.cloudsync_enabled());
 
-        if legacy_import_attempt_required(reopened.pool())
-            .await
-            .unwrap()
-        {
-            legacy_vault::import_legacy_vault(reopened.pool(), &vault, false)
-                .await
-                .unwrap();
-        }
+        let second = sync_from_vault(reopened.pool(), &vault).await.unwrap();
+        assert_eq!(second.imported_count, 1);
+        assert_eq!(second.conflict_count, 0);
 
-        let state_after: (String, bool, i64) = sqlx::query_as(
-            "SELECT latest_run_id, parity_verified, importer_version
-             FROM storage_migration_state WHERE id = 'legacy_v1'",
-        )
-        .fetch_one(reopened.pool())
-        .await
-        .unwrap();
         let run_count_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM migration_import_runs")
             .fetch_one(reopened.pool())
             .await
@@ -831,14 +664,13 @@ mod tests {
                 .await
                 .unwrap();
 
-        assert_eq!(state_after, state_before);
-        assert_eq!(run_count_after, run_count_before);
-        assert_eq!(stored_title, "Imported before restart");
-        assert!(legacy_migration_verified(reopened.pool()).await.unwrap());
+        assert_eq!(run_count_after, run_count_before + 1);
+        assert_eq!(stored_title, "Changed after restart");
         assert!(
-            !legacy_import_attempt_required(reopened.pool())
-                .await
+            std::fs::read_dir(&session_dir)
                 .unwrap()
+                .filter_map(std::result::Result::ok)
+                .all(|entry| !entry.file_name().to_string_lossy().contains(".conflict-"))
         );
     }
 }

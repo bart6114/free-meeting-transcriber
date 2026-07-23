@@ -5,6 +5,7 @@ mod import;
 mod runtime;
 
 pub use error::{Error, Result};
+pub use import::{SyncReport, sync_from_vault};
 pub use runtime::open_app_db;
 use tauri::Manager;
 
@@ -84,25 +85,6 @@ pub struct LegacyImportReport {
     pub latest_run: Option<LegacyImportRun>,
     pub items: Vec<LegacyImportItemReport>,
     pub targets: Vec<LegacyImportTargetReport>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyCleanupStatus {
-    pub migration_verified: bool,
-    pub available: bool,
-    pub already_cleaned: bool,
-    pub file_count: u64,
-    pub total_bytes: u64,
-    pub source_root: String,
-    pub blocking_reason: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyCleanupResult {
-    pub deleted_file_count: u64,
-    pub deleted_bytes: u64,
 }
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type, PartialEq, Eq)]
@@ -206,8 +188,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::execute_transaction,
             commands::execute_proxy,
             commands::get_legacy_import_report,
-            commands::get_legacy_cleanup_status,
-            commands::cleanup_legacy_files,
             commands::run_legacy_import,
             commands::get_e2ee_identity_status<tauri::Wry>,
             commands::inspect_e2ee_recovery_key,
@@ -245,15 +225,15 @@ pub fn init_with_cloudsync<R: tauri::Runtime>(
             hypr_tauri_utils::block_on(hypr_db_app::prepare_schema(db.as_ref()))?;
             hypr_tauri_utils::block_on(import::import_legacy_data(app.app_handle(), db.pool()))?;
             if let Some(config) = startup_config.clone() {
-                let migration_verified =
-                    hypr_tauri_utils::block_on(import::legacy_migration_verified(db.pool()))?;
-                if !migration_verified {
-                    tracing::warn!(
-                        "startup CloudSync configuration skipped until legacy migration is verified"
+                // `parity_verified` is observability only now — app.db is a
+                // disposable cache reconciled from the vault on every
+                // startup, so CloudSync no longer waits on it.
+                if !hypr_tauri_utils::block_on(import::legacy_migration_verified(db.pool()))? {
+                    tracing::debug!(
+                        "starting CloudSync while the last vault reconcile still has unresolved issues"
                     );
-                } else if let Err(error) =
-                    hypr_tauri_utils::block_on(db.cloudsync_configure(config))
-                {
+                }
+                if let Err(error) = hypr_tauri_utils::block_on(db.cloudsync_configure(config)) {
                     tracing::warn!(%error, "failed to configure startup cloudsync");
                 } else {
                     let sync_db = std::sync::Arc::clone(&db);
@@ -317,14 +297,16 @@ mod test {
     fn default_permissions_include_legacy_migration_workflow() {
         let permissions = include_str!("../permissions/default.toml");
 
-        for permission in [
-            "allow-get-legacy-cleanup-status",
-            "allow-get-legacy-import-report",
-            "allow-cleanup-legacy-files",
-            "allow-run-legacy-import",
-        ] {
+        for permission in ["allow-get-legacy-import-report", "allow-run-legacy-import"] {
             assert!(permissions.contains(permission), "missing {permission}");
         }
+    }
+
+    #[test]
+    fn default_permissions_exclude_removed_cleanup_flow() {
+        let permissions = include_str!("../permissions/default.toml");
+
+        assert!(!permissions.contains("legacy-cleanup"));
     }
 
     fn capture_channel() -> (Channel<QueryEvent>, Arc<Mutex<Vec<QueryEvent>>>) {
@@ -749,9 +731,14 @@ mod test {
         );
     }
 
+    /// `parity_verified` used to gate CloudSync startup on the one-time
+    /// legacy SQLite migration finishing cleanly. app.db is now a
+    /// disposable cache continuously reconciled from the vault, so an
+    /// unverified/issue-flagged run is observability only and must not
+    /// block CloudSync.
     #[tokio::test]
-    async fn cloudsync_waits_for_legacy_migration_verification() {
-        let (_dir, runtime) = setup_enabled_cloudsync_runtime().await;
+    async fn cloudsync_starts_even_when_legacy_migration_parity_is_unverified() {
+        let (_dir, runtime) = setup_runtime().await;
         sqlx::query(
             "UPDATE storage_migration_state
              SET parity_verified = 0, last_error = 'completed_with_issues'
@@ -761,27 +748,25 @@ mod test {
         .await
         .unwrap();
 
-        let error = runtime
-            .configure_cloudsync_token(
-                "managed-database-id".to_string(),
-                "token".to_string(),
-                "user-a".to_string(),
-                unreachable_witness("user-a"),
+        runtime
+            .configure_cloudsync(
+                serde_json::json!({
+                    "connection_string": "managed-database-id",
+                    "auth": { "type": "token", "token": "test-token" },
+                    "tables": hypr_db_app::cloudsync_table_registry(),
+                    "sync_interval_ms": 30_000,
+                    "wait_ms": 5_000,
+                    "max_retries": 3
+                })
+                .to_string(),
             )
             .await
-            .unwrap_err();
+            .unwrap();
+        runtime.start_cloudsync().await.unwrap();
 
-        assert!(matches!(&error, crate::Error::Io(_)));
-        assert!(
-            error
-                .to_string()
-                .contains("migration needs attention before CloudSync can start")
-        );
-        assert!(runtime.start_cloudsync().await.is_err());
-        assert!(runtime.sync_cloudsync_now().await.is_err());
         assert_eq!(
             runtime.cloudsync_status().await.unwrap()["configured"],
-            false
+            true
         );
     }
 

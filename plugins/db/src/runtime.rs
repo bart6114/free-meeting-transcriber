@@ -207,17 +207,19 @@ impl PluginDbRuntime {
         Ok(())
     }
 
+    /// Historically this blocked CloudSync until the one-time legacy SQLite
+    /// migration reported `parity_verified`. app.db is now a disposable
+    /// cache reconciled from the vault on every startup (see
+    /// `import::sync_from_vault`), so `parity_verified` is observability
+    /// only — this no longer suspends CloudSync or returns an error.
     async fn ensure_legacy_migration_verified(&self) -> Result<()> {
         self.ensure_app_schema().await?;
-        if crate::import::legacy_migration_verified(self.db.pool()).await? {
-            return Ok(());
+        if !crate::import::legacy_migration_verified(self.db.pool()).await? {
+            tracing::debug!(
+                "CloudSync starting while the last vault reconcile still has unresolved issues"
+            );
         }
-
-        let _ = self.db.cloudsync_suspend().await;
-        Err(std::io::Error::other(
-            "legacy data migration needs attention before CloudSync can start",
-        )
-        .into())
+        Ok(())
     }
 
     pub async fn execute(
@@ -272,11 +274,6 @@ impl PluginDbRuntime {
         let _write_guard = self.synced_write_barrier.read().await;
         self.ensure_app_schema().await?;
         Ok(self.executor.execute_proxy(sql, params, method).await?)
-    }
-
-    pub async fn cleanup_legacy_files(&self) -> Result<crate::LegacyCleanupResult> {
-        let _write_guard = self.synced_write_barrier.read().await;
-        Ok(crate::import::cleanup_legacy_files(self.db.pool()).await?)
     }
 
     pub async fn rerun_legacy_import(&self, dry_run: bool) -> Result<String> {

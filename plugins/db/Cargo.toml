@@ -18,7 +18,9 @@ hypr-e2ee = { workspace = true }
 hypr-fs-sync-core = { workspace = true }
 hypr-storage = { workspace = true }
 hypr-tauri-utils = { workspace = true }
+hypr-tiptap = { workspace = true }
 
+chrono = { workspace = true }
 futures-util = { workspace = true }
 reqwest = { workspace = true, features = ["json", "query", "stream"] }
 serde = { workspace = true }

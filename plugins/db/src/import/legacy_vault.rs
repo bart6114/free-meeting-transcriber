@@ -216,6 +216,417 @@ pub async fn import_legacy_vault(
     Ok(run_id)
 }
 
+/// Reconcile the "files win" conflict rule on top of a just-finished
+/// `import_legacy_vault` run: for any `sessions` / `session_documents` /
+/// `transcripts` target the run recorded as `conflict` (its DB row already
+/// held different content than the vault file), re-read the current file
+/// and force it into the DB. If the DB row's `updated_at` is newer than the
+/// file's mtime, the DB copy is exported to a `<name>.conflict-<ISO
+/// timestamp>.<ext>` file beside the source first, so nothing is silently
+/// lost, and a warning is logged. The vault file always wins the content
+/// itself — the timestamp check only decides whether a backup is written.
+///
+/// This intentionally does not touch `insert_row_if_missing` /
+/// `reconcile_content_conflict` in `db-app`: those keep their original
+/// "legacy SQLite is authoritative" semantics for direct
+/// `import_legacy_vault` callers (manual retries, the historical migration
+/// tests). Only the continuous `sync_from_vault` path reconciles
+/// vault-editable content (session title/meta, note bodies, transcripts) in
+/// favor of the file.
+pub(crate) async fn reconcile_vault_conflicts(
+    pool: &SqlitePool,
+    vault_base: &Path,
+    run_id: &str,
+) -> crate::Result<i64> {
+    let targets: Vec<(String, String, String, String, String)> = sqlx::query_as(
+        "SELECT target.id, target.item_id, target.table_name, target.target_id, item.source_path
+         FROM migration_import_targets AS target
+         JOIN migration_import_items AS item ON item.id = target.item_id
+         WHERE target.run_id = ?
+           AND target.status = 'conflict'
+           AND target.table_name IN ('sessions', 'session_documents', 'transcripts')
+         ORDER BY target.id",
+    )
+    .bind(run_id)
+    .fetch_all(pool)
+    .await?;
+
+    let mut resolved = 0_i64;
+    for (target_row_id, item_id, table_name, target_id, source_path) in targets {
+        let file_path = vault_base.join(&source_path);
+        let resolved_target = match table_name.as_str() {
+            "sessions" => reconcile_session_target(pool, vault_base, &file_path, &target_id).await,
+            "session_documents" => {
+                reconcile_document_target(pool, vault_base, &file_path, &target_id).await
+            }
+            "transcripts" => {
+                reconcile_transcript_target(pool, vault_base, &file_path, &target_id).await
+            }
+            _ => Ok(false),
+        }?;
+
+        if !resolved_target {
+            continue;
+        }
+
+        resolved += 1;
+        sqlx::query("UPDATE migration_import_targets SET status = 'reconciled_from_vault' WHERE id = ?")
+            .bind(&target_row_id)
+            .execute(pool)
+            .await?;
+        sqlx::query(
+            "UPDATE migration_import_items
+             SET conflict_count = MAX(conflict_count - 1, 0),
+                 imported_count = imported_count + 1,
+                 status = CASE
+                   WHEN conflict_count - 1 <= 0 AND skipped_count = 0 AND error = '' THEN 'complete'
+                   ELSE status
+                 END
+             WHERE id = ?",
+        )
+        .bind(&item_id)
+        .execute(pool)
+        .await?;
+    }
+
+    if resolved > 0 {
+        hypr_db_app::finish_legacy_import_run(pool, run_id).await?;
+    }
+
+    Ok(resolved)
+}
+
+async fn reconcile_session_target(
+    pool: &SqlitePool,
+    vault_base: &Path,
+    file_path: &Path,
+    target_id: &str,
+) -> crate::Result<bool> {
+    let Ok(bytes) = std::fs::read(file_path) else {
+        return Ok(false);
+    };
+    let Ok(content) = std::str::from_utf8(&bytes) else {
+        return Ok(false);
+    };
+    let Ok(batch) = parse_session_meta(vault_base, file_path, content) else {
+        return Ok(false);
+    };
+    let Some(LegacyImportRow::Session(session)) = batch.rows.into_iter().next() else {
+        return Ok(false);
+    };
+    if session.id != target_id {
+        return Ok(false);
+    }
+
+    let Some((title, event_json, updated_at, deleted_at)) = sqlx::query_as::<
+        _,
+        (String, String, String, Option<String>),
+    >(
+        "SELECT title, event_json, updated_at, deleted_at FROM sessions WHERE id = ?",
+    )
+    .bind(target_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(false);
+    };
+    if deleted_at.is_some() {
+        return Ok(false);
+    }
+
+    if row_is_newer_than_file(&updated_at, file_path)? {
+        export_conflict_backup(
+            file_path,
+            ConflictBackup::Json(serde_json::json!({
+                "conflict_source": "app_db",
+                "session": {
+                    "id": target_id,
+                    "title": title,
+                    "event": parse_optional_json(&event_json),
+                },
+            })),
+        )?;
+        tracing::warn!(
+            target_id,
+            source_path = %source_relative_path(vault_base, file_path),
+            "vault reconcile: app.db session is newer than the vault file; exported a conflict backup before the file won"
+        );
+    }
+
+    sqlx::query(
+        "UPDATE sessions
+         SET title = ?, started_at = ?, ended_at = ?, event_id = ?, external_event_id = ?,
+             series_id = ?, event_json = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE id = ?",
+    )
+    .bind(&session.title)
+    .bind(&session.started_at)
+    .bind(&session.ended_at)
+    .bind(&session.event_id)
+    .bind(&session.external_event_id)
+    .bind(&session.series_id)
+    .bind(&session.event_json)
+    .bind(target_id)
+    .execute(pool)
+    .await?;
+
+    Ok(true)
+}
+
+async fn reconcile_document_target(
+    pool: &SqlitePool,
+    vault_base: &Path,
+    file_path: &Path,
+    target_id: &str,
+) -> crate::Result<bool> {
+    let Ok(bytes) = std::fs::read(file_path) else {
+        return Ok(false);
+    };
+    let Ok(content) = std::str::from_utf8(&bytes) else {
+        return Ok(false);
+    };
+    let source_sha256 = sha256(&bytes);
+    let Ok(batch) = parse_session_document(vault_base, file_path, content, &source_sha256) else {
+        return Ok(false);
+    };
+    let Some(LegacyImportRow::Document(document)) = batch.rows.into_iter().next() else {
+        return Ok(false);
+    };
+    if document.id != target_id {
+        return Ok(false);
+    }
+
+    let Some((session_id, title, body_format, body, updated_at, deleted_at)) = sqlx::query_as::<
+        _,
+        (String, String, String, String, String, Option<String>),
+    >(
+        "SELECT session_id, title, body_format, body, updated_at, deleted_at
+         FROM session_documents
+         WHERE id = ?",
+    )
+    .bind(target_id)
+    .fetch_optional(pool)
+    .await?
+    else {
+        return Ok(false);
+    };
+    if deleted_at.is_some() || session_id != document.session_id {
+        return Ok(false);
+    }
+
+    if row_is_newer_than_file(&updated_at, file_path)? {
+        let markdown_body = render_document_body_as_markdown(&body_format, &body);
+        export_conflict_backup(
+            file_path,
+            ConflictBackup::Markdown {
+                frontmatter: [
+                    ("id".to_string(), serde_json::Value::String(target_id.to_string())),
+                    (
+                        "session_id".to_string(),
+                        serde_json::Value::String(document.session_id.clone()),
+                    ),
+                    ("title".to_string(), serde_json::Value::String(title)),
+                    (
+                        "conflict_source".to_string(),
+                        serde_json::Value::String("app_db".to_string()),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+                content: markdown_body,
+            },
+        )?;
+        tracing::warn!(
+            target_id,
+            source_path = %source_relative_path(vault_base, file_path),
+            "vault reconcile: app.db document is newer than the vault file; exported a conflict backup before the file won"
+        );
+    }
+
+    sqlx::query(
+        "UPDATE session_documents
+         SET kind = ?, template_id = ?, title = ?, body_format = ?, body = ?, source_hash = ?,
+             sort_order = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE id = ?",
+    )
+    .bind(&document.kind)
+    .bind(&document.template_id)
+    .bind(&document.title)
+    .bind(&document.body_format)
+    .bind(&document.body)
+    .bind(&document.source_hash)
+    .bind(document.sort_order)
+    .bind(target_id)
+    .execute(pool)
+    .await?;
+
+    Ok(true)
+}
+
+async fn reconcile_transcript_target(
+    pool: &SqlitePool,
+    vault_base: &Path,
+    file_path: &Path,
+    target_id: &str,
+) -> crate::Result<bool> {
+    let Ok(bytes) = std::fs::read(file_path) else {
+        return Ok(false);
+    };
+    let Ok(content) = std::str::from_utf8(&bytes) else {
+        return Ok(false);
+    };
+    let source_sha256 = sha256(&bytes);
+    let Ok(batch) = parse_transcript(vault_base, file_path, content, &source_sha256) else {
+        return Ok(false);
+    };
+    let Some(transcript) = batch.rows.into_iter().find_map(|row| match row {
+        LegacyImportRow::Transcript(transcript) if transcript.id == target_id => Some(transcript),
+        _ => None,
+    }) else {
+        return Ok(false);
+    };
+
+    let Some((session_id, memo, words_json, speaker_hints_json, updated_at, deleted_at)) =
+        sqlx::query_as::<_, (String, String, String, String, String, Option<String>)>(
+            "SELECT session_id, memo, words_json, speaker_hints_json, updated_at, deleted_at
+             FROM transcripts
+             WHERE id = ?",
+        )
+        .bind(target_id)
+        .fetch_optional(pool)
+        .await?
+    else {
+        return Ok(false);
+    };
+    if deleted_at.is_some() || session_id != transcript.session_id {
+        return Ok(false);
+    }
+
+    if row_is_newer_than_file(&updated_at, file_path)? {
+        export_conflict_backup(
+            file_path,
+            ConflictBackup::Json(serde_json::json!({
+                "conflict_source": "app_db",
+                "transcript": {
+                    "id": target_id,
+                    "session_id": session_id,
+                    "memo_md": memo,
+                    "words": parse_optional_json(&words_json),
+                    "speaker_hints": parse_optional_json(&speaker_hints_json),
+                },
+            })),
+        )?;
+        tracing::warn!(
+            target_id,
+            source_path = %source_relative_path(vault_base, file_path),
+            "vault reconcile: app.db transcript is newer than the vault file; exported a conflict backup before the file won"
+        );
+    }
+
+    sqlx::query(
+        "UPDATE transcripts
+         SET started_at_ms = ?, ended_at_ms = ?, memo = ?, words_json = ?, speaker_hints_json = ?,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE id = ?",
+    )
+    .bind(transcript.started_at_ms)
+    .bind(transcript.ended_at_ms)
+    .bind(&transcript.memo)
+    .bind(&transcript.words_json)
+    .bind(&transcript.speaker_hints_json)
+    .bind(target_id)
+    .execute(pool)
+    .await?;
+
+    Ok(true)
+}
+
+/// Vault-file content is stored as markdown; app-authored content may still
+/// be tiptap prosemirror JSON. Render whichever we have as markdown so a
+/// conflict backup reads like the rest of the vault.
+fn render_document_body_as_markdown(body_format: &str, body: &str) -> String {
+    if body_format != "prosemirror_json" {
+        return body.to_string();
+    }
+    serde_json::from_str(body)
+        .ok()
+        .and_then(|json| hypr_tiptap::tiptap_json_to_md(&json).ok())
+        .unwrap_or_else(|| body.to_string())
+}
+
+fn parse_optional_json(value: &str) -> serde_json::Value {
+    if value.is_empty() {
+        return serde_json::Value::Null;
+    }
+    serde_json::from_str(value).unwrap_or(serde_json::Value::Null)
+}
+
+enum ConflictBackup {
+    Markdown {
+        frontmatter: HashMap<String, Value>,
+        content: String,
+    },
+    Json(Value),
+}
+
+fn export_conflict_backup(file_path: &Path, backup: ConflictBackup) -> crate::Result<PathBuf> {
+    let rendered = match backup {
+        ConflictBackup::Markdown { frontmatter, content } => ParsedDocument { frontmatter, content }
+            .render()
+            .map_err(|error| std::io::Error::other(error.to_string()))?
+            .into_bytes(),
+        ConflictBackup::Json(value) => serde_json::to_vec_pretty(&value)?,
+    };
+
+    let backup_path = unique_conflict_backup_path(file_path);
+    std::fs::write(&backup_path, rendered)?;
+    Ok(backup_path)
+}
+
+fn unique_conflict_backup_path(file_path: &Path) -> PathBuf {
+    let stem = file_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("file");
+    let extension = file_path
+        .extension()
+        .and_then(|value| value.to_str())
+        .unwrap_or("md");
+    // Colons are filesystem-hostile on some platforms/mounts even though
+    // modern macOS tolerates them; stay portable and keep the timestamp
+    // sortable.
+    let timestamp = chrono::Utc::now()
+        .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        .replace(':', "-");
+
+    let mut candidate = file_path.with_file_name(format!("{stem}.conflict-{timestamp}.{extension}"));
+    let mut suffix = 1;
+    while candidate.exists() {
+        candidate =
+            file_path.with_file_name(format!("{stem}.conflict-{timestamp}-{suffix}.{extension}"));
+        suffix += 1;
+    }
+    candidate
+}
+
+/// `true` when `updated_at` (an `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+/// stamp, possibly empty for rows that predate this column being populated)
+/// is strictly after the file's last-modified time. An empty/unparsable
+/// timestamp is treated as "not newer" so the default is a plain overwrite,
+/// not a conflict backup.
+fn row_is_newer_than_file(updated_at: &str, file_path: &Path) -> crate::Result<bool> {
+    let Ok(row_time) = chrono::DateTime::parse_from_rfc3339(updated_at) else {
+        return Ok(false);
+    };
+    let file_mtime = std::fs::metadata(file_path)?.modified()?;
+    let file_time = chrono::DateTime::<chrono::Utc>::from(file_mtime);
+    Ok(row_time > file_time)
+}
+
+fn source_relative_path(vault_base: &Path, file_path: &Path) -> String {
+    normalized_relative_path(vault_base, file_path)
+}
+
 fn discover_sources(vault_base: &Path) -> std::io::Result<SourceDiscovery> {
     if !vault_base.exists() {
         return Ok(SourceDiscovery {
