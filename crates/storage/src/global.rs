@@ -105,6 +105,21 @@ mod tests {
     }
 
     #[test]
+    fn resolve_app_folder_falls_back_to_legacy_when_new_folder_exists_but_is_empty() {
+        let temp = tempdir().unwrap();
+        let new_base = temp.path().join(RELEASE_APP_FOLDER);
+        let hyprnote_base = temp.path().join(LEGACY_RELEASE_APP_FOLDERS[1]);
+        std::fs::create_dir_all(&new_base).unwrap();
+        std::fs::create_dir_all(&hyprnote_base).unwrap();
+        std::fs::write(hyprnote_base.join("app.db"), "").unwrap();
+
+        assert_eq!(
+            resolve_app_folder(temp.path(), STABLE_BUNDLE_ID, false),
+            LEGACY_RELEASE_APP_FOLDERS[1]
+        );
+    }
+
+    #[test]
     fn resolve_app_folder_prefers_new_folder_when_it_has_data() {
         let temp = tempdir().unwrap();
         let legacy_base = temp.path().join(LEGACY_RELEASE_APP_FOLDERS[0]);
