@@ -30,13 +30,52 @@ use crate::types::{TranscriptJson, TranscriptSpeakerHint, TranscriptWithData, Tr
 // synced vault).
 // ---------------------------------------------------------------------------
 
-/// Writes `content` to `path` via a temp-file-then-rename so a reader (or a
-/// sync client like Google Drive/iCloud) never observes a partially written
-/// file. Creates the parent directory if needed. Returns `Ok(false)` without
-/// touching the filesystem when `path` already holds byte-identical content —
-/// this is what breaks the export-worker/vault-watcher feedback loop (see
-/// `vault_export.rs`'s module doc).
-pub fn write_file_atomic(path: &Path, content: &[u8]) -> crate::Result<bool> {
+/// Computes the sibling temp-file path `write_file_atomic` will stage
+/// through before renaming into place. Exposed so callers that need to mark
+/// it as an "own write" *before* the write happens (loop prevention — see
+/// `vault_export.rs`'s module doc) can compute it once and pass the same
+/// path into `write_file_atomic`, rather than each side independently
+/// generating a (different, nonce-based) tmp path. Starts with `.tmp` to
+/// match both the repo's tempfile convention
+/// (<https://docs.rs/tempfile/latest/tempfile/struct.Builder.html#method.prefix>)
+/// and `plugins/notify`'s `should_skip_path`, which ignores any path whose
+/// filename starts with `.tmp`.
+pub fn tmp_sibling_path(path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("file");
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
+    path.with_file_name(format!(".tmp-{}-{nonce}-{file_name}", std::process::id()))
+}
+
+/// Writes `content` to `path` via a temp-file-then-rename (`tmp_path`, see
+/// `tmp_sibling_path`) so a reader (or a sync client like Google Drive/iCloud)
+/// never observes a partially written file. Creates the parent directory if
+/// needed.
+///
+/// Returns `Ok(false)` without touching the filesystem when `path` already
+/// holds byte-identical content — this is what breaks the export-worker/
+/// vault-watcher feedback loop (see `vault_export.rs`'s module doc).
+///
+/// When `path` exists with **different** content, the existing file is moved
+/// to `<vault_base>/.trash/<date>/...` (via `move_to_trash`) *before* the new
+/// content is written — never silently overwritten. Renders are strict
+/// subset projections of the DB rows they came from (see `export.rs`'s
+/// module doc): a legacy or hand-edited vault file can carry frontmatter
+/// keys or JSON fields our render functions don't know how to reproduce, and
+/// those would otherwise be destroyed permanently and irrecoverably on the
+/// very first export pass. Deletions already get this safety (`move_to_trash`
+/// below); overwrites deserve the same.
+pub fn write_file_atomic(
+    vault_base: &Path,
+    path: &Path,
+    tmp_path: &Path,
+    content: &[u8],
+) -> crate::Result<bool> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
             crate::Error::Io(std::io::Error::new(
@@ -50,33 +89,24 @@ pub fn write_file_atomic(path: &Path, content: &[u8]) -> crate::Result<bool> {
         })?;
     }
 
-    if let Ok(existing) = std::fs::read(path)
-        && existing == content
-    {
-        return Ok(false);
+    if let Ok(existing) = std::fs::read(path) {
+        if existing == content {
+            return Ok(false);
+        }
+        move_to_trash(vault_base, path)?;
     }
 
-    let tmp_path = sibling_tmp_path(path);
+    if let Some(parent) = tmp_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
     {
         use std::io::Write;
-        let mut file = std::fs::File::create(&tmp_path)?;
+        let mut file = std::fs::File::create(tmp_path)?;
         file.write_all(content)?;
         file.sync_all()?;
     }
-    std::fs::rename(&tmp_path, path)?;
+    std::fs::rename(tmp_path, path)?;
     Ok(true)
-}
-
-fn sibling_tmp_path(path: &Path) -> PathBuf {
-    let file_name = path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or("file");
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map(|duration| duration.as_nanos())
-        .unwrap_or_default();
-    path.with_file_name(format!(".{file_name}.tmp-{}-{nonce}", std::process::id()))
 }
 
 /// Moves `path` (a file or a whole directory) to `<vault_base>/.trash/<UTC
@@ -674,12 +704,17 @@ pub fn render_settings(value_json: &str) -> Value {
 mod tests {
     use super::*;
 
+    fn write_via_tmp(vault_base: &Path, path: &Path, content: &[u8]) -> crate::Result<bool> {
+        let tmp_path = tmp_sibling_path(path);
+        write_file_atomic(vault_base, path, &tmp_path, content)
+    }
+
     #[test]
     fn write_file_atomic_creates_parent_dirs_and_writes_content() {
         let temp = tempfile::tempdir().unwrap();
         let path = temp.path().join("nested").join("dir").join("file.json");
 
-        let wrote = write_file_atomic(&path, b"hello").unwrap();
+        let wrote = write_via_tmp(temp.path(), &path, b"hello").unwrap();
 
         assert!(wrote);
         assert_eq!(std::fs::read(&path).unwrap(), b"hello");
@@ -693,7 +728,7 @@ mod tests {
         let before = std::fs::metadata(&path).unwrap().modified().unwrap();
 
         std::thread::sleep(std::time::Duration::from_millis(10));
-        let wrote = write_file_atomic(&path, b"same").unwrap();
+        let wrote = write_via_tmp(temp.path(), &path, b"same").unwrap();
 
         assert!(!wrote);
         assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), before);
@@ -705,16 +740,85 @@ mod tests {
         let path = temp.path().join("file.json");
         std::fs::write(&path, b"old").unwrap();
 
-        let wrote = write_file_atomic(&path, b"new").unwrap();
+        let wrote = write_via_tmp(temp.path(), &path, b"new").unwrap();
 
         assert!(wrote);
         assert_eq!(std::fs::read(&path).unwrap(), b"new");
         let leftovers = std::fs::read_dir(temp.path())
             .unwrap()
             .filter_map(|entry| entry.ok())
-            .filter(|entry| entry.file_name().to_string_lossy().contains(".tmp-"))
+            .filter(|entry| entry.file_name().to_string_lossy().starts_with(".tmp"))
             .count();
         assert_eq!(leftovers, 0);
+    }
+
+    /// The critical fix from whole-branch review: renders are strict subset
+    /// projections, so a byte-different overwrite must never just discard
+    /// whatever was there before — it has to land in `.trash/` first.
+    #[test]
+    fn write_file_atomic_trashes_the_old_bytes_before_overwriting_changed_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let vault = temp.path();
+        std::fs::create_dir_all(vault.join("sessions/abc")).unwrap();
+        let path = vault.join("sessions/abc/_memo.md");
+        std::fs::write(&path, "---\nid: doc-1\ncustom_legacy_key: keep-me\n---\n\nOld body").unwrap();
+
+        let wrote = write_via_tmp(vault, &path, b"---\nid: doc-1\n---\n\nNew body").unwrap();
+
+        assert!(wrote);
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap(),
+            "---\nid: doc-1\n---\n\nNew body"
+        );
+        let trashed = vault
+            .join(".trash")
+            .join(chrono::Utc::now().format("%Y-%m-%d").to_string())
+            .join("sessions/abc/_memo.md");
+        assert!(trashed.is_file(), "old bytes should be preserved in .trash");
+        let trashed_content = std::fs::read_to_string(&trashed).unwrap();
+        assert!(trashed_content.contains("custom_legacy_key: keep-me"));
+        assert!(trashed_content.contains("Old body"));
+    }
+
+    /// Same fix, phrased exactly as the review's reproduction case: a
+    /// pre-existing vault file with a frontmatter key our renderer doesn't
+    /// (and can't) model must survive the first export pass, just relocated.
+    #[test]
+    fn write_file_atomic_preserves_unmodeled_frontmatter_keys_on_first_export() {
+        let temp = tempfile::tempdir().unwrap();
+        let vault = temp.path();
+        let path = vault.join("humans/human-1.md");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        let legacy_content =
+            "---\nname: Ada Lovelace\nlegacy_crm_id: crm-9182\n---\n\nHand-written notes.";
+        std::fs::write(&path, legacy_content).unwrap();
+
+        let rendered = super::render_human(&Human {
+            owner_user_id: String::new(),
+            organization_id: String::new(),
+            name: "Ada Lovelace".to_string(),
+            email: String::new(),
+            phone: String::new(),
+            job_title: String::new(),
+            linkedin_username: String::new(),
+            memo: "Hand-written notes.".to_string(),
+            pinned: false,
+            pin_order: None,
+            created_at: String::new(),
+        })
+        .render()
+        .unwrap();
+
+        let wrote = write_via_tmp(vault, &path, rendered.as_bytes()).unwrap();
+
+        assert!(wrote, "the render doesn't reproduce legacy_crm_id, so bytes differ");
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("legacy_crm_id"));
+        let trashed = vault
+            .join(".trash")
+            .join(chrono::Utc::now().format("%Y-%m-%d").to_string())
+            .join("humans/human-1.md");
+        assert!(trashed.is_file());
+        assert!(std::fs::read_to_string(&trashed).unwrap().contains("legacy_crm_id: crm-9182"));
     }
 
     #[test]
@@ -724,12 +828,23 @@ mod tests {
         std::fs::write(&blocker, b"not a directory").unwrap();
         let target = blocker.join("child").join("file.json");
 
-        let error = write_file_atomic(&target, b"x").unwrap_err();
+        let error = write_via_tmp(temp.path(), &target, b"x").unwrap_err();
 
         let message = error.to_string();
         assert!(message.contains("failed to create parent directory"));
         assert!(message.contains(&target.parent().unwrap().display().to_string()));
         assert!(message.contains(&target.display().to_string()));
+    }
+
+    #[test]
+    fn tmp_sibling_path_starts_with_dot_tmp_matching_notify_skip_convention() {
+        let path = Path::new("/vault/sessions/abc/_meta.json");
+
+        let tmp = tmp_sibling_path(path);
+
+        let name = tmp.file_name().and_then(|value| value.to_str()).unwrap();
+        assert!(name.starts_with(".tmp"), "got {name}");
+        assert_eq!(tmp.parent(), path.parent());
     }
 
     #[test]

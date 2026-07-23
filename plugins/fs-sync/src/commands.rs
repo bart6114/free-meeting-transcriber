@@ -54,18 +54,22 @@ pub(crate) async fn write_json_batch<R: tauri::Runtime>(
         .as_std_path()
         .canonicalize()
         .map_err(|e| e.to_string())?;
-    let items: Vec<(Value, PathBuf)> = items
+    let items: Vec<(Value, PathBuf, PathBuf)> = items
         .into_iter()
         .map(|(json, path)| {
             resolve_vault_path(&base_path, &path)
-                .map(|resolved_path| (json, resolved_path))
+                .map(|resolved_path| {
+                    let tmp_path = crate::export::tmp_sibling_path(&resolved_path);
+                    (json, resolved_path, tmp_path)
+                })
                 .map_err(|e| format!("failed to resolve json path {path}: {e}"))
         })
         .collect::<Result<_, _>>()?;
 
     let relative_paths: Vec<String> = items
         .iter()
-        .filter_map(|(_, path)| {
+        .flat_map(|(_, path, tmp_path)| [path, tmp_path])
+        .filter_map(|path| {
             path.strip_prefix(&base_path)
                 .ok()
                 .and_then(|p| p.to_str())
@@ -75,13 +79,19 @@ pub(crate) async fn write_json_batch<R: tauri::Runtime>(
 
     app.notify().mark_own_writes(&relative_paths);
 
+    let base_path_for_writes = base_path.clone();
     spawn_blocking!({
-        items.into_par_iter().try_for_each(|(json, path)| {
+        items.into_par_iter().try_for_each(|(json, path, tmp_path)| {
             let content = crate::json::serialize(json)
                 .map_err(|e| format!("failed to serialize json for {}: {e}", path.display()))?;
-            crate::export::write_file_atomic(&path, content.as_bytes())
-                .map(|_| ())
-                .map_err(|e| format!("failed to write {}: {e}", path.display()))
+            crate::export::write_file_atomic(
+                &base_path_for_writes,
+                &path,
+                &tmp_path,
+                content.as_bytes(),
+            )
+            .map(|_| ())
+            .map_err(|e| format!("failed to write {}: {e}", path.display()))
         })
     })
 }
@@ -97,18 +107,22 @@ pub(crate) async fn write_document_batch<R: tauri::Runtime>(
         .as_std_path()
         .canonicalize()
         .map_err(|e| e.to_string())?;
-    let items: Vec<(ParsedDocument, PathBuf)> = items
+    let items: Vec<(ParsedDocument, PathBuf, PathBuf)> = items
         .into_iter()
         .map(|(doc, path)| {
             resolve_vault_path(&base_path, &path)
-                .map(|resolved_path| (doc, resolved_path))
+                .map(|resolved_path| {
+                    let tmp_path = crate::export::tmp_sibling_path(&resolved_path);
+                    (doc, resolved_path, tmp_path)
+                })
                 .map_err(|e| format!("failed to resolve document path {path}: {e}"))
         })
         .collect::<Result<_, _>>()?;
 
     let relative_paths: Vec<String> = items
         .iter()
-        .filter_map(|(_, path)| {
+        .flat_map(|(_, path, tmp_path)| [path, tmp_path])
+        .filter_map(|path| {
             path.strip_prefix(&base_path)
                 .ok()
                 .and_then(|p| p.to_str())
@@ -118,14 +132,20 @@ pub(crate) async fn write_document_batch<R: tauri::Runtime>(
 
     app.notify().mark_own_writes(&relative_paths);
 
+    let base_path_for_writes = base_path.clone();
     spawn_blocking!({
-        items.into_par_iter().try_for_each(|(doc, path)| {
+        items.into_par_iter().try_for_each(|(doc, path, tmp_path)| {
             let content = doc
                 .render()
                 .map_err(|e| format!("failed to render document for {}: {e}", path.display()))?;
-            crate::export::write_file_atomic(&path, content.as_bytes())
-                .map(|_| ())
-                .map_err(|e| format!("failed to write {}: {e}", path.display()))
+            crate::export::write_file_atomic(
+                &base_path_for_writes,
+                &path,
+                &tmp_path,
+                content.as_bytes(),
+            )
+            .map(|_| ())
+            .map_err(|e| format!("failed to write {}: {e}", path.display()))
         })
     })
 }
