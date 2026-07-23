@@ -191,6 +191,19 @@ Adjust the stub fields to the real consumed surface found by the `rg` sweep (the
 
 - [ ] **Step 6: Commit** — `git commit -m "chore: remove accounts and billing; unlock all features locally"`
 
+### Task 4b: Remove calendar and contacts integrations (owner decision 2026-07-23)
+
+**Decision:** Bart: "calendar and contacts integrations can be dropped." Scope: ALL external calendar sync (Google/Outlook OAuth already dead; Apple Calendar/EventKit too) and the Apple Contacts integration/permission. KEEP: the in-app people data (humans/organizations tables + contacts UI fed from transcripts) and the sessions timeline — those are core data, not integrations. KEEP `calendars`/`events` DB tables (append-only migrations; readers may be deleted).
+
+**Files (discovery-driven — sweep `rg -il "calendar|eventkit|contacts" apps/desktop/src plugins crates --glob '!**/migrations/**'` and classify):**
+- Delete: calendar OAuth + Apple calendar sync UI (`apps/desktop/src/calendar/` sync/connect components; keep any pure sessions-timeline views it hosts by relocating if needed), onboarding calendar step (whole step; final flow: welcome → permissions → model download → done), calendar Settings surfaces, `plugins/calendar` + `plugins/apple-calendar`-style crates (exact names from sweep), Apple Contacts import path + its TCC permission strings (`crates/tcc` contacts entries, Info.plist usage strings), `settings/todo/` if its only providers were cloud (verify).
+- Modify: `apps/desktop/src-tauri/src/lib.rs` (plugin de-registration), both Cargo.tomls + root manifest, capabilities JSON, `Info.plist` (remove Calendar/Contacts usage descriptions), permissions settings screen (drop calendar/contacts permission rows), notification-worker event-notification source if it reads synced events (keep mic-detection notifications).
+
+- [ ] **Step 1:** Sweep + classify; post the kill-list in the report before deleting.
+- [ ] **Step 2:** Delete/edit per classification; gates green; tests of deleted subjects itemized.
+- [ ] **Step 3:** Manual dev smoke: onboarding flows welcome → permissions → model download; no calendar/contacts anywhere; recording + transcript unaffected.
+- [ ] **Step 4:** Commit — `git commit -m "feat: drop calendar and contacts integrations (local-only scope)"`
+
 ### Task 5: Hardwire CloudSync off; disable auto-updater; prune CI
 
 **Files:**
