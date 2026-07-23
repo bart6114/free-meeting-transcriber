@@ -226,7 +226,6 @@ msgid "Can transcribe while the meeting is happening."
 msgstr "Can transcribe while the meeting is happening."
 
 #: src/settings/general/storage/change-location.tsx
-#: src/settings/general/storage/legacy-cleanup.tsx
 msgid "Cancel"
 msgstr "Cancel"
 
@@ -255,10 +254,6 @@ msgstr "Changing..."
 msgid "Chat history"
 msgstr "Chat history"
 
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Checking migration..."
-msgstr "Checking migration..."
-
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Choose a file format and what to include."
 msgstr "Choose a file format and what to include."
@@ -279,18 +274,6 @@ msgstr "Choose storage location"
 #: src/templates/template-icon-picker.tsx
 msgid "Choose template icon"
 msgstr "Choose template icon"
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Clean Up"
-msgstr "Clean Up"
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Clean up legacy files?"
-msgstr "Clean up legacy files?"
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Cleaning up..."
-msgstr "Cleaning up..."
 
 #: src/contacts/shared.tsx
 #: src/templates/template-sidebar.tsx
@@ -596,10 +579,6 @@ msgstr "Free Meeting Transcriber needs microphone and system audio to transcribe
 msgid "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
 msgstr "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
 
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Free Meeting Transcriber will retry automatically. This does not affect your notes."
-msgstr "Free Meeting Transcriber will retry automatically. This does not affect your notes."
-
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr "Frequently used"
@@ -738,10 +717,6 @@ msgstr "Language model is needed to make Free Meeting Transcriber summarize and 
 msgid "Learn how to fix this"
 msgstr "Learn how to fix this"
 
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Legacy JSON and Markdown files were removed"
-msgstr "Legacy JSON and Markdown files were removed"
-
 #: src/settings/general/theme.tsx
 msgid "Light"
 msgstr "Light"
@@ -836,18 +811,6 @@ msgstr "Microphone access turned on"
 msgid "Microphone detection"
 msgstr "Microphone detection"
 
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Migration complete"
-msgstr "Migration complete"
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Migration needs attention"
-msgstr "Migration needs attention"
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Migration status unavailable"
-msgstr "Migration status unavailable"
-
 #: src/settings/ai/llm/select.tsx
 #: src/settings/ai/stt/select.tsx
 msgid "Model being used"
@@ -917,10 +880,6 @@ msgstr "No icons found"
 #: src/sidebar/timeline/index.tsx
 msgid "No items today"
 msgstr "No items today"
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "No legacy JSON or Markdown files remain"
-msgstr "No legacy JSON or Markdown files remain"
 
 #: src/settings/dictionary/index.tsx
 msgid "No match"
@@ -1184,7 +1143,6 @@ msgstr "Resume listening"
 
 #: src/chat/components/message/error.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
-#: src/settings/general/storage/legacy-cleanup.tsx
 msgid "Retry"
 msgstr "Retry"
 
@@ -1396,10 +1354,6 @@ msgstr "Something went wrong while generating the summary."
 msgid "Sort options"
 msgstr "Sort options"
 
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "SQLite migration verification is incomplete"
-msgstr "SQLite migration verification is incomplete"
-
 #: src/settings/general/app-settings.tsx
 msgid "Start Free Meeting Transcriber at login"
 msgstr "Start Free Meeting Transcriber at login"
@@ -1506,12 +1460,6 @@ msgstr "Thinking..."
 msgid "This folder already contains files. Copied vault files will be mixed in with them."
 msgstr "This folder already contains files. Copied vault files will be mixed in with them."
 
-#. placeholder {0}: status.fileCount
-#. placeholder {1}: formatBytes(status.totalBytes)
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "This will remove {0} legacy files and free {1}. Your app data will not be affected because the migration to SQLite is complete."
-msgstr "This will remove {0} legacy files and free {1}. Your app data will not be affected because the migration to SQLite is complete."
-
 #: src/settings/todo/index.tsx
 msgid "Ticket"
 msgstr "Ticket"
@@ -1594,10 +1542,6 @@ msgstr "Use your microphone to capture your voice"
 #: src/templates/auto-form.tsx
 msgid "Variables"
 msgstr "Variables"
-
-#: src/settings/general/storage/legacy-cleanup.tsx
-msgid "Verifying the SQLite migration status"
-msgstr "Verifying the SQLite migration status"
 
 #: src/contacts/organization-details.tsx
 msgid "View LinkedIn profile"
