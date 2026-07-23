@@ -65,7 +65,22 @@ const DEBOUNCE_WINDOW: Duration = Duration::from_millis(500);
 
 type WorkerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
-#[derive(Debug)]
+/// Copied from `plugins/fs-sync/src/commands.rs`: runs a blocking body on
+/// tokio's dedicated blocking thread pool instead of the shared async
+/// worker threads (whole-branch-review fix — this worker's filesystem calls
+/// used to run directly on the runtime that also services the rest of the
+/// app). A panic inside `$body` surfaces as a `WorkerResult` error (via
+/// `JoinError`'s `Display` -> `String` -> `Box<dyn Error + Send + Sync>`)
+/// rather than silently killing this worker's task forever.
+macro_rules! spawn_blocking {
+    ($body:expr) => {
+        tokio::task::spawn_blocking(move || $body)
+            .await
+            .map_err(|error| error.to_string())?
+    };
+}
+
+#[derive(Debug, Clone)]
 struct DirtyEntity {
     entity_type: String,
     entity_id: String,
@@ -119,37 +134,61 @@ fn vault_base_path<R: tauri::Runtime>(app: &AppHandle<R>) -> WorkerResult<PathBu
     Ok(app.settings().vault_base()?.as_std_path().to_path_buf())
 }
 
-/// Marks `path` (relative to `vault_base`) as our own write *before*
-/// performing it, per the notify plugin's own-write TTL — see the loop
-/// prevention analysis in the module doc.
-fn write_tracked<R: tauri::Runtime>(
+/// Marks `path` *and* the temp path it will be staged through (both relative
+/// to `vault_base`) as our own write *before* performing it, per the notify
+/// plugin's own-write TTL — see the loop prevention analysis in the module
+/// doc. The tmp path needs marking too: `plugins/notify`'s watcher fires on
+/// *any* filesystem event it doesn't otherwise skip, including the tmp
+/// file's own create-then-rename-away, and unlike `path` it was never
+/// previously marked by anything else.
+///
+/// Runs the actual filesystem write on tokio's blocking thread pool
+/// (`spawn_blocking`), not the shared async runtime — whole-branch-review
+/// fix; this worker used to block the same runtime the rest of the app's
+/// async tasks (including the DB pool's own connections) share.
+async fn write_tracked<R: tauri::Runtime>(
     app: &AppHandle<R>,
     vault_base: &Path,
     path: &Path,
     content: &[u8],
 ) -> WorkerResult<()> {
+    let tmp_path = export::tmp_sibling_path(path);
     let relative = hypr_fs_sync_core::path::to_relative_path(path, vault_base);
-    app.notify().mark_own_writes(&[relative]);
-    export::write_file_atomic(path, content)
-        .map(|_| ())
-        .map_err(|error| format!("failed to write {}: {error}", path.display()).into())
+    let relative_tmp = hypr_fs_sync_core::path::to_relative_path(&tmp_path, vault_base);
+    app.notify().mark_own_writes(&[relative, relative_tmp]);
+
+    let vault_base = vault_base.to_path_buf();
+    let path_owned = path.to_path_buf();
+    let content = content.to_vec();
+    let display_path = path.display().to_string();
+
+    Ok(spawn_blocking!({
+        export::write_file_atomic(&vault_base, &path_owned, &tmp_path, &content)
+            .map(|_| ())
+            .map_err(|error| format!("failed to write {display_path}: {error}"))
+    })?)
 }
 
 /// Moves `path` to `.trash/<date>/...` if it exists, marking it first so the
-/// watcher doesn't treat the removal as an external deletion.
-fn trash_if_exists<R: tauri::Runtime>(
+/// watcher doesn't treat the removal as an external deletion. Runs on
+/// tokio's blocking thread pool, same rationale as `write_tracked`.
+async fn trash_if_exists<R: tauri::Runtime>(
     app: &AppHandle<R>,
     vault_base: &Path,
     path: &Path,
 ) -> WorkerResult<()> {
-    if !path.exists() {
-        return Ok(());
-    }
     let relative = hypr_fs_sync_core::path::to_relative_path(path, vault_base);
     app.notify().mark_own_writes(&[relative]);
-    export::move_to_trash(vault_base, path)
-        .map(|_| ())
-        .map_err(|error| format!("failed to trash {}: {error}", path.display()).into())
+
+    let vault_base = vault_base.to_path_buf();
+    let path_owned = path.to_path_buf();
+    let display_path = path.display().to_string();
+
+    Ok(spawn_blocking!({
+        export::move_to_trash(&vault_base, &path_owned)
+            .map(|_| ())
+            .map_err(|error| format!("failed to trash {display_path}: {error}"))
+    })?)
 }
 
 async fn ensure_first_run_full_export<R: tauri::Runtime>(
@@ -158,7 +197,10 @@ async fn ensure_first_run_full_export<R: tauri::Runtime>(
 ) -> WorkerResult<()> {
     let vault_base = vault_base_path(app)?;
     let marker = vault_base.join(EXPORT_MARKER_FILENAME);
-    if marker.exists() {
+
+    let marker_for_check = marker.clone();
+    let already_marked: bool = spawn_blocking!(Ok::<bool, String>(marker_for_check.exists()))?;
+    if already_marked {
         return Ok(());
     }
 
@@ -170,8 +212,15 @@ async fn ensure_first_run_full_export<R: tauri::Runtime>(
     }
 
     enqueue_all_entities(pool).await?;
-    std::fs::create_dir_all(&vault_base)?;
-    std::fs::write(&marker, EXPORT_MARKER_VERSION)?;
+
+    let vault_base_for_write = vault_base.clone();
+    let marker_for_write = marker.clone();
+    spawn_blocking!({
+        std::fs::create_dir_all(&vault_base_for_write)
+            .and_then(|()| std::fs::write(&marker_for_write, EXPORT_MARKER_VERSION))
+            .map_err(|error| error.to_string())
+    })?;
+
     tracing::info!("enqueued first-run full vault export");
     Ok(())
 }
@@ -244,9 +293,39 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     tx.commit().await
 }
 
-async fn drain_queue<R: tauri::Runtime>(app: &AppHandle<R>, pool: &SqlitePool) -> WorkerResult<()> {
-    let vault_base = vault_base_path(app)?;
-
+/// Core drain loop, generic over `export_one` so it's testable without a
+/// Tauri `AppHandle` (see the tests module). Pages `vault_export_dirty` in
+/// batches of `BATCH_SIZE`, calling `export_one` for each row.
+///
+/// Whole-branch-review fix (root cause of the on-device stalled-drain
+/// defect): a per-entity failure used to propagate via `?` straight out of
+/// the batch loop, which (a) permanently wedged that one entity at the head
+/// of the FIFO queue — it's always the oldest `queued_at` row, so every
+/// future batch hit the identical failure again before reaching anything
+/// queued after it — and (b) meant **none** of that batch's entities got
+/// acknowledged, even ones whose own export had already completed
+/// successfully earlier in the same `for` loop. On-device this was observed
+/// as: a session's `_memo.md` got re-rendered (so that document's render
+/// succeeded), but the session's own dirty row plus five singleton-file rows
+/// enqueued in the very same `enqueue_all_entities` transaction (and hence
+/// ordered immediately after it by `queued_at`) never got created, for as
+/// long as *something* in that session's export kept failing on every retry.
+///
+/// Now: a failing entity is logged and left queued for a later retry, but
+/// never blocks its siblings — every entity that *did* succeed in the same
+/// batch is acknowledged regardless. If an entire batch makes zero progress
+/// (every entity in it fails), the loop stops rather than spin forever
+/// re-querying the identical unacknowledged rows; the next change signal or
+/// `RETRY_INTERVAL` tick tries again. This also guarantees that
+/// `enqueue_all_entities` followed by one call here drains to empty in a
+/// single pass (modulo entities that keep failing every attempt) with no
+/// external DB write or change-notifier signal required — the second half
+/// of the same fix.
+async fn drain_with<F, Fut>(pool: &SqlitePool, mut export_one: F) -> Result<(), sqlx::Error>
+where
+    F: FnMut(DirtyEntity) -> Fut,
+    Fut: std::future::Future<Output = WorkerResult<()>>,
+{
     loop {
         let rows = sqlx::query(
             "SELECT entity_type, entity_id, generation
@@ -271,13 +350,45 @@ async fn drain_queue<R: tauri::Runtime>(app: &AppHandle<R>, pool: &SqlitePool) -
             })
             .collect::<Vec<_>>();
 
-        for entity in &dirty_entities {
-            export_entity(app, pool, &vault_base, entity).await?;
+        let mut succeeded = Vec::with_capacity(dirty_entities.len());
+        for entity in dirty_entities {
+            let attempt = entity.clone();
+            match export_one(attempt).await {
+                Ok(()) => succeeded.push(entity),
+                Err(error) => {
+                    tracing::error!(
+                        entity_type = %entity.entity_type,
+                        entity_id = %entity.entity_id,
+                        %error,
+                        "failed to export vault entity; leaving it queued for retry"
+                    );
+                }
+            }
         }
 
-        acknowledge_dirty_entities(pool, &dirty_entities).await?;
+        if succeeded.is_empty() {
+            return Ok(());
+        }
+
+        acknowledge_dirty_entities(pool, &succeeded).await?;
         tokio::task::yield_now().await;
     }
+}
+
+async fn drain_queue<R: tauri::Runtime>(app: &AppHandle<R>, pool: &SqlitePool) -> WorkerResult<()> {
+    let vault_base = vault_base_path(app)?;
+    // `vault_base_ref` is a `&Path` (Copy) rather than capturing the owned
+    // `vault_base` `PathBuf` directly: the closure below is called once per
+    // entity by `drain_with`'s loop, and an `async move` block moves
+    // whatever it references — a non-Copy `PathBuf` could only be moved out
+    // of the closure's environment once, breaking every call after the
+    // first. A `&Path` copies trivially on every call instead.
+    let vault_base_ref: &Path = &vault_base;
+    drain_with(pool, move |entity| async move {
+        export_entity(app, pool, vault_base_ref, &entity).await
+    })
+    .await
+    .map_err(Into::into)
 }
 
 async fn acknowledge_dirty_entities(
@@ -354,7 +465,7 @@ async fn export_session<R: tauri::Runtime>(
     .await?;
 
     let Some(row) = session_row else {
-        trash_if_exists(app, vault_base, &session_dir)?;
+        trash_if_exists(app, vault_base, &session_dir).await?;
         return Ok(());
     };
 
@@ -431,7 +542,8 @@ async fn export_session<R: tauri::Runtime>(
         vault_base,
         &session_dir.join("_meta.json"),
         meta_content.as_bytes(),
-    )?;
+    )
+    .await?;
 
     export_session_documents(app, pool, vault_base, &session_dir, session_id).await?;
     export_session_transcript(app, pool, vault_base, &session_dir, session_id).await?;
@@ -445,6 +557,17 @@ async fn export_session<R: tauri::Runtime>(
 /// that changes kind without changing id/content otherwise still gets
 /// reconciled correctly here because we always recompute the *expected* file
 /// set from scratch on every pass).
+///
+/// Whole-branch-review fix: a single document's render failure (e.g.
+/// malformed prosemirror JSON `tiptap_json_to_md` can't convert) used to
+/// propagate straight out of this function via `?`, aborting the *entire*
+/// session's export — meta.json, every other document, and the transcript —
+/// even though only one document was actually broken. Now a per-document
+/// failure is logged and skipped; its filename slot is still protected from
+/// the stale-file cleanup below (so a document we currently can't render
+/// doesn't get its last-known-good vault file wrongly trashed as
+/// "orphaned"), and every other document, plus the caller's meta/transcript
+/// export, proceeds normally.
 async fn export_session_documents<R: tauri::Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
@@ -490,40 +613,68 @@ async fn export_session_documents<R: tauri::Runtime>(
             continue;
         };
 
-        let rendered = export::render_session_document(&document).map_err(|error| {
-            format!(
-                "failed to render session document {} for {session_id}: {error}",
-                document.id
-            )
-        })?;
-        let content = rendered.render().map_err(|error| {
-            format!(
-                "failed to render markdown for document {} in {session_id}: {error}",
-                document.id
-            )
-        })?;
-        write_tracked(app, vault_base, &session_dir.join(&filename), content.as_bytes())?;
-        expected_filenames.insert(filename);
+        // Protect this slot from the stale-cleanup scan below regardless of
+        // whether the render below actually succeeds this pass.
+        expected_filenames.insert(filename.clone());
+
+        if let Err(error) =
+            render_and_write_document(app, vault_base, session_dir, &document, &filename).await
+        {
+            tracing::error!(
+                session_id,
+                document_id = %document.id,
+                kind = %document.kind,
+                %error,
+                "failed to export session document; leaving its vault file unchanged"
+            );
+        }
     }
 
-    let Ok(entries) = std::fs::read_dir(session_dir) else {
-        return Ok(());
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-            continue;
-        };
-        if !name.ends_with(".md") || name.contains(".conflict-") {
-            continue;
+    let expected_for_scan = expected_filenames.clone();
+    let session_dir_owned = session_dir.to_path_buf();
+    let stale_paths: Vec<PathBuf> = spawn_blocking!({
+        let mut stale = Vec::new();
+        if let Ok(entries) = std::fs::read_dir(&session_dir_owned) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
+                    continue;
+                };
+                if !name.ends_with(".md") || name.contains(".conflict-") {
+                    continue;
+                }
+                if expected_for_scan.contains(name) {
+                    continue;
+                }
+                stale.push(path);
+            }
         }
-        if expected_filenames.contains(name) {
-            continue;
-        }
-        trash_if_exists(app, vault_base, &path)?;
+        stale
+    });
+
+    for path in stale_paths {
+        trash_if_exists(app, vault_base, &path).await?;
     }
 
     Ok(())
+}
+
+async fn render_and_write_document<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    vault_base: &Path,
+    session_dir: &Path,
+    document: &export::SessionDocument,
+    filename: &str,
+) -> WorkerResult<()> {
+    let rendered = export::render_session_document(document)
+        .map_err(|error| format!("failed to render session document {}: {error}", document.id))?;
+    let content = rendered.render().map_err(|error| {
+        format!(
+            "failed to render markdown for document {}: {error}",
+            document.id
+        )
+    })?;
+    write_tracked(app, vault_base, &session_dir.join(filename), content.as_bytes()).await
 }
 
 async fn export_session_transcript<R: tauri::Runtime>(
@@ -546,7 +697,7 @@ async fn export_session_transcript<R: tauri::Runtime>(
 
     let transcript_path = session_dir.join("transcript.json");
     if rows.is_empty() {
-        trash_if_exists(app, vault_base, &transcript_path)?;
+        trash_if_exists(app, vault_base, &transcript_path).await?;
         return Ok(());
     }
 
@@ -568,7 +719,7 @@ async fn export_session_transcript<R: tauri::Runtime>(
     let value = export::render_transcripts(&transcripts);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize transcript.json for {session_id}: {error}"))?;
-    write_tracked(app, vault_base, &transcript_path, content.as_bytes())?;
+    write_tracked(app, vault_base, &transcript_path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -593,7 +744,7 @@ async fn export_human<R: tauri::Runtime>(
     .await?;
 
     let Some(row) = row else {
-        trash_if_exists(app, vault_base, &path)?;
+        trash_if_exists(app, vault_base, &path).await?;
         return Ok(());
     };
 
@@ -614,7 +765,7 @@ async fn export_human<R: tauri::Runtime>(
     let content = export::render_human(&human)
         .render()
         .map_err(|error| format!("failed to render human {id}: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes())?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -634,7 +785,7 @@ async fn export_organization<R: tauri::Runtime>(
     .await?;
 
     let Some(row) = row else {
-        trash_if_exists(app, vault_base, &path)?;
+        trash_if_exists(app, vault_base, &path).await?;
         return Ok(());
     };
 
@@ -650,7 +801,7 @@ async fn export_organization<R: tauri::Runtime>(
     let content = export::render_organization(&organization)
         .render()
         .map_err(|error| format!("failed to render organization {id}: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes())?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -674,7 +825,7 @@ async fn export_chat_group<R: tauri::Runtime>(
     .await?;
 
     let Some(row) = row else {
-        trash_if_exists(app, vault_base, &chat_dir)?;
+        trash_if_exists(app, vault_base, &chat_dir).await?;
         return Ok(());
     };
 
@@ -712,7 +863,7 @@ async fn export_chat_group<R: tauri::Runtime>(
     let value = export::render_chat(&group, &messages);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize messages.json for chat {id}: {error}"))?;
-    write_tracked(app, vault_base, &chat_dir.join("messages.json"), content.as_bytes())?;
+    write_tracked(app, vault_base, &chat_dir.join("messages.json"), content.as_bytes()).await?;
     Ok(())
 }
 
@@ -734,7 +885,7 @@ async fn export_calendars_file<R: tauri::Runtime>(
     .await?;
 
     if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path)?;
+        trash_if_exists(app, vault_base, &path).await?;
         return Ok(());
     }
 
@@ -755,7 +906,7 @@ async fn export_calendars_file<R: tauri::Runtime>(
     let value = export::render_calendars(&calendars);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize calendars.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes())?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -775,7 +926,7 @@ async fn export_events_file<R: tauri::Runtime>(
     .await?;
 
     if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path)?;
+        trash_if_exists(app, vault_base, &path).await?;
         return Ok(());
     }
 
@@ -803,7 +954,7 @@ async fn export_events_file<R: tauri::Runtime>(
     let value = export::render_events(&events);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize events.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes())?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -821,7 +972,7 @@ async fn export_daily_notes_file<R: tauri::Runtime>(
     .await?;
 
     if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path)?;
+        trash_if_exists(app, vault_base, &path).await?;
         return Ok(());
     }
 
@@ -838,7 +989,7 @@ async fn export_daily_notes_file<R: tauri::Runtime>(
     let value = export::render_daily_notes(&notes);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize daily_notes.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes())?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -857,7 +1008,7 @@ async fn export_tasks_file<R: tauri::Runtime>(
     .await?;
 
     if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path)?;
+        trash_if_exists(app, vault_base, &path).await?;
         return Ok(());
     }
 
@@ -879,7 +1030,7 @@ async fn export_tasks_file<R: tauri::Runtime>(
     let value = export::render_tasks(&items);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize tasks.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes())?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -898,14 +1049,14 @@ async fn export_settings_file<R: tauri::Runtime>(
             .await?;
 
     let Some(value_json) = value_json else {
-        trash_if_exists(app, vault_base, &path)?;
+        trash_if_exists(app, vault_base, &path).await?;
         return Ok(());
     };
 
     let value = export::render_settings(&value_json);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize settings.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes())?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
     Ok(())
 }
 
@@ -929,6 +1080,135 @@ mod tests {
         let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
         hypr_db_app::prepare_schema(&db).await.unwrap();
         db
+    }
+
+    /// Regression test for the on-device stalled-drain defect: reproduces
+    /// hypothesis 1 exactly (a render error on one entity used to abort the
+    /// whole batch loop before `acknowledge_dirty_entities` ever ran, so
+    /// nothing in that batch got acked — not even entities that had already
+    /// exported successfully earlier in the same `for` loop). `drain_with`'s
+    /// generic `export_one` lets this be reproduced headlessly, with no
+    /// Tauri `AppHandle`/filesystem involved at all: one entity's "export"
+    /// always fails, the other two always succeed, and the failing one must
+    /// never block them.
+    #[tokio::test]
+    async fn drain_with_isolates_a_failing_entity_and_still_acks_its_siblings() {
+        let db = test_db().await;
+        sqlx::query(
+            "INSERT INTO sessions (id, title) VALUES ('good-1', 'A'), ('bad-1', 'B'), ('good-2', 'C')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        drain_with(db.pool(), |entity| async move {
+            if entity.entity_id == "bad-1" {
+                Err("simulated render failure".into())
+            } else {
+                Ok(())
+            }
+        })
+        .await
+        .unwrap();
+
+        let remaining: Vec<String> = sqlx::query_scalar(
+            "SELECT entity_id FROM vault_export_dirty ORDER BY entity_id",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+
+        assert_eq!(
+            remaining,
+            vec!["bad-1".to_string()],
+            "only the entity that actually failed should still be queued"
+        );
+    }
+
+    /// Regression test for the other half of the same on-device defect:
+    /// after `enqueue_all_entities`, a single `drain_with` pass must empty
+    /// the queue with no further DB write and no change-notifier signal —
+    /// exactly the sequence `run()` does (`ensure_first_run_full_export` then
+    /// `drain_queue`, unconditionally, before ever waiting on
+    /// `changes.recv()`). Before the fix, a single always-failing entity
+    /// among many (see the test above) would have left every entity queued
+    /// at or after it permanently undrained.
+    #[tokio::test]
+    async fn drain_with_empties_the_queue_after_enqueue_all_entities() {
+        let db = test_db().await;
+        sqlx::query("INSERT INTO sessions (id, title) VALUES ('s1', 'A'), ('s2', 'B')")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO humans (id, name) VALUES ('h1', 'Ada')")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM vault_export_dirty")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        enqueue_all_entities(db.pool()).await.unwrap();
+        let queued_before: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert!(queued_before > 0, "enqueue_all_entities should have queued something");
+
+        drain_with(db.pool(), |_entity| async { Ok(()) })
+            .await
+            .unwrap();
+
+        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(remaining, 0, "one drain pass must fully empty the queue");
+    }
+
+    /// Same scenario as the "empties the queue" test above, but with one
+    /// entity (an aggregate singleton file, matching what was observed
+    /// on-device) that always fails: the drain must still make maximal
+    /// progress on every other entity rather than stalling entirely, and
+    /// must terminate (not spin forever re-querying the one entity that can
+    /// never succeed).
+    #[tokio::test]
+    async fn drain_with_makes_progress_on_other_entities_when_one_singleton_always_fails() {
+        let db = test_db().await;
+        sqlx::query("INSERT INTO sessions (id, title) VALUES ('s1', 'A')")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        sqlx::query("DELETE FROM vault_export_dirty")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        enqueue_all_entities(db.pool()).await.unwrap();
+
+        drain_with(db.pool(), |entity| async move {
+            if entity.entity_type == "settings_file" {
+                Err("simulated permanent failure".into())
+            } else {
+                Ok(())
+            }
+        })
+        .await
+        .unwrap();
+
+        let remaining: Vec<(String, String)> = sqlx::query_as(
+            "SELECT entity_type, entity_id FROM vault_export_dirty",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+
+        assert_eq!(
+            remaining,
+            vec![("settings_file".to_string(), "all".to_string())],
+            "every entity except the permanently-failing one should have drained"
+        );
     }
 
     #[tokio::test]
