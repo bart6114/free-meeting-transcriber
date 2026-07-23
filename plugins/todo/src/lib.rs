@@ -63,17 +63,12 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 }
 
 fn get_api_base_url() -> String {
-    #[cfg(not(debug_assertions))]
-    {
-        env!("VITE_API_URL").to_string()
-    }
-
-    #[cfg(debug_assertions)]
-    {
-        option_env!("VITE_API_URL")
-            .unwrap_or("http://localhost:3001")
-            .to_string()
-    }
+    // Fork note: the hosted API is gone. This URL only feeds the dead
+    // Linear/GitHub fetch arms, which are unreachable without an access
+    // token; keep a localhost placeholder so no env var is required.
+    option_env!("VITE_API_URL")
+        .unwrap_or("http://localhost:3001")
+        .to_string()
 }
 
 #[cfg(test)]
