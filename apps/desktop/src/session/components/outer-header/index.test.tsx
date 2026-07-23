@@ -38,7 +38,6 @@ const mocks = vi.hoisted(() => ({
     allowListening?: boolean;
     standaloneWindow?: boolean;
   }>,
-  shareSessionIds: [] as string[],
 }));
 
 vi.mock("./metadata", () => ({
@@ -63,13 +62,6 @@ vi.mock("./overflow", () => ({
   }) => {
     mocks.overflowProps.push(props);
     return <button type="button">More</button>;
-  },
-}));
-
-vi.mock("~/session-sharing", () => ({
-  SessionShareButton: ({ sessionId }: { sessionId: string }) => {
-    mocks.shareSessionIds.push(sessionId);
-    return <button type="button">Share</button>;
   },
 }));
 
@@ -167,7 +159,6 @@ describe("OuterHeader", () => {
       auto_start_scheduled_meetings: false,
     };
     mocks.overflowProps = [];
-    mocks.shareSessionIds = [];
   });
 
   afterEach(() => {
@@ -280,27 +271,6 @@ describe("OuterHeader", () => {
     expect(titleSlot?.className).toContain("justify-center");
   });
 
-  it.each([
-    ["summary", { type: "enhanced", id: "summary-1" }],
-    ["memos", { type: "raw" }],
-    ["transcript", { type: "transcript" }],
-  ])("shows sharing from the %s view", (_label, currentView) => {
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={currentView as EditorView}
-        title={<span>Session title</span>}
-      />,
-    );
-
-    const title = screen.getByText("Session title");
-    const titleSlot = title.parentElement?.parentElement;
-
-    expect(mocks.shareSessionIds).toEqual(["session-1"]);
-    expect(screen.getByRole("button", { name: "Share" })).not.toBeNull();
-    expect(titleSlot?.className).toContain("right-[140px]");
-  });
-
   it("keeps sidebar header controls hidden while the sidebar is expanded", () => {
     mocks.sessionModes = { "session-1": "active" };
 
@@ -390,7 +360,6 @@ describe("OuterHeader", () => {
     const overflowProps = mocks.overflowProps[mocks.overflowProps.length - 1];
     expect(overflowProps?.standaloneWindow).toBe(true);
     expect(overflowProps?.allowListening).toBeUndefined();
-    expect(mocks.shareSessionIds).toContain("session-1");
   });
 
   it("does not reserve collapsed sidebar gutter in standalone windows", () => {

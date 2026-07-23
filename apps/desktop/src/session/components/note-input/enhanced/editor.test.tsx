@@ -84,16 +84,6 @@ vi.mock("~/stt/useUploadFile", () => ({
   useUploadFile: () => ({ processAudioFile: hoisted.processAudioFile }),
 }));
 
-vi.mock("~/session-sharing/comments", () => ({
-  SessionCommentsLayer: () => <div data-testid="summary-comments-layer" />,
-  useOwnedSessionComments: () => ({
-    containerRef: { current: null },
-    onCommentAnchorsEvent: vi.fn(),
-    onViewReady: vi.fn(),
-    onViewDisposed: vi.fn(),
-  }),
-}));
-
 vi.mock("~/session/queries", () => ({
   useEnhancedNote: () => ({ content: hoisted.content }),
   useUpdateEnhancedNoteContent: () => hoisted.persistContent,
@@ -154,8 +144,6 @@ describe("EnhancedEditor", () => {
 
     expect(props?.className).toContain("session-note-editor");
     expect(props?.className).toContain("enhanced-summary-editor");
-    expect(props?.onCommentAnchorsEvent).toEqual(expect.any(Function));
-    expect(screen.getByTestId("summary-comments-layer")).toBeTruthy();
     expect(props?.placeholderComponent).toEqual(expect.any(Function));
     expect(props?.syncContentWhenFocused).toBe(false);
     expect(props?.handleChange).not.toBe(hoisted.persistContent);

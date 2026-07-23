@@ -99,9 +99,6 @@ importers:
       '@hypr/plugin-analytics':
         specifier: workspace:*
         version: link:../../plugins/analytics
-      '@hypr/plugin-attachment-sync':
-        specifier: workspace:*
-        version: link:../../plugins/attachment-sync
       '@hypr/plugin-auth':
         specifier: workspace:*
         version: link:../../plugins/auth
@@ -1013,12 +1010,6 @@ importers:
         version: 2.10.1
 
   plugins/analytics:
-    dependencies:
-      '@tauri-apps/api':
-        specifier: ^2.10.1
-        version: 2.10.1
-
-  plugins/attachment-sync:
     dependencies:
       '@tauri-apps/api':
         specifier: ^2.10.1

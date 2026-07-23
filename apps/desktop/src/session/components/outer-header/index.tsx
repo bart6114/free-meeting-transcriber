@@ -18,7 +18,6 @@ import { useAudioPlayer } from "~/audio-player";
 import { useNow } from "~/calendar/hooks";
 import { useShell } from "~/contexts/shell";
 import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
-import { SessionShareButton } from "~/session-sharing";
 import { useEventCountdown } from "~/session/hooks/useEventCountdown";
 import {
   getRemoteMeeting,
@@ -91,7 +90,6 @@ export function OuterHeader({
         className="relative z-10 ml-auto flex shrink-0 items-center gap-0 pr-1"
       >
         <HeaderMeetingControl sessionId={sessionId} sessionMode={sessionMode} />
-        <SessionShareButton key={sessionId} sessionId={sessionId} />
         <OverflowButton
           standaloneWindow={standaloneWindow}
           sessionId={sessionId}

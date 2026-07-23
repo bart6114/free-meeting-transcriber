@@ -4435,7 +4435,6 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-agent",
  "tauri-plugin-analytics",
- "tauri-plugin-attachment-sync",
  "tauri-plugin-audio-priority",
  "tauri-plugin-auth",
  "tauri-plugin-automation",
@@ -17237,32 +17236,6 @@ dependencies = [
  "tauri-specta",
  "thiserror 2.0.18",
  "tokio",
-]
-
-[[package]]
-name = "tauri-plugin-attachment-sync"
-version = "0.1.0"
-dependencies = [
- "e2ee",
- "fs-sync-core",
- "futures-util",
- "reqwest 0.13.2",
- "serde",
- "sha2 0.11.0",
- "specta",
- "specta-typescript",
- "sqlx",
- "tauri",
- "tauri-plugin",
- "tauri-plugin-db",
- "tauri-plugin-settings",
- "tauri-specta",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "tokio-util",
- "url",
- "uuid",
 ]
 
 [[package]]

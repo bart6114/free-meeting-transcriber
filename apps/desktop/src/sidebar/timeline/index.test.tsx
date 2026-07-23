@@ -26,10 +26,6 @@ const mocks = vi.hoisted(() => ({
   timelineSelectionSelectedIds: [] as string[],
   timelineEventsTable: {} as Record<string, Record<string, unknown>>,
   timelineSessionsTable: {} as Record<string, Record<string, unknown>>,
-  sharedNotes: [] as Array<{
-    sessionId: string;
-    manageAccess: boolean;
-  }>,
 }));
 
 const lingui = vi.hoisted(() => {
@@ -108,14 +104,6 @@ vi.mock("~/shared/config", () => ({
   useConfigValue: () => mocks.configValue,
 }));
 
-vi.mock("~/auth", () => ({
-  useAuth: () => ({ session: { user: { id: "owner-1" } } }),
-}));
-
-vi.mock("~/shared-notes/cache", () => ({
-  useDurableSharedNotes: () => mocks.sharedNotes,
-}));
-
 vi.mock("~/calendar/queries", () => ({
   useTimelineTables: () => ({
     timelineEventsTable: mocks.timelineEventsTable,
@@ -190,9 +178,6 @@ vi.mock("./anchor", async () => {
 });
 
 vi.mock("./item", () => ({
-  ManagedSharedSessionIdsContext: {
-    Provider: ({ children }: { children: ReactNode }) => <>{children}</>,
-  },
   TimelineItemComponent: ({
     isUpcoming,
     item,

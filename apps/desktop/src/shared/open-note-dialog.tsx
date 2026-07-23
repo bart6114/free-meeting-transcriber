@@ -1,6 +1,6 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import { Command as CommandPrimitive } from "cmdk";
-import { FileTextIcon, SearchIcon, UsersRoundIcon, XIcon } from "lucide-react";
+import { FileTextIcon, SearchIcon, XIcon } from "lucide-react";
 import {
   createContext,
   useCallback,
@@ -13,9 +13,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 
 import { cn } from "@hypr/utils";
 
-import { useAuth } from "~/auth";
 import { useSessionSummaries } from "~/session/queries";
-import { useDurableSharedNotes } from "~/shared-notes/cache";
 import { useMainContentCenterOffset } from "~/shared/main/content-offset";
 import { useTabs } from "~/store/zustand/tabs";
 
@@ -32,7 +30,6 @@ type OpenNoteDialogContextValue = {
 };
 
 type NoteResult = {
-  resourceType: "session" | "shared_session";
   id: string;
   title: string;
   createdAt: string;
@@ -95,17 +92,14 @@ export function OpenNoteDialog({
   const recentlyOpenedSessionIds = useTabs(
     (state) => state.recentlyOpenedSessionIds,
   );
-  const { session } = useAuth();
 
   const sessions = useSessionSummaries();
-  const sharedNotes = useDurableSharedNotes(session?.user.id);
 
   const sessionsMap = useMemo(() => {
     return new Map<string, NoteResult>(
       sessions.map((session) => [
         session.id,
         {
-          resourceType: "session",
           id: session.id,
           title: session.title || t`Untitled`,
           createdAt: session.created_at,
@@ -115,25 +109,11 @@ export function OpenNoteDialog({
   }, [sessions, t]);
 
   const allNotesSortedByDate = useMemo(() => {
-    return [
-      ...sessionsMap.values(),
-      ...sharedNotes
-        .filter(
-          (note) => !(note.manageAccess && sessionsMap.has(note.sessionId)),
-        )
-        .map(
-          (note): NoteResult => ({
-            resourceType: "shared_session",
-            id: note.shareId,
-            title: note.title || t`Untitled`,
-            createdAt: note.publishedAt,
-          }),
-        ),
-    ].sort((a, b) => {
+    return [...sessionsMap.values()].sort((a, b) => {
       if (!a.createdAt || !b.createdAt) return 0;
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  }, [sessionsMap, sharedNotes, t]);
+  }, [sessionsMap]);
 
   const recentSessions = useMemo(() => {
     return recentlyOpenedSessionIds
@@ -148,9 +128,7 @@ export function OpenNoteDialog({
 
   const otherNotes = useMemo(() => {
     return allNotesSortedByDate.filter(
-      (note) =>
-        note.resourceType === "shared_session" ||
-        !recentSessionIdSet.has(note.id),
+      (note) => !recentSessionIdSet.has(note.id),
     );
   }, [allNotesSortedByDate, recentSessionIdSet]);
 
@@ -190,11 +168,7 @@ export function OpenNoteDialog({
   const handleSelect = useCallback(
     (note: NoteResult) => {
       handleOpenChange(false);
-      openCurrent(
-        note.resourceType === "shared_session"
-          ? { type: "shared_sessions", id: note.id }
-          : { type: "sessions", id: note.id },
-      );
+      openCurrent({ type: "sessions", id: note.id });
     },
     [handleOpenChange, openCurrent],
   );
@@ -309,8 +283,8 @@ export function OpenNoteDialog({
                     >
                       {filteredOtherNotes.map((note) => (
                         <CommandPrimitive.Item
-                          key={`${note.resourceType}-${note.id}`}
-                          value={`${note.resourceType}-${note.id}`}
+                          key={note.id}
+                          value={note.id}
                           onSelect={() => handleSelect(note)}
                           className={cn([
                             "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5",
@@ -319,11 +293,7 @@ export function OpenNoteDialog({
                             "transition-colors",
                           ])}
                         >
-                          {note.resourceType === "shared_session" ? (
-                            <UsersRoundIcon className="text-muted-foreground h-4 w-4 shrink-0" />
-                          ) : (
-                            <FileTextIcon className="text-muted-foreground h-4 w-4 shrink-0" />
-                          )}
+                          <FileTextIcon className="text-muted-foreground h-4 w-4 shrink-0" />
                           <span className="truncate">{note.title}</span>
                         </CommandPrimitive.Item>
                       ))}

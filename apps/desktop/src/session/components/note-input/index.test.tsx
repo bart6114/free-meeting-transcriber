@@ -14,9 +14,7 @@ const hoisted = vi.hoisted(() => ({
   flushPendingChanges: vi.fn(),
   onBeforeTabChange: vi.fn(),
   rawEditorProps: [] as Record<string, unknown>[],
-  registerCanonicalSessionEditor: vi.fn(),
   sessionMode: "inactive",
-  unregisterCanonicalSessionEditor: vi.fn(),
   updateSessionTabState: vi.fn(),
 }));
 
@@ -101,11 +99,6 @@ vi.mock("./transcript", () => ({
 
 vi.mock("~/session/components/shared", () => ({
   useCurrentNoteTab: () => ({ type: "raw" }),
-}));
-
-vi.mock("~/session-sharing/editor-activity", () => ({
-  registerCanonicalSessionEditor: hoisted.registerCanonicalSessionEditor,
-  unregisterCanonicalSessionEditor: hoisted.unregisterCanonicalSessionEditor,
 }));
 
 vi.mock("~/shared/hooks/useScrollPreservation", () => ({
@@ -204,9 +197,7 @@ describe("NoteInput tab selection", () => {
     hoisted.flushPendingChanges.mockClear();
     hoisted.onBeforeTabChange.mockClear();
     hoisted.rawEditorProps = [];
-    hoisted.registerCanonicalSessionEditor.mockClear();
     hoisted.sessionMode = "inactive";
-    hoisted.unregisterCanonicalSessionEditor.mockClear();
     hoisted.updateSessionTabState.mockClear();
   });
 
@@ -312,50 +303,6 @@ describe("NoteInput tab selection", () => {
       rawMd: "stored memo",
       sessionTitle: "Stored title",
     });
-  });
-
-  it("tracks the mounted memo editor until its view is disposed", () => {
-    renderNoteInput();
-    const props = hoisted.rawEditorProps[hoisted.rawEditorProps.length - 1] as {
-      onViewReady?: (view: unknown) => void;
-      onViewDisposed?: (view: unknown) => void;
-    };
-    const view = { hasFocus: () => true };
-
-    props.onViewReady?.(view);
-    expect(hoisted.registerCanonicalSessionEditor).toHaveBeenCalledWith(
-      "session-1",
-      view,
-      expect.any(Function),
-    );
-
-    props.onViewDisposed?.(view);
-    expect(hoisted.unregisterCanonicalSessionEditor).toHaveBeenCalledWith(
-      "session-1",
-      view,
-    );
-  });
-
-  it("tracks the mounted summary editor because it can update the session title", () => {
-    hoisted.editorTabs = [
-      { type: "enhanced", id: "summary-1" },
-      { type: "raw" },
-    ];
-    renderNoteInput({
-      currentTab: { type: "enhanced", id: "summary-1" },
-    });
-    const props = hoisted.enhancedEditorProps[
-      hoisted.enhancedEditorProps.length - 1
-    ] as { onViewReady?: (view: unknown) => void };
-    const view = { hasFocus: () => true };
-
-    props.onViewReady?.(view);
-
-    expect(hoisted.registerCanonicalSessionEditor).toHaveBeenCalledWith(
-      "session-1",
-      view,
-      expect.any(Function),
-    );
   });
 
   it("passes the hydrated session title to the summary editor", () => {
