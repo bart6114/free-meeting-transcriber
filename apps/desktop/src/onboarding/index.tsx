@@ -21,7 +21,6 @@ import { FolderLocationSection } from "./folder-location";
 import { PermissionsSection } from "./permissions";
 import { OnboardingSection } from "./shared";
 
-import { useAuth } from "~/auth";
 import { StandaloneWindowShell } from "~/shared/window-shell";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
 
@@ -82,7 +81,6 @@ function OnboardingScreenContent({
   headerDragRegion?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const auth = useAuth();
   const [isMuted, setIsMuted] = useState(false);
   const [currentStep, setCurrentStep] = useState(getInitialStep);
   const onboardingVideoRef = useRef<HTMLVideoElement>(null);
@@ -97,10 +95,6 @@ function OnboardingScreenContent({
     const prev = getPrevStep(currentStep);
     if (prev) setCurrentStep(prev);
   }, [currentStep]);
-
-  const handleCalendarSignIn = useCallback(() => {
-    void auth.signIn();
-  }, [auth]);
 
   useEffect(() => {
     void analyticsCommands.event({
@@ -241,10 +235,7 @@ function OnboardingScreenContent({
             onBack={goBack}
             onNext={goNext}
           >
-            <CalendarSection
-              onContinue={goNext}
-              onSignIn={handleCalendarSignIn}
-            />
+            <CalendarSection onContinue={goNext} />
           </OnboardingSection>
 
           <OnboardingSection

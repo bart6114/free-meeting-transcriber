@@ -23,6 +23,13 @@ export function SettingsTodo() {
       provider.platform === undefined || provider.platform === "all" || isMacos,
   );
 
+  // Apple Reminders (the only remaining provider — see ./shared.tsx) is
+  // macOS-only. On other platforms there is nothing left to show, so hide
+  // the whole section instead of rendering an empty accordion.
+  if (visibleProviders.length === 0) {
+    return null;
+  }
+
   return (
     <div className="flex flex-col gap-6">
       <SettingsPageTitle title={<Trans>Ticket</Trans>} />

@@ -10,7 +10,6 @@ watch = [
   "apps/api/src",
   "crates/analytics/src",
   "crates/llm-proxy/src",
-  "crates/supabase-auth/src",
   "crates/transcribe-proxy/src",
   "crates/owhisper-client/src",
 ]
