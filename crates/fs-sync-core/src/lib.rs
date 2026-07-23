@@ -3,6 +3,7 @@ mod test_fixtures;
 
 pub mod audio;
 pub mod error;
+pub mod export;
 pub mod folder;
 pub mod frontmatter;
 pub mod json;
