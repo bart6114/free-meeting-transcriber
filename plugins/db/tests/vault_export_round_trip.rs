@@ -118,7 +118,7 @@ async fn session_note_transcript_and_summary_round_trip() {
         event_json: session_row.get("event_json"),
     };
     let meta_value = export::render_session_meta(&session_meta, &[], &[], None);
-    write_json(&session_dir.join("_meta.json"), &meta_value);
+    write_json(vault.path(), &session_dir.join("_meta.json"), &meta_value);
 
     // _meta.json round-trips the exact vault-carried fields the importer
     // reads (title/timestamps/event ids) — see the module doc for why
@@ -132,7 +132,7 @@ async fn session_note_transcript_and_summary_round_trip() {
     .fetch_one(source.pool())
     .await
     .unwrap();
-    write_document(&session_dir, &session_row_to_document(&note_row), true);
+    write_document(vault.path(), &session_dir, &session_row_to_document(&note_row), true);
 
     let summary_row = sqlx::query(
         "SELECT id, session_id, kind, template_id, title, body_format, body, sort_order
@@ -141,7 +141,7 @@ async fn session_note_transcript_and_summary_round_trip() {
     .fetch_one(source.pool())
     .await
     .unwrap();
-    write_document(&session_dir, &session_row_to_document(&summary_row), true);
+    write_document(vault.path(), &session_dir, &session_row_to_document(&summary_row), true);
 
     let transcript_row = sqlx::query(
         "SELECT id, owner_user_id, session_id, created_at, started_at_ms, ended_at_ms,
@@ -163,7 +163,7 @@ async fn session_note_transcript_and_summary_round_trip() {
         speaker_hints_json: transcript_row.get("speaker_hints_json"),
     };
     let transcript_value = export::render_transcripts(&[transcript]);
-    write_json(&session_dir.join("transcript.json"), &transcript_value);
+    write_json(vault.path(), &session_dir.join("transcript.json"), &transcript_value);
 
     assert!(session_dir.join("_meta.json").is_file());
     assert!(session_dir.join("_memo.md").is_file());
@@ -228,6 +228,134 @@ async fn session_note_transcript_and_summary_round_trip() {
     assert_eq!(ended_at_ms, Some(2000));
 }
 
+/// Whole-branch-review gap: every other `_meta.json` test in this file
+/// passes `participants: &[]` and `key_facts: None`, so the participants
+/// array and the `key_facts` object in `render_session_meta`'s output were
+/// never actually exercised end to end through the real importer. This
+/// covers both: a session with two real participants (each backed by a
+/// `humans` row) and a `key_facts`-kind `session_documents` row.
+#[tokio::test]
+async fn session_meta_participants_and_key_facts_round_trip() {
+    let source = fresh_db().await;
+    sqlx::query(
+        "INSERT INTO sessions (id, owner_user_id, title, created_at)
+         VALUES ('session-1', 'user-1', 'Planning', '2026-07-01T00:00:00Z')",
+    )
+    .execute(source.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO humans (id, name) VALUES ('human-1', 'Ada Lovelace'), ('human-2', 'Alan Turing')",
+    )
+    .execute(source.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO session_participants (id, owner_user_id, session_id, human_id, source)
+         VALUES ('participant-1', 'user-1', 'session-1', 'human-1', 'calendar'),
+                ('participant-2', 'user-1', 'session-1', 'human-2', 'manual')",
+    )
+    .execute(source.pool())
+    .await
+    .unwrap();
+    sqlx::query(
+        "INSERT INTO session_documents
+           (id, session_id, kind, title, body_format, body, source_hash, created_by, created_at, updated_at)
+         VALUES ('session-1:key_facts', 'session-1', 'key_facts', 'Key facts', 'markdown',
+                 'Discussed Q3 roadmap.', 'hash-abc123', 'user-1',
+                 '2026-07-01T00:00:00Z', '2026-07-01T00:05:00Z')",
+    )
+    .execute(source.pool())
+    .await
+    .unwrap();
+
+    let session = export::SessionMeta {
+        id: "session-1".to_string(),
+        owner_user_id: "user-1".to_string(),
+        title: "Planning".to_string(),
+        created_at: "2026-07-01T00:00:00Z".to_string(),
+        started_at: String::new(),
+        ended_at: String::new(),
+        event_id: String::new(),
+        external_event_id: String::new(),
+        series_id: String::new(),
+        event_json: String::new(),
+    };
+    let participants = vec![
+        export::SessionParticipant {
+            id: "participant-1".to_string(),
+            owner_user_id: "user-1".to_string(),
+            human_id: "human-1".to_string(),
+            source: "calendar".to_string(),
+            display_name: "Ada Lovelace".to_string(),
+            email: String::new(),
+            role: String::new(),
+        },
+        export::SessionParticipant {
+            id: "participant-2".to_string(),
+            owner_user_id: "user-1".to_string(),
+            human_id: "human-2".to_string(),
+            source: "manual".to_string(),
+            display_name: "Alan Turing".to_string(),
+            email: String::new(),
+            role: String::new(),
+        },
+    ];
+    let key_facts = export::SessionKeyFacts {
+        content: "Discussed Q3 roadmap.".to_string(),
+        source_hash: "hash-abc123".to_string(),
+        user_id: "user-1".to_string(),
+        created_at: "2026-07-01T00:00:00Z".to_string(),
+        updated_at: "2026-07-01T00:05:00Z".to_string(),
+    };
+    let meta_value = export::render_session_meta(&session, &participants, &[], Some(&key_facts));
+
+    let vault = vault();
+    write_json(
+        vault.path(),
+        &vault.path().join("sessions/session-1/_meta.json"),
+        &meta_value,
+    );
+
+    let target = reimport(vault.path()).await;
+
+    let mut reimported_participants: Vec<(String, String, String, String)> = sqlx::query_as(
+        "SELECT id, owner_user_id, human_id, source
+         FROM session_participants WHERE session_id = 'session-1' ORDER BY id",
+    )
+    .fetch_all(target.pool())
+    .await
+    .unwrap();
+    reimported_participants.sort();
+    assert_eq!(
+        reimported_participants,
+        vec![
+            (
+                "participant-1".to_string(),
+                "user-1".to_string(),
+                "human-1".to_string(),
+                "calendar".to_string(),
+            ),
+            (
+                "participant-2".to_string(),
+                "user-1".to_string(),
+                "human-2".to_string(),
+                "manual".to_string(),
+            ),
+        ]
+    );
+
+    let (key_facts_body, key_facts_source_hash): (String, String) = sqlx::query_as(
+        "SELECT body, source_hash FROM session_documents
+         WHERE session_id = 'session-1' AND kind = 'key_facts'",
+    )
+    .fetch_one(target.pool())
+    .await
+    .unwrap();
+    assert_eq!(key_facts_body, "Discussed Q3 roadmap.");
+    assert_eq!(key_facts_source_hash, "hash-abc123");
+}
+
 // Small helpers kept out of the main test body for readability.
 
 struct DocumentRow {
@@ -254,7 +382,7 @@ fn session_row_to_document(row: &sqlx::sqlite::SqliteRow) -> DocumentRow {
     }
 }
 
-fn write_document(session_dir: &Path, row: &DocumentRow, is_first_of_kind: bool) {
+fn write_document(vault_base: &Path, session_dir: &Path, row: &DocumentRow, is_first_of_kind: bool) {
     let document = export::SessionDocument {
         id: row.id.clone(),
         session_id: row.session_id.clone(),
@@ -270,12 +398,21 @@ fn write_document(session_dir: &Path, row: &DocumentRow, is_first_of_kind: bool)
     };
     let rendered = export::render_session_document(&document).unwrap();
     let content = rendered.render().unwrap();
-    export::write_file_atomic(&session_dir.join(filename), content.as_bytes()).unwrap();
+    write_file(vault_base, &session_dir.join(filename), content.as_bytes());
 }
 
-fn write_json(path: &Path, value: &serde_json::Value) {
+fn write_json(vault_base: &Path, path: &Path, value: &serde_json::Value) {
     let content = hypr_fs_sync_core::json::serialize(value.clone()).unwrap();
-    export::write_file_atomic(path, content.as_bytes()).unwrap();
+    write_file(vault_base, path, content.as_bytes());
+}
+
+/// Test-local equivalent of `vault_export.rs`'s `write_tracked` minus the
+/// Tauri notify marking (no `AppHandle` in these tests) — computes the tmp
+/// path the same way the real worker does and delegates to the same
+/// `write_file_atomic`.
+fn write_file(vault_base: &Path, path: &Path, content: &[u8]) {
+    let tmp_path = export::tmp_sibling_path(path);
+    export::write_file_atomic(vault_base, path, &tmp_path, content).unwrap();
 }
 
 // ---------------------------------------------------------------------------
@@ -322,7 +459,7 @@ async fn human_round_trip() {
 
     let vault = vault();
     let path = vault.path().join("humans/human-1.md");
-    export::write_file_atomic(&path, rendered.as_bytes()).unwrap();
+    write_file(vault.path(), &path, rendered.as_bytes());
 
     let target = reimport(vault.path()).await;
     let (name, email, phone, job_title, linkedin, memo, pinned, pin_order): (
@@ -381,8 +518,11 @@ async fn organization_round_trip() {
     let rendered = export::render_organization(&organization).render().unwrap();
 
     let vault = vault();
-    export::write_file_atomic(&vault.path().join("organizations/org-1.md"), rendered.as_bytes())
-        .unwrap();
+    write_file(
+        vault.path(),
+        &vault.path().join("organizations/org-1.md"),
+        rendered.as_bytes(),
+    );
 
     let target = reimport(vault.path()).await;
     let (name, memo, pinned): (String, String, bool) =
@@ -430,8 +570,8 @@ async fn calendars_and_events_round_trip() {
     }]);
 
     let vault = vault();
-    write_json(&vault.path().join("calendars.json"), &value);
-    write_json(&vault.path().join("events.json"), &events_value);
+    write_json(vault.path(), &vault.path().join("calendars.json"), &value);
+    write_json(vault.path(), &vault.path().join("events.json"), &events_value);
 
     let target = reimport(vault.path()).await;
 
@@ -475,7 +615,7 @@ async fn daily_notes_round_trip() {
     }]);
 
     let vault = vault();
-    write_json(&vault.path().join("daily_notes.json"), &value);
+    write_json(vault.path(), &vault.path().join("daily_notes.json"), &value);
 
     let target = reimport(vault.path()).await;
     let (note_date, body_format, body): (String, String, String) = sqlx::query_as(
@@ -521,10 +661,11 @@ async fn tasks_round_trip() {
     };
     let meta_value = export::render_session_meta(&session, &[], &[], None);
     write_json(
+        vault.path(),
         &vault.path().join("sessions/session-1/_meta.json"),
         &meta_value,
     );
-    write_json(&vault.path().join("tasks.json"), &value);
+    write_json(vault.path(), &vault.path().join("tasks.json"), &value);
 
     let target = reimport(vault.path()).await;
     let (source_type, source_id, source_order, status, text, due_at): (
@@ -576,7 +717,7 @@ async fn chat_round_trip() {
     );
 
     let vault = vault();
-    write_json(&vault.path().join("chats/chat-1/messages.json"), &value);
+    write_json(vault.path(), &vault.path().join("chats/chat-1/messages.json"), &value);
 
     let target = reimport(vault.path()).await;
     let title: String = sqlx::query_scalar("SELECT title FROM chat_groups WHERE id = 'chat-1'")
@@ -613,7 +754,7 @@ async fn settings_round_trip() {
     let value = export::render_settings(r#"{"theme":"dark","locale":"en"}"#);
 
     let vault = vault();
-    write_json(&vault.path().join("settings.json"), &value);
+    write_json(vault.path(), &vault.path().join("settings.json"), &value);
 
     let target = reimport(vault.path()).await;
     let value_json: String =
@@ -653,7 +794,7 @@ async fn session_tags_round_trip_through_meta_json() {
     );
 
     let vault = vault();
-    write_json(&vault.path().join("sessions/session-1/_meta.json"), &value);
+    write_json(vault.path(), &vault.path().join("sessions/session-1/_meta.json"), &value);
 
     let target = reimport(vault.path()).await;
     let mut tag_ids: Vec<String> =
