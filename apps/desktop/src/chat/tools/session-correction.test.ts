@@ -272,7 +272,7 @@ describe("session correction chat tool", () => {
     );
     let persistedDictionary = "";
     mocks.updateSettingValue.mockImplementation(async (_key, update) => {
-      persistedDictionary = update(JSON.stringify(["Anarlog"]));
+      persistedDictionary = update(JSON.stringify(["Vertex"]));
       return persistedDictionary;
     });
 
@@ -306,7 +306,7 @@ describe("session correction chat tool", () => {
     expect(
       mocks.applySessionContentCorrections.mock.invocationCallOrder[0],
     ).toBeLessThan(mocks.updateSettingValue.mock.invocationCallOrder[0]);
-    expect(persistedDictionary).toBe(JSON.stringify(["Anarlog", "Erebor"]));
+    expect(persistedDictionary).toBe(JSON.stringify(["Vertex", "Erebor"]));
   });
 
   it("reports partial success when a requested target does not match", async () => {

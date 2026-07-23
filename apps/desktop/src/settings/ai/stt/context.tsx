@@ -12,7 +12,6 @@ import {
   type LocalModel,
 } from "@hypr/plugin-local-stt";
 
-import { useBillingAccess } from "~/auth/billing-context";
 import { useToastAction } from "~/store/zustand/toast-action";
 
 type SttSettingsContextType = {
@@ -20,7 +19,6 @@ type SttSettingsContextType = {
   setAccordionValue: (value: string) => void;
   startDownload: (model: LocalModel) => void;
   queuedDownloads: LocalModel[];
-  startTrial: () => void;
 };
 
 const SttSettingsContext = createContext<SttSettingsContextType | null>(null);
@@ -33,7 +31,6 @@ export function SttSettingsProvider({
   children: React.ReactNode;
 }) {
   const [accordionValue, setAccordionValue] = useState<string>("");
-  const { upgradeToPro } = useBillingAccess();
 
   const toastActionTarget = useToastAction((state) => state.target);
   const clearToastActionTarget = useToastAction((state) => state.clearTarget);
@@ -68,10 +65,6 @@ export function SttSettingsProvider({
     );
   }, []);
 
-  const startTrial = useCallback(() => {
-    upgradeToPro();
-  }, [upgradeToPro]);
-
   return (
     <SttSettingsContext.Provider
       value={{
@@ -79,7 +72,6 @@ export function SttSettingsProvider({
         setAccordionValue,
         startDownload,
         queuedDownloads,
-        startTrial,
       }}
     >
       {children}

@@ -113,7 +113,7 @@ describe("General Listener Slice", () => {
     setRecordingIndicatorMock.mockResolvedValue({ status: "ok", data: null });
     startCaptureMock.mockResolvedValue({ status: "ok", data: null });
     stopCaptureMock.mockResolvedValue({ status: "ok", data: null });
-    vaultBaseMock.mockResolvedValue({ status: "ok", data: "/tmp/anarlog" });
+    vaultBaseMock.mockResolvedValue({ status: "ok", data: "/tmp/fmtr" });
   });
 
   describe("Initial State", () => {

@@ -98,7 +98,7 @@ const notifyTranscriptionStalled = () => {
   sonnerToast.warning("Live transcription stalled", {
     id: "live-transcription-stalled",
     description:
-      "Anarlog keeps recording. The missing part of the transcript will be rebuilt from the recording when you stop listening.",
+      "Free Meeting Transcriber keeps recording. The missing part of the transcript will be rebuilt from the recording when you stop listening.",
   });
 };
 

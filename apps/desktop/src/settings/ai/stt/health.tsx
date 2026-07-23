@@ -1,6 +1,3 @@
-import { useQuery } from "@tanstack/react-query";
-import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
-
 import { Spinner } from "@hypr/ui/components/ui/spinner";
 
 import { useConfigValues } from "~/shared/config";
@@ -22,30 +19,6 @@ export function HealthStatusIndicator() {
   return null;
 }
 
-function useDeepgramHealth(enabled: boolean, apiKey?: string) {
-  return useQuery({
-    enabled,
-    queryKey: ["stt-health-check", "deepgram", apiKey],
-    staleTime: 0,
-    retry: 3,
-    retryDelay: 200,
-    queryFn: async () => {
-      const response = await tauriFetch(
-        "https://api.deepgram.com/v1/projects",
-        {
-          headers: {
-            Authorization: `Token ${apiKey}`,
-          },
-        },
-      );
-      if (!response.ok) {
-        throw new Error(`${response.status} ${response.statusText}`);
-      }
-      return response.status;
-    },
-  });
-}
-
 export function useConnectionHealth(): HealthStatus {
   const { conn, local } = useSTTConnection();
   const { current_stt_provider, current_stt_model } = useConfigValues([
@@ -57,9 +30,6 @@ export function useConnectionHealth(): HealthStatus {
     current_stt_provider,
     current_stt_model,
   );
-  const isDeepgram = current_stt_provider === "deepgram";
-
-  const deepgramHealth = useDeepgramHealth(isDeepgram && !!conn, conn?.apiKey);
 
   if (
     current_stt_provider === "hyprnote" &&
@@ -97,21 +67,6 @@ export function useConnectionHealth(): HealthStatus {
 
   if (!conn) {
     return { status: "error", message: "Provider not configured." };
-  }
-
-  if (isDeepgram) {
-    if (deepgramHealth.isPending) {
-      return { status: "pending", message: "Verifying API key..." };
-    }
-    if (deepgramHealth.isError) {
-      return {
-        status: "error",
-        message: `API key verification failed: ${deepgramHealth.error.message}`,
-      };
-    }
-    if (deepgramHealth.isSuccess) {
-      return { status: "success" };
-    }
   }
 
   return { status: "success" };

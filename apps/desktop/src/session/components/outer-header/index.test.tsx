@@ -420,11 +420,11 @@ describe("OuterHeader", () => {
     expect(mocks.startListening).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the Anarlog logo for the welcome note meeting", () => {
+  it("shows the app logo for the welcome note meeting", () => {
     mocks.sessionEvents = {
       "session-1": {
-        tracking_id: "anarlog-onboarding-demo-v1",
-        meeting_link: "https://anarlog.so/onboarding-demo/",
+        tracking_id: "fmtr-onboarding-demo-v1",
+        meeting_link: "https://github.com/bart6114/free-meeting-transcriber",
       },
     };
 
@@ -438,7 +438,7 @@ describe("OuterHeader", () => {
     const joinButton = screen.getByRole("button", { name: "Join & record" });
     const logo = joinButton.querySelector("img");
 
-    expect(logo?.getAttribute("src")).toBe("/assets/anarlog-icon.png");
+    expect(logo?.getAttribute("src")).toBe("/assets/app-icon.png");
     expect(logo?.getAttribute("alt")).toBe("");
   });
 

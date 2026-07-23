@@ -74,9 +74,18 @@ fn should_skip_startup_migration(args: &[OsString]) -> bool {
 
 fn legacy_target_app_path(current_app_path: &Path) -> Option<PathBuf> {
     let target_name = match current_app_path.file_name().and_then(|name| name.to_str()) {
-        Some("Hyprnote.app") | Some("Char.app") => "Anarlog.app",
+        Some("Hyprnote.app") | Some("Char.app") | Some("Anarlog.app") => {
+            "Free Meeting Transcriber.app"
+        }
+        // No "Nightly" channel exists in the current build config (and none
+        // did at the Anarlog rebrand either) — this rung is speculative
+        // legacy-compat for an install that predates that finding, kept
+        // pointing at its pre-existing (never-built) target rather than
+        // inventing a new one.
         Some("Hyprnote Nightly.app") | Some("Char Nightly.app") => "Anarlog Nightly.app",
-        Some("Hyprnote Staging.app") | Some("Char Staging.app") => "Anarlog Staging.app",
+        Some("Hyprnote Staging.app") | Some("Char Staging.app") | Some("Anarlog Staging.app") => {
+            "Free Meeting Transcriber Staging.app"
+        }
         _ => return None,
     };
 
@@ -202,10 +211,20 @@ mod tests {
     use super::*;
 
     #[test]
-    fn maps_legacy_bundle_names_to_anarlog_names() {
+    fn maps_legacy_bundle_names_to_current_names() {
         let cases = [
-            ("/Applications/Hyprnote.app", "/Applications/Anarlog.app"),
-            ("/Applications/Char.app", "/Applications/Anarlog.app"),
+            (
+                "/Applications/Hyprnote.app",
+                "/Applications/Free Meeting Transcriber.app",
+            ),
+            (
+                "/Applications/Char.app",
+                "/Applications/Free Meeting Transcriber.app",
+            ),
+            (
+                "/Applications/Anarlog.app",
+                "/Applications/Free Meeting Transcriber.app",
+            ),
             (
                 "/Applications/Hyprnote Nightly.app",
                 "/Applications/Anarlog Nightly.app",
@@ -216,11 +235,15 @@ mod tests {
             ),
             (
                 "/Applications/Hyprnote Staging.app",
-                "/Applications/Anarlog Staging.app",
+                "/Applications/Free Meeting Transcriber Staging.app",
             ),
             (
                 "/Applications/Char Staging.app",
+                "/Applications/Free Meeting Transcriber Staging.app",
+            ),
+            (
                 "/Applications/Anarlog Staging.app",
+                "/Applications/Free Meeting Transcriber Staging.app",
             ),
         ];
 
@@ -235,9 +258,9 @@ mod tests {
     #[test]
     fn ignores_non_legacy_bundle_names() {
         for path in [
-            "/Applications/Anarlog.app",
+            "/Applications/Free Meeting Transcriber.app",
             "/Applications/Anarlog Nightly.app",
-            "/Applications/Anarlog Staging.app",
+            "/Applications/Free Meeting Transcriber Staging.app",
         ] {
             assert_eq!(legacy_target_app_path(Path::new(path)), None);
         }

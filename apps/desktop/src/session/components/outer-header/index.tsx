@@ -219,7 +219,7 @@ function HeaderMeetingActionPill({
         title: t`Join meeting and record`,
         icon:
           event?.tracking_id === WELCOME_NOTE_TRACKING_ID ? (
-            <img src="/assets/anarlog-icon.png" alt="" className="size-4" />
+            <img src="/assets/app-icon.png" alt="" className="size-4" />
           ) : remote ? (
             getMeetingDisplay(remote.type).icon
           ) : undefined,

@@ -1,45 +1,56 @@
-> **Note:** The team is now building **[char](https://char.com)**. **anarlog** remains open-source, MIT-licensed, and maintained as the local-first meeting notetaker in this repo.
+# Free Meeting Transcriber
 
-![anarlog](https://repository-images.githubusercontent.com/900550981/a4267a9f-414b-4c36-965c-419313ce2417)
+A local-first, privacy-first AI meeting notetaker. It joins your meetings,
+transcribes them entirely on-device, and turns the transcript into markdown
+notes you own on disk — no cloud backend, no account, and no telemetry. Bring
+your own LLM (OpenAI, Anthropic, Gemini, OpenRouter, Ollama, LM Studio, or
+anything OpenAI-compatible) to summarize and chat about your meetings.
 
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/fastrepl/anarlog)
-
-# anarlog
-
-An open-source AI meeting notetaker that is local-first, privacy-first, and yours to fork.
-
-Granola, rearranged.
+This is a private hard fork of [fastrepl/anarlog](https://github.com/fastrepl/anarlog)
+(MIT-licensed). All hosted/cloud-sync, accounts, and billing functionality
+has been removed — everything here runs locally on your own machine.
 
 ## How to use it
 
-Download the latest release for your platform:
+Build it yourself (see Development below) and run it. Join a meeting:
+recording and transcription happen entirely on-device, and notes are saved
+as markdown on disk.
 
-→ [github.com/fastrepl/anarlog/releases/latest](https://github.com/fastrepl/anarlog/releases/latest)
+## Why
 
-Open it and join a meeting. anarlog records, transcribes locally, and saves your notes as markdown on disk. Bring your own LLM: OpenAI, Anthropic, Gemini, OpenRouter, Ollama, LM Studio, or anything OpenAI-compatible.
+- **Your data, your disk.** Every meeting is a `.md` file you can inspect,
+  search, and sync yourself (Dropbox, iCloud, Syncthing, git). No cloud
+  backend, no cloud lock-in.
+- **Local transcription.** Transcription runs on-device; audio never leaves
+  your machine.
+- **Bring your own AI.** Any LLM provider, including OpenAI-compatible
+  services and local models (Ollama, LM Studio).
+- **No accounts, no tracking.** There is no hosted account model and no
+  telemetry.
+- **CLI + MCP included.** The bundled `fmtr` CLI and MCP server give scripts
+  and coding agents read-only access to your local meeting data.
 
-To self-host, clone the repo, build it, and run it.
+## Development
 
-## Why use it
+This is a pnpm-workspace monorepo: a Tauri desktop app (`apps/desktop/`) plus
+a Rust CLI (`apps/cli/`), built on SQLite (schema/migrations in
+`crates/db-app/`) with Zustand for UI state and TipTap for the editor.
 
-- **Your data, your disk.** Every meeting is a `.md` file you can inspect, search, and sync through Dropbox, iCloud, Syncthing, or git. No cloud backend means no cloud lock-in.
-- **Local transcription.** Transcription runs on-device, so audio never leaves your machine.
-- **Bring your own AI.** Use any LLM provider, including OpenAI-compatible services and local models.
-- **Open source, MIT.** Fork it, sell it, or self-host it.
-- **No accounts or tracking.** There is no hosted account model.
+```sh
+pnpm install
+pnpm -F @hypr/desktop tauri:dev   # run the desktop app
+cargo build -p anarlog-cli         # build the fmtr CLI
+```
 
-## Name history
+See [AGENTS.md](./AGENTS.md) for the fuller dev-guidance (formatting,
+typechecking, code-style conventions).
 
-**anarlog** started as **Hyprnote**, then briefly used the **char** name.
+## Provenance
 
-We later split the work into two projects. **[char](https://char.com)** is the team's current productivity app. **anarlog** is this open-source, local-first meeting notetaker.
-
-This repository is not the current char codebase, and anarlog is not being retired. It keeps the open-source path: MIT-licensed, forkable, self-hostable, and built for local notes you control.
-
-If you came here from Granola, welcome. If you came here from Hyprnote, welcome back.
-
-Either way, it's yours.
+Forked from [fastrepl/anarlog](https://github.com/fastrepl/anarlog), MIT
+licensed. See [LICENSE](./LICENSE) for the full license and copyright
+history.
 
 ---
 
-**License:** MIT · **Maintainers:** [fastrepl](https://github.com/fastrepl)
+**License:** MIT · **Issues:** [github.com/bart6114/free-meeting-transcriber/issues](https://github.com/bart6114/free-meeting-transcriber/issues)

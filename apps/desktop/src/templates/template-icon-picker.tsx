@@ -68,7 +68,7 @@ const FREQUENT_EMOJI_IDS = [
   "question",
 ];
 
-const RECENT_EMOJIS_KEY = "anarlog.template-picker.recent-emojis";
+const RECENT_EMOJIS_KEY = "fmtr.template-picker.recent-emojis";
 const data = emojiData as EmojiMartData;
 
 type EmojiItem = {

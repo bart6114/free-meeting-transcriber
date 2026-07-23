@@ -2050,7 +2050,7 @@ describe("ListenerProvider detect events", () => {
       expect(notification).toEqual({
         key: expect.stringContaining("auto-stop-ended:session-1"),
         title: "Did your meeting end?",
-        message: "Anarlog will stop listening in 30 seconds.",
+        message: "Free Meeting Transcriber will stop listening in 30 seconds.",
         timeout: { secs: 30, nanos: 0 },
         source: null,
         start_time: null,

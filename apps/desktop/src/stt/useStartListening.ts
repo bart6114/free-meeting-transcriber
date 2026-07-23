@@ -43,7 +43,7 @@ import {
 } from "~/stt/queries";
 
 export const MEETING_DISCLOSURE_MESSAGE =
-  "I'm using Anarlog to record and transcribe this meeting. https://anarlog.so";
+  "I'm using Free Meeting Transcriber to record and transcribe this meeting.";
 
 const MEETING_DISCLOSURE_MAX_ATTEMPTS = 30;
 const MEETING_DISCLOSURE_RETRY_INTERVAL_MS = 1_000;
@@ -74,7 +74,7 @@ function meetingDisclosureFailure(reason: unknown): MeetingDisclosureOutcome {
   const detail = reason instanceof Error ? reason.message : String(reason);
   console.warn("[listener] meeting disclosure was not sent", reason);
   sonnerToast.warning(
-    "Recording started, but Anarlog could not post the meeting chat disclosure.",
+    "Recording started, but Free Meeting Transcriber could not post the meeting chat disclosure.",
     { id: "meeting-disclosure-send-failed" },
   );
   return { status: "notSent", reason: detail };
@@ -318,7 +318,7 @@ export function useStartListening(sessionId: string) {
       await lastTranscriptWrite;
       if (transcriptWriteError) {
         sonnerToast.error(
-          "Anarlog could not save part of the live transcript.",
+          "Free Meeting Transcriber could not save part of the live transcript.",
           { id: "live-transcript-persist-failed" },
         );
       }

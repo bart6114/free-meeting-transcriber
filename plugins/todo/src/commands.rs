@@ -279,7 +279,7 @@ pub async fn github_issue_comments(
 }
 
 fn require_access_token<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> Result<String, Error> {
-    // Linear/GitHub OAuth required a signed-in Anarlog account.
+    // Linear/GitHub OAuth required a signed-in Free Meeting Transcriber account.
     // Accounts/billing were removed in Task 4 — there is never an access
     // token.
     Err(Error::Auth("not authenticated".to_string()))

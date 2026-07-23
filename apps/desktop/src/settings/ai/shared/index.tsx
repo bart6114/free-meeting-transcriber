@@ -62,13 +62,13 @@ type ProviderConfig = {
   };
 };
 
-const ANARLOG_ICON_SRC = "/assets/anarlog-icon.png";
+const APP_ICON_SRC = "/assets/app-icon.png";
 
-export function AnarlogProviderIcon() {
+export function AppProviderIcon() {
   return (
     <img
-      src={ANARLOG_ICON_SRC}
-      alt="Anarlog"
+      src={APP_ICON_SRC}
+      alt="Free Meeting Transcriber"
       data-slot="provider-logo"
       className="size-4 object-contain object-center [clip-path:inset(6%_round_18%)]"
     />
@@ -235,9 +235,9 @@ export function NonHyprProviderCard({
     },
   });
   const keychainToastDescription = isKeychainRecoveryInProgress
-    ? t`Unlock your login Keychain in the macOS prompt. Anarlog will retry saving this API key automatically.`
+    ? t`Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically.`
     : (repairMutation.error?.message ??
-      t`macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Anarlog retries this API key.`);
+      t`macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Free Meeting Transcriber retries this API key.`);
 
   return (
     <AccordionItem

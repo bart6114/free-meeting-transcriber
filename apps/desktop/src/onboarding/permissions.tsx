@@ -147,8 +147,8 @@ function PermissionsSectionContent({
 
       <div className="flex flex-col gap-2">
         <PermissionBlock
-          enabledLabel={t`Anarlog can hear your voice`}
-          enableLabel={t`Help Anarlog listen to you`}
+          enabledLabel={t`Free Meeting Transcriber can hear your voice`}
+          enableLabel={t`Help Free Meeting Transcriber listen to you`}
           enabledBody={t`Microphone access turned on`}
           enableBody={t`Use your microphone to capture your voice`}
           Icon={MicIcon}
@@ -159,8 +159,8 @@ function PermissionsSectionContent({
         />
 
         <PermissionBlock
-          enabledLabel={t`Anarlog can hear others`}
-          enableLabel={t`Help Anarlog listen to others`}
+          enabledLabel={t`Free Meeting Transcriber can hear others`}
+          enableLabel={t`Help Free Meeting Transcriber listen to others`}
           enabledBody={t`System audio enabled`}
           enableBody={t`Use system audio to capture other speakers`}
           Icon={Volume2Icon}
@@ -172,8 +172,8 @@ function PermissionsSectionContent({
 
         {accessibility && (
           <PermissionBlock
-            enabledLabel={t`Anarlog can read meeting details`}
-            enableLabel={t`Help Anarlog read meeting activity`}
+            enabledLabel={t`Free Meeting Transcriber can read meeting details`}
+            enableLabel={t`Help Free Meeting Transcriber read meeting activity`}
             enabledBody={t`Meeting details access turned on`}
             enableBody={t`Read meeting controls, visible chat, and participant status`}
             Icon={MousePointer2Icon}

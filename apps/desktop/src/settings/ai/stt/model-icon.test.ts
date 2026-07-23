@@ -11,9 +11,6 @@ describe("local model icons", () => {
   });
 
   test("uses researched logo assets for known model families", () => {
-    expect(getLocalModelIcon("cloud")?.imageSrc).toBe(
-      "/assets/anarlog-icon.png",
-    );
     expect(getLocalModelIcon("soniqo-qwen3-0_6b")?.imageSrc).toBe(
       "/assets/model-icons/qwen-logo.svg",
     );

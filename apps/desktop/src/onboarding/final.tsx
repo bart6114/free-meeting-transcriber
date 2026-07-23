@@ -20,20 +20,9 @@ import { commands } from "~/types/tauri.gen";
 
 const SOCIALS = [
   {
-    label: "Discord",
-    icon: "simple-icons:discord",
-    url: "https://anarlog.so/discord",
-  },
-  {
     label: "GitHub",
     icon: "simple-icons:github",
-    url: "https://github.com/fastrepl/char",
-  },
-  {
-    label: "X",
-    icon: "simple-icons:x",
-    size: 14,
-    url: "https://x.com/getcharnotes",
+    url: "https://github.com/bart6114/free-meeting-transcriber",
   },
 ] as const;
 
@@ -46,20 +35,20 @@ export function FinalDescription() {
         <Trans>Join our community and stay updated:</Trans>
       </span>
       <div className="flex items-center gap-2">
-        {SOCIALS.map((social) => {
-          const iconSize = "size" in social ? social.size : SOCIAL_ICON_SIZE;
-
-          return (
-            <button
-              key={social.label}
-              onClick={() => void openerCommands.openUrl(social.url, null)}
-              className="text-muted-foreground hover:text-muted-foreground inline-flex size-5 items-center justify-center rounded-md transition-colors duration-150"
-              aria-label={social.label}
-            >
-              <Icon icon={social.icon} width={iconSize} height={iconSize} />
-            </button>
-          );
-        })}
+        {SOCIALS.map((social) => (
+          <button
+            key={social.label}
+            onClick={() => void openerCommands.openUrl(social.url, null)}
+            className="text-muted-foreground hover:text-muted-foreground inline-flex size-5 items-center justify-center rounded-md transition-colors duration-150"
+            aria-label={social.label}
+          >
+            <Icon
+              icon={social.icon}
+              width={SOCIAL_ICON_SIZE}
+              height={SOCIAL_ICON_SIZE}
+            />
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -102,17 +91,18 @@ export function FinalSection({
         {status === "loading" ? (
           <span className="flex items-center gap-2">
             <Loader2Icon className="size-4 animate-spin" />
-            <Trans>Open Anarlog</Trans>
+            <Trans>Open Free Meeting Transcriber</Trans>
           </span>
         ) : (
-          <Trans>Open Anarlog</Trans>
+          <Trans>Open Free Meeting Transcriber</Trans>
         )}
       </OnboardingButton>
       {status === "error" && (
         <p className="text-sm text-red-500" role="alert">
           {translate({
             id: "onboarding.finish-error",
-            message: "Couldn't open Anarlog. Please try again.",
+            message:
+              "Couldn't open Free Meeting Transcriber. Please try again.",
           })}
         </p>
       )}

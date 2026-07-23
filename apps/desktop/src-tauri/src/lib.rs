@@ -329,7 +329,7 @@ pub async fn main() {
 }
 
 fn startup_failure_message(error: &impl std::fmt::Display) -> String {
-    format!("Anarlog failed to start: {error}")
+    format!("Free Meeting Transcriber failed to start: {error}")
 }
 
 fn exit_after_startup_failure(error: &impl std::fmt::Display) -> ! {
@@ -342,7 +342,7 @@ fn exit_after_startup_failure(error: &impl std::fmt::Display) -> ! {
         let _ = std::process::Command::new("/usr/bin/osascript")
             .args([
                 "-e",
-                "display alert \"Anarlog could not start\" message \"Your existing data was left unchanged. Please restart the app. If the problem continues, contact support.\" as critical buttons {\"OK\"} default button \"OK\"",
+                "display alert \"Free Meeting Transcriber could not start\" message \"Your existing data was left unchanged. Please restart the app. If the problem continues, contact support.\" as critical buttons {\"OK\"} default button \"OK\"",
             ])
             .spawn();
     }
@@ -413,7 +413,7 @@ mod test {
 
         assert_eq!(
             message,
-            "Anarlog failed to start: legacy import did not pass parity verification"
+            "Free Meeting Transcriber failed to start: legacy import did not pass parity verification"
         );
     }
 

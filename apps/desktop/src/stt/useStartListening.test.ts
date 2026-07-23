@@ -466,7 +466,7 @@ describe("useStartListening", () => {
     expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith("session-1");
     expect(runBatchMock).not.toHaveBeenCalled();
     expect(sonnerToastErrorMock).toHaveBeenCalledWith(
-      "Anarlog could not save part of the live transcript.",
+      "Free Meeting Transcriber could not save part of the live transcript.",
       { id: "live-transcript-persist-failed" },
     );
     expect(queueAutoEnhanceIfSummaryEmptyMock).toHaveBeenCalledWith(
@@ -926,7 +926,7 @@ describe("useStartListening", () => {
 
     await waitFor(() => {
       expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-        "I'm using Anarlog to record and transcribe this meeting. https://anarlog.so",
+        "I'm using Free Meeting Transcriber to record and transcribe this meeting.",
         ["com.tinyspeck.slackmacgap"],
       );
     });
@@ -1024,13 +1024,13 @@ describe("useStartListening", () => {
 
     expect(listMicUsingApplicationsMock).toHaveBeenCalledTimes(2);
     expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-      expect.stringContaining("https://anarlog.so"),
+      expect.stringContaining("Free Meeting Transcriber"),
       ["com.tinyspeck.slackmacgap"],
     );
     expect(sonnerToastWarningMock).not.toHaveBeenCalled();
   });
 
-  test("keeps the Slack scope when Anarlog also appears in the mic-active apps", async () => {
+  test("keeps the Slack scope when Free Meeting Transcriber also appears in the mic-active apps", async () => {
     useConfigValueMock.mockImplementation((key: string) =>
       key === "ai_language"
         ? "en"
@@ -1041,7 +1041,10 @@ describe("useStartListening", () => {
     listMicUsingApplicationsMock.mockResolvedValue({
       status: "ok",
       data: [
-        { id: "org.freemeetingtranscriber.dev", name: "Anarlog Dev" },
+        {
+          id: "org.freemeetingtranscriber.dev",
+          name: "Free Meeting Transcriber Dev",
+        },
         { id: "com.tinyspeck.slackmacgap", name: "Slack" },
       ],
     });
@@ -1055,7 +1058,7 @@ describe("useStartListening", () => {
 
     await waitFor(() => {
       expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-        expect.stringContaining("https://anarlog.so"),
+        expect.stringContaining("Free Meeting Transcriber"),
         ["org.freemeetingtranscriber.dev", "com.tinyspeck.slackmacgap"],
       );
     });
@@ -1084,7 +1087,7 @@ describe("useStartListening", () => {
     });
 
     expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-      expect.stringContaining("https://anarlog.so"),
+      expect.stringContaining("Free Meeting Transcriber"),
       ["us.zoom.xos", "com.tinyspeck.slackmacgap"],
     );
     expect(warn).toHaveBeenCalledWith(
@@ -1092,7 +1095,7 @@ describe("useStartListening", () => {
       "expected exactly one recognized meeting app bundle",
     );
     expect(sonnerToastWarningMock).toHaveBeenCalledWith(
-      "Recording started, but Anarlog could not post the meeting chat disclosure.",
+      "Recording started, but Free Meeting Transcriber could not post the meeting chat disclosure.",
       { id: "meeting-disclosure-send-failed" },
     );
     warn.mockRestore();
@@ -1242,7 +1245,7 @@ describe("useStartListening", () => {
       error,
     );
     expect(sonnerToastWarningMock).toHaveBeenCalledWith(
-      "Recording started, but Anarlog could not post the meeting chat disclosure.",
+      "Recording started, but Free Meeting Transcriber could not post the meeting chat disclosure.",
       { id: "meeting-disclosure-send-failed" },
     );
     warn.mockRestore();
@@ -1267,7 +1270,7 @@ describe("useStartListening", () => {
       expect(startMeetingChatCaptureMock).toHaveBeenCalledWith({
         sessionId: "session-1",
         excludedTexts: [
-          "I'm using Anarlog to record and transcribe this meeting. https://anarlog.so",
+          "I'm using Free Meeting Transcriber to record and transcribe this meeting.",
         ],
       });
     });
@@ -1305,7 +1308,7 @@ describe("useStartListening", () => {
       expect(startMeetingChatCaptureMock).toHaveBeenCalledWith({
         sessionId: "session-1",
         excludedTexts: [
-          "I'm using Anarlog to record and transcribe this meeting. https://anarlog.so",
+          "I'm using Free Meeting Transcriber to record and transcribe this meeting.",
         ],
       });
     });

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import type { LocalModel } from "@hypr/plugin-local-stt";
 
-import { AnarlogProviderIcon } from "~/settings/ai/shared";
+import { AppProviderIcon } from "~/settings/ai/shared";
 import { type ProviderRequirement } from "~/settings/ai/shared/eligibility";
 import { sortProviders } from "~/settings/ai/shared/sort-providers";
 import { localSttQueries } from "~/stt/useLocalSttModel";
@@ -72,7 +72,7 @@ export const _PROVIDERS = [
     id: "hyprnote",
     displayName: "On-device",
     badge: "Recommended",
-    icon: <AnarlogProviderIcon />,
+    icon: <AppProviderIcon />,
     models: [],
     requirements: [],
   },

@@ -228,9 +228,7 @@ describe("Auto prompt editor", () => {
       />,
     );
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Reset to Anarlog default" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Reset to default" }));
 
     await waitFor(() =>
       expect(mocks.setSettingValue).toHaveBeenCalledWith(

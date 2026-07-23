@@ -31,7 +31,7 @@ describe("ChatCTA", () => {
     render(<ChatCTA />);
 
     const button = screen.getByRole("button", {
-      name: "Ask Anarlog anything",
+      name: "Ask AI anything",
     });
 
     fireEvent.click(button);
@@ -43,7 +43,7 @@ describe("ChatCTA", () => {
     render(<ChatCTA />);
 
     const button = screen.getByRole("button", {
-      name: "Ask Anarlog anything",
+      name: "Ask AI anything",
     });
     const surface = button.querySelector("[data-chat-cta-surface]");
     const label = screen.getByText("Ask anything");
@@ -76,30 +76,28 @@ describe("ChatCTA", () => {
       "dark:shadow-[0_4px_12px_rgba(33,29,29,0.1),inset_0_-1px_0_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.4)]",
     );
     expect(surface?.className).toContain(
-      "group-hover/anarlog-chat-cta:shadow-[0_16px_42px_rgba(0,0,0,0.26)]",
+      "group-hover/chat-cta:shadow-[0_16px_42px_rgba(0,0,0,0.26)]",
     );
     expect(surface?.className).toContain(
-      "dark:group-hover/anarlog-chat-cta:shadow-[0_18px_52px_rgba(0,0,0,0.64)]",
+      "dark:group-hover/chat-cta:shadow-[0_18px_52px_rgba(0,0,0,0.64)]",
     );
     expect(surface?.className).toContain("border");
     expect(surface?.className).toContain("border-transparent");
     expect(surface?.className).not.toContain("border-2");
     expect(surface?.className).toContain("pointer-events-none");
     expect(surface?.className).toContain(
-      "group-hover/anarlog-chat-cta:border-border/70",
+      "group-hover/chat-cta:border-border/70",
+    );
+    expect(surface?.className).toContain("group-hover/chat-cta:bg-[#f4f4f5]");
+    expect(surface?.className).toContain(
+      "dark:group-hover/chat-cta:bg-[#202020]",
+    );
+    expect(surface?.className).toContain("group-hover/chat-cta:h-10");
+    expect(surface?.className).toContain(
+      "group-hover/chat-cta:w-[min(640px,calc(100cqw_-_2rem))]",
     );
     expect(surface?.className).toContain(
-      "group-hover/anarlog-chat-cta:bg-[#f4f4f5]",
-    );
-    expect(surface?.className).toContain(
-      "dark:group-hover/anarlog-chat-cta:bg-[#202020]",
-    );
-    expect(surface?.className).toContain("group-hover/anarlog-chat-cta:h-10");
-    expect(surface?.className).toContain(
-      "group-hover/anarlog-chat-cta:w-[min(640px,calc(100cqw_-_2rem))]",
-    );
-    expect(surface?.className).toContain(
-      "group-focus-visible/anarlog-chat-cta:w-[min(640px,calc(100cqw_-_2rem))]",
+      "group-focus-visible/chat-cta:w-[min(640px,calc(100cqw_-_2rem))]",
     );
     expect(surface?.className).not.toContain("clip-path");
     expect(surface?.className).not.toContain("inset_0_0_0_1px");
@@ -108,7 +106,7 @@ describe("ChatCTA", () => {
     expect(label.className).toContain("text-white/55");
     expect(label.className).not.toContain("ml-2");
     expect(label.className).toContain(
-      "group-hover/anarlog-chat-cta:text-muted-foreground",
+      "group-hover/chat-cta:text-muted-foreground",
     );
     expect(label.className).toContain("transition-opacity");
     expect(label.className).not.toContain("max-w");
@@ -118,7 +116,7 @@ describe("ChatCTA", () => {
     render(<FloatingChatCTA />);
 
     const hoverZone = screen.getByRole("button", {
-      name: "Ask Anarlog anything",
+      name: "Ask AI anything",
     }).parentElement?.parentElement;
 
     expect(hoverZone?.className).toContain("h-10");
@@ -133,7 +131,7 @@ describe("ChatCTA", () => {
     render(<ChatCTA />);
 
     expect(
-      screen.queryByRole("button", { name: "Ask Anarlog anything" }),
+      screen.queryByRole("button", { name: "Ask AI anything" }),
     ).toBeNull();
   });
 
@@ -143,7 +141,7 @@ describe("ChatCTA", () => {
     render(<ChatCTA />);
 
     expect(
-      screen.queryByRole("button", { name: "Ask Anarlog anything" }),
+      screen.queryByRole("button", { name: "Ask AI anything" }),
     ).toBeNull();
   });
 });

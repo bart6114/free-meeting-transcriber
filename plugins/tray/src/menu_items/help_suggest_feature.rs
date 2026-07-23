@@ -16,6 +16,6 @@ impl MenuItemHandler for HelpSuggestFeature {
     }
 
     fn handle(_app: &AppHandle<tauri::Wry>) {
-        let _ = open::that("https://anarlog.so/discord");
+        let _ = open::that("https://github.com/bart6114/free-meeting-transcriber/issues");
     }
 }

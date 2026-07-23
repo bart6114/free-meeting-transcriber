@@ -35,7 +35,7 @@ it("reuses an existing onboarding welcome note", async () => {
   await expect(getOrCreateWelcomeSession()).resolves.toBe("welcome-session");
   expect(mocks.createSession).not.toHaveBeenCalled();
   expect(mocks.execute).toHaveBeenCalledWith(expect.any(String), [
-    "anarlog-onboarding-demo-v1",
+    "fmtr-onboarding-demo-v1",
   ]);
 });
 
@@ -47,9 +47,11 @@ it("creates a prerecorded demo note with normal meeting metadata", async () => {
 
   const [title, , initial] = mocks.createSession.mock.calls[0];
   const event = JSON.parse(initial.event_json);
-  expect(title).toBe("Welcome to Anarlog");
-  expect(event.meeting_link).toBe("https://anarlog.so/onboarding-demo/");
-  expect(event.tracking_id).toBe("anarlog-onboarding-demo-v1");
+  expect(title).toBe("Welcome to Free Meeting Transcriber");
+  expect(event.meeting_link).toBe(
+    "https://github.com/bart6114/free-meeting-transcriber",
+  );
+  expect(event.tracking_id).toBe("fmtr-onboarding-demo-v1");
   expect(initial.raw_md).toContain("prerecorded demo meeting");
   expect(initial.raw_md).toContain("Join & record");
 

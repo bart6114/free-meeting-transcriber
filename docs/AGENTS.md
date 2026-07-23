@@ -1,9 +1,12 @@
-# Anarlog documentation instructions
+# Free Meeting Transcriber documentation instructions
 
 ## Scope
 
-- This is the Mintlify project published at `https://docs.anarlog.so`.
-- Write for Anarlog users, developers, and agents using the CLI or MCP server.
+- This is the Mintlify project source. It is not currently published for
+  this fork — there is no hosted docs site — but the content is kept as the
+  source of truth for CLI/MCP behavior.
+- Write for Free Meeting Transcriber users, developers, and agents using the
+  CLI or MCP server.
 - Configuration lives in `docs.json`; content pages are MDX.
 - The public agent skill is maintained in `../skills/anarlog/`.
 
@@ -19,8 +22,10 @@
 - Use active voice and second person.
 - Keep headings and sentences concise.
 - Put the result before implementation detail.
-- Use `Anarlog` for the product and `anarlog` for the executable.
-- Use root-relative links between Mintlify pages. Use `https://docs.anarlog.so` in external instructions and agent metadata.
+- Use `Free Meeting Transcriber` for the product and `fmtr` for the executable.
+- Use root-relative links between Mintlify pages. Do not reference a public
+  docs URL in external instructions or agent metadata — none is published for
+  this fork; point to the GitHub repository instead.
 
 ## Accuracy boundaries
 

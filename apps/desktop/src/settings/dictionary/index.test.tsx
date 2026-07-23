@@ -54,7 +54,7 @@ describe("DictionarySettings", () => {
 
   it("adds entered terms and keeps them normalized", async () => {
     const onSave = vi.fn();
-    render(<DictionarySettings terms={["Anarlog"]} onSave={onSave} />);
+    render(<DictionarySettings terms={["Vertex"]} onSave={onSave} />);
 
     fireEvent.change(screen.getByRole("textbox"), {
       target: { value: " FastConformer, Parakeet TDT " },
@@ -67,7 +67,7 @@ describe("DictionarySettings", () => {
 
     await waitFor(() =>
       expect(onSave).toHaveBeenCalledWith(
-        JSON.stringify(["Anarlog", "FastConformer", "Parakeet TDT"]),
+        JSON.stringify(["Vertex", "FastConformer", "Parakeet TDT"]),
       ),
     );
   });
@@ -75,23 +75,20 @@ describe("DictionarySettings", () => {
   it("removes saved terms", () => {
     const onSave = vi.fn();
     render(
-      <DictionarySettings
-        terms={["Anarlog", "Parakeet TDT"]}
-        onSave={onSave}
-      />,
+      <DictionarySettings terms={["Vertex", "Parakeet TDT"]} onSave={onSave} />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Remove Anarlog" }));
+    fireEvent.click(screen.getByRole("button", { name: "Remove Vertex" }));
 
     expect(onSave).toHaveBeenCalledWith(JSON.stringify(["Parakeet TDT"]));
   });
 
   it("does not enable adding duplicate terms", async () => {
     const onSave = vi.fn();
-    render(<DictionarySettings terms={["Anarlog"]} onSave={onSave} />);
+    render(<DictionarySettings terms={["Vertex"]} onSave={onSave} />);
 
     fireEvent.change(screen.getByRole("textbox"), {
-      target: { value: "anarlog" },
+      target: { value: "vertex" },
     });
 
     const addButton = screen.getByRole("button", {
@@ -105,7 +102,7 @@ describe("DictionarySettings", () => {
   it("filters saved terms while typing", async () => {
     render(
       <DictionarySettings
-        terms={["Anarlog", "FastConformer", "Parakeet TDT"]}
+        terms={["Vertex", "FastConformer", "Parakeet TDT"]}
         onSave={vi.fn()}
       />,
     );
@@ -115,7 +112,7 @@ describe("DictionarySettings", () => {
     });
 
     await waitFor(() => expect(screen.getByText("FastConformer")).toBeTruthy());
-    expect(screen.queryByText("Anarlog")).toBeNull();
+    expect(screen.queryByText("Vertex")).toBeNull();
     expect(screen.queryByText("Parakeet TDT")).toBeNull();
   });
 });

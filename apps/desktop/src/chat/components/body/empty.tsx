@@ -70,7 +70,7 @@ export function ChatBodyEmpty({
                   : "text-foreground",
               ])}
             >
-              Anarlog AI
+              AI
             </span>
             <BetaChip isDarkAppearance={isDarkAppearance} />
           </div>
@@ -82,8 +82,7 @@ export function ChatBodyEmpty({
                 : "text-muted-foreground",
             ])}
           >
-            Hi, I'm Anarlog AI. Set up a language model and I'll be ready to
-            help.
+            Hi, I'm your AI. Set up a language model and I'll be ready to help.
           </p>
           <button
             onClick={handleGoToSettings}

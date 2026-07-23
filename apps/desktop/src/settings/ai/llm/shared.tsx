@@ -50,7 +50,7 @@ export const _PROVIDERS = [
       models: { label: "Available models", url: "https://lmstudio.ai/models" },
       setup: {
         label: "Setup guide",
-        url: "https://docs.anarlog.so/ai-setup#lm-studio",
+        url: "https://github.com/bart6114/free-meeting-transcriber",
       },
     },
   },
@@ -70,7 +70,7 @@ export const _PROVIDERS = [
       models: { label: "Available models", url: "https://ollama.com/library" },
       setup: {
         label: "Setup guide",
-        url: "https://docs.anarlog.so/ai-setup#ollama",
+        url: "https://github.com/bart6114/free-meeting-transcriber",
       },
     },
   },

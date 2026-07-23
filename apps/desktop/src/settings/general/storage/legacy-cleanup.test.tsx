@@ -63,7 +63,7 @@ describe("LegacyMigrationCleanupRow", () => {
       alreadyCleaned: false,
       fileCount: 12,
       totalBytes: 2048,
-      sourceRoot: "/Users/test/Anarlog",
+      sourceRoot: "/Users/test/anarlog",
       blockingReason: null,
     });
     mocks.cleanupLegacyFiles.mockResolvedValue({
@@ -83,7 +83,7 @@ describe("LegacyMigrationCleanupRow", () => {
       latestRun: {
         id: "run-1",
         importerVersion: 1,
-        sourceRoot: "/Users/test/Anarlog",
+        sourceRoot: "/Users/test/anarlog",
         dryRun: false,
         status: "completed",
         discoveredCount: 12,
@@ -152,7 +152,7 @@ describe("LegacyMigrationCleanupRow", () => {
       alreadyCleaned: false,
       fileCount: 0,
       totalBytes: 0,
-      sourceRoot: "/Users/test/Anarlog",
+      sourceRoot: "/Users/test/anarlog",
       blockingReason: "1 legacy file changed after migration",
     });
 
@@ -179,7 +179,7 @@ describe("LegacyMigrationCleanupRow", () => {
     ).toBeTruthy();
     expect(
       screen.getByText(
-        "Anarlog will retry automatically. This does not affect your notes.",
+        "Free Meeting Transcriber will retry automatically. This does not affect your notes.",
       ),
     ).toBeTruthy();
     expect(screen.queryByText("Migration needs attention")).toBeNull();
@@ -228,7 +228,7 @@ describe("LegacyMigrationCleanupRow", () => {
         alreadyCleaned: false,
         fileCount: 0,
         totalBytes: 0,
-        sourceRoot: "/Users/test/Anarlog",
+        sourceRoot: "/Users/test/anarlog",
         blockingReason: "SQLite migration verification is incomplete",
       })
       .mockResolvedValue({
@@ -237,7 +237,7 @@ describe("LegacyMigrationCleanupRow", () => {
         alreadyCleaned: false,
         fileCount: 12,
         totalBytes: 2048,
-        sourceRoot: "/Users/test/Anarlog",
+        sourceRoot: "/Users/test/anarlog",
         blockingReason: null,
       });
     mocks.getLegacyImportReport.mockResolvedValueOnce({
@@ -253,7 +253,7 @@ describe("LegacyMigrationCleanupRow", () => {
       latestRun: {
         id: "run-1",
         importerVersion: 1,
-        sourceRoot: "/Users/test/Anarlog",
+        sourceRoot: "/Users/test/anarlog",
         dryRun: false,
         status: "completed_with_issues",
         discoveredCount: 12,

@@ -10,7 +10,7 @@ export const env = createEnv({
   emptyStringAsUndefined: true,
 });
 
-// Anarlog's original desktop build pointed two removed env vars at hosted
+// This app's original desktop build pointed two removed env vars at hosted
 // backend infrastructure. Accounts/billing (and the server code they talked
 // to) were removed in Task 4 — the "hyprnote" hosted AI provider and
 // OAuth-integration code paths that referenced them are permanently

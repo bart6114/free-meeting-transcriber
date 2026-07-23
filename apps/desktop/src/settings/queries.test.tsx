@@ -322,7 +322,7 @@ Start with decisions.`);
     mocks.execute.mockResolvedValue([
       {
         id: "personalization_dictionary_terms",
-        value_json: JSON.stringify(JSON.stringify(["Anarlog"])),
+        value_json: JSON.stringify(JSON.stringify(["Vertex"])),
       },
     ]);
 
@@ -331,7 +331,7 @@ Start with decisions.`);
       (current) => JSON.stringify([...JSON.parse(current ?? "[]"), "Erebor"]),
     );
 
-    expect(next).toBe(JSON.stringify(["Anarlog", "Erebor"]));
+    expect(next).toBe(JSON.stringify(["Vertex", "Erebor"]));
     const statement = mocks.executeTransaction.mock.calls[0][0][0];
     expect(statement.params.slice(0, 2)).toEqual([
       "personalization_dictionary_terms",

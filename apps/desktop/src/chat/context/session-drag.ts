@@ -1,6 +1,6 @@
 import type { ContextRef } from "./entities";
 
-const SESSION_CONTEXT_DRAG_TYPE = "application/x-anarlog-session-context";
+const SESSION_CONTEXT_DRAG_TYPE = "application/x-fmtr-session-context";
 
 type SessionDragPayload = {
   sessionId: string;

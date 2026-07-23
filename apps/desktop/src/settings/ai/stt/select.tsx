@@ -133,7 +133,7 @@ export function SelectProviderAndModel() {
   const alertDescription = !providerSettingsReady
     ? undefined
     : !isConfigured
-      ? t`Transcription model is needed to make Anarlog listen to your conversations.`
+      ? t`Transcription model is needed to make Free Meeting Transcriber listen to your conversations.`
       : hasError
         ? health.message
         : undefined;

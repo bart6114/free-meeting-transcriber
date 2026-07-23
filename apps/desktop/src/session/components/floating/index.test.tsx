@@ -13,7 +13,7 @@ const hoisted = vi.hoisted(() => ({
 vi.mock("~/shared/chat-cta", () => ({
   ChatCTA: () => (
     <button type="button" onClick={() => hoisted.sendEvent({ type: "OPEN" })}>
-      Ask Anarlog anything
+      Ask AI anything
     </button>
   ),
 }));
@@ -51,7 +51,7 @@ describe("FloatingActionButton", () => {
     renderFloatingActionButton();
 
     expect(
-      screen.getByRole("button", { name: "Ask Anarlog anything" }),
+      screen.getByRole("button", { name: "Ask AI anything" }),
     ).not.toBeNull();
   });
 
@@ -69,7 +69,7 @@ describe("FloatingActionButton", () => {
       const view = renderFloatingActionButton(props);
 
       expect(
-        screen.getByRole("button", { name: "Ask Anarlog anything" }),
+        screen.getByRole("button", { name: "Ask AI anything" }),
       ).not.toBeNull();
       expect(
         screen.queryByRole("button", { name: "Start listening" }),
@@ -86,9 +86,7 @@ describe("FloatingActionButton", () => {
   it("opens chat from the FAB", () => {
     renderFloatingActionButton();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: "Ask Anarlog anything" }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: "Ask AI anything" }));
 
     expect(hoisted.sendEvent).toHaveBeenCalledWith({ type: "OPEN" });
   });

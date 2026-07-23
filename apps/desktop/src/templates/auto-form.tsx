@@ -207,8 +207,8 @@ export function AutoPromptForm({
             </p>
             <p className="text-muted-foreground mt-1 text-sm">
               <Trans>
-                Anarlog sends these separately, so editing the prompt cannot
-                remove the meeting source material.
+                Free Meeting Transcriber sends these separately, so editing the
+                prompt cannot remove the meeting source material.
               </Trans>
             </p>
             <div className="mt-3 flex flex-wrap gap-2">
@@ -248,7 +248,7 @@ export function AutoPromptForm({
                     void resetToDefault().catch(() => {});
                   }}
                 >
-                  <Trans>Reset to Anarlog default</Trans>
+                  <Trans>Reset to default</Trans>
                 </Button>
               )}
             </form.Subscribe>
