@@ -118,6 +118,44 @@ struct DocumentVariant {
     target_id: String,
 }
 
+/// Whether the hash short-circuit
+/// (`hypr_db_app::legacy_source_already_imported`) must be bypassed for
+/// this specific source, because it's a `_meta.json` targeting a session
+/// that's currently soft-deleted.
+///
+/// Without this, a session soft-hidden by `import_paths`'s missing-
+/// `_meta.json` detection (Task 14) could never be revived by a
+/// `_meta.json` reappearing with byte-identical content — the dominant
+/// real-world case, since a sync client typically restores the exact bytes
+/// it just removed, and any prior `sync_from_vault` startup reconcile will
+/// already have recorded this exact path+hash in `migration_import_items`
+/// long before any blip. The short-circuit would otherwise fire and
+/// `continue` straight past `insert_row_if_missing` ->
+/// `reconcile_content_conflict` -> `revive_soft_deleted_session`,
+/// permanently wedging the session hidden — neither a live watcher
+/// re-import (`import_paths`) nor a later app restart (`sync_from_vault`,
+/// which calls `import_legacy_vault` — this same function) could heal it.
+/// Used by both entry points so both heal identically.
+pub(crate) async fn session_needs_revival_bypass(
+    pool: &SqlitePool,
+    vault_base: &Path,
+    path: &Path,
+    kind: SourceKind,
+) -> Result<bool, sqlx::Error> {
+    if kind != SourceKind::SessionMeta {
+        return Ok(false);
+    }
+    let Ok((session_id, _folder_path)) = infer_session_id_and_folder(vault_base, path) else {
+        return Ok(false);
+    };
+    sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ? AND deleted_at IS NOT NULL)",
+    )
+    .bind(&session_id)
+    .fetch_one(pool)
+    .await
+}
+
 pub async fn import_legacy_vault(
     pool: &SqlitePool,
     vault_base: &Path,
@@ -164,9 +202,14 @@ pub async fn import_legacy_vault(
                 || (!summary.hide_hidden_source
                     && summary.hidden_relative_path == source.relative_path)
         });
+        // Bypass the hash short-circuit for a `_meta.json` whose session is
+        // currently soft-deleted — see `session_needs_revival_bypass`'s doc.
+        let needs_revival_bypass =
+            session_needs_revival_bypass(pool, vault_base, &source.path, source.kind).await?;
 
         if !dry_run
             && !recheck_summary_pair
+            && !needs_revival_bypass
             && source.kind != SourceKind::SessionDocument
             && hypr_db_app::legacy_source_already_imported(
                 pool,

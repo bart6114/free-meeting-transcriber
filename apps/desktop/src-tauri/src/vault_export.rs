@@ -535,6 +535,40 @@ async fn export_entity<R: tauri::Runtime>(
 // sessions/<folder>/<id>/*
 // ---------------------------------------------------------------------------
 
+/// Whether `export_session` should move a soft-deleted session's remaining
+/// vault files to `.trash/`.
+///
+/// `false` for an externally-detected soft-hide — Task 14's
+/// `tauri_plugin_db::import_paths` soft-hides a session when its
+/// `_meta.json` is found missing (possibly a transient sync-client blip:
+/// a delete-then-recreate delivered more than the watcher's coalesce
+/// window apart) and stamps `hypr_db_app::EXTERNAL_SOFT_HIDE_METADATA_KEY`
+/// into `sessions.metadata_json` when it does. The external actor owns
+/// those files; the app must not touch them in response to a hide it
+/// didn't decide to make. Controller-observed regression this guards
+/// against: removing `_meta.json` soft-hid the session, which (via the
+/// `vault_export_dirty` trigger) woke this worker, which then moved the
+/// session's remaining `_memo.md` etc. to `.trash/` — actively dismantling
+/// a folder a transient sync hiccup shouldn't have touched at all.
+///
+/// `true` for anything else — an in-app user-initiated deletion
+/// (`useDeleteSession`'s full-cascade soft-delete via
+/// `apps/desktop/src/session/queries.ts::softDeleteSession`, later
+/// finalized by a direct `delete_session_folder` command) never sets this
+/// marker, so it falls through to the original Task 12/13 behavior of
+/// projecting the deletion to the vault. Also `true` (safe default) for
+/// garbage/unparseable `metadata_json`.
+///
+/// Pure and synchronous — this crate has no way to construct a live
+/// `AppHandle` in a unit test (`tauri`'s `test` feature isn't enabled
+/// here), so `export_session` itself can't be exercised directly; this is
+/// the seam that is testable, mirroring how `RetryBackoff`/`backoff_delay`
+/// above are unit tested in isolation from the actual dirty-queue drain
+/// loop they gate.
+fn should_trash_soft_deleted_session(metadata_json: &str) -> bool {
+    !hypr_db_app::is_externally_soft_hidden(metadata_json)
+}
+
 async fn export_session<R: tauri::Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
@@ -553,19 +587,56 @@ async fn export_session<R: tauri::Runtime>(
     let session_dir = hypr_fs_sync_core::session::find_session_dir(&sessions_base, session_id)
         .unwrap_or_else(|_| sessions_base.join(session_id));
 
+    // Fetched regardless of `deleted_at` (unlike every other query in this
+    // function) — a soft-deleted row's `metadata_json` marker is exactly
+    // what decides whether this pass should trash the folder below. See
+    // `should_trash_soft_deleted_session`'s doc for the full rationale.
     let session_row = sqlx::query(
         "SELECT id, owner_user_id, title, created_at, started_at, ended_at,
-                event_id, external_event_id, series_id, event_json
-         FROM sessions WHERE id = ? AND deleted_at IS NULL",
+                event_id, external_event_id, series_id, event_json, deleted_at, metadata_json
+         FROM sessions WHERE id = ?",
     )
     .bind(session_id)
     .fetch_optional(pool)
     .await?;
 
     let Some(row) = session_row else {
+        // The row is genuinely absent from the table, not just
+        // soft-deleted — nothing in production hard-deletes a session
+        // today, but this is the safest fallback for a state this function
+        // otherwise can't interpret (matches the pre-existing behavior).
         trash_if_exists(app, vault_base, &session_dir).await?;
         return Ok(());
     };
+
+    let deleted_at: Option<String> = row.get("deleted_at");
+    if deleted_at.is_some() {
+        let metadata_json: String = row.get("metadata_json");
+        if should_trash_soft_deleted_session(&metadata_json) {
+            // An in-app user-initiated deletion (`useDeleteSession`'s
+            // full-cascade soft-delete) — matches the original Task 12/13
+            // behavior of projecting the deletion to the vault.
+            trash_if_exists(app, vault_base, &session_dir).await?;
+        } else {
+            // Task 14: this session was soft-hidden because its
+            // `_meta.json` was found missing by the live watcher or a
+            // startup reconcile — possibly a transient blip (e.g. a sync
+            // client delivering a delete-then-recreate more than the
+            // watcher's coalesce window apart). The external actor owns
+            // these files; leave them untouched. If the session is later
+            // revived, this same dirty entry re-fires through the normal
+            // path below and re-exports everything as needed. If the hide
+            // turns out to be permanent, the files are simply left behind
+            // (inert — the session no longer shows in `list_sessions`)
+            // rather than the app actively dismantling a folder it didn't
+            // decide to delete.
+            tracing::info!(
+                session_id,
+                "vault export: session externally soft-hidden; leaving its vault files untouched"
+            );
+        }
+        return Ok(());
+    }
 
     let session = export::SessionMeta {
         id: row.get("id"),
@@ -1192,6 +1263,140 @@ mod tests {
         let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
         hypr_db_app::prepare_schema(&db).await.unwrap();
         db
+    }
+
+    #[test]
+    fn should_trash_soft_deleted_session_is_false_only_for_the_external_marker() {
+        assert!(
+            !should_trash_soft_deleted_session(r#"{"external_soft_hide":true}"#),
+            "an externally-detected soft-hide must never be trashed"
+        );
+        assert!(
+            should_trash_soft_deleted_session("{}"),
+            "an in-app deletion (no marker) must still trash, matching Task 12/13 behavior"
+        );
+        assert!(
+            should_trash_soft_deleted_session(r#"{"external_soft_hide":false}"#),
+            "an explicit false marker is not a hide"
+        );
+        assert!(
+            should_trash_soft_deleted_session("not json"),
+            "garbage metadata_json defaults to the original (trash) behavior"
+        );
+        assert!(
+            should_trash_soft_deleted_session(""),
+            "empty metadata_json defaults to the original (trash) behavior"
+        );
+    }
+
+    /// Full transient-blip regression (controller-observed on-device bug):
+    /// removing `_meta.json` soft-hid a session, which — via the
+    /// `vault_export_dirty` trigger — woke this worker, which then moved
+    /// the session's still-live `_memo.md` to `.trash/`, dismantling a
+    /// valid folder over what turned out to be a transient sync hiccup.
+    ///
+    /// This crate has no way to construct a live `AppHandle` in a unit test
+    /// (`tauri`'s `test` feature isn't enabled here — see
+    /// `should_trash_soft_deleted_session`'s doc), so `export_session`
+    /// itself, and therefore the actual `.trash/` move, can't be exercised
+    /// directly. This test instead runs the *real* soft-hide/revival
+    /// machinery end-to-end (`tauri_plugin_db::import_paths`, unmodified,
+    /// same crate the live watcher calls) and checks the exact decision
+    /// `export_session` would make from the DB state that machinery
+    /// produces — the seam that is testable, and the one this fix actually
+    /// changed.
+    #[tokio::test]
+    async fn full_transient_blip_sequence_does_not_trash_files_and_fully_revives() {
+        let db = test_db().await;
+        let vault = tempfile::tempdir().unwrap();
+        let session_dir = vault.path().join("sessions/session-blip");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        let meta_path = session_dir.join("_meta.json");
+        let meta_content = r#"{"id":"session-blip","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Weekly sync"}"#;
+        std::fs::write(&meta_path, meta_content).unwrap();
+
+        // Baseline: a normal import (== what a startup sync_from_vault
+        // reconcile already did) establishes the session and records
+        // _meta.json's hash — required to reproduce the hash-short-circuit
+        // half of this bug, not just the soft-hide/trash half.
+        tauri_plugin_db::import_paths(db.pool(), vault.path(), &[meta_path.clone()])
+            .await
+            .unwrap();
+
+        // A document survives on disk throughout the whole blip: the
+        // soft-hide path only ever touches `sessions.deleted_at`, never
+        // `session_documents`.
+        let memo_path = session_dir.join("_memo.md");
+        std::fs::write(
+            &memo_path,
+            "---\nid: note-blip\nsession_id: session-blip\n---\n\nMeeting notes",
+        )
+        .unwrap();
+        tauri_plugin_db::import_paths(db.pool(), vault.path(), &[memo_path.clone()])
+            .await
+            .unwrap();
+
+        // A sync client delivers the delete half of the blip.
+        std::fs::remove_file(&meta_path).unwrap();
+        let hide_report =
+            tauri_plugin_db::import_paths(db.pool(), vault.path(), &[meta_path.clone()])
+                .await
+                .unwrap();
+        assert_eq!(hide_report.deleted_count, 1);
+
+        // What export_session would decide, from the exact DB state the
+        // soft-hide produced: must NOT trash.
+        let metadata_json_after_hide: String =
+            sqlx::query_scalar("SELECT metadata_json FROM sessions WHERE id = 'session-blip'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert!(
+            !should_trash_soft_deleted_session(&metadata_json_after_hide),
+            "an externally-detected soft-hide must not trigger trashing the session folder"
+        );
+
+        // The document is still live in the DB (never cascaded by the
+        // soft-hide) and its file was never touched by anything in this
+        // test — together, proof that once the session is revived, the
+        // *existing* export path (`export_session_documents`, which
+        // unconditionally re-renders every live row on every pass) will
+        // re-export it with nothing missing, with no separate "re-export
+        // after revival" mechanism needed.
+        let document_deleted_at: Option<String> = sqlx::query_scalar(
+            "SELECT deleted_at FROM session_documents WHERE id = 'note-blip'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert!(document_deleted_at.is_none());
+        assert!(
+            memo_path.exists(),
+            "the soft-hide path must never touch any file directly"
+        );
+
+        // The blip resolves: the sync client re-delivers byte-identical
+        // content.
+        std::fs::write(&meta_path, meta_content).unwrap();
+        let revival_report = tauri_plugin_db::import_paths(db.pool(), vault.path(), &[meta_path])
+            .await
+            .unwrap();
+        assert_eq!(revival_report.imported_count, 1);
+
+        let (deleted_at, metadata_json_after_revival): (Option<String>, String) = sqlx::query_as(
+            "SELECT deleted_at, metadata_json FROM sessions WHERE id = 'session-blip'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert!(
+            deleted_at.is_none(),
+            "session must be visible again once _meta.json reappears"
+        );
+        assert!(
+            !hypr_db_app::is_externally_soft_hidden(&metadata_json_after_revival),
+            "revival must clear the external-soft-hide marker"
+        );
     }
 
     #[test]

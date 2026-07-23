@@ -1073,7 +1073,7 @@ async fn reconcile_content_conflict(
             };
 
             if deleted_at.is_some() {
-                return revive_soft_deleted_session(transaction, row).await;
+                return revive_soft_deleted_session(transaction, row, &metadata_json).await;
             }
 
             if !is_recovered_session_placeholder(&metadata_json) {
@@ -1311,11 +1311,20 @@ async fn reconcile_content_conflict(
 async fn revive_soft_deleted_session(
     transaction: &mut Transaction<'_, Sqlite>,
     row: &LegacySession,
+    current_metadata_json: &str,
 ) -> Result<Option<InsertOutcome>, sqlx::Error> {
+    // Clear the external-soft-hide marker (if any) on revival — the vault
+    // watcher's own-write/dirty-queue machinery
+    // (`apps/desktop/src-tauri/src/vault_export.rs`) reads this same flag to
+    // decide whether a soft-deleted session's remaining vault files should
+    // be trashed; once the session is live again that decision no longer
+    // applies. Preserves anything else already in `metadata_json`.
+    let revived_metadata_json = set_external_soft_hide_flag(current_metadata_json, false);
+
     let result = sqlx::query(
         "UPDATE sessions
          SET title = ?, started_at = ?, ended_at = ?, event_id = ?, external_event_id = ?,
-             series_id = ?, event_json = ?, deleted_at = NULL,
+             series_id = ?, event_json = ?, metadata_json = ?, deleted_at = NULL,
              updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
          WHERE id = ? AND deleted_at IS NOT NULL",
     )
@@ -1326,11 +1335,60 @@ async fn revive_soft_deleted_session(
     .bind(&row.external_event_id)
     .bind(&row.series_id)
     .bind(&row.event_json)
+    .bind(&revived_metadata_json)
     .bind(&row.id)
     .execute(&mut **transaction)
     .await?;
 
     Ok((result.rows_affected() == 1).then_some(InsertOutcome::Revived))
+}
+
+/// Marker key embedded in `sessions.metadata_json` distinguishing an
+/// externally-detected soft-hide (Task 14: the vault watcher's
+/// `tauri_plugin_db::import_paths` found a session's `_meta.json` missing —
+/// possibly a transient sync-client blip, delete-then-recreate) from an
+/// in-app user-initiated deletion (`useDeleteSession`'s full-cascade
+/// soft-delete, eventually finalized by a direct `delete_session_folder`
+/// command). The vault export worker
+/// (`apps/desktop/src-tauri/src/vault_export.rs`) reads this to decide
+/// whether a soft-deleted session's remaining vault files should be moved
+/// to `.trash/` — yes for an in-app deletion (matches user intent), never
+/// for an external one (the external actor owns the files; a transient
+/// blip must not cause the app to dismantle a valid session folder).
+pub const EXTERNAL_SOFT_HIDE_METADATA_KEY: &str = "external_soft_hide";
+
+/// Sets or clears [`EXTERNAL_SOFT_HIDE_METADATA_KEY`] in a `metadata_json`
+/// blob, preserving whatever else it already holds. Falls back to `{}` if
+/// the existing value isn't a JSON object (defensive — `metadata_json` is
+/// not attacker-controlled, but a stray non-object value shouldn't panic).
+pub fn set_external_soft_hide_flag(metadata_json: &str, flagged: bool) -> String {
+    let mut object = serde_json::from_str::<serde_json::Value>(metadata_json)
+        .ok()
+        .and_then(|value| match value {
+            serde_json::Value::Object(object) => Some(object),
+            _ => None,
+        })
+        .unwrap_or_default();
+
+    if flagged {
+        object.insert(
+            EXTERNAL_SOFT_HIDE_METADATA_KEY.to_string(),
+            serde_json::Value::Bool(true),
+        );
+    } else {
+        object.remove(EXTERNAL_SOFT_HIDE_METADATA_KEY);
+    }
+
+    serde_json::Value::Object(object).to_string()
+}
+
+/// `true` if `metadata_json` carries [`EXTERNAL_SOFT_HIDE_METADATA_KEY`].
+pub fn is_externally_soft_hidden(metadata_json: &str) -> bool {
+    serde_json::from_str::<serde_json::Value>(metadata_json)
+        .ok()
+        .and_then(|value| value.get(EXTERNAL_SOFT_HIDE_METADATA_KEY).cloned())
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false)
 }
 
 fn document_bodies_are_equivalent(
@@ -1869,6 +1927,40 @@ mod tests {
         let db = Db::connect_memory_plain().await.unwrap();
         crate::prepare_schema(&db).await.unwrap();
         db
+    }
+
+    #[test]
+    fn external_soft_hide_flag_round_trips_and_preserves_other_keys() {
+        let flagged = set_external_soft_hide_flag("{}", true);
+        assert!(is_externally_soft_hidden(&flagged));
+
+        let cleared = set_external_soft_hide_flag(&flagged, false);
+        assert!(!is_externally_soft_hidden(&cleared));
+
+        // Preserves unrelated keys already in the blob.
+        let with_other_data = r#"{"legacy_recovery":{"reason":"missing_session_metadata"}}"#;
+        let flagged_with_other = set_external_soft_hide_flag(with_other_data, true);
+        assert!(is_externally_soft_hidden(&flagged_with_other));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&flagged_with_other).unwrap()["legacy_recovery"]
+                ["reason"],
+            "missing_session_metadata"
+        );
+        let cleared_with_other = set_external_soft_hide_flag(&flagged_with_other, false);
+        assert!(!is_externally_soft_hidden(&cleared_with_other));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&cleared_with_other).unwrap()["legacy_recovery"]
+                ["reason"],
+            "missing_session_metadata"
+        );
+    }
+
+    #[test]
+    fn is_externally_soft_hidden_defaults_to_false_for_garbage_or_empty_input() {
+        assert!(!is_externally_soft_hidden(""));
+        assert!(!is_externally_soft_hidden("not json"));
+        assert!(!is_externally_soft_hidden("{}"));
+        assert!(!is_externally_soft_hidden(r#"{"external_soft_hide":false}"#));
     }
 
     fn session_batch() -> LegacyImportBatch {

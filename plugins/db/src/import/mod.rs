@@ -136,8 +136,23 @@ pub async fn import_paths(
         match read_file_off_runtime(path).await {
             Ok(bytes) => {
                 let source_sha256 = legacy_vault::sha256(&bytes);
+                // Bypass the hash short-circuit for a `_meta.json` whose
+                // session is currently soft-deleted — see
+                // `session_needs_revival_bypass`'s doc for why: a
+                // byte-identical reappearance (the dominant real-world
+                // case) would otherwise skip straight past
+                // `revive_soft_deleted_session` and wedge the session
+                // hidden forever.
+                let needs_revival_bypass =
+                    legacy_vault::session_needs_revival_bypass(pool, vault_base, path, kind)
+                        .await?;
 
-                if hypr_db_app::legacy_source_already_imported(pool, &relative_path, &source_sha256)
+                if !needs_revival_bypass
+                    && hypr_db_app::legacy_source_already_imported(
+                        pool,
+                        &relative_path,
+                        &source_sha256,
+                    )
                     .await?
                 {
                     let item_id = uuid::Uuid::new_v4().to_string();
@@ -183,21 +198,43 @@ pub async fn import_paths(
                     if let Ok((session_id, _folder_path)) =
                         legacy_vault::infer_session_id_and_folder(vault_base, path)
                     {
-                        let result = sqlx::query(
-                            "UPDATE sessions
-                             SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-                             WHERE id = ? AND deleted_at IS NULL",
+                        // Stamp the external-soft-hide marker into
+                        // metadata_json (preserving whatever else is
+                        // already there) so the vault export worker knows
+                        // NOT to trash this session's remaining files —
+                        // the external actor (a sync client, or the user
+                        // directly) owns them, and this may just be a
+                        // transient blip. Cleared again on revival by
+                        // `hypr_db_app::revive_soft_deleted_session`.
+                        let existing_metadata_json: Option<String> = sqlx::query_scalar(
+                            "SELECT metadata_json FROM sessions WHERE id = ? AND deleted_at IS NULL",
                         )
                         .bind(&session_id)
-                        .execute(pool)
+                        .fetch_optional(pool)
                         .await?;
 
-                        if result.rows_affected() > 0 {
-                            deleted_count += 1;
-                            tracing::info!(
-                                session_id,
-                                "vault watch: session folder removed externally; soft-hid the session"
-                            );
+                        if let Some(existing_metadata_json) = existing_metadata_json {
+                            let flagged_metadata_json =
+                                hypr_db_app::set_external_soft_hide_flag(&existing_metadata_json, true);
+
+                            let result = sqlx::query(
+                                "UPDATE sessions
+                                 SET deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+                                     metadata_json = ?
+                                 WHERE id = ? AND deleted_at IS NULL",
+                            )
+                            .bind(&flagged_metadata_json)
+                            .bind(&session_id)
+                            .execute(pool)
+                            .await?;
+
+                            if result.rows_affected() > 0 {
+                                deleted_count += 1;
+                                tracing::info!(
+                                    session_id,
+                                    "vault watch: session folder removed externally; soft-hid the session"
+                                );
+                            }
                         }
                     }
                 } else {
@@ -1145,67 +1182,83 @@ mod tests {
     /// both require `deleted_at IS NULL` and `reconcile_content_conflict`
     /// bailed on a soft-deleted row, so re-importing a present `_meta.json`
     /// fell through to `MissingDependency` forever.
+    ///
+    /// Crucially, this establishes a **baseline import first** (exactly
+    /// like the reviewer's reproduction) rather than inserting the session
+    /// via raw SQL: without a prior `import_paths`/`sync_from_vault` call
+    /// recording `_meta.json`'s hash in `migration_import_items`, the second
+    /// bug this test also covers — the hash short-circuit
+    /// (`legacy_source_already_imported`) firing on a byte-identical
+    /// recreation and skipping straight past `revive_soft_deleted_session`
+    /// — would never trigger, since there'd be no recorded hash for it to
+    /// match in the first place. A first version of this test made exactly
+    /// that mistake and passed for the wrong reason.
     #[tokio::test]
     async fn import_paths_revives_a_soft_deleted_session_when_meta_json_reappears() {
         let db = test_db().await;
-        sqlx::query(
-            "INSERT INTO sessions
-             (id, owner_user_id, title, created_at, started_at, ended_at, event_id,
-              external_event_id, external_provider, series_id, event_json, folder_path)
-             VALUES ('session-7', 'user-1', 'Comes back', '2026-07-20T00:00:00Z',
-                     '', '', '', '', '', '', '', '')",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
-
         let vault = tempfile::tempdir().unwrap();
         let session_dir = vault.path().join("sessions/session-7");
         std::fs::create_dir_all(&session_dir).unwrap();
         let meta_path = session_dir.join("_meta.json");
-        std::fs::write(
-            &meta_path,
-            r#"{"id":"session-7","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Comes back"}"#,
-        )
-        .unwrap();
+        let meta_content = r#"{"id":"session-7","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Comes back"}"#;
+        std::fs::write(&meta_path, meta_content).unwrap();
 
-        // First call: the watcher saw the deletion (file briefly gone) —
-        // soft-hides the session, exactly like
+        // Baseline: a normal import establishes the session AND records
+        // this exact path+hash in `migration_import_items` — precisely
+        // what a startup `sync_from_vault` reconcile would already have
+        // done long before any blip, in the real app.
+        let baseline_report = import_paths(db.pool(), vault.path(), &[meta_path.clone()])
+            .await
+            .unwrap();
+        assert_eq!(baseline_report.imported_count, 1);
+
+        // The watcher saw the deletion (file briefly gone) — soft-hides
+        // the session, exactly like
         // `import_paths_soft_hides_a_session_whose_meta_json_was_deleted`.
         std::fs::remove_file(&meta_path).unwrap();
         let deletion_report = import_paths(db.pool(), vault.path(), &[meta_path.clone()])
             .await
             .unwrap();
         assert_eq!(deletion_report.deleted_count, 1);
-        let deleted_at_after_hide: Option<String> =
-            sqlx::query_scalar("SELECT deleted_at FROM sessions WHERE id = 'session-7'")
+        let (deleted_at_after_hide, metadata_json_after_hide): (Option<String>, String) =
+            sqlx::query_as("SELECT deleted_at, metadata_json FROM sessions WHERE id = 'session-7'")
                 .fetch_one(db.pool())
                 .await
                 .unwrap();
         assert!(deleted_at_after_hide.is_some());
+        assert!(
+            hypr_db_app::is_externally_soft_hidden(&metadata_json_after_hide),
+            "soft-hiding via a missing _meta.json must flag the session as externally hidden"
+        );
 
-        // A sync client (or the user) recreates the file more than the
-        // watcher's coalesce window later — a second, independent
-        // `import_paths` call.
-        std::fs::write(
-            &meta_path,
-            r#"{"id":"session-7","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Comes back"}"#,
-        )
-        .unwrap();
+        // A sync client (or the user) recreates the file with
+        // byte-identical content, more than the watcher's coalesce window
+        // later — a second, independent `import_paths` call. This is the
+        // dominant real-world case: nothing about the file's content
+        // actually changed, only its transient absence.
+        std::fs::write(&meta_path, meta_content).unwrap();
         let revival_report = import_paths(db.pool(), vault.path(), &[meta_path]).await.unwrap();
 
-        let (title, deleted_at_after_revival): (String, Option<String>) = sqlx::query_as(
-            "SELECT title, deleted_at FROM sessions WHERE id = 'session-7'",
+        let (title, deleted_at_after_revival, metadata_json_after_revival): (
+            String,
+            Option<String>,
+            String,
+        ) = sqlx::query_as(
+            "SELECT title, deleted_at, metadata_json FROM sessions WHERE id = 'session-7'",
         )
         .fetch_one(db.pool())
         .await
         .unwrap();
         assert!(
             deleted_at_after_revival.is_none(),
-            "session should be visible again once _meta.json reappears"
+            "session should be visible again once _meta.json reappears, even with byte-identical content"
         );
         assert_eq!(title, "Comes back");
         assert_eq!(revival_report.imported_count, 1);
+        assert!(
+            !hypr_db_app::is_externally_soft_hidden(&metadata_json_after_revival),
+            "revival must clear the external-soft-hide marker"
+        );
     }
 
     /// Same fix, exercised through the startup-reconcile path
@@ -1215,41 +1268,61 @@ mod tests {
     /// soft-hidden while the app was running must also come back the next
     /// time the app launches and reconciles the whole vault, not just via a
     /// live watcher event.
+    ///
+    /// Also establishes a baseline import first (via `sync_from_vault`
+    /// itself this time) before soft-hiding, then recreates the file with
+    /// byte-identical content — otherwise `legacy_source_already_imported`
+    /// never gets a chance to defeat the revival in the first place. The
+    /// soft-hide itself goes through `import_paths` (not raw SQL) so the
+    /// external-soft-hide marker is set exactly like it would be in
+    /// production, demonstrating that `import_paths` and `sync_from_vault`
+    /// compose correctly across the two entry points.
     #[tokio::test]
     async fn sync_from_vault_revives_a_soft_deleted_session_on_the_next_startup_reconcile() {
         let db = test_db().await;
-        sqlx::query(
-            "INSERT INTO sessions
-             (id, owner_user_id, title, created_at, started_at, ended_at, event_id,
-              external_event_id, external_provider, series_id, event_json, folder_path,
-              deleted_at)
-             VALUES ('session-8', 'user-1', 'Also comes back', '2026-07-20T00:00:00Z',
-                     '', '', '', '', '', '', '', '', '2026-07-21T00:00:00Z')",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
-
         let vault = tempfile::tempdir().unwrap();
         let session_dir = vault.path().join("sessions/session-8");
         std::fs::create_dir_all(&session_dir).unwrap();
-        std::fs::write(
-            session_dir.join("_meta.json"),
-            r#"{"id":"session-8","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Also comes back"}"#,
+        let meta_path = session_dir.join("_meta.json");
+        let meta_content = r#"{"id":"session-8","user_id":"user-1","created_at":"2026-07-20T00:00:00Z","title":"Also comes back"}"#;
+        std::fs::write(&meta_path, meta_content).unwrap();
+
+        // Baseline: a normal startup reconcile imports the session and
+        // records its _meta.json hash in migration_import_items.
+        let baseline = sync_from_vault(db.pool(), vault.path()).await.unwrap();
+        assert_eq!(baseline.imported_count, 1);
+
+        // The live watcher's import_paths sees _meta.json go missing during
+        // a prior running session and soft-hides it.
+        std::fs::remove_file(&meta_path).unwrap();
+        let deletion_report = import_paths(db.pool(), vault.path(), &[meta_path.clone()])
+            .await
+            .unwrap();
+        assert_eq!(deletion_report.deleted_count, 1);
+
+        // The file reappears with byte-identical content before the app's
+        // next launch — the next full sync_from_vault reconcile (not
+        // import_paths this time) must still revive the session, even
+        // though its hash already matches the baseline import's recorded
+        // hash.
+        std::fs::write(&meta_path, meta_content).unwrap();
+        let revival = sync_from_vault(db.pool(), vault.path()).await.unwrap();
+        assert_eq!(revival.imported_count, 1);
+
+        let (title, deleted_at, metadata_json): (String, Option<String>, String) = sqlx::query_as(
+            "SELECT title, deleted_at, metadata_json FROM sessions WHERE id = 'session-8'",
         )
+        .fetch_one(db.pool())
+        .await
         .unwrap();
-
-        sync_from_vault(db.pool(), vault.path()).await.unwrap();
-
-        let (title, deleted_at): (String, Option<String>) =
-            sqlx::query_as("SELECT title, deleted_at FROM sessions WHERE id = 'session-8'")
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
         assert!(
             deleted_at.is_none(),
-            "startup reconcile should revive a soft-deleted session whose _meta.json is present"
+            "startup reconcile should revive a soft-deleted session whose _meta.json is present, even with byte-identical content"
         );
         assert_eq!(title, "Also comes back");
+        assert!(
+            !hypr_db_app::is_externally_soft_hidden(&metadata_json),
+            "revival must clear the external-soft-hide marker"
+        );
     }
 }
