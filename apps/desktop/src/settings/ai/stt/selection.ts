@@ -48,7 +48,6 @@ export function getDefaultSttSelection(
     const model = getPreferredProviderModel(
       provider === currentProvider ? currentModel : undefined,
       status.models,
-      { allowSavedModelWithoutChoices: provider === "custom" },
     );
 
     if (model) {

@@ -42,7 +42,6 @@ import {
 } from "~/settings/providers";
 import { SettingsAlertToast } from "~/shared/ui/settings-alert";
 
-export * from "./hypr-cloud-button";
 export * from "./model-combobox";
 
 type ProviderType = "stt" | "llm";

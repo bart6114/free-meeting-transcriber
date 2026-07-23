@@ -75,14 +75,16 @@ describe("isSupportedLocalSttModel", () => {
 });
 
 describe("isConfiguredSttModel", () => {
-  test("requires known model ids for Anarlog STT", () => {
-    expect(isConfiguredSttModel("hyprnote", "cloud")).toBe(true);
+  test("requires an on-device model id for the on-device provider — no cloud model exists anymore", () => {
+    expect(isConfiguredSttModel("hyprnote", "cloud")).toBe(false);
     expect(isConfiguredSttModel("hyprnote", "soniqo-qwen3-small")).toBe(true);
     expect(isConfiguredSttModel("hyprnote", "removed-local-model")).toBe(false);
   });
 
-  test("allows custom model ids for external providers", () => {
-    expect(isConfiguredSttModel("custom", "whisper-large-v3")).toBe(true);
+  test("treats any other provider string as configured (defensive default for unknown/legacy providers)", () => {
+    expect(
+      isConfiguredSttModel("some-legacy-provider", "whisper-large-v3"),
+    ).toBe(true);
   });
 });
 
@@ -116,6 +118,9 @@ describe("getOnDeviceTranscriptionConfig", () => {
 });
 
 describe("getLiveTranscriptionConfig", () => {
+  // These use a non-on-device provider string to exercise the fallback branch
+  // that runs when `provider`/`model` are not a recognized on-device pair
+  // (e.g. a stale config from before STT went on-device only).
   test("keeps all languages when the selected provider supports them live", async () => {
     const config = await getLiveTranscriptionConfig({
       provider: "deepgram",
@@ -151,50 +156,20 @@ describe("getLiveTranscriptionConfig", () => {
     });
   });
 
-  test("checks custom providers as Deepgram-compatible for language fallback", async () => {
-    isSupportedLanguagesLiveMock.mockImplementation(
-      (_provider, _model, languages) =>
-        Promise.resolve({
-          status: "ok",
-          data: languages.length === 1 && languages[0] === "en",
-        }),
-    );
-
-    await getLiveTranscriptionConfig({
-      provider: "custom",
-      model: "nova-3-general",
-      languages: ["en", "ko"],
-    });
-
-    expect(isSupportedLanguagesLiveMock.mock.calls[0]?.[0]).toBe("deepgram");
-  });
-
-  test("checks Cloudflare Workers AI as Deepgram-compatible for language fallback", async () => {
-    await getLiveTranscriptionConfig({
-      provider: "cloudflare_workers_ai",
-      model: "nova-3",
-      languages: ["en", "ko"],
-    });
-
-    expect(isSupportedLanguagesLiveMock.mock.calls[0]?.[0]).toBe("deepgram");
-  });
-
-  test("checks Cloudflare Workers AI as Deepgram-compatible for live language support", async () => {
-    await isSupportedLanguagesLive("cloudflare_workers_ai", "nova-3", ["en"]);
+  test("passes the provider through untouched — STT is on-device only, no Deepgram-compatibility mapping left", async () => {
+    await isSupportedLanguagesLive("hyprnote", "am-parakeet-v3", ["en"]);
 
     expect(isSupportedLanguagesLiveMock.mock.calls[0]).toEqual([
-      "deepgram",
-      "nova-3",
+      "hyprnote",
+      "am-parakeet-v3",
       ["en"],
     ]);
-  });
 
-  test("checks Cloudflare Workers AI as Deepgram-compatible for batch language support", async () => {
-    await isSupportedLanguagesBatch("cloudflare_workers_ai", "nova-3", ["en"]);
+    await isSupportedLanguagesBatch("hyprnote", "am-parakeet-v3", ["en"]);
 
     expect(isSupportedLanguagesBatchMock.mock.calls[0]).toEqual([
-      "deepgram",
-      "nova-3",
+      "hyprnote",
+      "am-parakeet-v3",
       ["en"],
     ]);
   });

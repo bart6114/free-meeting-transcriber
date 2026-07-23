@@ -195,8 +195,11 @@ describe("SQLite settings", () => {
     );
   });
 
-  it("repairs a selected external transcription provider with no model", async () => {
-    let rows = [
+  it("does not invent a model for a stale/legacy transcription provider — STT is on-device only", async () => {
+    // "deepgram" is a stale value from before STT went on-device only; there
+    // is no more built-in per-provider default to repair it with, so
+    // initialization should leave it untouched (no write happens at all).
+    const rows = [
       {
         id: "current_stt_provider",
         value_json: JSON.stringify("deepgram"),
@@ -204,20 +207,10 @@ describe("SQLite settings", () => {
       { id: "current_stt_model", value_json: JSON.stringify("") },
     ];
     mocks.execute.mockImplementation(async () => rows);
-    mocks.executeTransaction.mockImplementation(async (statements) => {
-      rows = statements.map((statement) => ({
-        id: String(statement.params[0]),
-        value_json: String(statement.params[1]),
-      }));
-      return statements.map(() => 1);
-    });
 
     await initializeApplicationSettings();
 
-    const statements = mocks.executeTransaction.mock.calls[0][0];
-    expect(statements.map((statement) => statement.params.slice(0, 2))).toEqual(
-      [["current_stt_model", JSON.stringify("nova-3-general")]],
-    );
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("migrates legacy summary instructions into the editable Auto prompt", async () => {

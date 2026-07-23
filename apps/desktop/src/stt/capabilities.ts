@@ -49,13 +49,6 @@ export function isSupportedLocalSttModel(
   );
 }
 
-export function isHyprnoteCloudSttModel(
-  provider?: string | null,
-  model?: string | null,
-) {
-  return provider === "hyprnote" && model === "cloud";
-}
-
 export function isHyprnoteLocalSttModel(
   provider?: string | null,
   model?: string | null,
@@ -72,7 +65,7 @@ export function isConfiguredSttModel(
   }
 
   if (provider === "hyprnote") {
-    return model === "cloud" || isSupportedLocalSttModel(model);
+    return isSupportedLocalSttModel(model);
   }
 
   return true;
@@ -86,19 +79,13 @@ function baseLanguageCode(language: string) {
   return language.split(/[-_]/)[0]?.toLowerCase() ?? "";
 }
 
-function languageSupportProvider(provider: string) {
-  return provider === "custom" || provider === "cloudflare_workers_ai"
-    ? "deepgram"
-    : provider;
-}
-
 export async function isSupportedLanguagesLive(
   provider: string,
   model: string | null | undefined,
   languages: readonly string[],
 ) {
   const result = await listenerCommands.isSupportedLanguagesLive(
-    languageSupportProvider(provider),
+    provider,
     model ?? null,
     [...languages],
   );
@@ -112,7 +99,7 @@ export async function isSupportedLanguagesBatch(
   languages: readonly string[],
 ) {
   const result = await listenerCommands.isSupportedLanguagesBatch(
-    languageSupportProvider(provider),
+    provider,
     model ?? null,
     [...languages],
   );

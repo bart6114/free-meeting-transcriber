@@ -20,8 +20,6 @@ import {
   type LocalModel,
 } from "@hypr/plugin-local-stt";
 import { commands as openerCommands } from "@hypr/plugin-opener2";
-import type { AIProviderStorage } from "@hypr/store";
-import { Input } from "@hypr/ui/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -54,13 +52,8 @@ import {
   sttModelQueries,
 } from "./shared";
 
-import { useBillingAccess } from "~/auth/billing-context";
 import { useNotifications } from "~/contexts/notifications";
-import { providerRowId, ProviderIconSlot } from "~/settings/ai/shared";
-import {
-  getProviderSelectionBlockers,
-  requiresEntitlement,
-} from "~/settings/ai/shared/eligibility";
+import { ProviderIconSlot } from "~/settings/ai/shared";
 import { PersistAiSelection } from "~/settings/ai/shared/persist-selection";
 import {
   getConfiguredProviderIds,
@@ -93,10 +86,9 @@ export function SelectProviderAndModel() {
     "current_stt_provider",
     "current_stt_model",
   ] as const);
-  const billing = useBillingAccess();
   const { providers: configuredProviders, isReady: providerSettingsReady } =
     useConfiguredMapping();
-  const { startDownload, startTrial } = useSttSettings();
+  const { startDownload } = useSttSettings();
   const health = useConnectionHealth();
   const [pendingProvider, setPendingProvider] = useState<ProviderId | null>(
     null,
@@ -148,14 +140,11 @@ export function SelectProviderAndModel() {
   const selectedModels = visibleProvider
     ? (configuredProviders[visibleProvider]?.models ?? [])
     : [];
-  const displayedSttModel =
-    visibleProvider === "custom"
-      ? effectiveSelection.model
-      : effectiveSelection.model
-        ? getPreferredProviderModel(effectiveSelection.model, selectedModels, {
-            keepUnavailableSavedModel: true,
-          })
-        : undefined;
+  const displayedSttModel = effectiveSelection.model
+    ? getPreferredProviderModel(effectiveSelection.model, selectedModels, {
+        keepUnavailableSavedModel: true,
+      })
+    : undefined;
   const selectedModel = selectedModels.find(
     (model) => model.id === displayedSttModel,
   );
@@ -187,7 +176,6 @@ export function SelectProviderAndModel() {
       getPreferredProviderModel(
         lastSelectedModelsRef.current[provider],
         nextModels,
-        { allowSavedModelWithoutChoices: providerId === "custom" },
       ) ||
       getDefaultSttModel(providerId) ||
       "";
@@ -247,36 +235,21 @@ export function SelectProviderAndModel() {
               {providerOptions.map((provider) => {
                 const configured =
                   configuredProviders[provider.id]?.configured ?? false;
-                const requiresPro = requiresEntitlement(
-                  provider.requirements,
-                  "pro",
-                );
-                const locked = requiresPro && !billing.isPaid;
                 return (
                   <SelectItem
                     key={provider.id}
                     value={provider.id}
-                    disabled={provider.disabled || locked}
+                    disabled={provider.disabled}
                     className={cn([
                       "data-disabled:text-muted-foreground data-disabled:!opacity-100",
-                      !configured && !locked && "text-muted-foreground",
+                      !configured && "text-muted-foreground",
                     ])}
                   >
                     <div className="flex flex-col gap-0.5">
                       <div className="flex items-center gap-2">
                         <ProviderIconSlot>{provider.icon}</ProviderIconSlot>
                         <span>{provider.displayName}</span>
-                        {requiresPro ? (
-                          <span className="border-border text-muted-foreground rounded-full border px-2 py-0.5 text-[10px] tracking-wide uppercase">
-                            <Trans>Pro</Trans>
-                          </span>
-                        ) : null}
                       </div>
-                      {locked ? (
-                        <span className="text-muted-foreground text-[11px]">
-                          <Trans>Upgrade to Pro to use this provider.</Trans>
-                        </span>
-                      ) : null}
                     </div>
                   </SelectItem>
                 );
@@ -287,67 +260,55 @@ export function SelectProviderAndModel() {
 
         <span className="text-muted-foreground">/</span>
 
-        {visibleProvider === "custom" ? (
-          <div className="min-w-0 flex-3">
-            <Input
-              value={displayedSttModel || ""}
-              onChange={(event) => handleModelChange(event.target.value)}
-              className="text-xs"
-              placeholder={t`Enter a model identifier`}
-            />
-          </div>
-        ) : (
-          <div className="min-w-0 flex-3">
-            <Select
-              value={displayedSttModel || ""}
-              onValueChange={handleModelChange}
-              disabled={selectedModels.length === 0}
+        <div className="min-w-0 flex-3">
+          <Select
+            value={displayedSttModel || ""}
+            onValueChange={handleModelChange}
+            disabled={selectedModels.length === 0}
+          >
+            <SelectTrigger
+              className={cn([
+                "bg-card text-left shadow-none focus:ring-0",
+                "[&>span]:!flex [&>span]:w-full [&>span]:min-w-0 [&>span]:items-center [&>span]:justify-start [&>span]:gap-2 [&>span]:overflow-visible [&>span]:[-webkit-line-clamp:unset]",
+                isConfigured && "[&>svg:last-child]:hidden",
+              ])}
             >
-              <SelectTrigger
-                className={cn([
-                  "bg-card text-left shadow-none focus:ring-0",
-                  "[&>span]:!flex [&>span]:w-full [&>span]:min-w-0 [&>span]:items-center [&>span]:justify-start [&>span]:gap-2 [&>span]:overflow-visible [&>span]:[-webkit-line-clamp:unset]",
-                  isConfigured && "[&>svg:last-child]:hidden",
-                ])}
-              >
-                <SelectValue placeholder={t`Select a model`}>
-                  {selectedModel ? (
-                    <ModelSelectedValue model={selectedModel} />
-                  ) : undefined}
-                </SelectValue>
-                {isConfigured && <HealthStatusIndicator />}
-                {isConfigured && health.status === "success" && (
-                  <Check className="-mr-1 h-4 w-4 shrink-0 text-green-600" />
-                )}
-              </SelectTrigger>
-              <SelectContent align="end">
-                {selectedModels.map((model, i) => {
-                  const prevCategory =
-                    i > 0 ? selectedModels[i - 1].category : null;
-                  const showHeader =
-                    model.category && model.category !== prevCategory;
-                  const categoryLabel = showHeader
-                    ? getModelCategoryLabel(model.category)
-                    : null;
-                  return (
-                    <span key={model.id}>
-                      {categoryLabel && (
-                        <div className="text-muted-foreground px-2 pt-2 pb-1 text-[11px] font-medium tracking-wide uppercase">
-                          {categoryLabel}
-                        </div>
-                      )}
-                      <ModelSelectItem
-                        model={model}
-                        onDownload={() => startDownload(model.id as LocalModel)}
-                        onStartTrial={startTrial}
-                      />
-                    </span>
-                  );
-                })}
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+              <SelectValue placeholder={t`Select a model`}>
+                {selectedModel ? (
+                  <ModelSelectedValue model={selectedModel} />
+                ) : undefined}
+              </SelectValue>
+              {isConfigured && <HealthStatusIndicator />}
+              {isConfigured && health.status === "success" && (
+                <Check className="-mr-1 h-4 w-4 shrink-0 text-green-600" />
+              )}
+            </SelectTrigger>
+            <SelectContent align="end">
+              {selectedModels.map((model, i) => {
+                const prevCategory =
+                  i > 0 ? selectedModels[i - 1].category : null;
+                const showHeader =
+                  model.category && model.category !== prevCategory;
+                const categoryLabel = showHeader
+                  ? getModelCategoryLabel(model.category)
+                  : null;
+                return (
+                  <span key={model.id}>
+                    {categoryLabel && (
+                      <div className="text-muted-foreground px-2 pt-2 pb-1 text-[11px] font-medium tracking-wide uppercase">
+                        {categoryLabel}
+                      </div>
+                    )}
+                    <ModelSelectItem
+                      model={model}
+                      onDownload={() => startDownload(model.id as LocalModel)}
+                    />
+                  </span>
+                );
+              })}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
     </div>
   );
@@ -532,58 +493,9 @@ function getModelCategoryLabel(category?: ModelCategory) {
   return null;
 }
 
-function getProviderModelMode(
-  providerId: ProviderId,
-  model: string,
-): ModelEntry["mode"] {
-  if (providerId === "assemblyai") {
-    if (model === "universal-3-pro") {
-      return "batch";
-    }
-
-    if (model === "u3-rt-pro") {
-      return "realtime";
-    }
-  }
-
-  if (providerId === "elevenlabs") {
-    if (model === "scribe_v2") {
-      return "batch";
-    }
-
-    if (model === "scribe_v2_realtime") {
-      return "realtime";
-    }
-  }
-
-  if (providerId === "mistral") {
-    if (model === "voxtral-mini-2602" || model === "voxtral-mini-latest") {
-      return "batch";
-    }
-
-    if (model === "voxtral-mini-transcribe-realtime-2602") {
-      return "realtime";
-    }
-  }
-
-  if (providerId === "soniox") {
-    if (model === "stt-async-v5" || model === "stt-async-v4") {
-      return "batch";
-    }
-
-    if (
-      model === "stt-rt-v5" ||
-      model === "stt-rt-v4" ||
-      model === "stt-v5" ||
-      model === "stt-v4"
-    ) {
-      return "realtime";
-    }
-  }
-
-  return undefined;
-}
-
+// STT has a single, always-eligible provider ("hyprnote", on-device only):
+// there is no per-provider config/eligibility to compute anymore, just the
+// locally discovered Soniqo models.
 function useConfiguredMapping(): {
   providers: Record<
     ProviderId,
@@ -594,9 +506,7 @@ function useConfiguredMapping(): {
   >;
   isReady: boolean;
 } {
-  const billing = useBillingAccess();
-  const { providers: configuredProviders, isReady } =
-    useAiProvidersState("stt");
+  const { isReady } = useAiProvidersState("stt");
 
   const targetArch = useQuery({
     queryKey: ["target-arch"],
@@ -622,85 +532,33 @@ function useConfiguredMapping(): {
     queries: [...soniqoModels.map((m) => sttModelQueries.isDownloaded(m.key))],
   });
 
-  const providers = Object.fromEntries(
-    PROVIDERS.map((provider) => {
-      const config = configuredProviders[providerRowId("stt", provider.id)] as
-        | AIProviderStorage
-        | undefined;
-      const baseUrl = String(config?.base_url || provider.baseUrl || "").trim();
-      const apiKey = String(config?.api_key || "").trim();
+  const models: ModelEntry[] = isAppleSilicon
+    ? soniqoModels.map((model, i) => ({
+        id: model.key,
+        isDownloaded: soniqoDownloaded[i]?.data ?? false,
+        displayName: model.display_name,
+        sizeBytes: model.size_bytes,
+        mode: isRealtimeLocalModel(String(model.key)) ? "realtime" : "batch",
+        category: "latest",
+      }))
+    : [];
 
-      const eligible =
-        getProviderSelectionBlockers(provider.requirements, {
-          isAuthenticated: true,
-          isPaid: billing.isPaid,
-          config: { base_url: baseUrl, api_key: apiKey },
-        }).length === 0;
-
-      if (!eligible) {
-        return [provider.id, { configured: false, models: [] }];
-      }
-
-      if (provider.id === "hyprnote") {
-        const models: ModelEntry[] = [
-          { id: "cloud", isDownloaded: billing.isPaid, category: "latest" },
-        ];
-
-        if (isAppleSilicon) {
-          soniqoModels.forEach((model, i) => {
-            models.push({
-              id: model.key,
-              isDownloaded: soniqoDownloaded[i]?.data ?? false,
-              displayName: model.display_name,
-              sizeBytes: model.size_bytes,
-              mode: isRealtimeLocalModel(String(model.key))
-                ? "realtime"
-                : "batch",
-              category: "latest",
-            });
-          });
-        }
-
-        return [provider.id, { configured: true, models }];
-      }
-
-      if (provider.id === "custom") {
-        return [provider.id, { configured: true, models: [] }];
-      }
-
-      return [
-        provider.id,
-        {
-          configured: true,
-          models: provider.models.map((model) => ({
-            id: model,
-            isDownloaded: true,
-            mode: getProviderModelMode(provider.id, model),
-          })),
-        },
-      ];
-    }),
-  ) as Record<
-    ProviderId,
-    {
-      configured: boolean;
-      models: ModelEntry[];
-    }
-  >;
-
-  return { providers, isReady };
+  return {
+    providers: { hyprnote: { configured: true, models } } as Record<
+      ProviderId,
+      { configured: boolean; models: ModelEntry[] }
+    >,
+    isReady,
+  };
 }
 
 function ModelSelectItem({
   model,
   onDownload,
-  onStartTrial,
 }: {
   model: ModelEntry;
   onDownload: () => void;
-  onStartTrial: () => void;
 }) {
-  const isCloud = model.id === "cloud";
   const { activeDownloads } = useNotifications();
   const { queuedDownloads } = useSttSettings();
   const downloadInfo = activeDownloads.find((d) => d.model === model.id);
@@ -757,19 +615,14 @@ function ModelSelectItem({
     if (isDownloading) {
       return;
     }
-    if (isCloud) {
-      onStartTrial();
-    } else {
-      onDownload();
-    }
+    onDownload();
   };
 
   return (
     <div
       className={cn([
         "relative flex items-center justify-between",
-        "rounded-full py-1.5 text-sm outline-hidden",
-        isCloud ? "pr-1.5 pl-2" : "px-2",
+        "rounded-full px-2 py-1.5 text-sm outline-hidden",
         "cursor-pointer select-none",
         "hover:bg-accent hover:text-accent-foreground",
         "group",
@@ -797,13 +650,11 @@ function ModelSelectItem({
             "rounded-full px-2 text-[11px] font-medium",
             "opacity-0 group-hover:opacity-100",
             "transition-all duration-150",
-            isCloud
-              ? "bg-primary text-primary-foreground hover:bg-primary/90 py-1 shadow-xs hover:shadow-md dark:!bg-white dark:!text-black dark:hover:!bg-white/90"
-              : "from-muted to-accent text-foreground bg-linear-to-t py-0.5 shadow-xs hover:shadow-md",
+            "from-muted to-accent text-foreground bg-linear-to-t py-0.5 shadow-xs hover:shadow-md",
           ])}
           onClick={handleAction}
         >
-          {isCloud ? <Trans>Upgrade to use</Trans> : <Trans>Download</Trans>}
+          <Trans>Download</Trans>
         </button>
       )}
     </div>

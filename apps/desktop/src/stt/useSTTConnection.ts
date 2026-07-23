@@ -2,22 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { commands as localSttCommands } from "@hypr/plugin-local-stt";
-import type { AIProviderStorage } from "@hypr/store";
 
-import { useAuth } from "~/auth";
-import { useBillingAccess } from "~/auth/billing-context";
-import { HOSTED_API_URL } from "~/env";
 import { type ProviderId } from "~/settings/ai/stt/shared";
-import { useAiProvider } from "~/settings/providers";
 import { useConfigValues } from "~/shared/config";
-import {
-  isHyprnoteCloudSttModel,
-  isHyprnoteLocalSttModel,
-} from "~/stt/capabilities";
+import { isHyprnoteLocalSttModel } from "~/stt/capabilities";
 
+// STT is on-device only: the connection is always a local server the
+// `local-stt` plugin spins up for the selected model. There is no cloud or
+// generic baseUrl+apiKey provider left to connect to.
 export const useSTTConnection = () => {
-  const auth = useAuth();
-  const billing = useBillingAccess();
   const { current_stt_provider, current_stt_model } = useConfigValues([
     "current_stt_provider",
     "current_stt_model",
@@ -26,10 +19,6 @@ export const useSTTConnection = () => {
     current_stt_model: string | undefined;
   };
 
-  const providerConfig = useAiProvider("stt", current_stt_provider) as
-    | AIProviderStorage
-    | undefined;
-
   const localModel = isHyprnoteLocalSttModel(
     current_stt_provider,
     current_stt_model,
@@ -37,11 +26,6 @@ export const useSTTConnection = () => {
     ? current_stt_model
     : null;
   const isLocalModel = !!localModel;
-
-  const isCloudModel = isHyprnoteCloudSttModel(
-    current_stt_provider,
-    current_stt_model,
-  );
 
   const local = useQuery({
     enabled: current_stt_provider === "hyprnote",
@@ -84,58 +68,17 @@ export const useSTTConnection = () => {
     },
   });
 
-  const baseUrl = providerConfig?.base_url?.trim();
-  const apiKey = providerConfig?.api_key?.trim();
-
   const connection = useMemo(() => {
-    if (!current_stt_provider || !current_stt_model) {
+    if (!current_stt_provider || !current_stt_model || !isLocalModel) {
       return null;
     }
 
-    if (isLocalModel) {
-      return local.data?.connection ?? null;
-    }
-
-    if (isCloudModel) {
-      if (!auth?.session || !billing.isPaid) {
-        return null;
-      }
-
-      return {
-        provider: current_stt_provider,
-        model: current_stt_model,
-        baseUrl: baseUrl ?? new URL("/stt", HOSTED_API_URL).toString(),
-        apiKey: auth.session.access_token,
-      };
-    }
-
-    if (!baseUrl || !apiKey) {
-      return null;
-    }
-
-    return {
-      provider: current_stt_provider,
-      model: current_stt_model,
-      baseUrl,
-      apiKey,
-    };
-  }, [
-    current_stt_provider,
-    current_stt_model,
-    localModel,
-    isLocalModel,
-    isCloudModel,
-    local.data,
-    baseUrl,
-    apiKey,
-    auth,
-    billing.isPaid,
-  ]);
+    return local.data?.connection ?? null;
+  }, [current_stt_provider, current_stt_model, isLocalModel, local.data]);
 
   return {
     conn: connection,
     local,
     isLocalModel,
-    isCloudModel,
   };
 };

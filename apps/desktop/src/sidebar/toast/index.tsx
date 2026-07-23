@@ -18,10 +18,7 @@ import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import { useDevtoolsToastPreview } from "~/store/zustand/devtools-toast-preview";
 import { useTabs } from "~/store/zustand/tabs";
 import { useToastAction } from "~/store/zustand/toast-action";
-import {
-  isConfiguredSttModel,
-  isHyprnoteCloudSttModel,
-} from "~/stt/capabilities";
+import { isConfiguredSttModel } from "~/stt/capabilities";
 import { useListener } from "~/stt/contexts";
 
 export function ToastNotifications() {
@@ -57,10 +54,8 @@ export function ToastNotifications() {
     current_stt_provider,
     current_stt_model,
   );
-  const hasProSttConfigured = isHyprnoteCloudSttModel(
-    current_stt_provider,
-    current_stt_model,
-  );
+  // STT is on-device only now — there is no "pro"/cloud STT state anymore,
+  // only the LLM side can still be hosted (hyprnote).
   const hasProLlmConfigured = current_llm_provider === "hyprnote";
 
   const currentTab = useTabs((state) => state.currentTab);
@@ -121,7 +116,6 @@ export function ToastNotifications() {
         isAuthLoading,
         hasLLMConfigured,
         hasSttConfigured,
-        hasProSttConfigured,
         hasProLlmConfigured,
         isAiTranscriptionTabActive,
         isAiIntelligenceTabActive,
@@ -141,7 +135,6 @@ export function ToastNotifications() {
       isAuthLoading,
       hasLLMConfigured,
       hasSttConfigured,
-      hasProSttConfigured,
       hasProLlmConfigured,
       isAiTranscriptionTabActive,
       isAiIntelligenceTabActive,

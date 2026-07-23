@@ -45,15 +45,11 @@ export function getProviderSelectionBlockers(
 
   for (const req of requirements) {
     switch (req.kind) {
+      // Accounts/billing were removed (Phase 1): there is no session or
+      // entitlement left to gate on, so these requirement kinds never block
+      // provider selection anymore.
       case "requires_auth":
-        if (!context.isAuthenticated) {
-          blockers.push({ code: "requires_auth" });
-        }
-        break;
       case "requires_entitlement":
-        if (req.entitlement === "pro" && !context.isPaid) {
-          blockers.push({ code: "requires_entitlement", entitlement: "pro" });
-        }
         break;
       case "requires_config": {
         const missingFields = req.fields.filter((field) => {

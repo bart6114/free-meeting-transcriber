@@ -95,7 +95,6 @@ vi.mock("~/store/zustand/toast-action", () => ({
 
 vi.mock("~/stt/capabilities", () => ({
   isConfiguredSttModel: () => true,
-  isHyprnoteCloudSttModel: () => false,
 }));
 
 vi.mock("~/stt/contexts", () => ({

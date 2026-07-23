@@ -16,7 +16,6 @@ type ToastRegistryParams = {
   isAuthLoading: boolean;
   hasLLMConfigured: boolean;
   hasSttConfigured: boolean;
-  hasProSttConfigured: boolean;
   hasProLlmConfigured: boolean;
   isAiTranscriptionTabActive: boolean;
   isAiIntelligenceTabActive: boolean;
@@ -44,7 +43,6 @@ export function createToastRegistry({
   isAuthLoading,
   hasLLMConfigured,
   hasSttConfigured,
-  hasProSttConfigured,
   hasProLlmConfigured,
   isAiTranscriptionTabActive,
   isAiIntelligenceTabActive,
@@ -158,9 +156,7 @@ export function createToastRegistry({
       },
       // suppress until auth resolves to avoid flash on startup
       condition: () =>
-        !isAuthLoading &&
-        !isAuthenticated &&
-        (hasProSttConfigured || hasProLlmConfigured),
+        !isAuthLoading && !isAuthenticated && hasProLlmConfigured,
     },
     {
       toast: {
@@ -178,7 +174,6 @@ export function createToastRegistry({
         !isAuthenticated &&
         hasLLMConfigured &&
         hasSttConfigured &&
-        !hasProSttConfigured &&
         !hasProLlmConfigured,
     },
   ];

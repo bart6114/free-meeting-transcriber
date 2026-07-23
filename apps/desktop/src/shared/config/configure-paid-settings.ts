@@ -9,8 +9,10 @@ export async function configurePaidSettings(): Promise<void> {
   const updates: SettingValues = {};
 
   if (!values.current_stt_provider) {
+    // STT is on-device only: default to the local Soniqo batch model rather
+    // than any hosted/cloud model.
     updates.current_stt_provider = "hyprnote";
-    updates.current_stt_model = "cloud";
+    updates.current_stt_model = "soniqo-parakeet-batch";
   }
 
   if (await shouldUseHostedLlm(values)) {

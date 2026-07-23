@@ -353,7 +353,6 @@ msgid "Configure"
 msgstr ""
 
 #: src/settings/ai/llm/configure.tsx
-#: src/settings/ai/stt/configure.tsx
 msgid "Configure Providers"
 msgstr ""
 
@@ -515,10 +514,6 @@ msgstr ""
 
 #: src/session/components/outer-header/metadata/participants/chip.tsx
 msgid "Enhance contact {label}"
-msgstr ""
-
-#: src/settings/ai/stt/select.tsx
-msgid "Enter a model identifier"
 msgstr ""
 
 #: src/session/components/outer-header/metadata/date.tsx
@@ -1078,10 +1073,6 @@ msgstr ""
 msgid "Previous match"
 msgstr ""
 
-#: src/settings/ai/stt/select.tsx
-msgid "Pro"
-msgstr ""
-
 #: src/onboarding/permissions.tsx
 msgid "Read meeting controls, visible chat, and participant status"
 msgstr ""
@@ -1564,12 +1555,7 @@ msgid "Untitled Note"
 msgstr ""
 
 #: src/settings/ai/llm/select.tsx
-#: src/settings/ai/stt/select.tsx
 msgid "Upgrade to Pro to use this provider."
-msgstr ""
-
-#: src/settings/ai/stt/select.tsx
-msgid "Upgrade to use"
 msgstr ""
 
 #: src/session/components/floating/options-menu.tsx

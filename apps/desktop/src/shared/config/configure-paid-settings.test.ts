@@ -33,7 +33,7 @@ describe("configurePaidSettings", () => {
 
     expect(mocks.setSettingValues).toHaveBeenCalledWith({
       current_stt_provider: "hyprnote",
-      current_stt_model: "cloud",
+      current_stt_model: "soniqo-parakeet-batch",
       current_llm_provider: "hyprnote",
       current_llm_model: "Auto",
     });
@@ -43,7 +43,7 @@ describe("configurePaidSettings", () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {
         current_stt_provider: "hyprnote",
-        current_stt_model: "cloud",
+        current_stt_model: "soniqo-parakeet-batch",
         current_llm_provider: "anthropic",
         current_llm_model: "claude-opus-4-5-20251101",
       },
@@ -74,7 +74,7 @@ describe("configurePaidSettings", () => {
 
     expect(mocks.setSettingValues).toHaveBeenCalledWith({
       current_stt_provider: "hyprnote",
-      current_stt_model: "cloud",
+      current_stt_model: "soniqo-parakeet-batch",
       current_llm_provider: "hyprnote",
       current_llm_model: "Auto",
     });
@@ -84,7 +84,7 @@ describe("configurePaidSettings", () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {
         current_stt_provider: "hyprnote",
-        current_stt_model: "cloud",
+        current_stt_model: "soniqo-parakeet-batch",
         current_llm_provider: "anthropic",
         current_llm_model: "claude-opus-4-5-20251101",
       },
@@ -105,7 +105,7 @@ describe("configurePaidSettings", () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {
         current_stt_provider: "hyprnote",
-        current_stt_model: "cloud",
+        current_stt_model: "soniqo-parakeet-batch",
         current_llm_provider: "ollama",
         current_llm_model: "llama3.2",
       },

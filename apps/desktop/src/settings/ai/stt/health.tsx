@@ -4,10 +4,7 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { Spinner } from "@hypr/ui/components/ui/spinner";
 
 import { useConfigValues } from "~/shared/config";
-import {
-  isHyprnoteCloudSttModel,
-  isHyprnoteLocalSttModel,
-} from "~/stt/capabilities";
+import { isHyprnoteLocalSttModel } from "~/stt/capabilities";
 import { useSTTConnection } from "~/stt/useSTTConnection";
 
 export type HealthStatus = {
@@ -60,9 +57,6 @@ export function useConnectionHealth(): HealthStatus {
     current_stt_provider,
     current_stt_model,
   );
-  const isCloud =
-    isHyprnoteCloudSttModel(current_stt_provider, current_stt_model) ||
-    current_stt_provider !== "hyprnote";
   const isDeepgram = current_stt_provider === "deepgram";
 
   const deepgramHealth = useDeepgramHealth(isDeepgram && !!conn, conn?.apiKey);
@@ -70,7 +64,6 @@ export function useConnectionHealth(): HealthStatus {
   if (
     current_stt_provider === "hyprnote" &&
     current_stt_model &&
-    !isCloud &&
     !isLocalModel
   ) {
     return {

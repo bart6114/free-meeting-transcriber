@@ -3,19 +3,6 @@ import { describe, expect, test } from "vitest";
 import { displayModelLabel, displayModelTitle } from "./shared";
 
 describe("STT model display labels", () => {
-  test("keeps cloud model product-facing", () => {
-    expect(displayModelLabel("cloud")).toBe("Pro (Cloud)");
-    expect(displayModelTitle("cloud")).toBeUndefined();
-  });
-
-  test("uses product-facing labels for hosted provider models", () => {
-    expect(displayModelLabel("stt-rt-v5")).toBe("Soniox 5");
-    expect(displayModelLabel("u3-rt-pro")).toBe("Universal 3.5 Pro Realtime");
-    expect(displayModelLabel("gpt-4o-transcribe-diarize")).toBe(
-      "GPT-4o Transcribe Diarize",
-    );
-  });
-
   test("collapses local model names to on-device labels", () => {
     expect(
       displayModelLabel(
@@ -29,5 +16,10 @@ describe("STT model display labels", () => {
         "Soniqo Parakeet Streaming",
       ),
     ).toBe("Soniqo Parakeet Streaming");
+  });
+
+  test("falls back to the raw model id when there is no display name", () => {
+    expect(displayModelLabel("some-unknown-model")).toBe("some-unknown-model");
+    expect(displayModelTitle("some-unknown-model")).toBeUndefined();
   });
 });

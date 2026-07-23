@@ -11,7 +11,6 @@ const baseParams = {
   isAuthLoading: false,
   hasLLMConfigured: true,
   hasSttConfigured: true,
-  hasProSttConfigured: false,
   hasProLlmConfigured: false,
   isAiTranscriptionTabActive: false,
   isAiIntelligenceTabActive: false,
