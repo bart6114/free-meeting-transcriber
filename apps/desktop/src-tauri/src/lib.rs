@@ -7,6 +7,7 @@ mod ext;
 mod search_index;
 mod store;
 mod supervisor;
+mod vault_export;
 
 use db::{cloudsync_runtime_config_from_env, open_desktop_db};
 use ext::*;
@@ -246,7 +247,17 @@ pub async fn main() {
                 }
             }
 
-            search_index::spawn(app_handle, db.clone());
+            search_index::spawn(app_handle.clone(), db.clone());
+            // Spawned after `search_index`; both start here in the app-level
+            // `setup()` closure, which Tauri runs only after every plugin's
+            // own `setup()` — including `tauri_plugin_db::init_with_cloudsync`,
+            // whose `setup()` runs `sync_from_vault` synchronously
+            // (`import::import_legacy_data` via `hypr_tauri_utils::block_on`).
+            // So the vault-to-DB reconcile is always complete before this
+            // DB-to-vault mirror starts draining — reconcile first, mirror
+            // second. See `vault_export.rs`'s module doc for the full
+            // loop-prevention analysis.
+            vault_export::spawn(app_handle, db.clone());
 
             Ok(())
         })
@@ -399,6 +410,7 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::set_recently_opened_sessions::<tauri::Wry>,
             commands::check_embedded_cli::<tauri::Wry>,
             commands::install_embedded_cli::<tauri::Wry>,
+            vault_export::export_vault_now::<tauri::Wry>,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }
