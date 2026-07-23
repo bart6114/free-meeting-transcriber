@@ -83,7 +83,7 @@ export const buildWebSearchTool = (deps: ToolDependencies) =>
 Search the public web for current or external information.
 Use this for questions about public websites, URLs, companies, products, people, news, or facts that may not be in local notes.
 Return source URLs in the final answer when web results are used.
-Do not use this when the user is asking only about local notes, meetings, contacts, or calendar events.
+Do not use this when the user is asking only about local notes, meetings, or contacts.
 `.trim(),
     inputSchema: webSearchInputSchema,
     execute: (params) => runWebSearch(params, deps),

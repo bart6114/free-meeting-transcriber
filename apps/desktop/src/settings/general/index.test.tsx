@@ -23,7 +23,6 @@ vi.mock("./spoken-languages", () => ({ SpokenLanguagesView: () => null }));
 vi.mock("./storage", () => ({ StorageSettingsView: () => null }));
 vi.mock("./theme", () => ({ ThemeSelector: () => null }));
 vi.mock("./timezone", () => ({ TimezoneSelector: () => null }));
-vi.mock("./week-start", () => ({ WeekStartSelector: () => null }));
 
 import { SettingsApp } from "./index";
 

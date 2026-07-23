@@ -79,11 +79,6 @@ export const SETTING_DEFINITIONS = {
     path: ["general", "audio_retention"],
     default: "forever" as string,
   },
-  notification_event: {
-    type: "boolean",
-    path: ["notification", "event"],
-    default: true as boolean,
-  },
   notification_detect: {
     type: "boolean",
     path: ["notification", "detect"],
@@ -178,10 +173,6 @@ export const SETTING_DEFINITIONS = {
   timezone: {
     type: "string",
     path: ["general", "timezone"],
-  },
-  week_start: {
-    type: "string",
-    path: ["general", "week_start"],
   },
   selected_template_id: {
     type: "string",

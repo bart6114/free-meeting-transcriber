@@ -62,22 +62,12 @@ msgstr ""
 
 #: src/contacts/shared.tsx
 #: src/settings/dictionary/index.tsx
-#: src/settings/todo/github.tsx
 msgid "Add"
 msgstr ""
 
 #. placeholder {0}: option.name
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "Add \"{0}\""
-msgstr ""
-
-#. placeholder {0}: provider.displayName
-#: src/calendar/components/sidebar.tsx
-msgid "Add {0} account"
-msgstr ""
-
-#: src/onboarding/calendar.tsx
-msgid "Add another account"
 msgstr ""
 
 #: src/session/components/note-input/enhanced/config-error.tsx
@@ -106,10 +96,6 @@ msgstr ""
 
 #: src/contacts/new-person-form.tsx
 msgid "Add person"
-msgstr ""
-
-#: src/settings/todo/github.tsx
-msgid "Add repository"
 msgstr ""
 
 #: src/settings/general/spoken-languages.tsx
@@ -176,10 +162,6 @@ msgstr ""
 msgid "Anarlog will retry automatically. This does not affect your notes."
 msgstr ""
 
-#: src/onboarding/index.tsx
-msgid "Anarlog will sync your calendar to get meeting reminders"
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Animals & Nature"
 msgstr ""
@@ -226,10 +208,6 @@ msgstr ""
 msgid "Audio file retention"
 msgstr ""
 
-#: src/instruction/index.tsx
-msgid "Authorize access in your browser, then return to Anarlog."
-msgstr ""
-
 #: src/templates/auto-form.tsx
 msgid "Auto prompt cannot be empty."
 msgstr ""
@@ -258,8 +236,7 @@ msgstr "Secara otomatis mulai mendengarkan ketika catatan yang didukung acara me
 msgid "Automatically stop listening when the meeting app releases the microphone."
 msgstr "Secara otomatis berhenti mendengarkan saat aplikasi rapat melepaskan mikrofon."
 
-#: src/calendar/components/apple/permission.tsx
-#: src/instruction/index.tsx
+#: src/settings/todo/permission.tsx
 #: src/sidebar/custom-sidebar-header.tsx
 msgid "Back"
 msgstr ""
@@ -268,23 +245,11 @@ msgstr ""
 msgid "Base URL"
 msgstr ""
 
-#: src/calendar/components/sidebar.tsx
-#: src/settings/general/permissions.tsx
-#: src/sidebar/calendar.tsx
-#: src/sidebar/settings.tsx
-msgid "Calendar"
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Calendar connected"
-msgstr ""
-
 #: src/settings/ai/stt/select.tsx
 msgid "Can transcribe while the meeting is happening."
 msgstr ""
 
 #: src/settings/general/storage/legacy-cleanup.tsx
-#: src/settings/todo/github.tsx
 msgid "Cancel"
 msgstr ""
 
@@ -397,34 +362,6 @@ msgstr ""
 msgid "Confirm"
 msgstr ""
 
-#. placeholder {0}: config.displayName
-#. placeholder {0}: integration.displayName
-#: src/instruction/index.tsx
-#: src/settings/todo/provider-content.tsx
-msgid "Connect {0}"
-msgstr ""
-
-#: src/onboarding/calendar.tsx
-#: src/onboarding/index.tsx
-msgid "Connect calendar"
-msgstr ""
-
-#: src/settings/todo/github.tsx
-msgid "Connect GitHub for private repos."
-msgstr ""
-
-#: src/onboarding/calendar.tsx
-msgid "Connect Google Calendar"
-msgstr ""
-
-#: src/onboarding/calendar.tsx
-msgid "Connect Outlook"
-msgstr ""
-
-#: src/instruction/index.tsx
-msgid "Connect your integration"
-msgstr ""
-
 #: src/sidebar/contacts.tsx
 #: src/sidebar/settings.tsx
 msgid "Contacts"
@@ -436,10 +373,6 @@ msgstr ""
 
 #: src/templates/auto-form.tsx
 msgid "Context always provided"
-msgstr ""
-
-#: src/onboarding/calendar.tsx
-msgid "Continue"
 msgstr ""
 
 #: src/chat/components/message/normal.tsx
@@ -534,14 +467,6 @@ msgstr ""
 msgid "Dictionary"
 msgstr ""
 
-#: src/settings/todo/provider-content.tsx
-msgid "Disconnect"
-msgstr ""
-
-#: src/settings/todo/github.tsx
-msgid "Disconnect private repo access."
-msgstr ""
-
 #: src/settings/general/app-settings.tsx
 msgid "Don't save"
 msgstr ""
@@ -613,10 +538,6 @@ msgid "Enter your API key (optional)"
 msgstr ""
 
 #: src/settings/general/notification.tsx
-msgid "Event notifications"
-msgstr ""
-
-#: src/settings/general/notification.tsx
 msgid "Exclude apps from detection"
 msgstr ""
 
@@ -629,20 +550,8 @@ msgstr ""
 msgid "Exporting..."
 msgstr ""
 
-#: src/onboarding/calendar.tsx
-msgid "Failed to load Google Calendar"
-msgstr ""
-
-#: src/settings/todo/provider-content.tsx
-msgid "Failed to load integration status"
-msgstr ""
-
 #: src/task/resource-view.tsx
 msgid "Failed to load issue"
-msgstr ""
-
-#: src/onboarding/calendar.tsx
-msgid "Failed to load Outlook Calendar"
 msgstr ""
 
 #: src/task/resource-view.tsx
@@ -657,17 +566,8 @@ msgstr ""
 msgid "File format"
 msgstr ""
 
-#. placeholder {0}: (config.filterLabel ?? "repository").toLowerCase()
-#: src/settings/todo/provider-content.tsx
-msgid "Filter synced items by {0}."
-msgstr ""
-
 #: src/shared/open-note-dialog.tsx
 msgid "Find a note..."
-msgstr ""
-
-#: src/settings/general/week-start.tsx
-msgid "First day of the week in the calendar view"
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -703,10 +603,6 @@ msgstr ""
 msgid "Generating title..."
 msgstr ""
 
-#: src/settings/general/notification.tsx
-msgid "Get notified 5 minutes before calendar events start"
-msgstr ""
-
 #: src/sidebar/timeline/index.tsx
 msgid "Go back to now"
 msgstr ""
@@ -731,7 +627,7 @@ msgstr ""
 msgid "Got it"
 msgstr ""
 
-#: src/calendar/components/apple/permission.tsx
+#: src/settings/todo/permission.tsx
 msgid "Having trouble?"
 msgstr ""
 
@@ -852,10 +748,6 @@ msgstr ""
 msgid "Loading Auto prompt..."
 msgstr ""
 
-#: src/calendar/components/calendar-selection.tsx
-msgid "Loading calendars..."
-msgstr ""
-
 #: src/settings/ai/shared/model-combobox.tsx
 msgid "Loading models..."
 msgstr ""
@@ -951,10 +843,6 @@ msgstr ""
 msgid "Model being used"
 msgstr ""
 
-#: src/settings/general/week-start.tsx
-msgid "Monday"
-msgstr ""
-
 #: src/session/components/floating/options-menu.tsx
 msgid "More options"
 msgstr ""
@@ -990,10 +878,6 @@ msgstr ""
 
 #: src/settings/general/notification.tsx
 msgid "No apps found."
-msgstr ""
-
-#: src/calendar/components/calendar-selection.tsx
-msgid "No calendars found"
 msgstr ""
 
 #: src/changelog/index.tsx
@@ -1104,33 +988,21 @@ msgstr ""
 msgid "Oldest"
 msgstr ""
 
-#: src/settings/todo/github.tsx
-msgid "Only public repositories are supported."
-msgstr ""
-
-#: src/calendar/components/apple/permission.tsx
+#: src/settings/todo/permission.tsx
 #: src/task/resource-view.tsx
 msgid "Open"
 msgstr ""
 
 #. placeholder {0}: permissionName.toLowerCase()
 #. placeholder {0}: title.toLowerCase()
-#: src/calendar/components/apple/permission.tsx
 #: src/onboarding/permissions.tsx
 #: src/settings/general/permissions.tsx
+#: src/settings/todo/permission.tsx
 msgid "Open {0} settings"
 msgstr ""
 
 #: src/onboarding/final.tsx
 msgid "Open Anarlog"
-msgstr ""
-
-#: src/sidebar/timeline/index.tsx
-msgid "Open calendar"
-msgstr ""
-
-#: src/calendar/components/calendar-selection.tsx
-msgid "Open calendar account actions"
 msgstr ""
 
 #: src/session/components/outer-header/overflow/index.tsx
@@ -1150,12 +1022,7 @@ msgstr ""
 msgid "Open on GitHub"
 msgstr ""
 
-#: src/settings/todo/github.tsx
-msgid "Open repository on GitHub"
-msgstr ""
-
-#: src/calendar/components/apple/permission.tsx
-#: src/settings/todo/provider-content.tsx
+#: src/settings/todo/permission.tsx
 msgid "or"
 msgstr ""
 
@@ -1165,10 +1032,6 @@ msgstr ""
 
 #: src/contacts/organization-details.tsx
 msgid "Organization name"
-msgstr ""
-
-#: src/settings/general/permissions.tsx
-msgid "Others"
 msgstr ""
 
 #: src/settings/general/timezone.tsx
@@ -1186,7 +1049,7 @@ msgstr ""
 msgid "People"
 msgstr ""
 
-#: src/calendar/components/apple/permission.tsx
+#: src/settings/todo/permission.tsx
 msgid "permission panel."
 msgstr ""
 
@@ -1231,17 +1094,8 @@ msgstr ""
 msgid "Recent"
 msgstr ""
 
-#: src/calendar/components/oauth/status.tsx
-#: src/settings/todo/provider-content.tsx
-msgid "Reconnect required"
-msgstr ""
-
 #: src/session/components/outer-header/index.tsx
 msgid "Record"
-msgstr ""
-
-#: src/calendar/components/calendar-selection.tsx
-msgid "Refresh calendars"
 msgstr ""
 
 #: src/chat/components/message/normal.tsx
@@ -1260,14 +1114,6 @@ msgstr ""
 msgid "Remove {term}"
 msgstr ""
 
-#: src/settings/todo/github.tsx
-msgid "Remove repository"
-msgstr ""
-
-#: src/instruction/index.tsx
-msgid "Reopen in browser"
-msgstr ""
-
 #: src/settings/ai/shared/index.tsx
 msgid "Repair Keychain Access"
 msgstr ""
@@ -1280,20 +1126,16 @@ msgstr ""
 msgid "Replace all"
 msgstr ""
 
-#: src/settings/todo/github.tsx
-msgid "Replace repository"
-msgstr ""
-
 #: src/session/components/note-input/search/bar.tsx
 msgid "Replace with..."
 msgstr ""
 
-#: src/calendar/components/apple/permission.tsx
+#: src/settings/todo/permission.tsx
 msgid "Request"
 msgstr ""
 
 #. placeholder {0}: title.toLowerCase()
-#: src/calendar/components/apple/permission.tsx
+#: src/settings/todo/permission.tsx
 msgid "Request {0}"
 msgstr ""
 
@@ -1314,11 +1156,7 @@ msgstr ""
 msgid "Required to record your voice during meetings and calls"
 msgstr ""
 
-#: src/settings/general/permissions.tsx
-msgid "Required to sync Apple Calendar events into Anarlog"
-msgstr ""
-
-#: src/calendar/components/apple/permission.tsx
+#: src/settings/todo/permission.tsx
 msgid "Reset"
 msgstr ""
 
@@ -1389,10 +1227,6 @@ msgstr ""
 msgid "Search or create new"
 msgstr ""
 
-#: src/settings/todo/github.tsx
-msgid "Search or type owner/repo"
-msgstr ""
-
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "Search people"
 msgstr ""
@@ -1439,10 +1273,6 @@ msgstr ""
 
 #: src/settings/general/theme.tsx
 msgid "Select appearance"
-msgstr ""
-
-#: src/settings/general/week-start.tsx
-msgid "Select day"
 msgstr ""
 
 #: src/settings/general/main-language.tsx
@@ -1540,19 +1370,6 @@ msgstr ""
 msgid "Show tray icon"
 msgstr ""
 
-#: src/settings/todo/github.tsx
-msgid "Sign in for private repo access."
-msgstr ""
-
-#: src/onboarding/calendar.tsx
-msgid "Sign in to connect"
-msgstr ""
-
-#. placeholder {0}: config.displayName
-#: src/settings/todo/provider-content.tsx
-msgid "Sign in to connect {0}"
-msgstr ""
-
 #: src/onboarding/shared.tsx
 msgid "Skip"
 msgstr ""
@@ -1634,10 +1451,6 @@ msgstr ""
 #: src/contacts/details.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Summary"
-msgstr ""
-
-#: src/settings/general/week-start.tsx
-msgid "Sunday"
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -1750,23 +1563,6 @@ msgstr ""
 msgid "Untitled Note"
 msgstr ""
 
-#: src/settings/todo/github.tsx
-msgid "Upgrade for private repos."
-msgstr ""
-
-#: src/settings/todo/provider-content.tsx
-msgid "Upgrade to connect"
-msgstr ""
-
-#: src/calendar/components/sidebar.tsx
-msgid "Upgrade to Pro"
-msgstr ""
-
-#. placeholder {0}: provider.displayName
-#: src/calendar/components/sidebar.tsx
-msgid "Upgrade to Pro for {0}"
-msgstr ""
-
 #: src/settings/ai/llm/select.tsx
 #: src/settings/ai/stt/select.tsx
 msgid "Upgrade to Pro to use this provider."
@@ -1806,10 +1602,6 @@ msgstr ""
 msgid "View LinkedIn profile"
 msgstr ""
 
-#: src/settings/general/week-start.tsx
-msgid "Week starts on"
-msgstr ""
-
 #: src/onboarding/index.tsx
 msgid "Welcome to Anarlog"
 msgstr ""
@@ -1830,7 +1622,7 @@ msgstr ""
 msgid "Work on this task"
 msgstr ""
 
-#: src/calendar/components/apple/permission.tsx
+#: src/settings/todo/permission.tsx
 msgid "You can"
 msgstr ""
 

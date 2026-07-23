@@ -52,7 +52,6 @@ export function NotificationSettingsView() {
   const [searchQuery, setSearchQuery] = useState("");
 
   const configs = useConfigValues([
-    "notification_event",
     "notification_detect",
     "respect_dnd",
     "ignored_platforms",
@@ -101,7 +100,6 @@ export function NotificationSettingsView() {
 
   const form = useForm({
     defaultValues: {
-      notification_event: configs.notification_event,
       notification_detect: configs.notification_detect,
       respect_dnd: configs.respect_dnd,
       ignored_platforms: configs.ignored_platforms,
@@ -115,7 +113,6 @@ export function NotificationSettingsView() {
     },
     onSubmit: async ({ value }) => {
       setSettingValues({
-        notification_event: value.notification_event,
         notification_detect: value.notification_detect,
         respect_dnd: value.respect_dnd,
         ignored_platforms: JSON.stringify(value.ignored_platforms),
@@ -166,27 +163,6 @@ export function NotificationSettingsView() {
 
   return (
     <div className="flex flex-col gap-6">
-      <form.Field name="notification_event">
-        {(field) => (
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <h3 className="mb-1 text-sm font-medium">
-                <Trans>Event notifications</Trans>
-              </h3>
-              <p className="text-muted-foreground text-xs">
-                <Trans>
-                  Get notified 5 minutes before calendar events start
-                </Trans>
-              </p>
-            </div>
-            <Switch
-              checked={field.state.value}
-              onCheckedChange={field.handleChange}
-            />
-          </div>
-        )}
-      </form.Field>
-
       <form.Field name="notification_detect">
         {(field) => (
           <div className="flex flex-col gap-4">
@@ -373,9 +349,7 @@ export function NotificationSettingsView() {
         </div>
 
         <form.Subscribe
-          selector={(state) =>
-            state.values.notification_event || state.values.notification_detect
-          }
+          selector={(state) => state.values.notification_detect}
         >
           {(anyNotificationEnabled) => (
             <form.Field name="respect_dnd">

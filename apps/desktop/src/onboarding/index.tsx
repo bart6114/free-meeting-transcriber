@@ -9,7 +9,6 @@ import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as sfxCommands } from "@hypr/plugin-sfx";
 import { cn } from "@hypr/utils";
 
-import { CalendarSection } from "./calendar";
 import {
   getInitialStep,
   getNextStep,
@@ -221,21 +220,6 @@ function OnboardingScreenContent({
             onNext={goNext}
           >
             <PermissionsSection onContinue={goNext} />
-          </OnboardingSection>
-
-          <OnboardingSection
-            title={<Trans>Connect calendar</Trans>}
-            description={
-              <Trans>
-                Anarlog will sync your calendar to get meeting reminders
-              </Trans>
-            }
-            completedTitle={<Trans>Calendar connected</Trans>}
-            status={getStepStatus("calendar", currentStep)}
-            onBack={goBack}
-            onNext={goNext}
-          >
-            <CalendarSection onContinue={goNext} />
           </OnboardingSection>
 
           <OnboardingSection

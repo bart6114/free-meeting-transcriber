@@ -2,10 +2,8 @@ import { useLingui } from "@lingui/react/macro";
 
 import type { TodoProvider } from "./shared";
 
-import {
-  AccessPermissionRow,
-  TroubleShootingLink,
-} from "~/calendar/components/apple/permission";
+import { AccessPermissionRow, TroubleShootingLink } from "./permission";
+
 import { usePermission } from "~/shared/hooks/usePermissions";
 
 // GitHub/Linear OAuth todo providers were removed (Task 4 review fix) — see

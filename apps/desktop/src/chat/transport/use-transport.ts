@@ -30,7 +30,7 @@ Context and local meeting tool guidance:
 Web search guidance:
 - Use web_search for public websites, URLs, companies, products, people, news, or current facts that may be outside local notes.
 - Include source URLs in the final answer when web_search results are used.
-- Do not use web_search for questions that only need local notes, contacts, or calendar events.
+- Do not use web_search for questions that only need local notes or contacts.
 `.trim();
 
 export function appendMeetingContextToolGuidance(

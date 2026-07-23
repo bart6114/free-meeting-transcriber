@@ -6,7 +6,6 @@ import {
   BellIcon,
   BookOpenIcon,
   BookText,
-  CalendarIcon,
   Code2Icon,
   CogIcon,
   LockIcon,
@@ -26,7 +25,7 @@ import { AUTO_TEMPLATE_ID, useOpenTemplatesTab } from "~/templates";
 type SettingsNavItem =
   | { id: SettingsTab; label: string; icon: LucideIcon }
   | {
-      action: "open-templates" | "open-calendar" | "open-contacts";
+      action: "open-templates" | "open-contacts";
       label: string;
       icon: LucideIcon;
     };
@@ -63,10 +62,6 @@ export function SettingsNav() {
     });
   }, [openTemplatesTab]);
 
-  const handleOpenCalendar = useCallback(() => {
-    openNew({ type: "calendar" });
-  }, [openNew]);
-
   const handleOpenContacts = useCallback(() => {
     openNew({ type: "contacts", state: { selected: null } });
   }, [openNew]);
@@ -83,11 +78,6 @@ export function SettingsNav() {
     {
       label: t`Context`,
       items: [
-        {
-          action: "open-calendar",
-          label: t`Calendar`,
-          icon: CalendarIcon,
-        },
         {
           action: "open-contacts",
           label: t`Contacts`,
@@ -142,8 +132,6 @@ export function SettingsNav() {
                       if (!isSettingsItem) {
                         if (item.action === "open-templates") {
                           handleOpenTemplates();
-                        } else if (item.action === "open-calendar") {
-                          handleOpenCalendar();
                         } else {
                           handleOpenContacts();
                         }

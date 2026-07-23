@@ -119,7 +119,6 @@ describe("SettingsNav", () => {
       "Developers",
       "Permissions",
       "Context",
-      "Calendar",
       "Contacts",
       "AI",
       "Transcription",

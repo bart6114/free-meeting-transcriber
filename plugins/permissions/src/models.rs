@@ -9,8 +9,6 @@ pub enum PermissionStatus {
 #[cfg(target_os = "macos")]
 use objc2_av_foundation::AVAuthorizationStatus;
 #[cfg(target_os = "macos")]
-use objc2_contacts::CNAuthorizationStatus;
-#[cfg(target_os = "macos")]
 use objc2_event_kit::EKAuthorizationStatus;
 
 #[cfg(target_os = "macos")]
@@ -51,17 +49,6 @@ impl From<EKAuthorizationStatus> for PermissionStatus {
         match status {
             EKAuthorizationStatus::NotDetermined => Self::NeverRequested,
             EKAuthorizationStatus::FullAccess => Self::Authorized,
-            _ => Self::Denied,
-        }
-    }
-}
-
-#[cfg(target_os = "macos")]
-impl From<CNAuthorizationStatus> for PermissionStatus {
-    fn from(status: CNAuthorizationStatus) -> Self {
-        match status {
-            CNAuthorizationStatus::NotDetermined => Self::NeverRequested,
-            CNAuthorizationStatus::Authorized => Self::Authorized,
             _ => Self::Denied,
         }
     }

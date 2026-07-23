@@ -9,7 +9,7 @@ const hoisted = vi.hoisted(() => ({
 const { setExpanded, setLocked } = hoisted;
 
 let mockCurrentTab: {
-  type: "settings" | "empty" | "onboarding" | "calendar";
+  type: "settings" | "empty" | "onboarding" | "contacts";
 } | null = { type: "empty" };
 const mockLeftSidebar = {
   expanded: false,
@@ -61,7 +61,7 @@ describe("ClassicMainSidebar", () => {
   });
 
   it("unlocks the custom sidebar when unmounted while active", () => {
-    mockCurrentTab = { type: "calendar" };
+    mockCurrentTab = { type: "contacts" };
 
     const { unmount } = render(<ClassicMainSidebar />);
 

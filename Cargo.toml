@@ -36,7 +36,6 @@ hypr-api-client = { path = "crates/api-client", package = "api-client" }
 hypr-api-env = { path = "crates/api-env", package = "api-env" }
 hypr-api-error = { path = "crates/api-error", package = "api-error" }
 hypr-api-messenger = { path = "crates/api-messenger", package = "api-messenger" }
-hypr-apple-calendar = { path = "crates/apple-calendar", package = "apple-calendar" }
 hypr-apple-note = { path = "crates/apple-note", package = "apple-note" }
 hypr-apple-todo = { path = "crates/apple-todo", package = "apple-todo" }
 hypr-askama-utils = { path = "crates/askama-utils", package = "askama-utils" }
@@ -54,8 +53,6 @@ hypr-audio-sync = { path = "crates/audio-sync", package = "audio-sync" }
 hypr-audio-utils = { path = "crates/audio-utils", package = "audio-utils" }
 hypr-buffer = { path = "crates/buffer", package = "buffer" }
 hypr-bundle = { path = "crates/bundle", package = "bundle" }
-hypr-calendar = { path = "crates/calendar", package = "calendar" }
-hypr-calendar-interface = { path = "crates/calendar-interface", package = "calendar-interface" }
 hypr-chatwoot = { path = "crates/chatwoot", package = "chatwoot" }
 hypr-claude = { path = "crates/claude", package = "claude" }
 hypr-cli-process = { path = "crates/cli-process", package = "cli-process" }
@@ -117,7 +114,6 @@ hypr-mobile-bridge = { path = "crates/mobile-bridge", package = "mobile-bridge" 
 hypr-model-downloader = { path = "crates/model-downloader", package = "model-downloader" }
 hypr-model-manager = { path = "crates/model-manager", package = "model-manager" }
 hypr-mp3 = { path = "crates/mp3", package = "mp3" }
-hypr-nango = { path = "crates/nango", package = "nango" }
 hypr-notification = { path = "crates/notification", package = "notification" }
 hypr-notification-interface = { path = "crates/notification-interface", package = "notification-interface" }
 hypr-notification-macos2 = { path = "crates/notification-macos2", package = "notification-macos2" }
@@ -198,7 +194,6 @@ tauri-plugin-agent = { path = "plugins/agent" }
 tauri-plugin-analytics = { path = "plugins/analytics" }
 tauri-plugin-audio-priority = { path = "plugins/audio-priority" }
 tauri-plugin-bedrock = { path = "plugins/bedrock" }
-tauri-plugin-calendar = { path = "plugins/calendar" }
 tauri-plugin-db = { path = "plugins/db" }
 tauri-plugin-deeplink2 = { path = "plugins/deeplink2" }
 tauri-plugin-detect = { path = "plugins/detect" }
@@ -383,7 +378,6 @@ objc2 = "0.6"
 objc2-app-kit = "0.3.2"
 objc2-application-services = "0.3.2"
 objc2-av-foundation = "0.3.2"
-objc2-contacts = "0.3.2"
 objc2-core-foundation = "0.3.2"
 objc2-core-graphics = "0.3.2"
 objc2-core-location = "0.3.2"

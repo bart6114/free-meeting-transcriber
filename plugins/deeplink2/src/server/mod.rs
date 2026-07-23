@@ -107,21 +107,6 @@ fn ui_content(deep_link: &DeepLink) -> (bool, &'static str, &'static str) {
             "Subscription updated",
             "Click the button below to return to the app.",
         ),
-        DeepLink::IntegrationCallback(s) if s.status == "success" => (
-            true,
-            "Connected successfully",
-            "Click the button below to return to the app.",
-        ),
-        DeepLink::IntegrationCallback(s) if s.status == "upgrade_required" => (
-            false,
-            "Upgrade required",
-            "You can close this window and upgrade your plan to connect this integration.",
-        ),
-        DeepLink::IntegrationCallback(_) => (
-            false,
-            "Connection failed",
-            "Something went wrong. Please close this window and try again.",
-        ),
     }
 }
 

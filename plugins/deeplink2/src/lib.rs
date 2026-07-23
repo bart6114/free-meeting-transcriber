@@ -10,8 +10,8 @@ mod docs;
 
 pub use error::{Error, Result};
 pub use types::{
-    AuthCallbackSearch, BillingRefreshSearch, DeepLink, DeepLinkEvent, IntegrationCallbackSearch,
-    ShareOpenPendingEvent, ShareOpenRequest,
+    AuthCallbackSearch, BillingRefreshSearch, DeepLink, DeepLinkEvent, ShareOpenPendingEvent,
+    ShareOpenRequest,
 };
 
 use std::str::FromStr;

@@ -1,11 +1,9 @@
 mod auth_callback;
 mod billing_refresh;
-mod integration_callback;
 mod share_open;
 
 pub use auth_callback::*;
 pub use billing_refresh::*;
-pub use integration_callback::*;
 pub use share_open::*;
 
 use serde::{Deserialize, Serialize};
@@ -25,8 +23,6 @@ pub enum DeepLink {
     AuthCallback(AuthCallbackSearch),
     #[serde(rename = "/billing/refresh")]
     BillingRefresh(BillingRefreshSearch),
-    #[serde(rename = "/integration/callback")]
-    IntegrationCallback(IntegrationCallbackSearch),
 }
 
 pub(crate) enum IncomingDeepLink {
@@ -92,7 +88,6 @@ impl DeepLink {
         match self {
             DeepLink::AuthCallback(_) => "/auth/callback",
             DeepLink::BillingRefresh(_) => "/billing/refresh",
-            DeepLink::IntegrationCallback(_) => "/integration/callback",
         }
     }
 }
@@ -116,7 +111,6 @@ impl FromStr for DeepLink {
         match full_path.as_str() {
             "auth/callback" => Ok(DeepLink::AuthCallback(serde_qs::from_str(query)?)),
             "billing/refresh" => Ok(DeepLink::BillingRefresh(serde_qs::from_str(query)?)),
-            "integration/callback" => Ok(DeepLink::IntegrationCallback(serde_qs::from_str(query)?)),
             _ => Err(crate::Error::UnknownPath(full_path)),
         }
     }

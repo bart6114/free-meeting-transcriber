@@ -16,7 +16,6 @@ import { SpokenLanguagesView } from "./spoken-languages";
 import { StorageSettingsView } from "./storage";
 import { ThemeSelector } from "./theme";
 import { TimezoneSelector } from "./timezone";
-import { WeekStartSelector } from "./week-start";
 
 import { SettingsPageTitle } from "~/settings/page-title";
 import {
@@ -335,7 +334,6 @@ function SettingsAppContent({
             )}
           </form.Field>
           <TimezoneSelector />
-          <WeekStartSelector />
           <form.Field name="spoken_languages">
             {(field) => (
               <SpokenLanguagesView

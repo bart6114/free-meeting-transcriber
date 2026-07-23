@@ -49,8 +49,6 @@ common_derives! {
             #[serde(skip_serializing_if = "Option::is_none")]
             state: Option<serde_json::Map<String, serde_json::Value>>,
         },
-        #[serde(rename = "calendar")]
-        Calendar,
         #[serde(rename = "changelog")]
         Changelog { state: ChangelogState },
         #[serde(rename = "settings")]

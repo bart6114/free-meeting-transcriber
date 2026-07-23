@@ -106,7 +106,6 @@ export type Tab =
     })
   | (BaseTab & { type: "organizations"; id: string })
   | (BaseTab & { type: "empty" })
-  | (BaseTab & { type: "calendar" })
   | (BaseTab & {
       type: "changelog";
       state: ChangelogState;
@@ -165,8 +164,6 @@ export const getDefaultState = (tab: TabInput): Tab => {
       return { ...base, type: "organizations", id: tab.id };
     case "empty":
       return { ...base, type: "empty" };
-    case "calendar":
-      return { ...base, type: "calendar" };
     case "changelog":
       return {
         ...base,
@@ -175,9 +172,6 @@ export const getDefaultState = (tab: TabInput): Tab => {
       };
     case "settings": {
       const subtab = tab.state?.tab as string | null | undefined;
-      if (subtab === "calendar") {
-        return { ...base, type: "calendar" };
-      }
       return {
         ...base,
         type: "settings",
@@ -210,8 +204,6 @@ export const uniqueIdfromTab = (tab: Tab): string => {
       return `templates`;
     case "empty":
       return `empty-${tab.slotId}`;
-    case "calendar":
-      return `calendar`;
     case "changelog":
       return "changelog";
     case "settings":

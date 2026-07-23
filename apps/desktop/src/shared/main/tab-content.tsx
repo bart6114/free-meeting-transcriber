@@ -1,4 +1,3 @@
-import { TabContentCalendar } from "~/calendar";
 import { TabContentChangelog } from "~/changelog";
 import { TabContentContact } from "~/contacts";
 import { TabContentHuman } from "~/contacts/humans";
@@ -19,9 +18,6 @@ export function MainTabContent({ tab }: { tab: Tab }) {
   }
   if (tab.type === "contacts") {
     return <TabContentContact tab={tab} />;
-  }
-  if (tab.type === "calendar") {
-    return <TabContentCalendar />;
   }
   if (tab.type === "changelog") {
     return <TabContentChangelog tab={tab} />;

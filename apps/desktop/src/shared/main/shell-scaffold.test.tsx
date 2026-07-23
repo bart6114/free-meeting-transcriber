@@ -1,28 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-const mocks = vi.hoisted(() => ({
-  currentTab: { type: "empty" } as { type: string } | null,
-}));
-
-vi.mock("~/calendar/components/context", () => ({
-  SyncProvider: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="sync-provider">{children}</div>
-  ),
-}));
-
-vi.mock("~/store/zustand/tabs", () => ({
-  useTabs: (
-    selector: (state: { currentTab: typeof mocks.currentTab }) => unknown,
-  ) => selector({ currentTab: mocks.currentTab }),
-}));
+import { afterEach, describe, expect, it } from "vitest";
 
 import { MainShellScaffold } from "./shell-scaffold";
 
 describe("MainShellScaffold", () => {
   afterEach(() => {
     cleanup();
-    mocks.currentTab = { type: "empty" };
   });
 
   it("keeps the top border for regular top chrome", () => {

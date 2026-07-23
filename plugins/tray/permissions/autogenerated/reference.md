@@ -5,7 +5,6 @@ Default permissions for the plugin
 #### This default permission set includes the following:
 
 - `allow-set-tray-icon-visible`
-- `allow-set-tray-schedule`
 
 ## Permission Table
 
@@ -38,32 +37,6 @@ Enables the set_tray_icon_visible command without any pre-configured scope.
 <td>
 
 Denies the set_tray_icon_visible command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`hypr-tray:allow-set-tray-schedule`
-
-</td>
-<td>
-
-Enables the set_tray_schedule command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`hypr-tray:deny-set-tray-schedule`
-
-</td>
-<td>
-
-Denies the set_tray_schedule command without any pre-configured scope.
 
 </td>
 </tr>

@@ -13,25 +13,18 @@ vi.mock("~/store/zustand/tabs", () => ({
 
 vi.mock("~/sidebar/timeline", () => ({
   TimelineView: ({
-    showOpenCalendarButton = true,
     topChipsOverlapHeader = false,
     topChromeInset = false,
   }: {
-    showOpenCalendarButton?: boolean;
     topChipsOverlapHeader?: boolean;
     topChromeInset?: boolean;
   }) => (
     <div
       data-testid="timeline-view"
-      data-show-open-calendar-button={String(showOpenCalendarButton)}
       data-top-chips-overlap-header={String(topChipsOverlapHeader)}
       data-top-chrome-inset={String(topChromeInset)}
     />
   ),
-}));
-
-vi.mock("~/sidebar/calendar", () => ({
-  CalendarNav: () => <div data-testid="calendar-nav" />,
 }));
 
 vi.mock("~/sidebar/contacts", () => ({
@@ -61,11 +54,6 @@ describe("LeftSidebar", () => {
     const { container } = render(<LeftSidebar />);
 
     expect(screen.getByTestId("timeline-view")).toBeTruthy();
-    expect(
-      screen
-        .getByTestId("timeline-view")
-        .getAttribute("data-show-open-calendar-button"),
-    ).toBe("true");
     expect(
       screen.getByTestId("timeline-view").getAttribute("data-top-chrome-inset"),
     ).toBe("true");
@@ -100,7 +88,6 @@ describe("LeftSidebar", () => {
 
   it.each([
     ["settings", "settings-nav"],
-    ["calendar", "calendar-nav"],
     ["contacts", "contacts-nav"],
     ["templates", "templates-nav"],
   ])("keeps %s below the window chrome", (type, testId) => {

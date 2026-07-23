@@ -10,18 +10,6 @@ export type ContactSearchResult = {
   memo: string | null;
 };
 
-export type CalendarEventSearchResult = {
-  id: string;
-  title: string;
-  startedAt: string | null;
-  endedAt: string | null;
-  location: string | null;
-  meetingLink: string | null;
-  description: string | null;
-  participantCount: number;
-  linkedSessionId: string | null;
-};
-
 export type WebSearchResult = {
   title: string;
   url: string;
@@ -46,10 +34,6 @@ export interface ToolDependencies {
     query: string,
     limit: number,
   ) => Promise<ContactSearchResult[]>;
-  getCalendarEventSearchResults: (
-    query: string,
-    limit: number,
-  ) => Promise<CalendarEventSearchResult[]>;
   getSessionId: () => string | undefined;
   getEnhancedNoteId: () => string | undefined;
   openEditTab: (requestId: string) => void;

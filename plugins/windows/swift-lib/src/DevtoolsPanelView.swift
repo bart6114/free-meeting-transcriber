@@ -72,9 +72,6 @@ struct DevtoolsPanelView: View {
       DevtoolsActionButton("Onboarding") {
         RustBridge.devtoolsPanelAction("navigation:onboarding")
       }
-      DevtoolsActionButton("Instruction: integration") {
-        RustBridge.devtoolsPanelAction("instruction:integration")
-      }
     }
   }
 
@@ -94,9 +91,6 @@ struct DevtoolsPanelView: View {
 
   private var notificationsSection: some View {
     DevtoolsSection(title: "NOTIFICATIONS") {
-      DevtoolsActionButton("Calendar") {
-        RustBridge.devtoolsPanelAction("notifications:calendar")
-      }
       DevtoolsActionButton("Mic Detected") {
         RustBridge.devtoolsPanelAction("notifications:mic-detected")
       }

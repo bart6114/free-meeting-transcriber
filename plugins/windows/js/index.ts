@@ -16,41 +16,6 @@ export const getCurrentWebviewWindowLabel = () => {
   return window.label as WindowLabel;
 };
 
-export async function openUrlWithInstruction(
-  url: string,
-  instructionType: string,
-  openUrl: (
-    url: string,
-  ) => Promise<{ status: "ok" | "error"; error?: unknown }>,
-  instructionSearch?: Record<string, string | undefined>,
-) {
-  await commands.windowSaveFrame({ type: "main" });
-  const search = Object.fromEntries(
-    Object.entries({ type: instructionType, url, ...instructionSearch }).filter(
-      ([, value]) => value !== undefined,
-    ),
-  );
-  await commands.windowEmitNavigate(
-    { type: "main" },
-    { path: "/app/instruction", search },
-  );
-  await commands.windowSetFrameAnimated({ type: "main" }, "TopRight", 340, 500);
-
-  try {
-    const result = await openUrl(url);
-    if (result.status === "error") {
-      throw new Error(String(result.error));
-    }
-  } catch (error) {
-    await commands.windowEmitNavigate(
-      { type: "main" },
-      { path: "/app", search: null },
-    );
-    await commands.windowRestoreFrameAnimated({ type: "main" });
-    throw error;
-  }
-}
-
 export async function dismissInstruction() {
   await commands.windowEmitNavigate(
     { type: "main" },

@@ -136,10 +136,6 @@ extension NotificationManager {
     return NSWorkspace.shared.icon(forFile: expandedPath)
   }
 
-  func calendarNotificationIcon() -> NSImage? {
-    resolveNotificationBundleIcon("com.apple.iCal")
-  }
-
   func systemSymbolNotificationIcon(_ name: String) -> NSImage? {
     NSImage(systemSymbolName: name, accessibilityDescription: nil)
   }
@@ -148,8 +144,6 @@ extension NotificationManager {
     switch asset {
     case .appIcon:
       return defaultNotificationIcon()
-    case .calendar:
-      return calendarNotificationIcon()
     case .systemSymbol(let name):
       return systemSymbolNotificationIcon(name)
     case .bundleId(let bundleId):

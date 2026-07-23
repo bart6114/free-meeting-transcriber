@@ -93,7 +93,6 @@ function PermissionGroup({
 
 export function Permissions() {
   const { t } = useLingui();
-  const calendar = usePermission("calendar");
   const mic = usePermission("microphone");
   const systemAudio = usePermission("systemAudio");
   const accessibility = usePermission("accessibility");
@@ -127,17 +126,6 @@ export function Permissions() {
         onRequest={accessibility.request}
         onOpen={accessibility.open}
       />
-
-      <PermissionGroup title={<Trans>Others</Trans>}>
-        <PermissionRow
-          title={t`Calendar`}
-          description={t`Required to sync Apple Calendar events into Anarlog`}
-          status={calendar.status}
-          isPending={calendar.isPending}
-          onRequest={calendar.request}
-          onOpen={calendar.open}
-        />
-      </PermissionGroup>
     </div>
   );
 }

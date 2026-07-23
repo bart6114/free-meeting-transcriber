@@ -99,9 +99,6 @@ importers:
       '@hypr/plugin-analytics':
         specifier: workspace:*
         version: link:../../plugins/analytics
-      '@hypr/plugin-calendar':
-        specifier: workspace:*
-        version: link:../../plugins/calendar
       '@hypr/plugin-db':
         specifier: workspace:*
         version: link:../../plugins/db
@@ -969,12 +966,6 @@ importers:
         version: 2.10.1
 
   plugins/bedrock:
-    dependencies:
-      '@tauri-apps/api':
-        specifier: ^2.10.1
-        version: 2.10.1
-
-  plugins/calendar:
     dependencies:
       '@tauri-apps/api':
         specifier: ^2.10.1

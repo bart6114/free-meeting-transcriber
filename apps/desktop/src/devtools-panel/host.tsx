@@ -6,10 +6,8 @@ import {
   commands as windowsCommands,
   events as windowsEvents,
   getCurrentWebviewWindowLabel,
-  openUrlWithInstruction,
 } from "@hypr/plugin-windows";
 
-import { executeTransaction } from "~/db";
 import { useDevtoolsUserId } from "~/devtools-panel/hooks";
 import { createSession, updateSession } from "~/session/queries";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
@@ -34,7 +32,6 @@ const canResolveDevtoolsPanel = import.meta.env.MODE !== "test";
 
 type DevtoolsPanelAction =
   | "navigation:onboarding"
-  | "instruction:integration"
   | `toasts:preview:${DevtoolsToastPreview}`
   | "toasts:clear"
   | "ota:available"
@@ -42,7 +39,6 @@ type DevtoolsPanelAction =
   | "ota:ready"
   | "ota:failed"
   | "ota:clear"
-  | "notifications:calendar"
   | "notifications:mic-detected"
   | "notifications:mic-options"
   | "notifications:auto-stop"
@@ -148,14 +144,6 @@ function useDevtoolsPanelActions() {
     openNew({ type: "onboarding" });
   }, [openNew, showMainWindow]);
 
-  const showInstruction = useCallback((type: string) => {
-    void openUrlWithInstruction(
-      `https://example.com/${type}`,
-      type,
-      async () => ({ status: "ok" as const }),
-    );
-  }, []);
-
   const showToastPreviewInMainWindow = useCallback(
     async (preview: DevtoolsToastPreview) => {
       await showMainWindow();
@@ -178,73 +166,6 @@ function useDevtoolsPanelActions() {
     } catch (error) {
       console.error("[devtools] failed to clear notifications", error);
     }
-  }, []);
-
-  const showCalendarNotification = useCallback(async () => {
-    const eventId = `devtool-event-${crypto.randomUUID()}`;
-    const startedAt = new Date(Date.now() + 5 * 60 * 1000);
-    const endedAt = new Date(startedAt.getTime() + 30 * 60 * 1000);
-    const now = new Date().toISOString();
-
-    await executeTransaction([
-      {
-        sql: `
-          INSERT INTO events (
-            id, tracking_id_event, calendar_id, title, started_at, ended_at,
-            location, meeting_link, description, note, recurrence_series_id,
-            has_recurrence_rules, is_all_day, provider, participants_json,
-            created_at, updated_at, deleted_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, '', '', 0, 0, ?, ?, ?, ?, NULL)
-        `,
-        params: [
-          eventId,
-          eventId,
-          "devtool-calendar",
-          "Devtool design sync",
-          startedAt.toISOString(),
-          endedAt.toISOString(),
-          "Conference Room",
-          "https://zoom.us/j/1234567890",
-          "Notification test event",
-          "google",
-          JSON.stringify([
-            {
-              name: "Ada Lovelace",
-              email: "ada@example.com",
-              status: "accepted",
-            },
-          ]),
-          now,
-          now,
-        ],
-      },
-    ]);
-
-    await notificationCommands.showNotification({
-      key: `devtool-calendar-${eventId}`,
-      title: "Devtool design sync",
-      message: "Starting in 5 minutes",
-      timeout: null,
-      source: { type: "calendar_event", event_id: eventId },
-      start_time: Math.floor(startedAt.getTime() / 1000),
-      participants: [
-        {
-          name: "Ada Lovelace",
-          email: "ada@example.com",
-          status: "Accepted",
-        },
-      ],
-      event_details: {
-        what: "Devtool design sync",
-        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-        location: "Conference Room",
-      },
-      action_label: "Open Anarlog",
-      action_variant: null,
-      options: null,
-      footer: null,
-      icon: null,
-    });
   }, []);
 
   const showMicDetectedNotification = useCallback(async () => {
@@ -359,9 +280,6 @@ function useDevtoolsPanelActions() {
         case "navigation:onboarding":
           void showOnboarding();
           return;
-        case "instruction:integration":
-          showInstruction("integration");
-          return;
         case "toasts:preview:language-model":
           void showToastPreviewInMainWindow("language-model");
           return;
@@ -394,9 +312,6 @@ function useDevtoolsPanelActions() {
           return;
         case "ota:clear":
           clearOtaPreview();
-          return;
-        case "notifications:calendar":
-          void showCalendarNotification();
           return;
         case "notifications:mic-detected":
           void showMicDetectedNotification();
@@ -439,8 +354,6 @@ function useDevtoolsPanelActions() {
       createWithCountdown,
       clearNotifications,
       showAutoStopNotification,
-      showCalendarNotification,
-      showInstruction,
       showMicDetectedNotification,
       showMicOptionsNotification,
       showOnboarding,

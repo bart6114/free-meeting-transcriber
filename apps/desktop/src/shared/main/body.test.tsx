@@ -455,7 +455,7 @@ describe("ClassicMainBody", () => {
     );
   });
 
-  it.each(["calendar", "settings", "contacts", "templates"])(
+  it.each(["settings", "contacts", "templates"])(
     "runs the escape shortcut from the %s left chrome back button",
     (type) => {
       mocks.currentTab = {

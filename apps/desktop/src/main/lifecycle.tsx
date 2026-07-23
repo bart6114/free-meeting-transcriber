@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef } from "react";
 
 import { useLanguageModel, useLLMConnection } from "~/ai/hooks";
 import { useAuth } from "~/auth";
-import { searchCalendarEvents } from "~/calendar/queries";
 import { useSessionTab } from "~/chat/components/use-session-tab";
 import { buildChatTools } from "~/chat/tools";
 import { searchContacts } from "~/contacts/queries";
@@ -53,8 +52,6 @@ function ToolRegistration() {
 
   const getContactSearchResults = searchContacts;
 
-  const getCalendarEventSearchResults = searchCalendarEvents;
-
   const { getSessionId, getEnhancedNoteId } = useSessionTab();
   const getAuthHeaders = useCallback(() => auth?.getHeaders(), [auth]);
   const openEditTab = useCallback((requestId: string) => {
@@ -67,7 +64,6 @@ function ToolRegistration() {
       buildChatTools({
         search,
         getContactSearchResults,
-        getCalendarEventSearchResults,
         getSessionId,
         getEnhancedNoteId,
         openEditTab,
@@ -76,7 +72,6 @@ function ToolRegistration() {
     [
       search,
       getContactSearchResults,
-      getCalendarEventSearchResults,
       getSessionId,
       getEnhancedNoteId,
       openEditTab,

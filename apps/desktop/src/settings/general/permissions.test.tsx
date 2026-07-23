@@ -38,7 +38,6 @@ function renderPermissions(accessibilityStatus: PermissionStatus) {
   mocks.permissions.set("microphone", permission("authorized"));
   mocks.permissions.set("systemAudio", permission("authorized"));
   mocks.permissions.set("accessibility", accessibility);
-  mocks.permissions.set("calendar", permission("authorized"));
 
   render(<Permissions />);
 

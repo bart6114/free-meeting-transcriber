@@ -20,7 +20,6 @@
     "core:window:allow-set-position",
     "core:window:allow-is-maximized",
     "core:window:allow-toggle-maximize",
-    "calendar:default",
     "audio-priority:default",
     "db:default",
     "windows:default",

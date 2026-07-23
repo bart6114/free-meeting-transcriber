@@ -12,7 +12,6 @@ pub enum NotificationEvent {
 pub enum NotificationKey {
     MicStarted { apps: BTreeSet<String> },
     MicStopped { apps: BTreeSet<String> },
-    CalendarEvent { event_id: String },
     Custom(String),
 }
 
@@ -29,12 +28,6 @@ impl NotificationKey {
         }
     }
 
-    pub fn calendar_event(event_id: impl Into<String>) -> Self {
-        Self::CalendarEvent {
-            event_id: event_id.into(),
-        }
-    }
-
     pub fn to_dedup_key(&self) -> String {
         match self {
             Self::MicStarted { apps } => {
@@ -44,9 +37,6 @@ impl NotificationKey {
             Self::MicStopped { apps } => {
                 let sorted: Vec<_> = apps.iter().cloned().collect();
                 format!("mic-stopped:{}", sorted.join(","))
-            }
-            Self::CalendarEvent { event_id } => {
-                format!("event:{event_id}")
             }
             Self::Custom(s) => s.clone(),
         }
@@ -100,8 +90,6 @@ pub struct NotificationFooter {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(tag = "type")]
 pub enum NotificationSource {
-    #[serde(rename = "calendar_event")]
-    CalendarEvent { event_id: String },
     #[serde(rename = "session")]
     Session { session_id: String },
     #[serde(rename = "mic_detected")]
@@ -119,8 +107,6 @@ pub enum NotificationSource {
 pub enum NotificationIconAsset {
     #[serde(rename = "app_icon")]
     AppIcon,
-    #[serde(rename = "calendar")]
-    Calendar,
     #[serde(rename = "system_symbol")]
     SystemSymbol { name: String },
     #[serde(rename = "bundle_id")]
@@ -190,10 +176,6 @@ impl Notification {
 impl NotificationSource {
     pub fn default_icon(&self) -> Option<NotificationIcon> {
         match self {
-            Self::CalendarEvent { .. } => Some(NotificationIcon::Overlay {
-                base: NotificationIconAsset::AppIcon,
-                badge: NotificationIconAsset::Calendar,
-            }),
             Self::Session { .. } => None,
             Self::MicDetected { app_ids, .. } => app_ids
                 .iter()
@@ -336,21 +318,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn calendar_notifications_default_to_app_plus_calendar_overlay() {
-        let source = NotificationSource::CalendarEvent {
-            event_id: "evt-1".to_string(),
-        };
-
-        assert_eq!(
-            source.default_icon(),
-            Some(NotificationIcon::Overlay {
-                base: NotificationIconAsset::AppIcon,
-                badge: NotificationIconAsset::Calendar,
-            })
-        );
-    }
-
-    #[test]
     fn mic_notifications_default_to_first_resolvable_app_icon() {
         let source = NotificationSource::MicDetected {
             app_names: vec!["Zoom".to_string()],
@@ -401,8 +368,8 @@ mod tests {
         let notification = Notification::builder()
             .title("Title")
             .message("Message")
-            .source(NotificationSource::CalendarEvent {
-                event_id: "evt-1".to_string(),
+            .source(NotificationSource::Session {
+                session_id: "session-1".to_string(),
             })
             .icon(NotificationIcon::Hidden)
             .build();

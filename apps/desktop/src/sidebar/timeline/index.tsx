@@ -1,10 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import {
-  ArrowDownIcon,
-  ArrowUpIcon,
-  CalendarDaysIcon,
-  SunIcon,
-} from "lucide-react";
+import { ArrowDownIcon, ArrowUpIcon, SunIcon } from "lucide-react";
 import {
   type ReactNode,
   memo,
@@ -56,13 +51,11 @@ import { useTimelineSelection } from "~/store/zustand/timeline-selection";
 import { useListener } from "~/stt/contexts";
 
 export const TimelineView = memo(function TimelineView({
-  showOpenCalendarButton = true,
   showIgnoredEvents,
   onShowIgnoredEventsChange,
   topChipsOverlapHeader = false,
   topChromeInset = false,
 }: {
-  showOpenCalendarButton?: boolean;
   showIgnoredEvents?: boolean;
   onShowIgnoredEventsChange?: (showIgnored: boolean) => void;
   topChipsOverlapHeader?: boolean;
@@ -73,7 +66,6 @@ export const TimelineView = memo(function TimelineView({
   const { timelineEventsTable, timelineSessionsTable } = useTimelineTables();
   const [uncontrolledShowIgnored, setUncontrolledShowIgnored] = useState(false);
   const showIgnored = showIgnoredEvents ?? uncontrolledShowIgnored;
-  const [isScrolledToTop, setIsScrolledToTop] = useState(true);
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
   const { isIgnored } = useIgnoredEvents();
@@ -84,13 +76,6 @@ export const TimelineView = memo(function TimelineView({
     timelineSessionsTable,
     timezone,
   });
-  const openNew = useTabs((state) => state.openNew);
-
-  const showOpenCalendarChip =
-    showOpenCalendarButton && isScrolledToTop && hasMoreFutureItems;
-  const reserveOpenCalendarChipSpace =
-    showOpenCalendarButton && hasMoreFutureItems;
-
   const hasToday = useMemo(
     () => buckets.some((bucket) => bucket.label === "Today"),
     [buckets],
@@ -183,17 +168,11 @@ export const TimelineView = memo(function TimelineView({
   const showTopNowChip =
     !showUpcomingMeetingChip && !isTodayVisible && isScrolledPastToday;
   const topSpacerClassName = topChromeInset
-    ? reserveOpenCalendarChipSpace
-      ? "h-14"
-      : "h-12"
+    ? "h-12"
     : topChipsOverlapHeader
       ? "h-9"
       : "h-8";
-  const bucketHeaderTopClassName = topChromeInset
-    ? showOpenCalendarChip
-      ? "top-14"
-      : "top-12"
-    : "top-0";
+  const bucketHeaderTopClassName = topChromeInset ? "top-12" : "top-0";
   const topChipStackTopClassName = topChromeInset
     ? "top-4"
     : topChipsOverlapHeader
@@ -241,9 +220,7 @@ export const TimelineView = memo(function TimelineView({
         container.scrollHeight - container.clientHeight,
       );
       const nextScrollTop = container.scrollTop;
-      const scrolledToTop = nextScrollTop <= 12;
 
-      setIsScrolledToTop(scrolledToTop);
       setIsScrolledToBottom(maxScrollTop - nextScrollTop <= 12);
       setIsUpcomingMeetingVisible(
         isTimelineItemVisible(container, upcomingMeetingNodeRef.current),
@@ -340,10 +317,6 @@ export const TimelineView = memo(function TimelineView({
 
     setUncontrolledShowIgnored(nextShowIgnored);
   }, [onShowIgnoredEventsChange, showIgnored]);
-
-  const handleOpenCalendar = useCallback(() => {
-    openNew({ type: "calendar" });
-  }, [openNew]);
 
   const handleDeleteSelected = useCallback(() => {
     const sessionIds = selectedIds
@@ -559,7 +532,7 @@ export const TimelineView = memo(function TimelineView({
         />
       )}
 
-      {(showOpenCalendarChip || showUpcomingMeetingChip || showTopNowChip) && (
+      {(showUpcomingMeetingChip || showTopNowChip) && (
         <div
           data-sidebar-timeline-top-chip-stack
           className={cn([
@@ -567,15 +540,6 @@ export const TimelineView = memo(function TimelineView({
             topChipStackTopClassName,
           ])}
         >
-          {showOpenCalendarChip && (
-            <TimelineTopChip
-              ariaLabel={t`Open calendar`}
-              icon={<CalendarDaysIcon size={12} />}
-              onClick={handleOpenCalendar}
-            >
-              <Trans>Open calendar</Trans>
-            </TimelineTopChip>
-          )}
           {upcomingMeetingStatus && showUpcomingMeetingChip && (
             <SidebarUpcomingMeetingStatus
               label={upcomingMeetingStatus.label}

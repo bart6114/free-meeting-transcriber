@@ -93,15 +93,15 @@ describe("SQLite settings", () => {
       {
         id: "legacy_settings_document",
         value_json: JSON.stringify({
-          general: { theme: "dark", week_start: "monday" },
+          general: { theme: "dark", audio_retention: "forever" },
         }),
       },
       { id: "theme", value_json: JSON.stringify("light") },
-      { id: "week_start", value_json: "not-json" },
+      { id: "audio_retention", value_json: "not-json" },
     ]);
 
     expect(result.values.theme).toBe("light");
-    expect(result.values.week_start).toBe("monday");
+    expect(result.values.audio_retention).toBe("forever");
   });
 
   it("recovers main-store values after settings document values and aliases", () => {
@@ -131,7 +131,7 @@ describe("SQLite settings", () => {
   it("writes multiple independent values in one transaction", async () => {
     await setSettingValues({
       theme: "dark",
-      notification_event: false,
+      notification_detect: false,
     });
 
     const statements = mocks.executeTransaction.mock.calls[0][0];
@@ -143,7 +143,7 @@ describe("SQLite settings", () => {
       JSON.stringify("dark"),
     ]);
     expect(statements[1].params.slice(0, 2)).toEqual([
-      "notification_event",
+      "notification_detect",
       JSON.stringify(false),
     ]);
   });
