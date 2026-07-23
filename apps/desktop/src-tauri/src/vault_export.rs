@@ -87,6 +87,72 @@ struct DirtyEntity {
     generation: i64,
 }
 
+/// Exponential backoff for a permanently (or currently) failing entity, keyed
+/// by `(entity_type, entity_id)`. Controller re-drill finding: without this,
+/// a stuck row was reattempted (and re-logged as an `ERROR`) on every single
+/// drain pass — every ~5s (`RETRY_INTERVAL`) forever — burning cycles and
+/// spamming logs indefinitely for a row that will keep failing the exact
+/// same way until something external fixes it (a code fix, or the
+/// underlying data changing). Lives for the whole `run()` task lifetime (one
+/// `RetryBackoff` created once in `run()`, threaded through every
+/// `drain_queue`/`drain_with` call) — an in-memory heuristic that resets on
+/// app restart is an intentional simplification, not an oversight.
+#[derive(Debug, Default)]
+struct RetryBackoff {
+    state: std::collections::HashMap<(String, String), BackoffEntry>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BackoffEntry {
+    consecutive_failures: u32,
+    retry_after: std::time::Instant,
+}
+
+/// 5s, 10s, 20s, 40s, capping at 60s from the 5th consecutive failure
+/// onward. `now`/`consecutive_failures` are both explicit parameters (no
+/// internal `Instant::now()` calls) so the whole backoff state machine is
+/// testable with constructed instants — no real sleeping required.
+fn backoff_delay(consecutive_failures: u32) -> Duration {
+    const BASE: Duration = Duration::from_secs(5);
+    const MAX: Duration = Duration::from_secs(60);
+    let exponent = consecutive_failures.saturating_sub(1).min(4);
+    BASE.saturating_mul(1 << exponent).min(MAX)
+}
+
+impl RetryBackoff {
+    fn new() -> Self {
+        Self::default()
+    }
+
+    /// True if `key` failed recently enough that it's still within its
+    /// backoff window and should be skipped entirely this pass — no export
+    /// attempt, no log line, just left queued for a later retry.
+    fn should_skip(&self, key: &(String, String), now: std::time::Instant) -> bool {
+        self.state
+            .get(key)
+            .is_some_and(|entry| now < entry.retry_after)
+    }
+
+    /// Records a failed attempt and returns the delay before `key` should be
+    /// attempted again.
+    fn record_failure(&mut self, key: (String, String), now: std::time::Instant) -> Duration {
+        let entry = self.state.entry(key).or_insert(BackoffEntry {
+            consecutive_failures: 0,
+            retry_after: now,
+        });
+        entry.consecutive_failures += 1;
+        let delay = backoff_delay(entry.consecutive_failures);
+        entry.retry_after = now + delay;
+        delay
+    }
+
+    /// Clears any backoff history for `key` — a fresh failure after a
+    /// success starts the exponential sequence over from the 5s base delay.
+    fn record_success(&mut self, key: &(String, String)) {
+        self.state.remove(key);
+    }
+}
+
 pub fn spawn(app: AppHandle, db: Arc<hypr_db_core::Db>) {
     tauri::async_runtime::spawn(async move {
         run(app, db).await;
@@ -95,13 +161,14 @@ pub fn spawn(app: AppHandle, db: Arc<hypr_db_core::Db>) {
 
 async fn run(app: AppHandle, db: Arc<hypr_db_core::Db>) {
     let mut changes = db.change_notifier().subscribe();
+    let mut backoff = RetryBackoff::new();
 
     if let Err(error) = ensure_first_run_full_export(&app, db.pool()).await {
         tracing::error!(%error, "failed to enqueue the first-run full vault export");
     }
 
     loop {
-        if let Err(error) = drain_queue(&app, db.pool()).await {
+        if let Err(error) = drain_queue(&app, db.pool(), &mut backoff).await {
             tracing::error!(%error, "failed to export vault files");
         }
 
@@ -321,7 +388,19 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 /// single pass (modulo entities that keep failing every attempt) with no
 /// external DB write or change-notifier signal required — the second half
 /// of the same fix.
-async fn drain_with<F, Fut>(pool: &SqlitePool, mut export_one: F) -> Result<(), sqlx::Error>
+///
+/// Controller re-drill follow-up: a batch-level stop isn't enough on its
+/// own — with `RETRY_INTERVAL` waking `run()`'s loop every ~5s, a
+/// permanently-failing entity got reattempted (and re-logged as an
+/// `ERROR`) every single cycle, forever. `backoff` (see `RetryBackoff`)
+/// suppresses that: an entity within its backoff window is skipped
+/// entirely (no attempt, no log) until the window elapses, and the delay
+/// grows exponentially up to 60s the longer it keeps failing.
+async fn drain_with<F, Fut>(
+    pool: &SqlitePool,
+    backoff: &mut RetryBackoff,
+    mut export_one: F,
+) -> Result<(), sqlx::Error>
 where
     F: FnMut(DirtyEntity) -> Fut,
     Fut: std::future::Future<Output = WorkerResult<()>>,
@@ -352,15 +431,26 @@ where
 
         let mut succeeded = Vec::with_capacity(dirty_entities.len());
         for entity in dirty_entities {
+            let key = (entity.entity_type.clone(), entity.entity_id.clone());
+            let now = std::time::Instant::now();
+            if backoff.should_skip(&key, now) {
+                continue;
+            }
+
             let attempt = entity.clone();
             match export_one(attempt).await {
-                Ok(()) => succeeded.push(entity),
+                Ok(()) => {
+                    backoff.record_success(&key);
+                    succeeded.push(entity);
+                }
                 Err(error) => {
+                    let retry_in = backoff.record_failure(key, now);
                     tracing::error!(
                         entity_type = %entity.entity_type,
                         entity_id = %entity.entity_id,
                         %error,
-                        "failed to export vault entity; leaving it queued for retry"
+                        retry_in_secs = retry_in.as_secs(),
+                        "failed to export vault entity; backing off before retry"
                     );
                 }
             }
@@ -375,7 +465,11 @@ where
     }
 }
 
-async fn drain_queue<R: tauri::Runtime>(app: &AppHandle<R>, pool: &SqlitePool) -> WorkerResult<()> {
+async fn drain_queue<R: tauri::Runtime>(
+    app: &AppHandle<R>,
+    pool: &SqlitePool,
+    backoff: &mut RetryBackoff,
+) -> WorkerResult<()> {
     let vault_base = vault_base_path(app)?;
     // `vault_base_ref` is a `&Path` (Copy) rather than capturing the owned
     // `vault_base` `PathBuf` directly: the closure below is called once per
@@ -384,7 +478,7 @@ async fn drain_queue<R: tauri::Runtime>(app: &AppHandle<R>, pool: &SqlitePool) -
     // of the closure's environment once, breaking every call after the
     // first. A `&Path` copies trivially on every call instead.
     let vault_base_ref: &Path = &vault_base;
-    drain_with(pool, move |entity| async move {
+    drain_with(pool, backoff, move |entity| async move {
         export_entity(app, pool, vault_base_ref, &entity).await
     })
     .await
@@ -999,24 +1093,44 @@ async fn export_tasks_file<R: tauri::Runtime>(
     vault_base: &Path,
 ) -> WorkerResult<()> {
     let path = vault_base.join("tasks.json");
+    let items = fetch_action_items(pool).await?;
+
+    if items.is_empty() {
+        trash_if_exists(app, vault_base, &path).await?;
+        return Ok(());
+    }
+
+    let value = export::render_tasks(&items);
+    let content = hypr_fs_sync_core::json::serialize(value)
+        .map_err(|error| format!("failed to serialize tasks.json: {error}"))?;
+    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
+    Ok(())
+}
+
+/// Extracted from `export_tasks_file` so it's independently testable
+/// against a real migrated database — the previous round-trip test built
+/// `export::ActionItem` values directly and never actually ran this SQL,
+/// which is exactly how a controller physical drill caught a live
+/// `no such column: owner_user_id` error this SQL used to have.
+/// `action_items` has no `owner_user_id` column (it's `created_by` — this
+/// table doesn't follow the `owner_user_id`/`workspace_id` convention most
+/// other tables do; verified against the live schema in
+/// `crates/db-app/migrations/20260710223922_canonical_data_model.sql`, not
+/// just the `LegacyActionItem`/`export::ActionItem` field name).
+async fn fetch_action_items(pool: &SqlitePool) -> Result<Vec<export::ActionItem>, sqlx::Error> {
     let rows = sqlx::query(
-        "SELECT id, owner_user_id, source_type, source_id, source_order, status, text,
+        "SELECT id, created_by, source_type, source_id, source_order, status, text,
                 body_json, due_at
          FROM action_items WHERE deleted_at IS NULL ORDER BY id",
     )
     .fetch_all(pool)
     .await?;
 
-    if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    }
-
-    let items = rows
+    Ok(rows
         .into_iter()
         .map(|row| export::ActionItem {
             id: row.get("id"),
-            owner_user_id: row.get("owner_user_id"),
+            owner_user_id: row.get("created_by"),
             source_type: row.get("source_type"),
             source_id: row.get("source_id"),
             source_order: row.get("source_order"),
@@ -1025,13 +1139,7 @@ async fn export_tasks_file<R: tauri::Runtime>(
             body_json: row.get("body_json"),
             due_at: row.get("due_at"),
         })
-        .collect::<Vec<_>>();
-
-    let value = export::render_tasks(&items);
-    let content = hypr_fs_sync_core::json::serialize(value)
-        .map_err(|error| format!("failed to serialize tasks.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
+        .collect())
 }
 
 /// `parse_settings` only understands a single, whole-file blob keyed to the
@@ -1082,6 +1190,163 @@ mod tests {
         db
     }
 
+    #[test]
+    fn backoff_delay_grows_exponentially_and_caps_at_sixty_seconds() {
+        assert_eq!(backoff_delay(1), Duration::from_secs(5));
+        assert_eq!(backoff_delay(2), Duration::from_secs(10));
+        assert_eq!(backoff_delay(3), Duration::from_secs(20));
+        assert_eq!(backoff_delay(4), Duration::from_secs(40));
+        assert_eq!(backoff_delay(5), Duration::from_secs(60));
+        assert_eq!(backoff_delay(6), Duration::from_secs(60));
+        assert_eq!(backoff_delay(1_000), Duration::from_secs(60));
+    }
+
+    /// Pure state-machine test using constructed `Instant`s (no real
+    /// sleeping) — controller re-drill fix for "the stuck row retried every
+    /// ~5.5s forever, one ERROR log line each time".
+    #[test]
+    fn retry_backoff_skips_within_the_window_grows_on_repeat_failure_and_resets_on_success() {
+        let mut backoff = RetryBackoff::new();
+        let key = ("session".to_string(), "s1".to_string());
+        let t0 = std::time::Instant::now();
+
+        assert!(
+            !backoff.should_skip(&key, t0),
+            "an entity with no failure history must never be skipped"
+        );
+
+        let delay = backoff.record_failure(key.clone(), t0);
+        assert_eq!(delay, Duration::from_secs(5));
+        assert!(
+            backoff.should_skip(&key, t0 + Duration::from_secs(1)),
+            "still within the 5s window"
+        );
+        assert!(
+            !backoff.should_skip(&key, t0 + Duration::from_secs(6)),
+            "window elapsed"
+        );
+
+        // A second consecutive failure, attempted after the first window
+        // elapsed, grows the delay.
+        let t1 = t0 + Duration::from_secs(6);
+        let delay2 = backoff.record_failure(key.clone(), t1);
+        assert_eq!(delay2, Duration::from_secs(10));
+        assert!(backoff.should_skip(&key, t1 + Duration::from_secs(1)));
+
+        // A success clears the history entirely.
+        backoff.record_success(&key);
+        assert!(!backoff.should_skip(&key, t1 + Duration::from_secs(1)));
+
+        // The next failure after a success starts over at the 5s base delay,
+        // not continuing from where the previous streak left off.
+        let delay3 = backoff.record_failure(key, t1);
+        assert_eq!(delay3, Duration::from_secs(5));
+    }
+
+    /// Integration-level regression test for the log-spam/burned-cycles
+    /// fix: a repeatedly failing entity must not be reattempted (and hence
+    /// not re-logged) on the very next `drain_with` pass, even though it's
+    /// still sitting in `vault_export_dirty` the whole time. No real
+    /// sleeping needed — the backoff window (5s minimum) trivially still
+    /// covers the near-instantaneous gap between two consecutive test calls.
+    #[tokio::test]
+    async fn drain_with_does_not_immediately_reattempt_a_backed_off_entity() {
+        let db = test_db().await;
+        sqlx::query("INSERT INTO sessions (id, title) VALUES ('bad-1', 'B')")
+            .execute(db.pool())
+            .await
+            .unwrap();
+        // `test_db()`'s `prepare_schema` bootstraps a `cloudsync_workspace_binding`
+        // row in `app_settings`, which the `settings_file` trigger also
+        // enqueues — irrelevant here, so drop it and keep only the one
+        // entity this test cares about (same pattern as
+        // `tags_trigger_propagates_to_every_session_that_references_the_tag`).
+        sqlx::query(
+            "DELETE FROM vault_export_dirty WHERE NOT (entity_type = 'session' AND entity_id = 'bad-1')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let attempts = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let mut backoff = RetryBackoff::new();
+
+        for _ in 0..2 {
+            let attempts = attempts.clone();
+            drain_with(db.pool(), &mut backoff, |_entity| {
+                let attempts = attempts.clone();
+                async move {
+                    attempts.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                    Err("boom".into())
+                }
+            })
+            .await
+            .unwrap();
+        }
+
+        assert_eq!(
+            attempts.load(std::sync::atomic::Ordering::SeqCst),
+            1,
+            "the second pass must skip the still-backed-off entity, not reattempt it"
+        );
+
+        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(remaining, 1, "the entity is still queued for a later retry");
+    }
+
+    /// Controller physical-drill regression test: `fetch_action_items`
+    /// (extracted from `export_tasks_file`) must run its SQL against a
+    /// *real* migrated `action_items` table, not just a directly-constructed
+    /// `export::ActionItem` value — that's exactly the gap that let a
+    /// `no such column: owner_user_id` error reach a real device (the
+    /// round-trip test built rows by hand and never executed this query).
+    #[tokio::test]
+    async fn fetch_action_items_runs_against_the_real_action_items_schema() {
+        let db = test_db().await;
+        sqlx::query(
+            "INSERT INTO action_items
+               (id, created_by, source_type, source_id, source_order, status, text, body_json, due_at)
+             VALUES ('task-1', 'user-1', 'session', 'session-1', 2, 'done', 'Send follow-up',
+                     '[{\"type\":\"text\",\"text\":\"Send follow-up\"}]', '2026-07-05')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let items = fetch_action_items(db.pool()).await.unwrap();
+
+        assert_eq!(items.len(), 1);
+        let item = &items[0];
+        assert_eq!(item.id, "task-1");
+        assert_eq!(item.owner_user_id, "user-1");
+        assert_eq!(item.source_type, "session");
+        assert_eq!(item.source_id, "session-1");
+        assert_eq!(item.source_order, 2);
+        assert_eq!(item.status, "done");
+        assert_eq!(item.text, "Send follow-up");
+        assert_eq!(item.due_at, "2026-07-05");
+    }
+
+    #[tokio::test]
+    async fn fetch_action_items_excludes_soft_deleted_rows() {
+        let db = test_db().await;
+        sqlx::query(
+            "INSERT INTO action_items (id, created_by, source_type, source_id, status, text, deleted_at)
+             VALUES ('task-deleted', 'user-1', 'session', 'session-1', 'todo', 'Gone',
+                     strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        let items = fetch_action_items(db.pool()).await.unwrap();
+
+        assert!(items.is_empty());
+    }
+
     /// Regression test for the on-device stalled-drain defect: reproduces
     /// hypothesis 1 exactly (a render error on one entity used to abort the
     /// whole batch loop before `acknowledge_dirty_entities` ever ran, so
@@ -1101,7 +1366,7 @@ mod tests {
         .await
         .unwrap();
 
-        drain_with(db.pool(), |entity| async move {
+        drain_with(db.pool(), &mut RetryBackoff::new(), |entity| async move {
             if entity.entity_id == "bad-1" {
                 Err("simulated render failure".into())
             } else {
@@ -1156,7 +1421,7 @@ mod tests {
             .unwrap();
         assert!(queued_before > 0, "enqueue_all_entities should have queued something");
 
-        drain_with(db.pool(), |_entity| async { Ok(()) })
+        drain_with(db.pool(), &mut RetryBackoff::new(), |_entity| async { Ok(()) })
             .await
             .unwrap();
 
@@ -1187,7 +1452,7 @@ mod tests {
 
         enqueue_all_entities(db.pool()).await.unwrap();
 
-        drain_with(db.pool(), |entity| async move {
+        drain_with(db.pool(), &mut RetryBackoff::new(), |entity| async move {
             if entity.entity_type == "settings_file" {
                 Err("simulated permanent failure".into())
             } else {
