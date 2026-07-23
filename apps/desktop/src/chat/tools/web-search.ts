@@ -4,7 +4,7 @@ import { z } from "zod";
 
 import type { ToolDependencies, WebSearchResponse } from "./types";
 
-import { env } from "~/env";
+import { HOSTED_API_URL } from "~/env";
 
 const webSearchInputSchema = z.object({
   query: z.string().min(1).describe("Search query for public web information."),
@@ -49,7 +49,7 @@ export async function runWebSearch(
   requestHeaders.set("Content-Type", "application/json");
 
   const response = await (deps.fetch ?? tauriFetch)(
-    new URL("/research/search", env.VITE_API_URL).toString(),
+    new URL("/research/search", HOSTED_API_URL).toString(),
     {
       method: "POST",
       headers: requestHeaders,

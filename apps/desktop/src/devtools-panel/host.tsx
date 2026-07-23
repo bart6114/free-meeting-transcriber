@@ -9,9 +9,6 @@ import {
   openUrlWithInstruction,
 } from "@hypr/plugin-windows";
 
-import { useBillingAccess } from "~/auth/billing-context";
-import { TrialEndedDialog } from "~/billing/trial-ended-dialog";
-import { TrialStartedDialog } from "~/billing/trial-started-dialog";
 import { executeTransaction } from "~/db";
 import { useDevtoolsUserId } from "~/devtools-panel/hooks";
 import { createSession, updateSession } from "~/session/queries";
@@ -37,8 +34,6 @@ const canResolveDevtoolsPanel = import.meta.env.MODE !== "test";
 
 type DevtoolsPanelAction =
   | "navigation:onboarding"
-  | "instruction:sign-in"
-  | "instruction:billing"
   | "instruction:integration"
   | `toasts:preview:${DevtoolsToastPreview}`
   | "toasts:clear"
@@ -53,8 +48,6 @@ type DevtoolsPanelAction =
   | "notifications:auto-stop"
   | "notifications:batch-done"
   | "notifications:clear"
-  | "billing:trial-started"
-  | "billing:trial-ended"
   | "countdown:note-60"
   | "countdown:note-300"
   | "countdown:zoom-60"
@@ -136,7 +129,6 @@ function DevtoolsFloatingPanelSync() {
 function useDevtoolsPanelActions() {
   const openNew = useTabs((s) => s.openNew);
   const user_id = useDevtoolsUserId();
-  const { trialDaysRemaining, upgradeToPro } = useBillingAccess();
   const showToastPreview = useDevtoolsToastPreview(
     (state) => state.showPreview,
   );
@@ -145,8 +137,6 @@ function useDevtoolsPanelActions() {
   );
   const showOtaPreview = useDevtoolsOtaPreview((state) => state.showPreview);
   const clearOtaPreview = useDevtoolsOtaPreview((state) => state.clearPreview);
-  const [trialStartedOpen, setTrialStartedOpen] = useState(false);
-  const [trialEndedOpen, setTrialEndedOpen] = useState(false);
   const [shouldThrow, setShouldThrow] = useState(false);
 
   const showMainWindow = useCallback(async () => {
@@ -369,12 +359,6 @@ function useDevtoolsPanelActions() {
         case "navigation:onboarding":
           void showOnboarding();
           return;
-        case "instruction:sign-in":
-          showInstruction("sign-in");
-          return;
-        case "instruction:billing":
-          showInstruction("billing");
-          return;
         case "instruction:integration":
           showInstruction("integration");
           return;
@@ -429,12 +413,6 @@ function useDevtoolsPanelActions() {
         case "notifications:clear":
           void clearNotifications();
           return;
-        case "billing:trial-started":
-          setTrialStartedOpen(true);
-          return;
-        case "billing:trial-ended":
-          setTrialEndedOpen(true);
-          return;
         case "countdown:note-60":
           void createWithCountdown(60);
           return;
@@ -474,21 +452,7 @@ function useDevtoolsPanelActions() {
   );
 
   return {
-    dialogs: (
-      <>
-        <TrialStartedDialog
-          open={trialStartedOpen}
-          onOpenChange={setTrialStartedOpen}
-          trialDaysRemaining={trialDaysRemaining}
-          hasPaymentMethod={false}
-        />
-        <TrialEndedDialog
-          open={trialEndedOpen}
-          onOpenChange={setTrialEndedOpen}
-          onUpgrade={upgradeToPro}
-        />
-      </>
-    ),
+    dialogs: null,
     handleAction,
     shouldThrow,
   };

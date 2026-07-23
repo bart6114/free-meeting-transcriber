@@ -9,7 +9,7 @@ import { useSTTConnection } from "./useSTTConnection";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { env } from "~/env";
+import { HOSTED_API_URL } from "~/env";
 import {
   deleteProcessedAudioForRetention,
   normalizeAudioRetention,
@@ -222,7 +222,7 @@ export const useRunBatch = (sessionId: string) => {
       const fallbackTarget = getBatchFallbackTarget({
         isPaid: billing.isPaid,
         accessToken: auth?.session?.access_token,
-        apiBaseUrl: env.VITE_API_URL,
+        apiBaseUrl: HOSTED_API_URL,
       });
       const shouldUseSelectedTarget =
         selectedTargetSupported ||

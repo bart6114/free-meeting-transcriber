@@ -292,15 +292,15 @@ describe("Basic Tab Actions", () => {
     ]);
   });
 
-  test("openNew preserves account settings tab requests", () => {
+  test("openNew normalizes an unknown/removed settings tab to app", () => {
     useTabs.getState().openNew({ type: "settings", state: { tab: "account" } });
 
     expect(useTabs.getState()).toHaveCurrentTab({
       type: "settings",
-      state: { tab: "account" },
+      state: { tab: "app" },
     });
     expect(useTabs.getState()).toMatchTabsInOrder([
-      { type: "settings", active: true, state: { tab: "account" } },
+      { type: "settings", active: true, state: { tab: "app" } },
     ]);
   });
 

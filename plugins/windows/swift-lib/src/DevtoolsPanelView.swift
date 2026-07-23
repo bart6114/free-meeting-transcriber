@@ -23,7 +23,6 @@ struct DevtoolsPanelView: View {
           toastsSection
           otaSection
           notificationsSection
-          billingSection
           countdownSection
           errorSection
         }
@@ -72,12 +71,6 @@ struct DevtoolsPanelView: View {
     DevtoolsSection(title: "NAVIGATION") {
       DevtoolsActionButton("Onboarding") {
         RustBridge.devtoolsPanelAction("navigation:onboarding")
-      }
-      DevtoolsActionButton("Instruction: sign-in") {
-        RustBridge.devtoolsPanelAction("instruction:sign-in")
-      }
-      DevtoolsActionButton("Instruction: billing") {
-        RustBridge.devtoolsPanelAction("instruction:billing")
       }
       DevtoolsActionButton("Instruction: integration") {
         RustBridge.devtoolsPanelAction("instruction:integration")
@@ -138,17 +131,6 @@ struct DevtoolsPanelView: View {
       }
       DevtoolsActionButton("Clear", role: .destructive) {
         RustBridge.devtoolsPanelAction("ota:clear")
-      }
-    }
-  }
-
-  private var billingSection: some View {
-    DevtoolsSection(title: "BILLING") {
-      DevtoolsActionButton("Trial Started") {
-        RustBridge.devtoolsPanelAction("billing:trial-started")
-      }
-      DevtoolsActionButton("Trial Ended") {
-        RustBridge.devtoolsPanelAction("billing:trial-ended")
       }
     }
   }

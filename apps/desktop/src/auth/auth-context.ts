@@ -1,49 +1,46 @@
-import type { Session, SupabaseClient } from "@supabase/supabase-js";
 import { createContext, useContext } from "react";
 
-type AuthState = {
-  supabase: SupabaseClient | null;
-  // undefined = initial load in progress, null = known unauthenticated
-  session: Session | null | undefined;
-  isRefreshingSession: boolean;
+// Accounts/billing were removed (Task 4): the app is fully local and always
+// runs signed-out. This stub keeps the `useAuth()` surface that ~15
+// consumers destructure so none of them need editing.
+export type StubSession = {
+  user: { id: string; email?: string };
+  access_token: string;
 };
 
-type AuthActions = {
+export type AuthContextType = {
+  // undefined = initial load in progress, null = known unauthenticated.
+  // Always null here: there is no session to load.
+  session: StubSession | null;
+  isRefreshingSession: boolean;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
-  refreshSession: () => Promise<Session | null>;
-};
-
-type AuthTokenHandlers = {
+  refreshSession: () => Promise<StubSession | null>;
   handleAuthCallback: (url: string) => Promise<void>;
   setSessionFromTokens: (
     accessToken: string,
     refreshToken: string,
   ) => Promise<void>;
-};
-
-type AuthUtils = {
   getHeaders: () => Record<string, string> | null;
-  getAvatarUrl: () => Promise<string | null>;
 };
 
-export type AuthContextType = AuthState &
-  AuthActions &
-  AuthTokenHandlers &
-  AuthUtils;
+export const AUTH: AuthContextType = {
+  session: null,
+  isRefreshingSession: false,
+  signIn: async () => {},
+  signOut: async () => {},
+  refreshSession: async () => null,
+  handleAuthCallback: async () => {},
+  setSessionFromTokens: async () => {},
+  getHeaders: () => null,
+};
 
-export const AuthContext = createContext<AuthContextType | null>(null);
+export const AuthContext = createContext<AuthContextType>(AUTH);
 
 export function useOptionalAuth() {
   return useContext(AuthContext);
 }
 
 export function useAuth() {
-  const context = useOptionalAuth();
-
-  if (!context) {
-    throw new Error("'useAuth' must be used within an 'AuthProvider'");
-  }
-
-  return context;
+  return useContext(AuthContext);
 }

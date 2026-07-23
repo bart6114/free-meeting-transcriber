@@ -20,7 +20,6 @@ import { type CalendarProvider, PROVIDERS } from "./shared";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { useConnections } from "~/auth/useConnections";
 import { useNativeContextMenu } from "~/shared/hooks/useNativeContextMenu";
 import { usePermission } from "~/shared/hooks/usePermissions";
 import {
@@ -95,8 +94,9 @@ export function CalendarSidebarContent({
 }) {
   const isMacos = platform() === "macos";
   const calendar = usePermission("calendar");
-  const { isPaid } = useBillingAccess();
-  const { data: connections } = useConnections(isPaid);
+  // OAuth calendar connections require the (removed) backend — there are
+  // never any connections locally.
+  const connections: ConnectionItem[] = [];
 
   const visibleProviders = useMemo(
     () =>
@@ -164,7 +164,11 @@ function ProviderAccordionItem({
   const auth = useAuth();
   const { isPaid, isPro, upgradeToPro, isUpgradingToPro } = useBillingAccess();
   const { openIntegration, openingAction } = useOpenIntegrationUrl();
-  const { data: connections, isPending, isError } = useConnections(isPaid);
+  // OAuth calendar connections require the (removed) backend — there are
+  // never any connections locally.
+  const connections: ConnectionItem[] = [];
+  const isPending = false;
+  const isError = false;
   const providerConnections =
     connections?.filter(
       (connection) => connection.integration_id === provider.nangoIntegrationId,

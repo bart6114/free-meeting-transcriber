@@ -11,7 +11,6 @@ import { OnboardingButton } from "./shared";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { useConnections } from "~/auth/useConnections";
 import { useAppleCalendarSelection } from "~/calendar/components/apple/calendar-selection";
 import { TroubleShootingLink } from "~/calendar/components/apple/permission";
 import {
@@ -386,7 +385,11 @@ function OAuthCalendarProviderAction({
 function OutlookCalendarProvider({ onSignIn }: { onSignIn: () => void }) {
   const auth = useAuth();
   const { isPro, isReady, upgradeToPro, isUpgradingToPro } = useBillingAccess();
-  const { data: connections, isPending, isError } = useConnections(isPro);
+  // OAuth calendar connections require the (removed) backend — there are
+  // never any connections locally.
+  const connections: ConnectionItem[] = [];
+  const isPending = false;
+  const isError = false;
   const [isHovered, setHovered] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
   // State alone cannot gate re-entry: a second click can land before the
@@ -471,7 +474,11 @@ function OutlookCalendarProvider({ onSignIn }: { onSignIn: () => void }) {
 function GoogleCalendarProvider({ onSignIn }: { onSignIn: () => void }) {
   const auth = useAuth();
   const { isPro, isReady, upgradeToPro, isUpgradingToPro } = useBillingAccess();
-  const { data: connections, isPending, isError } = useConnections(isPro);
+  // OAuth calendar connections require the (removed) backend — there are
+  // never any connections locally.
+  const connections: ConnectionItem[] = [];
+  const isPending = false;
+  const isError = false;
   const [isHovered, setHovered] = useState(false);
   const [isOpening, setIsOpening] = useState(false);
   // State alone cannot gate re-entry: a second click can land before the

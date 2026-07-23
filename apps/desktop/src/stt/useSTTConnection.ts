@@ -6,7 +6,7 @@ import type { AIProviderStorage } from "@hypr/store";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { env } from "~/env";
+import { HOSTED_API_URL } from "~/env";
 import { type ProviderId } from "~/settings/ai/stt/shared";
 import { useAiProvider } from "~/settings/providers";
 import { useConfigValues } from "~/shared/config";
@@ -104,7 +104,7 @@ export const useSTTConnection = () => {
       return {
         provider: current_stt_provider,
         model: current_stt_model,
-        baseUrl: baseUrl ?? new URL("/stt", env.VITE_API_URL).toString(),
+        baseUrl: baseUrl ?? new URL("/stt", HOSTED_API_URL).toString(),
         apiKey: auth.session.access_token,
       };
     }

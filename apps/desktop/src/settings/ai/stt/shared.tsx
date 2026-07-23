@@ -11,7 +11,7 @@ import type { ReactNode } from "react";
 
 import type { LocalModel } from "@hypr/plugin-local-stt";
 
-import { env } from "~/env";
+import { HOSTED_API_URL } from "~/env";
 import { AnarlogProviderIcon, ProviderBrandImage } from "~/settings/ai/shared";
 import { type ProviderRequirement } from "~/settings/ai/shared/eligibility";
 import { sortProviders } from "~/settings/ai/shared/sort-providers";
@@ -173,7 +173,7 @@ const _PROVIDERS = [
     displayName: "Anarlog",
     badge: "Recommended",
     icon: <AnarlogProviderIcon />,
-    baseUrl: new URL("/stt", env.VITE_API_URL).toString(),
+    baseUrl: new URL("/stt", HOSTED_API_URL).toString(),
     models: ["cloud"],
     requirements: [],
   },

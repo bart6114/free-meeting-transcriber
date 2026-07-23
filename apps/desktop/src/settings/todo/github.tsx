@@ -4,6 +4,7 @@ import { fetch } from "@tauri-apps/plugin-http";
 import { ExternalLinkIcon, Loader2Icon, PlusIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+import type { ConnectionItem } from "@hypr/api-client";
 import { commands as openerCommands } from "@hypr/plugin-opener2";
 import { Input } from "@hypr/ui/components/ui/input";
 import {
@@ -17,7 +18,6 @@ import type { TodoProvider } from "./shared";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { useConnections } from "~/auth/useConnections";
 import { useSetSettingValue } from "~/settings/queries";
 import { useConfigValue } from "~/shared/config";
 import { useOpenIntegrationUrl } from "~/shared/integration";
@@ -41,7 +41,9 @@ export function GitHubTodoProviderContent({
   const { t } = useLingui();
   const auth = useAuth();
   const { isPaid, upgradeToPro, isUpgradingToPro } = useBillingAccess();
-  const { data: connections } = useConnections(isPaid);
+  // GitHub connections require the (removed) backend — there are never any
+  // connections locally.
+  const connections: ConnectionItem[] = [];
   const { openIntegration, openingAction } = useOpenIntegrationUrl();
   const [showAddInput, setShowAddInput] = useState(false);
   const [inputValue, setInputValue] = useState("");

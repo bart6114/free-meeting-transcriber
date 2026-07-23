@@ -16,7 +16,6 @@ import { ReconnectRequiredIndicator } from "./status";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { useConnections } from "~/auth/useConnections";
 import type { CalendarProvider } from "~/calendar/components/shared";
 import {
   openIntegrationUrl,
@@ -32,7 +31,10 @@ export function OAuthProviderContent({
 }) {
   const auth = useAuth();
   const { isPro, upgradeToPro, isUpgradingToPro } = useBillingAccess();
-  const { data: connections, isError } = useConnections(isPro);
+  // OAuth calendar connections require the (removed) backend — there are
+  // never any connections locally.
+  const connections: ConnectionItem[] = [];
+  const isError = false;
   const { openIntegration, openingAction } = useOpenIntegrationUrl();
   const providerConnections = useMemo(
     () =>

@@ -9,7 +9,6 @@ import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as sfxCommands } from "@hypr/plugin-sfx";
 import { cn } from "@hypr/utils";
 
-import { LoginSection } from "./account";
 import { CalendarSection } from "./calendar";
 import {
   getInitialStep,
@@ -86,7 +85,6 @@ function OnboardingScreenContent({
   const auth = useAuth();
   const [isMuted, setIsMuted] = useState(false);
   const [currentStep, setCurrentStep] = useState(getInitialStep);
-  const [didSkipLogin, setDidSkipLogin] = useState(false);
   const onboardingVideoRef = useRef<HTMLVideoElement>(null);
   const currentPlatform = platform();
 
@@ -101,7 +99,6 @@ function OnboardingScreenContent({
   }, [currentStep]);
 
   const handleCalendarSignIn = useCallback(() => {
-    setCurrentStep("login");
     void auth.signIn();
   }, [auth]);
 
@@ -230,39 +227,6 @@ function OnboardingScreenContent({
             onNext={goNext}
           >
             <PermissionsSection onContinue={goNext} />
-          </OnboardingSection>
-
-          <OnboardingSection
-            title={<Trans>Create account</Trans>}
-            description={
-              <Trans>
-                Sign in to unlock powerful AI models, sync across devices, and
-                personalization.
-              </Trans>
-            }
-            completedTitle={
-              auth.session ? (
-                <Trans>Signed in</Trans>
-              ) : didSkipLogin ? (
-                <Trans>Skipped</Trans>
-              ) : (
-                <Trans>Account</Trans>
-              )
-            }
-            status={getStepStatus("login", currentStep)}
-            onBack={goBack}
-            onNext={goNext}
-            onSkip={() => {
-              setDidSkipLogin(true);
-              void analyticsCommands.event({
-                event: "onboarding_login_skipped",
-              });
-            }}
-          >
-            <LoginSection
-              onContinue={goNext}
-              onSkip={() => setDidSkipLogin(true)}
-            />
           </OnboardingSection>
 
           <OnboardingSection

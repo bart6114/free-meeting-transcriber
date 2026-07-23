@@ -1,4 +1,3 @@
-import type { AccountInfo } from "@hypr/plugin-auth";
 import type { DeviceInfo } from "@hypr/plugin-misc";
 
 import type { HyprUIMessage } from "../types";
@@ -55,11 +54,6 @@ export type ContextEntity =
       name?: string | null;
       removable?: boolean;
     })
-  | ({
-      kind: "account";
-      key: string;
-      source?: ContextEntitySource;
-    } & Partial<AccountInfo>)
   | ({
       kind: "device";
       key: string;

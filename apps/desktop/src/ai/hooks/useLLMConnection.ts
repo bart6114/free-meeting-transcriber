@@ -16,7 +16,7 @@ import { createTracedFetch, tracedFetch } from "../traced-fetch";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { env } from "~/env";
+import { HOSTED_API_URL } from "~/env";
 import { type ProviderId, PROVIDERS } from "~/settings/ai/llm/shared";
 import {
   getProviderSelectionBlockers,
@@ -206,7 +206,7 @@ const resolveLLMConnection = (params: {
       conn: {
         providerId,
         modelId,
-        baseUrl: baseUrl ?? new URL("/llm", env.VITE_API_URL).toString(),
+        baseUrl: baseUrl ?? new URL("/llm", HOSTED_API_URL).toString(),
         apiKey: session.access_token,
       },
       status: { status: "success", providerId, isHosted: true },

@@ -2,6 +2,7 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { Loader2Icon } from "lucide-react";
 import { useCallback, useMemo } from "react";
 
+import type { ConnectionItem } from "@hypr/api-client";
 import {
   Tooltip,
   TooltipContent,
@@ -14,7 +15,6 @@ import type { TodoProvider } from "./shared";
 
 import { useAuth } from "~/auth";
 import { useBillingAccess } from "~/auth/billing-context";
-import { useConnections } from "~/auth/useConnections";
 import {
   AccessPermissionRow,
   TroubleShootingLink,
@@ -43,7 +43,10 @@ function OAuthTodoProviderContent({ config }: { config: TodoProvider }) {
 
   const auth = useAuth();
   const { isPaid, upgradeToPro, isUpgradingToPro } = useBillingAccess();
-  const { data: connections, isError } = useConnections(isPaid);
+  // OAuth todo connections require the (removed) backend — there are never
+  // any connections locally.
+  const connections: ConnectionItem[] = [];
+  const isError = false;
   const { openIntegration, openingAction } = useOpenIntegrationUrl();
 
   const providerConnections = useMemo(

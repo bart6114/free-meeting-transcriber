@@ -35,7 +35,6 @@ export const isTabInputSupported = (
 };
 
 export type SettingsTab =
-  | "account"
   | "app"
   | "notifications"
   | "developers"
@@ -47,7 +46,7 @@ export type SettingsTab =
 
 export const normalizeSettingsTab = (
   tab: string | null | undefined,
-): Exclude<SettingsTab, "account"> => {
+): SettingsTab => {
   switch (tab) {
     case "app":
     case "notifications":
@@ -60,7 +59,6 @@ export const normalizeSettingsTab = (
       return tab;
     case "personalization":
       return "dictionary";
-    case "account":
     default:
       return "app";
   }
@@ -184,7 +182,7 @@ export const getDefaultState = (tab: TabInput): Tab => {
         ...base,
         type: "settings",
         state: {
-          tab: subtab === "account" ? "account" : normalizeSettingsTab(subtab),
+          tab: normalizeSettingsTab(subtab),
         },
       };
     }

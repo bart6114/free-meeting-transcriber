@@ -1,7 +1,6 @@
 import { cn } from "@hypr/utils";
 
 import {
-  SettingsAccount,
   SettingsApp,
   SettingsNotifications,
   SettingsPermissions,
@@ -41,8 +40,6 @@ function SettingsView({ tab }: { tab: Extract<Tab, { type: "settings" }> }) {
 
   const renderContent = () => {
     switch (activeTab) {
-      case "account":
-        return <SettingsAccount />;
       case "app":
         return <SettingsApp />;
       case "notifications":

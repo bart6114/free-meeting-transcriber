@@ -71,9 +71,7 @@ vi.mock("~/auth/billing-context", () => ({
 }));
 
 vi.mock("~/env", () => ({
-  env: {
-    VITE_API_URL: "https://api.test",
-  },
+  HOSTED_API_URL: "https://api.test",
 }));
 
 vi.mock("~/services/audio-retention", () => ({

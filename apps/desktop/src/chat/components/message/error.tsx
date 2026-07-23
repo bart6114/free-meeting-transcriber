@@ -5,9 +5,9 @@ import { commands as openerCommands } from "@hypr/plugin-opener2";
 
 import { ActionButton, MessageBubble, MessageContainer } from "./shared";
 
-import { env } from "~/env";
+import { HOSTED_APP_URL } from "~/env";
 
-const WEB_APP_BASE_URL = env.VITE_APP_URL ?? "http://localhost:3000";
+const WEB_APP_BASE_URL = HOSTED_APP_URL;
 
 function isContextLengthError(message: string): boolean {
   const lowerMessage = message.toLowerCase();

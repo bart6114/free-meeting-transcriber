@@ -22,7 +22,6 @@
     "core:window:allow-toggle-maximize",
     "calendar:default",
     "audio-priority:default",
-    "auth:default",
     "db:default",
     "windows:default",
     "windows:allow-floating-bar-show",

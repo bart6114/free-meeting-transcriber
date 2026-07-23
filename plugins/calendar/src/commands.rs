@@ -2,7 +2,6 @@ use hypr_calendar_interface::{
     CalendarEvent, CalendarListItem, CalendarProviderType, CreateEventInput, EventFilter,
 };
 use tauri::Manager;
-use tauri_plugin_auth::AuthPluginExt;
 use tauri_plugin_permissions::PermissionsPluginExt;
 
 use crate::error::Error;
@@ -109,10 +108,12 @@ pub fn parse_meeting_link(text: String) -> Option<String> {
     hypr_calendar::parse_meeting_link(&text)
 }
 
-fn access_token<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<Option<String>, Error> {
-    app.access_token()
-        .map(|token| token.filter(|token| !token.is_empty()))
-        .map_err(|error| Error::Auth(error.to_string()))
+fn access_token<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> Result<Option<String>, Error> {
+    // Cloud calendar OAuth (Google/Outlook) required a signed-in Anarlog
+    // account. Accounts/billing were removed in Task 4 — there is never an
+    // access token, so non-Apple providers are always treated as
+    // unauthenticated.
+    Ok(None)
 }
 
 fn require_access_token<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<String, Error> {

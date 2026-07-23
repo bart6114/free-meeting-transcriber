@@ -1,6 +1,6 @@
 import { getIdentifier } from "@tauri-apps/api/app";
 
-import { env } from "~/env";
+import { HOSTED_APP_URL } from "~/env";
 
 // export * from "../shared/config/configure-pro-settings";
 // export * from "~/sidebar/timeline/utils";
@@ -30,7 +30,7 @@ export const buildWebAppUrl = async (
   params?: Record<string, string>,
 ): Promise<string> => {
   const scheme = await getScheme();
-  const url = new URL(path, env.VITE_APP_URL);
+  const url = new URL(path, HOSTED_APP_URL);
   url.searchParams.set("flow", "desktop");
   url.searchParams.set("scheme", scheme);
   if (params) {

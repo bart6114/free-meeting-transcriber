@@ -138,7 +138,6 @@ hypr-segmentation = { path = "crates/segmentation", package = "segmentation" }
 hypr-shortcut-macos = { path = "crates/shortcut-macos", package = "shortcut-macos" }
 hypr-slack-web = { path = "crates/slack-web", package = "slack-web" }
 hypr-storage = { path = "crates/storage", package = "storage" }
-hypr-supabase-auth = { path = "crates/supabase-auth", package = "supabase-auth" }
 hypr-tantivy-core = { path = "crates/tantivy", package = "tantivy-core" }
 hypr-tauri-utils = { path = "crates/tauri-utils", package = "tauri-utils" }
 hypr-tcc = { path = "crates/tcc", package = "tcc" }
@@ -198,7 +197,6 @@ tauri-plugin-window-state = "2.4"
 tauri-plugin-agent = { path = "plugins/agent" }
 tauri-plugin-analytics = { path = "plugins/analytics" }
 tauri-plugin-audio-priority = { path = "plugins/audio-priority" }
-tauri-plugin-auth = { path = "plugins/auth" }
 tauri-plugin-bedrock = { path = "plugins/bedrock" }
 tauri-plugin-calendar = { path = "plugins/calendar" }
 tauri-plugin-db = { path = "plugins/db" }

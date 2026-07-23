@@ -4,7 +4,6 @@ use hypr_apple_todo::types::{
 use hypr_ticket_interface::{CollectionPage, TicketPage};
 
 use tauri::Manager;
-use tauri_plugin_auth::AuthPluginExt;
 
 use crate::error::Error;
 use crate::read_path::{ReadPath, ReadPathResult};
@@ -279,10 +278,9 @@ pub async fn github_issue_comments(
     crate::github_state::fetch_issue_comments(&owner, &repo, number).await
 }
 
-fn require_access_token<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<String, Error> {
-    let token = app.access_token().map_err(|e| Error::Auth(e.to_string()))?;
-    match token {
-        Some(t) if !t.is_empty() => Ok(t),
-        _ => Err(Error::Auth("not authenticated".to_string())),
-    }
+fn require_access_token<R: tauri::Runtime>(_app: &tauri::AppHandle<R>) -> Result<String, Error> {
+    // Linear/GitHub OAuth required a signed-in Anarlog account.
+    // Accounts/billing were removed in Task 4 — there is never an access
+    // token.
+    Err(Error::Auth("not authenticated".to_string()))
 }
