@@ -9,8 +9,6 @@ import type {
   CloudsyncWorkspaceProjection,
   E2eeIdentityStatus,
   E2eeRecoveryKeyIdentity,
-  LegacyCleanupResult,
-  LegacyCleanupStatus,
   LegacyImportReport,
   ListMeetingsInput as GeneratedListMeetingsInput,
   Meeting,
@@ -26,8 +24,6 @@ export type {
   E2eeIdentityStatus,
   E2eeRecoveryKeyIdentity,
   GetMeetingInput,
-  LegacyCleanupResult,
-  LegacyCleanupStatus,
   LegacyImportReport,
   Meeting,
   MeetingPage,
@@ -153,14 +149,6 @@ export async function executeProxy(
 
 export async function getLegacyImportReport(): Promise<LegacyImportReport> {
   return invoke("plugin:db|get_legacy_import_report");
-}
-
-export async function getLegacyCleanupStatus(): Promise<LegacyCleanupStatus> {
-  return invoke("plugin:db|get_legacy_cleanup_status");
-}
-
-export async function cleanupLegacyFiles(): Promise<LegacyCleanupResult> {
-  return invoke("plugin:db|cleanup_legacy_files");
 }
 
 export async function runLegacyImport(dryRun = false): Promise<string> {

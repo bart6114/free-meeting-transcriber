@@ -11,9 +11,7 @@ Default permissions for the plugin
 - `allow-get-meeting`
 - `allow-get-meeting-transcript`
 - `allow-get-recurring-meeting-history`
-- `allow-get-legacy-cleanup-status`
 - `allow-get-legacy-import-report`
-- `allow-cleanup-legacy-files`
 - `allow-run-legacy-import`
 - `allow-get-e2ee-identity-status`
 - `allow-inspect-e2ee-recovery-key`
@@ -58,32 +56,6 @@ Enables the bind_cloudsync_account command without any pre-configured scope.
 <td>
 
 Denies the bind_cloudsync_account command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:allow-cleanup-legacy-files`
-
-</td>
-<td>
-
-Enables the cleanup_legacy_files command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:deny-cleanup-legacy-files`
-
-</td>
-<td>
-
-Denies the cleanup_legacy_files command without any pre-configured scope.
 
 </td>
 </tr>
@@ -292,32 +264,6 @@ Enables the get_e2ee_identity_status command without any pre-configured scope.
 <td>
 
 Denies the get_e2ee_identity_status command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:allow-get-legacy-cleanup-status`
-
-</td>
-<td>
-
-Enables the get_legacy_cleanup_status command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:deny-get-legacy-cleanup-status`
-
-</td>
-<td>
-
-Denies the get_legacy_cleanup_status command without any pre-configured scope.
 
 </td>
 </tr>

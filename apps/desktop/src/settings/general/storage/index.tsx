@@ -1,7 +1,6 @@
 import { Trans } from "@lingui/react/macro";
 
 import { ChangeLocationRow } from "./change-location";
-import { LegacyMigrationCleanupRow } from "./legacy-cleanup";
 
 export function StorageSettingsView() {
   return (
@@ -11,7 +10,6 @@ export function StorageSettingsView() {
       </h2>
       <div className="flex flex-col gap-3">
         <ChangeLocationRow />
-        <LegacyMigrationCleanupRow />
       </div>
     </div>
   );
