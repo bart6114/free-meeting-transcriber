@@ -179,7 +179,10 @@ design is for. A few things worth knowing:
   pass, only your actual edits cause writes. This is the same mechanism as
   rule 5 above, just applied to everything at once instead of one file.
 
-## Known residuals (honest gaps, not hidden)
+## Known residuals
+
+- **Empty aggregate tables remove their file.** When the last row of an aggregate table (calendars, events, daily notes, tasks, settings) is deleted, the exporter moves the corresponding JSON file to `.trash/` rather than writing an empty file. A missing aggregate file imports as empty — this is symmetric and intentional, but it can look surprising ("why did my `calendars.json` vanish?").
+ (honest gaps, not hidden)
 
 - **`.trash/` has no retention policy yet.** Nothing currently prunes old
   dated folders under `.trash/`. Over a long enough time this can
