@@ -512,6 +512,7 @@ msgid "Export"
 msgstr "Export"
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
+#: src/settings/general/storage/reexport-all.tsx
 msgid "Exporting..."
 msgstr "Exporting..."
 
@@ -1046,6 +1047,18 @@ msgstr "Preparing transcript..."
 #: src/session/components/note-input/search/bar.tsx
 msgid "Previous match"
 msgstr "Previous match"
+
+#: src/settings/general/storage/reexport-all.tsx
+msgid "Re-export all files"
+msgstr "Re-export all files"
+
+#: src/settings/general/storage/reexport-all.tsx
+msgid "Re-export queued — files will update in the vault within a few seconds."
+msgstr "Re-export queued — files will update in the vault within a few seconds."
+
+#: src/settings/general/storage/reexport-all.tsx
+msgid "Re-render every session, contact, and calendar file"
+msgstr "Re-render every session, contact, and calendar file"
 
 #: src/onboarding/permissions.tsx
 msgid "Read meeting controls, visible chat, and participant status"

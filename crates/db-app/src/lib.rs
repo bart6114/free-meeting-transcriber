@@ -180,6 +180,22 @@ pub const APP_MIGRATION_STEPS: &[hypr_db_migrate::MigrationStep] = &[
         scope: hypr_db_migrate::MigrationScope::Plain,
         sql: include_str!("../migrations/20260717191000_session_share_sync_state.sql"),
     },
+    hypr_db_migrate::MigrationStep {
+        id: "20260723150000_vault_export_dirty",
+        // `Plain`, not `CloudsyncAlter`, even though some altered tables
+        // (sessions, session_documents, transcripts, humans, organizations,
+        // session_participants, action_items) are in `E2EE_DOMAIN_TABLES`:
+        // CloudSync is permanently disabled in this fork
+        // (`cloudsync_runtime_config_from_env` always returns `None`), so the
+        // `CloudsyncAlter` branch in `db-migrate`'s `apply()` always falls
+        // through to the same plain-apply path anyway. `CloudsyncAlter` also
+        // names exactly one table per step, which doesn't fit one migration
+        // spanning fourteen tables. `validate_step` only enforces the
+        // cloudsync-table guard when a step opts into `CloudsyncAlter`, so
+        // `Plain` here is unconditionally valid.
+        scope: hypr_db_migrate::MigrationScope::Plain,
+        sql: include_str!("../migrations/20260723150000_vault_export_dirty.sql"),
+    },
 ];
 
 pub fn schema() -> hypr_db_migrate::DbSchema {
@@ -928,6 +944,7 @@ ON shared_session_cache(workspace_id);
                 "tags",
                 "templates",
                 "transcripts",
+                "vault_export_dirty",
                 "workspace_memberships",
                 "workspaces",
             ]

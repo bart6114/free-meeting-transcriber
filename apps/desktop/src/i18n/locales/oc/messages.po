@@ -512,6 +512,7 @@ msgid "Export"
 msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
+#: src/settings/general/storage/reexport-all.tsx
 msgid "Exporting..."
 msgstr ""
 
@@ -1045,6 +1046,18 @@ msgstr ""
 
 #: src/session/components/note-input/search/bar.tsx
 msgid "Previous match"
+msgstr ""
+
+#: src/settings/general/storage/reexport-all.tsx
+msgid "Re-export all files"
+msgstr ""
+
+#: src/settings/general/storage/reexport-all.tsx
+msgid "Re-export queued — files will update in the vault within a few seconds."
+msgstr ""
+
+#: src/settings/general/storage/reexport-all.tsx
+msgid "Re-render every session, contact, and calendar file"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
