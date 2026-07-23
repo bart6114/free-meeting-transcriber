@@ -1584,6 +1584,10 @@ msgstr ""
 msgid "You can"
 msgstr ""
 
+#: src/settings/general/storage/index.tsx
+msgid "Your data lives as files in this folder. The internal database is a cache and can be rebuilt at any time."
+msgstr ""
+
 #: src/templates/template-sidebar.tsx
 msgid "Z to A"
 msgstr ""
