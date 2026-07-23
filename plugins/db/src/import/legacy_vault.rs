@@ -31,7 +31,7 @@ const RECOVERED_DUPLICATE_DOCUMENT_ID: &str = "recovered_duplicate_document_id";
 const CONFLICT_BACKUP_MARKER: &str = ".conflict-";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum SourceKind {
+pub(crate) enum SourceKind {
     Calendar,
     Event,
     Template,
@@ -48,7 +48,7 @@ enum SourceKind {
 }
 
 impl SourceKind {
-    fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Calendar => "calendar",
             Self::Event => "event",
@@ -68,10 +68,10 @@ impl SourceKind {
 }
 
 #[derive(Debug)]
-struct SourceFile {
-    path: PathBuf,
-    relative_path: String,
-    kind: SourceKind,
+pub(crate) struct SourceFile {
+    pub(crate) path: PathBuf,
+    pub(crate) relative_path: String,
+    pub(crate) kind: SourceKind,
 }
 
 impl SourceFile {
@@ -904,7 +904,7 @@ fn documents_share_variant(left: &LegacyDocument, right: &LegacyDocument) -> boo
             || right.title.trim().is_empty())
 }
 
-fn classify_source(relative_path: &str) -> Option<SourceKind> {
+pub(crate) fn classify_source(relative_path: &str) -> Option<SourceKind> {
     let parts = relative_path.split('/').collect::<Vec<_>>();
     let filename = parts.last().copied()?;
 
@@ -938,7 +938,7 @@ fn classify_source(relative_path: &str) -> Option<SourceKind> {
     }
 }
 
-fn parse_source(
+pub(crate) fn parse_source(
     vault_base: &Path,
     source: &SourceFile,
     bytes: &[u8],
@@ -1577,7 +1577,10 @@ fn parse_json_object(content: &str) -> Result<Map<String, Value>, String> {
         .ok_or_else(|| "JSON root is not an object".to_string())
 }
 
-fn infer_session_id_and_folder(vault_base: &Path, path: &Path) -> Result<(String, String), String> {
+pub(crate) fn infer_session_id_and_folder(
+    vault_base: &Path,
+    path: &Path,
+) -> Result<(String, String), String> {
     let relative = path
         .strip_prefix(vault_base)
         .map_err(|_| "session source is outside the vault".to_string())?;
@@ -1593,7 +1596,7 @@ fn infer_session_id_and_folder(vault_base: &Path, path: &Path) -> Result<(String
     Ok((session_id, folder_path))
 }
 
-fn normalized_relative_path(base: &Path, path: &Path) -> String {
+pub(crate) fn normalized_relative_path(base: &Path, path: &Path) -> String {
     path.strip_prefix(base)
         .unwrap_or(path)
         .components()
@@ -1640,7 +1643,7 @@ fn append_warning(batch: &mut LegacyImportBatch, warning: String) {
     batch.warning.push_str(&warning);
 }
 
-fn sha256(bytes: &[u8]) -> String {
+pub(crate) fn sha256(bytes: &[u8]) -> String {
     Sha256::digest(bytes)
         .iter()
         .fold(String::with_capacity(64), |mut output, byte| {

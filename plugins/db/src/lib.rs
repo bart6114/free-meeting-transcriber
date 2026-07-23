@@ -5,7 +5,7 @@ mod import;
 mod runtime;
 
 pub use error::{Error, Result};
-pub use import::{SyncReport, sync_from_vault};
+pub use import::{SyncReport, import_paths, sync_from_vault};
 pub use runtime::open_app_db;
 use tauri::Manager;
 
