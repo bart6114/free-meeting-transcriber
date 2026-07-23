@@ -59,14 +59,6 @@ msgstr "3 days"
 msgid "A to Z"
 msgstr "A to Z"
 
-#: src/shared-notes/index.tsx
-msgid "Access no longer available"
-msgstr "Access no longer available"
-
-#: src/session-sharing/index.tsx
-msgid "Access settings could not be loaded."
-msgstr "Access settings could not be loaded."
-
 #: src/onboarding/permissions.tsx
 #: src/settings/general/permissions.tsx
 msgid "Accessibility"
@@ -178,10 +170,6 @@ msgstr "Anarlog can hear your voice"
 msgid "Anarlog can read meeting details"
 msgstr "Anarlog can read meeting details"
 
-#: src/shared-notes/index.tsx
-msgid "Anarlog could not read the local shared-note cache."
-msgstr "Anarlog could not read the local shared-note cache."
-
 #: src/settings/general/account.tsx
 msgid "Anarlog couldn't sign you out. Try again."
 msgstr "Anarlog couldn't sign you out. Try again."
@@ -230,10 +218,6 @@ msgstr "Appearance"
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "Apply to all"
 msgstr "Apply to all"
-
-#: src/session-sharing/index.tsx
-msgid "Approve"
-msgstr "Approve"
 
 #: src/chat/components/input/index.tsx
 msgid "Ask & search about anything, or be creative!"
@@ -330,7 +314,6 @@ msgstr "Calendar connected"
 msgid "Can transcribe while the meeting is happening."
 msgstr "Can transcribe while the meeting is happening."
 
-#: src/session-sharing/comments.tsx
 #: src/settings/general/account.tsx
 #: src/settings/general/e2ee-setup.tsx
 #: src/settings/general/storage/legacy-cleanup.tsx
@@ -381,10 +364,6 @@ msgstr "Choose storage location"
 #: src/templates/template-icon-picker.tsx
 msgid "Choose template icon"
 msgstr "Choose template icon"
-
-#: src/session-sharing/index.tsx
-msgid "Choose who can open this note."
-msgstr "Choose who can open this note."
 
 #: src/settings/general/storage/legacy-cleanup.tsx
 msgid "Clean Up"
@@ -439,21 +418,9 @@ msgstr "Cloud sync is limited to 5 devices. Remove another device to sync here."
 msgid "Cloud sync status: {0}"
 msgstr "Cloud sync status: {0}"
 
-#: src/session-sharing/comments.tsx
-msgid "Collaborator"
-msgstr "Collaborator"
-
 #: src/task/resource-view.tsx
 msgid "comment"
 msgstr "comment"
-
-#: src/session-sharing/comments.tsx
-msgid "Comment"
-msgstr "Comment"
-
-#: src/session-sharing/comments.tsx
-msgid "Comment is too long."
-msgstr "Comment is too long."
 
 #: src/task/resource-view.tsx
 msgid "commented on"
@@ -550,10 +517,6 @@ msgstr "Continue"
 msgid "Continuing without trial"
 msgstr "Continuing without trial"
 
-#: src/session-sharing/index.tsx
-msgid "Copy link"
-msgstr "Copy link"
-
 #: src/chat/components/message/normal.tsx
 msgid "Copy message"
 msgstr "Copy message"
@@ -645,10 +608,6 @@ msgstr "Delete This Event"
 msgid "Deleting..."
 msgstr "Deleting..."
 
-#: src/session-sharing/index.tsx
-msgid "Deny"
-msgstr "Deny"
-
 #: src/templates/template-form.tsx
 msgid "Describe the template purpose..."
 msgstr "Describe the template purpose..."
@@ -685,10 +644,6 @@ msgstr "Don't save"
 #: src/settings/general/notification.tsx
 msgid "Don't show notifications when Do-Not-Disturb is enabled on your system"
 msgstr "Don't show notifications when Do-Not-Disturb is enabled on your system"
-
-#: src/session-sharing/index.tsx
-msgid "Done"
-msgstr "Done"
 
 #: src/settings/ai/stt/select.tsx
 msgid "Download"
@@ -862,17 +817,9 @@ msgstr "Free"
 msgid "Frequently used"
 msgstr "Frequently used"
 
-#: src/session-sharing/index.tsx
-msgid "Full access"
-msgstr "Full access"
-
 #: src/sidebar/settings.tsx
 msgid "General"
 msgstr "General"
-
-#: src/session-sharing/index.tsx
-msgid "General access"
-msgstr "General access"
 
 #: src/session/components/note-input/enhanced/streaming.tsx
 #: src/session/components/title-input.tsx
@@ -985,14 +932,6 @@ msgstr "Insert below"
 msgid "Intelligence"
 msgstr "Intelligence"
 
-#: src/session-sharing/index.tsx
-msgid "Invite"
-msgstr "Invite"
-
-#: src/session-sharing/index.tsx
-msgid "Invite people to this note."
-msgstr "Invite people to this note."
-
 #: src/contacts/details.tsx
 msgid "Job Title"
 msgstr "Job Title"
@@ -1016,10 +955,6 @@ msgstr "Join scheduled meetings"
 #: src/settings/general/app-settings.tsx
 msgid "Keep Anarlog available from the menu bar."
 msgstr "Keep Anarlog available from the menu bar."
-
-#: src/session-sharing/index.tsx
-msgid "Keep desktop edits"
-msgstr "Keep desktop edits"
 
 #: src/settings/general/index.tsx
 msgid "Language & Region"
@@ -1057,10 +992,6 @@ msgstr "LinkedIn"
 #: src/settings/ai/stt/select.tsx
 msgid "Live"
 msgstr "Live"
-
-#: src/session-sharing/index.tsx
-msgid "Loading access…"
-msgstr "Loading access…"
 
 #: src/templates/auto-form.tsx
 msgid "Loading Auto prompt..."
@@ -1326,10 +1257,6 @@ msgstr "Objects"
 msgid "Oldest"
 msgstr "Oldest"
 
-#: src/session-sharing/index.tsx
-msgid "Only people invited"
-msgstr "Only people invited"
-
 #: src/settings/todo/github.tsx
 msgid "Only public repositories are supported."
 msgstr "Only public repositories are supported."
@@ -1380,14 +1307,6 @@ msgstr "Open on GitHub"
 msgid "Open repository on GitHub"
 msgstr "Open repository on GitHub"
 
-#: src/session-sharing/index.tsx
-msgid "Open web copy"
-msgstr "Open web copy"
-
-#: src/shared-notes/index.tsx
-msgid "Opening…"
-msgstr "Opening…"
-
 #: src/calendar/components/apple/permission.tsx
 #: src/settings/todo/provider-content.tsx
 msgid "or"
@@ -1428,10 +1347,6 @@ msgstr "Pause sync"
 msgid "People"
 msgstr "People"
 
-#: src/session-sharing/index.tsx
-msgid "People with access"
-msgstr "People with access"
-
 #: src/calendar/components/apple/permission.tsx
 msgid "permission panel."
 msgstr "permission panel."
@@ -1464,10 +1379,6 @@ msgstr "Post recording disclosure in meeting chat"
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Preparing transcript..."
 msgstr "Preparing transcript..."
-
-#: src/session-sharing/index.tsx
-msgid "Previous broad access is still active"
-msgstr "Previous broad access is still active"
 
 #: src/session/components/note-input/search/bar.tsx
 msgid "Previous match"
@@ -1604,17 +1515,9 @@ msgstr "Reset"
 msgid "Reset to Anarlog default"
 msgstr "Reset to Anarlog default"
 
-#: src/session-sharing/index.tsx
-msgid "Resolve the web and desktop edits before inviting anyone."
-msgstr "Resolve the web and desktop edits before inviting anyone."
-
 #: src/settings/general/notification.tsx
 msgid "Respect Do-Not-Disturb mode"
 msgstr "Respect Do-Not-Disturb mode"
-
-#: src/session-sharing/index.tsx
-msgid "Restrict"
-msgstr "Restrict"
 
 #: src/session/components/outer-header/index.tsx
 msgid "Resume"
@@ -1793,61 +1696,9 @@ msgstr "Setting up cloud sync"
 msgid "Settings"
 msgstr "Settings"
 
-#: src/session-sharing/index.tsx
-msgid "Share"
-msgstr "Share"
-
-#: src/session-sharing/index.tsx
-msgid "Share note"
-msgstr "Share note"
-
-#: src/session-sharing/index.tsx
-msgid "Share notes with others"
-msgstr "Share notes with others"
-
 #: src/settings/general/app-settings.tsx
 msgid "Share usage data"
 msgstr "Share usage data"
-
-#: src/shared-notes/index.tsx
-msgid "Shared link · View only"
-msgstr "Shared link · View only"
-
-#: src/sidebar/timeline/item.tsx
-msgid "Shared note"
-msgstr "Shared note"
-
-#: src/shared-notes/index.tsx
-msgid "Shared note · Owner"
-msgstr "Shared note · Owner"
-
-#: src/shared-notes/index.tsx
-msgid "Shared note unavailable"
-msgstr "Shared note unavailable"
-
-#: src/shared-notes/index.tsx
-msgid "Shared notes are tied to the account they were shared with."
-msgstr "Shared notes are tied to the account they were shared with."
-
-#: src/sidebar/shared-notes.tsx
-msgid "Shared with me"
-msgstr "Shared with me"
-
-#: src/shared-notes/index.tsx
-msgid "Shared with me · Can comment"
-msgstr "Shared with me · Can comment"
-
-#: src/shared-notes/index.tsx
-msgid "Shared with me · Can edit"
-msgstr "Shared with me · Can edit"
-
-#: src/shared-notes/index.tsx
-msgid "Shared with me · View only"
-msgstr "Shared with me · View only"
-
-#: src/session-sharing/index.tsx
-msgid "Sharing paused to protect your edits"
-msgstr "Sharing paused to protect your edits"
 
 #: src/sidebar/timeline/item.tsx
 msgid "Show All Recurring Events"
@@ -1891,7 +1742,6 @@ msgid "Show tray icon"
 msgstr "Show tray icon"
 
 #: src/settings/general/account.tsx
-#: src/shared-notes/index.tsx
 msgid "Sign in"
 msgstr "Sign in"
 
@@ -1923,10 +1773,6 @@ msgstr "Sign in to unlock cloud transcription and AI models, plus Pro features l
 #: src/onboarding/index.tsx
 msgid "Sign in to unlock powerful AI models, sync across devices, and personalization."
 msgstr "Sign in to unlock powerful AI models, sync across devices, and personalization."
-
-#: src/shared-notes/index.tsx
-msgid "Sign in to view this shared note"
-msgstr "Sign in to view this shared note"
 
 #: src/instruction/index.tsx
 msgid "Sign in to your account"
@@ -2112,17 +1958,9 @@ msgstr "Templates"
 msgid "The app will restart after onboarding to apply your storage changes"
 msgstr "The app will restart after onboarding to apply your storage changes"
 
-#: src/shared-notes/index.tsx
-msgid "The link may have expired or its access may have changed."
-msgstr "The link may have expired or its access may have changed."
-
 #: src/settings/general/spoken-languages.tsx
 msgid "The main language is always included for transcription"
 msgstr "The main language is always included for transcription"
-
-#: src/shared-notes/index.tsx
-msgid "The note may have been unshared or moved out of a workspace you can access."
-msgstr "The note may have been unshared or moved out of a workspace you can access."
 
 #: src/chat/components/message/loading.tsx
 msgid "Thinking..."
@@ -2177,10 +2015,6 @@ msgstr "Trial"
 msgid "Trial activated - {trialDays} days of Pro"
 msgstr "Trial activated - {trialDays} days of Pro"
 
-#: src/session-sharing/index.tsx
-msgid "Try again"
-msgstr "Try again"
-
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "Unknown"
 msgstr "Unknown"
@@ -2203,10 +2037,8 @@ msgstr "Unnamed"
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
 #: src/session/components/title-input.tsx
-#: src/shared-notes/index.tsx
 #: src/shared/open-note-dialog.tsx
 #: src/shared/ui/resource-list/preview-header.tsx
-#: src/sidebar/shared-notes.tsx
 #: src/sidebar/timeline/item.tsx
 #: src/templates/details.tsx
 #: src/templates/sections-editor.tsx
@@ -2227,7 +2059,6 @@ msgstr "Upgrade to connect"
 
 #: src/calendar/components/sidebar.tsx
 #: src/main/sync-status.tsx
-#: src/session-sharing/index.tsx
 msgid "Upgrade to Pro"
 msgstr "Upgrade to Pro"
 
@@ -2235,10 +2066,6 @@ msgstr "Upgrade to Pro"
 #: src/calendar/components/sidebar.tsx
 msgid "Upgrade to Pro for {0}"
 msgstr "Upgrade to Pro for {0}"
-
-#: src/session-sharing/index.tsx
-msgid "Upgrade to Pro to invite people and share this note with them."
-msgstr "Upgrade to Pro to invite people and share this note with them."
 
 #: src/settings/ai/llm/select.tsx
 #: src/settings/ai/stt/select.tsx
@@ -2307,10 +2134,6 @@ msgstr "While listening, use Accessibility access to copy visible chat from supp
 msgid "Work on this task"
 msgstr "Work on this task"
 
-#: src/session-sharing/comments.tsx
-msgid "You"
-msgstr "You"
-
 #: src/calendar/components/apple/permission.tsx
 msgid "You can"
 msgstr "You can"
@@ -2330,10 +2153,6 @@ msgstr "You're on the <0>{planLabel}</0> plan"
 #: src/settings/general/account.tsx
 msgid "Your Account"
 msgstr "Your Account"
-
-#: src/session-sharing/comments.tsx
-msgid "Your comment couldn’t be added. Try again."
-msgstr "Your comment couldn’t be added. Try again."
 
 #: src/main/sync-status.tsx
 msgid "Your notes are stored on this device only"
