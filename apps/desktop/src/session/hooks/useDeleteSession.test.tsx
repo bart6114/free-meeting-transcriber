@@ -23,9 +23,6 @@ const mocks = vi.hoisted(() => {
       () => Promise<Array<{ label: string; close: () => Promise<void> }>>
     >(() => Promise.resolve([])),
     getCurrentWebviewWindowLabel: vi.fn(() => "main"),
-    ignoreEvent: vi.fn(),
-    unignoreEvent: vi.fn(),
-    isIgnored: vi.fn(() => false),
     invalidateResource: vi.fn(),
     openCurrent: vi.fn(),
     openTabs: [] as Array<{ type: string; id: string }>,
@@ -56,14 +53,6 @@ vi.mock("@hypr/plugin-windows", () => ({
 
 vi.mock("@hypr/ui/components/ui/toast", () => ({
   sonnerToast: { error: mocks.toastError, warning: mocks.toastWarning },
-}));
-
-vi.mock("~/calendar/ignored-events", () => ({
-  useIgnoredEvents: () => ({
-    ignoreEvent: mocks.ignoreEvent,
-    unignoreEvent: mocks.unignoreEvent,
-    isIgnored: mocks.isIgnored,
-  }),
 }));
 
 vi.mock("~/session/queries", () => ({
@@ -167,7 +156,7 @@ describe("useDeleteSession", () => {
     const { result } = renderHook(() => useDeleteSession());
 
     act(() => {
-      result.current("session-1", { trackingId: "tracking-1", title: "Note" });
+      result.current("session-1", { title: "Note" });
     });
 
     expect(mocks.addDeletion).toHaveBeenCalledWith(
@@ -179,7 +168,6 @@ describe("useDeleteSession", () => {
       expect.any(Function),
       undefined,
     );
-    expect(mocks.ignoreEvent).toHaveBeenCalledWith("tracking-1");
     expect(mocks.softDeleteSession).toHaveBeenCalledWith(
       "session-1",
       expect.any(String),
@@ -199,7 +187,7 @@ describe("useDeleteSession", () => {
     const { result } = renderHook(() => useDeleteSession());
 
     act(() => {
-      result.current("session-1", { trackingId: "tracking-1" });
+      result.current("session-1");
     });
 
     expect(mocks.addDeletion).toHaveBeenCalledOnce();
@@ -207,7 +195,6 @@ describe("useDeleteSession", () => {
       expect(mocks.toastError).toHaveBeenCalledOnce();
     });
     expect(mocks.clearDeletion).toHaveBeenCalledWith("session-1");
-    expect(mocks.unignoreEvent).toHaveBeenCalledWith("tracking-1");
     expect(mocks.finalizeSessionDeletion).not.toHaveBeenCalled();
     consoleError.mockRestore();
   });
@@ -225,7 +212,6 @@ describe("useDeleteSession", () => {
       expect(mocks.clearDeletion).toHaveBeenCalledWith("session-1");
     });
     expect(mocks.toastError).not.toHaveBeenCalled();
-    expect(mocks.unignoreEvent).not.toHaveBeenCalled();
   });
 
   it("never finalizes a deletion whose write failed", async () => {

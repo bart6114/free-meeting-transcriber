@@ -17,6 +17,7 @@ import { cn } from "@hypr/utils";
 
 import { useAnchor, useAutoScrollToAnchor } from "./anchor";
 import { TimelineItemComponent } from "./item";
+import { useTimelineSessionsTable } from "./queries";
 import {
   CurrentTimeIndicator,
   useCurrentTimeMs,
@@ -32,15 +33,12 @@ import {
   deriveTimelineWindowData,
   getItemTimestamp,
   type TimelineBucket,
-  type TimelineEventsTable,
   type TimelineIndicatorPlacement,
   type TimelineItem,
   type TimelinePrecision,
   type TimelineSessionsTable,
 } from "./utils";
 
-import { useIgnoredEvents } from "~/calendar/ignored-events";
-import { useTimelineTables } from "~/calendar/queries";
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
 import { useConfigValue } from "~/shared/config";
 import { scrollElementByWheel } from "~/shared/dom/scroll-wheel";
@@ -51,28 +49,18 @@ import { useTimelineSelection } from "~/store/zustand/timeline-selection";
 import { useListener } from "~/stt/contexts";
 
 export const TimelineView = memo(function TimelineView({
-  showIgnoredEvents,
-  onShowIgnoredEventsChange,
   topChipsOverlapHeader = false,
   topChromeInset = false,
 }: {
-  showIgnoredEvents?: boolean;
-  onShowIgnoredEventsChange?: (showIgnored: boolean) => void;
   topChipsOverlapHeader?: boolean;
   topChromeInset?: boolean;
 } = {}) {
   const { t } = useLingui();
   const timezone = useConfigValue("timezone") || undefined;
-  const { timelineEventsTable, timelineSessionsTable } = useTimelineTables();
-  const [uncontrolledShowIgnored, setUncontrolledShowIgnored] = useState(false);
-  const showIgnored = showIgnoredEvents ?? uncontrolledShowIgnored;
+  const timelineSessionsTable = useTimelineSessionsTable();
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
-  const { isIgnored } = useIgnoredEvents();
   const { buckets, hasMoreFutureItems } = useTimelineData({
-    isEventIgnored: isIgnored,
-    showIgnored,
-    timelineEventsTable,
     timelineSessionsTable,
     timezone,
   });
@@ -307,17 +295,6 @@ export const TimelineView = memo(function TimelineView({
     return getFallbackIndicatorIndex(buckets, Date.now());
   }, [buckets, hasToday, indicatorTimeMs]);
 
-  const toggleShowIgnored = useCallback(() => {
-    const nextShowIgnored = !showIgnored;
-
-    if (onShowIgnoredEventsChange) {
-      onShowIgnoredEventsChange(nextShowIgnored);
-      return;
-    }
-
-    setUncontrolledShowIgnored(nextShowIgnored);
-  }, [onShowIgnoredEventsChange, showIgnored]);
-
   const handleDeleteSelected = useCallback(() => {
     const sessionIds = selectedIds
       .filter((key) => key.startsWith("session-"))
@@ -351,23 +328,8 @@ export const TimelineView = memo(function TimelineView({
               disabled: sessionCount === 0,
             },
           ]
-        : [
-            {
-              id: "toggle-ignored",
-              text: showIgnored
-                ? t`Hide Deleted Events`
-                : t`Show Deleted Events`,
-              action: toggleShowIgnored,
-            },
-          ],
-    [
-      selectedIds,
-      sessionCount,
-      handleDeleteSelected,
-      showIgnored,
-      toggleShowIgnored,
-      t,
-    ],
+        : [],
+    [selectedIds, sessionCount, handleDeleteSelected, t],
   );
 
   const showContextMenu = useNativeContextMenu(contextMenuItems);
@@ -1024,50 +986,23 @@ function isTimelineItemVisible(
 }
 
 function useTimelineData({
-  isEventIgnored,
-  showIgnored,
-  timelineEventsTable,
   timelineSessionsTable,
   timezone,
 }: {
-  isEventIgnored: (
-    trackingId: string | null | undefined,
-    recurrenceSeriesId: string | null | undefined,
-  ) => boolean;
-  showIgnored: boolean;
-  timelineEventsTable: TimelineEventsTable;
   timelineSessionsTable: TimelineSessionsTable;
   timezone?: string;
 }): {
   buckets: TimelineBucket[];
   hasMoreFutureItems: boolean;
-  hasVisibleCalendarEvents: boolean;
 } {
   const windowData = useMemo(
-    () =>
-      deriveTimelineWindowData({
-        isEventIgnored,
-        showIgnored,
-        timelineEventsTable,
-        timelineSessionsTable,
-        timezone,
-      }),
-    [
-      isEventIgnored,
-      showIgnored,
-      timelineEventsTable,
-      timelineSessionsTable,
-      timezone,
-    ],
+    () => deriveTimelineWindowData({ timelineSessionsTable, timezone }),
+    [timelineSessionsTable, timezone],
   );
-  const currentTimeMs = useSmartCurrentTime(
-    windowData.timelineEventsTable,
-    windowData.timelineSessionsTable,
-  );
+  const currentTimeMs = useSmartCurrentTime(windowData.timelineSessionsTable);
 
   return useMemo(() => {
     const buckets = buildTimelineBuckets({
-      timelineEventsTable: windowData.timelineEventsTable,
       timelineSessionsTable: windowData.timelineSessionsTable,
       timezone,
     });
@@ -1075,9 +1010,6 @@ function useTimelineData({
     return {
       buckets,
       hasMoreFutureItems: windowData.hasMoreFutureItems,
-      hasVisibleCalendarEvents: buckets.some((bucket) =>
-        bucket.items.some((item) => item.type === "event"),
-      ),
     };
   }, [windowData, currentTimeMs, timezone]);
 }

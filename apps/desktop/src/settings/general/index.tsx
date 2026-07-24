@@ -27,8 +27,6 @@ import { resolveConfigValue, resolveConfigValues } from "~/shared/config";
 
 const SETTINGS_FORM_KEYS = [
   "autostart",
-  "auto_join_scheduled_meetings",
-  "auto_start_scheduled_meetings",
   "auto_stop_meetings",
   "floating_bar_enabled",
   "show_app_in_dock",
@@ -50,9 +48,6 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
   const form = useForm({
     defaultValues: {
       autostart: settingsValue.autostart,
-      auto_join_scheduled_meetings: settingsValue.auto_join_scheduled_meetings,
-      auto_start_scheduled_meetings:
-        settingsValue.auto_start_scheduled_meetings,
       auto_stop_meetings: settingsValue.auto_stop_meetings,
       floating_bar_enabled: settingsValue.floating_bar_enabled,
       show_app_in_dock: settingsValue.show_app_in_dock,
@@ -89,10 +84,6 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
 
       setSettingValues({
         autostart: normalizedValue.autostart,
-        auto_join_scheduled_meetings:
-          normalizedValue.auto_join_scheduled_meetings,
-        auto_start_scheduled_meetings:
-          normalizedValue.auto_start_scheduled_meetings,
         auto_stop_meetings: normalizedValue.auto_stop_meetings,
         floating_bar_enabled: normalizedValue.floating_bar_enabled,
         show_app_in_dock: normalizedValue.show_app_in_dock,
@@ -108,10 +99,6 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
       void analyticsCommands.event({
         event: "settings_changed",
         autostart: normalizedValue.autostart,
-        auto_join_scheduled_meetings:
-          normalizedValue.auto_join_scheduled_meetings,
-        auto_start_scheduled_meetings:
-          normalizedValue.auto_start_scheduled_meetings,
         auto_stop_meetings: normalizedValue.auto_stop_meetings,
         floating_bar_enabled: normalizedValue.floating_bar_enabled,
         show_app_in_dock: normalizedValue.show_app_in_dock,
@@ -169,129 +156,94 @@ function SettingsAppContent({
         <ThemeSelector />
         <form.Field name="autostart">
           {(autostartField) => (
-            <form.Field name="auto_join_scheduled_meetings">
-              {(autoJoinScheduledMeetingsField) => (
-                <form.Field name="auto_start_scheduled_meetings">
-                  {(autoStartScheduledMeetingsField) => (
-                    <form.Field name="auto_stop_meetings">
-                      {(autoStopMeetingsField) => (
-                        <form.Field name="floating_bar_enabled">
-                          {(floatingBarEnabledField) => (
-                            <form.Field name="show_app_in_dock">
-                              {(showAppInDockField) => (
-                                <form.Field name="show_tray_icon">
-                                  {(showTrayIconField) => (
-                                    <form.Field name="telemetry_consent">
-                                      {(telemetryConsentField) => (
-                                        <form.Field name="consent_auto_send_chat">
-                                          {(meetingDisclosureAutoPostField) => (
-                                            <form.Field name="capture_meeting_chat">
-                                              {(captureMeetingChatField) => (
-                                                <AppSettingsView
-                                                  autostart={{
-                                                    value:
-                                                      autostartField.state
-                                                        .value,
-                                                    onChange: (val) =>
-                                                      autostartField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  autoJoinScheduledMeetings={{
-                                                    value:
-                                                      autoJoinScheduledMeetingsField
-                                                        .state.value,
-                                                    onChange: (val) =>
-                                                      autoJoinScheduledMeetingsField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  autoStartScheduledMeetings={{
-                                                    value:
-                                                      autoStartScheduledMeetingsField
-                                                        .state.value,
-                                                    onChange: (val) =>
-                                                      autoStartScheduledMeetingsField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  autoStopMeetings={{
-                                                    value:
-                                                      autoStopMeetingsField
-                                                        .state.value,
-                                                    onChange: (val) =>
-                                                      autoStopMeetingsField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  floatingBar={{
-                                                    value:
-                                                      floatingBarEnabledField
-                                                        .state.value,
-                                                    onChange: (val) =>
-                                                      floatingBarEnabledField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  showAppInDock={{
-                                                    value:
-                                                      showAppInDockField.state
-                                                        .value,
-                                                    onChange: (val) =>
-                                                      showAppInDockField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  showTrayIcon={{
-                                                    value:
-                                                      showTrayIconField.state
-                                                        .value,
-                                                    onChange: (val) =>
-                                                      showTrayIconField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  telemetryConsent={{
-                                                    value:
-                                                      telemetryConsentField
-                                                        .state.value,
-                                                    onChange: (val) =>
-                                                      telemetryConsentField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  meetingDisclosureAutoPost={{
-                                                    value:
-                                                      meetingDisclosureAutoPostField
-                                                        .state.value,
-                                                    onChange: (val) =>
-                                                      meetingDisclosureAutoPostField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  captureMeetingChat={{
-                                                    value:
-                                                      captureMeetingChatField
-                                                        .state.value,
-                                                    onChange: (val) =>
-                                                      captureMeetingChatField.handleChange(
-                                                        val,
-                                                      ),
-                                                  }}
-                                                  audioRetention={{
-                                                    value: audioRetention,
-                                                    onChange: (val) =>
-                                                      setSettingValues({
-                                                        audio_retention: val,
-                                                        save_recordings:
-                                                          val !== "none",
-                                                      }),
-                                                  }}
-                                                />
-                                              )}
-                                            </form.Field>
-                                          )}
-                                        </form.Field>
+            <form.Field name="auto_stop_meetings">
+              {(autoStopMeetingsField) => (
+                <form.Field name="floating_bar_enabled">
+                  {(floatingBarEnabledField) => (
+                    <form.Field name="show_app_in_dock">
+                      {(showAppInDockField) => (
+                        <form.Field name="show_tray_icon">
+                          {(showTrayIconField) => (
+                            <form.Field name="telemetry_consent">
+                              {(telemetryConsentField) => (
+                                <form.Field name="consent_auto_send_chat">
+                                  {(meetingDisclosureAutoPostField) => (
+                                    <form.Field name="capture_meeting_chat">
+                                      {(captureMeetingChatField) => (
+                                        <AppSettingsView
+                                          autostart={{
+                                            value: autostartField.state.value,
+                                            onChange: (val) =>
+                                              autostartField.handleChange(val),
+                                          }}
+                                          autoStopMeetings={{
+                                            value:
+                                              autoStopMeetingsField.state.value,
+                                            onChange: (val) =>
+                                              autoStopMeetingsField.handleChange(
+                                                val,
+                                              ),
+                                          }}
+                                          floatingBar={{
+                                            value:
+                                              floatingBarEnabledField.state
+                                                .value,
+                                            onChange: (val) =>
+                                              floatingBarEnabledField.handleChange(
+                                                val,
+                                              ),
+                                          }}
+                                          showAppInDock={{
+                                            value:
+                                              showAppInDockField.state.value,
+                                            onChange: (val) =>
+                                              showAppInDockField.handleChange(
+                                                val,
+                                              ),
+                                          }}
+                                          showTrayIcon={{
+                                            value:
+                                              showTrayIconField.state.value,
+                                            onChange: (val) =>
+                                              showTrayIconField.handleChange(
+                                                val,
+                                              ),
+                                          }}
+                                          telemetryConsent={{
+                                            value:
+                                              telemetryConsentField.state.value,
+                                            onChange: (val) =>
+                                              telemetryConsentField.handleChange(
+                                                val,
+                                              ),
+                                          }}
+                                          meetingDisclosureAutoPost={{
+                                            value:
+                                              meetingDisclosureAutoPostField
+                                                .state.value,
+                                            onChange: (val) =>
+                                              meetingDisclosureAutoPostField.handleChange(
+                                                val,
+                                              ),
+                                          }}
+                                          captureMeetingChat={{
+                                            value:
+                                              captureMeetingChatField.state
+                                                .value,
+                                            onChange: (val) =>
+                                              captureMeetingChatField.handleChange(
+                                                val,
+                                              ),
+                                          }}
+                                          audioRetention={{
+                                            value: audioRetention,
+                                            onChange: (val) =>
+                                              setSettingValues({
+                                                audio_retention: val,
+                                                save_recordings: val !== "none",
+                                              }),
+                                          }}
+                                        />
                                       )}
                                     </form.Field>
                                   )}

@@ -9,7 +9,6 @@ type SessionContentSqlRow = {
   title: string;
   created_at: string;
   event_json: string;
-  event_id: string;
   raw_note_id: string;
   raw_body: string;
   raw_body_format: string;
@@ -41,7 +40,6 @@ export type SessionContentSnapshot = {
   title: string;
   createdAt: string;
   event: unknown;
-  eventId: string | null;
   rawNoteId: string | null;
   rawContent: string;
   rawContentFormat: string;
@@ -73,7 +71,6 @@ const SESSION_CONTENT_SQL = `
     session.title,
     session.created_at,
     session.event_json,
-    COALESCE(NULLIF(session.event_id, ''), NULLIF(session.external_event_id, ''), '') AS event_id,
     COALESCE(note.id, '') AS raw_note_id,
     COALESCE(note.body, '') AS raw_body,
     COALESCE(note.body_format, 'prosemirror_json') AS raw_body_format,
@@ -198,7 +195,6 @@ function mapSessionContentRow(
     title: row.title,
     createdAt: row.created_at,
     event: parseJson(row.event_json),
-    eventId: row.event_id || null,
     rawNoteId: row.raw_note_id || null,
     rawContent: row.raw_body,
     rawContentFormat: row.raw_body_format,

@@ -2,8 +2,8 @@ import { useMemo } from "react";
 
 import type { MentionConfig } from "@hypr/editor/widgets";
 
-import { useTimelineSessionsTable } from "~/calendar/queries";
 import { useSearchEngine } from "~/search/contexts/engine";
+import { useTimelineSessionsTable } from "~/sidebar/timeline/queries";
 
 export function useMentionConfig(): MentionConfig {
   const sessions = useTimelineSessionsTable();

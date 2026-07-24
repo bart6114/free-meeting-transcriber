@@ -18,8 +18,6 @@ interface SettingItem {
 
 interface AppSettingsViewProps {
   autostart: SettingItem;
-  autoJoinScheduledMeetings: SettingItem;
-  autoStartScheduledMeetings: SettingItem;
   autoStopMeetings: SettingItem;
   floatingBar: SettingItem;
   showAppInDock: SettingItem;
@@ -35,8 +33,6 @@ interface AppSettingsViewProps {
 
 export function AppSettingsView({
   autostart,
-  autoJoinScheduledMeetings,
-  autoStartScheduledMeetings,
   autoStopMeetings,
   floatingBar,
   showAppInDock,
@@ -97,29 +93,6 @@ export function AppSettingsView({
           <Trans>Meetings</Trans>
         </h2>
         <div className="flex flex-col gap-4">
-          <SettingRow
-            title={<Trans>Start when meeting begins</Trans>}
-            description={
-              <Trans>
-                Automatically start listening when an event-backed note reaches
-                its scheduled start time.
-              </Trans>
-            }
-            checked={autoStartScheduledMeetings.value}
-            onChange={autoStartScheduledMeetings.onChange}
-          />
-          <SettingRow
-            title={<Trans>Join scheduled meetings</Trans>}
-            description={
-              <Trans>
-                Automatically open the meeting link when scheduled listening
-                starts.
-              </Trans>
-            }
-            checked={autoJoinScheduledMeetings.value}
-            onChange={autoJoinScheduledMeetings.onChange}
-            disabled={!autoStartScheduledMeetings.value}
-          />
           <SettingRow
             title={<Trans>Stop when meeting ends</Trans>}
             description={

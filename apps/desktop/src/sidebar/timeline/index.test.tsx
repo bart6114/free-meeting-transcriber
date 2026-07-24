@@ -17,14 +17,12 @@ const mocks = vi.hoisted(() => ({
   currentTimeMs: undefined as number | undefined,
   isAnchorVisible: true,
   isScrolledPastAnchor: false,
-  isIgnored: vi.fn(() => false),
   liveSessionId: null as string | null,
   liveStatus: "inactive" as "inactive" | "active" | "finalizing",
   selectAll: vi.fn(),
   smartCurrentTimeMs: undefined as number | undefined,
   timelineSelectionAnchorId: null as string | null,
   timelineSelectionSelectedIds: [] as string[],
-  timelineEventsTable: {} as Record<string, Record<string, unknown>>,
   timelineSessionsTable: {} as Record<string, Record<string, unknown>>,
 }));
 
@@ -104,11 +102,8 @@ vi.mock("~/shared/config", () => ({
   useConfigValue: () => mocks.configValue,
 }));
 
-vi.mock("~/calendar/queries", () => ({
-  useTimelineTables: () => ({
-    timelineEventsTable: mocks.timelineEventsTable,
-    timelineSessionsTable: mocks.timelineSessionsTable,
-  }),
+vi.mock("./queries", () => ({
+  useTimelineSessionsTable: () => mocks.timelineSessionsTable,
 }));
 
 vi.mock("~/session/hooks/useDeleteSession", () => ({
@@ -117,12 +112,6 @@ vi.mock("~/session/hooks/useDeleteSession", () => ({
 
 vi.mock("~/shared/hooks/useNativeContextMenu", () => ({
   useNativeContextMenu: () => vi.fn(),
-}));
-
-vi.mock("~/calendar/ignored-events", () => ({
-  useIgnoredEvents: () => ({
-    isIgnored: mocks.isIgnored,
-  }),
 }));
 
 vi.mock("~/store/zustand/tabs", () => ({
@@ -217,6 +206,30 @@ vi.mock("./realtime", async () => {
 
 import { TimelineView } from ".";
 
+function sessionRow({
+  title,
+  started_at,
+  ended_at,
+}: {
+  title: string;
+  started_at: string;
+  ended_at: string;
+}) {
+  return {
+    title,
+    created_at: started_at,
+    event_json: JSON.stringify({
+      tracking_id: "",
+      calendar_id: "",
+      title,
+      started_at,
+      ended_at,
+      is_all_day: false,
+      has_recurrence_rules: false,
+    }),
+  };
+}
+
 describe("TimelineView", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -225,7 +238,6 @@ describe("TimelineView", () => {
     mocks.currentTimeMs = undefined;
     mocks.isAnchorVisible = true;
     mocks.isScrolledPastAnchor = false;
-    mocks.isIgnored.mockReturnValue(false);
     mocks.liveSessionId = null;
     mocks.liveStatus = "inactive";
     mocks.currentTab = { type: "empty" };
@@ -233,7 +245,6 @@ describe("TimelineView", () => {
     mocks.smartCurrentTimeMs = undefined;
     mocks.timelineSelectionAnchorId = null;
     mocks.timelineSelectionSelectedIds = [];
-    mocks.timelineEventsTable = {};
     mocks.timelineSessionsTable = {};
   });
 
@@ -324,15 +335,6 @@ describe("TimelineView", () => {
     mocks.currentTimeMs = Date.now();
     mocks.currentTab = { type: "sessions", id: "selected-note" };
     mocks.timelineSelectionAnchorId = "session-selected-note";
-    mocks.timelineEventsTable = {
-      event: {
-        title: "Calendar hold",
-        started_at: "2024-01-15T13:00:00.000Z",
-        ended_at: "2024-01-15T13:30:00.000Z",
-        tracking_id_event: "event-hold",
-        has_recurrence_rules: false,
-      },
-    };
     mocks.timelineSessionsTable = {
       "selected-note": {
         title: "Selected note",
@@ -586,14 +588,12 @@ describe("TimelineView", () => {
     mocks.isAnchorVisible = false;
     mocks.isScrolledPastAnchor = true;
     mocks.smartCurrentTimeMs = Date.now();
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T12:00:51.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const { container } = render(<TimelineView topChromeInset />);
@@ -668,14 +668,12 @@ describe("TimelineView", () => {
     vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
     mocks.currentTimeMs = Date.now();
     mocks.smartCurrentTimeMs = Date.now();
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T12:00:51.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const { container } = render(<TimelineView topChromeInset />);
@@ -717,14 +715,12 @@ describe("TimelineView", () => {
     vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
     mocks.currentTimeMs = Date.now();
     mocks.smartCurrentTimeMs = Date.now();
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T12:01:01.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const { container } = render(<TimelineView topChromeInset />);
@@ -740,14 +736,12 @@ describe("TimelineView", () => {
     vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
     mocks.currentTimeMs = Date.now();
     mocks.smartCurrentTimeMs = Date.now();
-    mocks.timelineEventsTable = {
-      later: {
+    mocks.timelineSessionsTable = {
+      later: sessionRow({
         title: "Roadmap review",
         started_at: "2024-01-15T12:06:00.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-later",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const { container, rerender } = render(<TimelineView topChromeInset />);
@@ -769,7 +763,7 @@ describe("TimelineView", () => {
     vi.setSystemTime(new Date("2024-01-15T12:06:01.000Z"));
     mocks.currentTimeMs = Date.now();
     fireEvent.focus(window);
-    rerender(<TimelineView topChromeInset showIgnoredEvents={false} />);
+    rerender(<TimelineView topChromeInset />);
 
     expect(
       container.querySelector("[data-sidebar-upcoming-meeting-status]")
@@ -779,7 +773,7 @@ describe("TimelineView", () => {
     vi.setSystemTime(new Date("2024-01-15T12:30:01.000Z"));
     mocks.currentTimeMs = Date.now();
     fireEvent.focus(window);
-    rerender(<TimelineView topChromeInset showIgnoredEvents={false} />);
+    rerender(<TimelineView topChromeInset />);
 
     expect(
       container.querySelector("[data-sidebar-upcoming-meeting-status]"),

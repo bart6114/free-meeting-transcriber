@@ -10,12 +10,8 @@ import { useTabs } from "~/store/zustand/tabs";
 
 export function LeftSidebar({
   timelineHeader,
-  showIgnoredTimelineEvents,
-  onShowIgnoredTimelineEventsChange,
 }: {
   timelineHeader?: ReactNode;
-  showIgnoredTimelineEvents?: boolean;
-  onShowIgnoredTimelineEventsChange?: (showIgnored: boolean) => void;
 } = {}) {
   const currentTab = useTabs((state) => state.currentTab);
 
@@ -43,8 +39,6 @@ export function LeftSidebar({
             <div className="flex h-full min-h-0 flex-col">
               <div className="relative min-h-0 flex-1">
                 <TimelineView
-                  showIgnoredEvents={showIgnoredTimelineEvents}
-                  onShowIgnoredEventsChange={onShowIgnoredTimelineEventsChange}
                   topChromeInset={isTimelineSidebarLayout && !timelineHeader}
                   topChipsOverlapHeader={
                     isTimelineSidebarLayout && !!timelineHeader

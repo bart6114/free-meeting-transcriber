@@ -1,6 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
 import { useCallback, useMemo, useSyncExternalStore } from "react";
 
+import { useTimelineSessionsTable } from "./queries";
 import {
   buildTimelineBuckets,
   deriveTimelineWindowData,
@@ -8,8 +9,6 @@ import {
   type TimelineBucket,
 } from "./utils";
 
-import { useIgnoredEvents } from "~/calendar/ignored-events";
-import { useTimelineTables } from "~/calendar/queries";
 import { useConfigValue } from "~/shared/config";
 import { useCurrentDay } from "~/shared/hooks/useCurrentDay";
 
@@ -23,40 +22,24 @@ export type SidebarUpcomingMeetingStatus = {
   progress?: number;
 };
 
-export function useSidebarUpcomingMeetingStatus({
-  showIgnored = false,
-}: {
-  showIgnored?: boolean;
-} = {}): SidebarUpcomingMeetingStatus | null {
+export function useSidebarUpcomingMeetingStatus(): SidebarUpcomingMeetingStatus | null {
   const timezone = useConfigValue("timezone") || undefined;
   const { t } = useLingui();
-  const { isIgnored } = useIgnoredEvents();
   const formatLabel = useUpcomingMeetingLabelFormatter();
-  const { timelineEventsTable, timelineSessionsTable } = useTimelineTables();
+  const timelineSessionsTable = useTimelineSessionsTable();
   const currentDay = useCurrentDay(timezone);
 
   const buckets = useMemo(() => {
     const windowData = deriveTimelineWindowData({
-      isEventIgnored: isIgnored,
-      showIgnored,
-      timelineEventsTable,
       timelineSessionsTable,
       timezone,
     });
 
     return buildTimelineBuckets({
-      timelineEventsTable: windowData.timelineEventsTable,
       timelineSessionsTable: windowData.timelineSessionsTable,
       timezone,
     });
-  }, [
-    isIgnored,
-    currentDay,
-    showIgnored,
-    timelineEventsTable,
-    timelineSessionsTable,
-    timezone,
-  ]);
+  }, [currentDay, timelineSessionsTable, timezone]);
 
   return useUpcomingMeetingStatus(buckets, formatLabel, t`Now`);
 }
@@ -143,10 +126,6 @@ export function getUpcomingMeetingStatus(
 
   for (const bucket of buckets) {
     for (const item of bucket.items) {
-      if (item.type === "event" && item.data.is_all_day) {
-        continue;
-      }
-
       const { start, end } = getItemTimeRange(item);
       if (!start) {
         continue;

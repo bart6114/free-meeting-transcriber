@@ -6,7 +6,6 @@ import {
   type RefCallback,
   useCallback,
   useMemo,
-  useState,
 } from "react";
 
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
@@ -16,17 +15,13 @@ import { Spinner } from "@hypr/ui/components/ui/spinner";
 import { cn, format, getYear, safeParseDate, TZDate } from "@hypr/utils";
 
 import {
-  type EventTimelineItem,
   isTimelineItemInFuture,
-  type SessionTimelineItem,
   type TimelineItem,
   TimelinePrecision,
 } from "./utils";
 
-import { useIgnoredEvents } from "~/calendar/ignored-events";
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
 import { useIsSessionEnhancing } from "~/session/hooks/useEnhancedNotes";
-import { getOrCreateSessionForEventId } from "~/session/queries";
 import { getSessionEvent } from "~/session/utils";
 import { openStandaloneNoteWindow } from "~/session/window";
 import type { MenuItemDef } from "~/shared/hooks/useNativeContextMenu";
@@ -46,7 +41,6 @@ type ItemBaseProps = {
   amplitude?: number;
   showSpinner?: boolean;
   selected: boolean;
-  ignored?: boolean;
   muted?: boolean;
   multiSelected: boolean;
   onClick: () => void;
@@ -94,22 +88,6 @@ export const TimelineItemComponent = memo(
     const readFlatItemKeys =
       getFlatItemKeys ?? (() => flatItemKeys ?? EMPTY_TIMELINE_ITEM_KEYS);
 
-    if (item.type === "event") {
-      return (
-        <EventItem
-          item={item}
-          precision={precision}
-          selected={selected}
-          timezone={timezone}
-          multiSelected={multiSelected}
-          getFlatItemKeys={readFlatItemKeys}
-          selectedNodeRef={selectedNodeRef}
-          itemNodeRef={itemNodeRef}
-          isUpcoming={isUpcoming}
-          upcomingProgress={upcomingProgress}
-        />
-      );
-    }
     return (
       <SessionItem
         item={item}
@@ -134,7 +112,6 @@ const ItemBase = memo(function ItemBase({
   amplitude,
   showSpinner,
   selected,
-  ignored,
   muted,
   multiSelected,
   onClick,
@@ -179,17 +156,17 @@ const ItemBase = memo(function ItemBase({
       className="group/sidebar-live-item relative [contain-intrinsic-size:auto_56px] [content-visibility:auto]"
     >
       <InteractiveButton
-        onClick={ignored ? undefined : onClick}
-        onDoubleClick={ignored ? undefined : onDoubleClick}
-        onCmdClick={ignored ? undefined : onCmdClick}
-        onShiftClick={ignored ? undefined : onShiftClick}
+        onClick={onClick}
+        onDoubleClick={onDoubleClick}
+        onCmdClick={onCmdClick}
+        onShiftClick={onShiftClick}
         onDragStart={onDragStart}
         contextMenu={hasSelection ? undefined : contextMenu}
         className={cn([
           "w-full rounded-lg px-3 py-2 text-left",
           showUpcomingGauge && "pl-4",
           showTrailingStatus && "pr-10",
-          ignored ? "cursor-default" : "cursor-pointer",
+          "cursor-pointer",
           multiSelected && "bg-accent",
           !multiSelected && selected && "bg-accent",
           !multiSelected && !selected && "hover:bg-accent/50",
@@ -202,20 +179,14 @@ const ItemBase = memo(function ItemBase({
             "bg-destructive text-destructive-foreground hover:bg-destructive/90",
             "focus-visible:ring-destructive/40 focus-visible:ring-2 focus-visible:outline-hidden",
           ],
-          ignored && "opacity-40",
-          !ignored && muted && !isLive && !isUpcoming && "opacity-65",
+          muted && !isLive && !isUpcoming && "opacity-65",
         ])}
         draggable={draggable}
       >
         <div className="flex items-center gap-2">
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <div className="flex min-w-0 items-center gap-1.5">
-              <div
-                className={cn(
-                  "pointer-events-none min-w-0 truncate text-sm font-normal",
-                  ignored && "line-through",
-                )}
-              >
+              <div className="pointer-events-none min-w-0 truncate text-sm font-normal">
                 {title || t`Untitled`}
               </div>
             </div>
@@ -303,7 +274,6 @@ function itemBasePropsAreEqual(prev: ItemBaseProps, next: ItemBaseProps) {
     prev.amplitude === next.amplitude &&
     prev.showSpinner === next.showSpinner &&
     prev.selected === next.selected &&
-    prev.ignored === next.ignored &&
     prev.muted === next.muted &&
     prev.multiSelected === next.multiSelected &&
     prev.onClick === next.onClick &&
@@ -322,172 +292,6 @@ function itemBasePropsAreEqual(prev: ItemBaseProps, next: ItemBaseProps) {
   );
 }
 
-const EventItem = memo(
-  ({
-    item,
-    precision,
-    selected,
-    timezone,
-    multiSelected,
-    getFlatItemKeys,
-    selectedNodeRef,
-    itemNodeRef,
-    isUpcoming,
-    upcomingProgress,
-  }: {
-    item: EventTimelineItem;
-    precision: TimelinePrecision;
-    selected: boolean;
-    timezone?: string;
-    multiSelected: boolean;
-    getFlatItemKeys: () => string[];
-    selectedNodeRef?: RefCallback<HTMLDivElement>;
-    itemNodeRef?: RefCallback<HTMLDivElement>;
-    isUpcoming?: boolean;
-    upcomingProgress?: number;
-  }) => {
-    const { t } = useLingui();
-    const openCurrent = useTabs((state) => state.openCurrent);
-
-    const eventId = item.id;
-    const trackingIdEvent = item.data.tracking_id_event;
-    const title = item.data.title || t`Untitled`;
-    const recurrenceSeriesId = item.data.recurrence_series_id;
-
-    const {
-      isIgnored,
-      ignoreEvent,
-      unignoreEvent,
-      ignoreSeries,
-      unignoreSeries,
-    } = useIgnoredEvents();
-
-    const ignored = isIgnored(trackingIdEvent, recurrenceSeriesId);
-
-    const displayTime = useMemo(
-      () => formatDisplayTime(item.data.started_at, precision, timezone),
-      [item.data.started_at, precision, timezone],
-    );
-
-    const [isOpening, setIsOpening] = useState(false);
-    const openEvent = useCallback(() => {
-      if (!eventId || isOpening) return;
-      setIsOpening(true);
-      void getOrCreateSessionForEventId(eventId, title)
-        .then((sessionId) => {
-          openCurrent({ id: sessionId, type: "sessions" });
-        })
-        .catch((error) => {
-          console.error("[timeline] failed to open event note", error);
-        })
-        .finally(() => {
-          setIsOpening(false);
-        });
-    }, [eventId, title, openCurrent, isOpening]);
-
-    const itemKey = `event-${item.id}`;
-    const muted = isTimelineItemInFuture(item);
-
-    const handleClick = useCallback(() => {
-      useTimelineSelection.getState().setAnchor(itemKey);
-      openEvent();
-    }, [openEvent, itemKey]);
-
-    const handleCmdClick = useCallback(() => {
-      useTimelineSelection.getState().toggleSelect(itemKey);
-    }, [itemKey]);
-
-    const handleShiftClick = useCallback(() => {
-      useTimelineSelection.getState().selectRange(getFlatItemKeys(), itemKey);
-    }, [getFlatItemKeys, itemKey]);
-
-    const handleIgnore = useCallback(() => {
-      if (!trackingIdEvent) return;
-      ignoreEvent(trackingIdEvent);
-    }, [trackingIdEvent, ignoreEvent]);
-
-    const handleUnignore = useCallback(() => {
-      if (!trackingIdEvent) return;
-      unignoreEvent(trackingIdEvent);
-    }, [trackingIdEvent, unignoreEvent]);
-
-    const handleUnignoreSeries = useCallback(() => {
-      if (!recurrenceSeriesId) return;
-      unignoreSeries(recurrenceSeriesId);
-    }, [recurrenceSeriesId, unignoreSeries]);
-
-    const handleIgnoreSeries = useCallback(() => {
-      if (!recurrenceSeriesId) return;
-      ignoreSeries(recurrenceSeriesId);
-    }, [recurrenceSeriesId, ignoreSeries]);
-
-    const contextMenu = useMemo(() => {
-      if (ignored) {
-        if (recurrenceSeriesId) {
-          return [
-            {
-              id: "unignore",
-              text: t`Show This Event`,
-              action: handleUnignore,
-            },
-            {
-              id: "unignore-series",
-              text: t`Show All Recurring Events`,
-              action: handleUnignoreSeries,
-            },
-          ];
-        }
-        return [
-          { id: "unignore", text: t`Show Event`, action: handleUnignore },
-        ];
-      }
-      const menu: MenuItemDef[] = [
-        {
-          id: "ignore",
-          text: recurrenceSeriesId ? t`Delete This Event` : t`Delete Event`,
-          action: handleIgnore,
-        },
-      ];
-      if (recurrenceSeriesId) {
-        menu.push({
-          id: "ignore-series",
-          text: t`Delete All Recurring Events`,
-          action: handleIgnoreSeries,
-        });
-      }
-      return menu;
-    }, [
-      ignored,
-      handleIgnore,
-      handleUnignore,
-      handleUnignoreSeries,
-      handleIgnoreSeries,
-      recurrenceSeriesId,
-      t,
-    ]);
-
-    return (
-      <ItemBase
-        title={title}
-        displayTime={displayTime}
-        showSpinner={isOpening}
-        selected={selected}
-        ignored={ignored}
-        muted={muted}
-        multiSelected={multiSelected}
-        onClick={handleClick}
-        onCmdClick={handleCmdClick}
-        onShiftClick={handleShiftClick}
-        contextMenu={contextMenu}
-        selectedNodeRef={selected ? selectedNodeRef : undefined}
-        itemNodeRef={itemNodeRef}
-        isUpcoming={isUpcoming}
-        upcomingProgress={upcomingProgress}
-      />
-    );
-  },
-);
-
 const SessionItem = memo(
   ({
     item,
@@ -501,7 +305,7 @@ const SessionItem = memo(
     isUpcoming,
     upcomingProgress,
   }: {
-    item: SessionTimelineItem;
+    item: TimelineItem;
     precision: TimelinePrecision;
     selected: boolean;
     timezone?: string;
@@ -578,11 +382,8 @@ const SessionItem = memo(
     );
 
     const handleDelete = useCallback(() => {
-      deleteSession(sessionId, {
-        trackingId: sessionEvent?.tracking_id,
-        title,
-      });
-    }, [deleteSession, sessionId, sessionEvent?.tracking_id, title]);
+      deleteSession(sessionId, { title });
+    }, [deleteSession, sessionId, title]);
 
     const handleShowInFinder = useCallback(async () => {
       const result = await fsSyncCommands.sessionDir(sessionId);

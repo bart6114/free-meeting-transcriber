@@ -7,9 +7,8 @@ import {
 } from "@hypr/plugin-updater2";
 import { getCurrentWebviewWindowLabel } from "@hypr/plugin-windows";
 
-import { getCalendarEventStartedAt } from "~/calendar/queries";
 import { liveQueryClient } from "~/db";
-import { createSession, getOrCreateSessionForEventId } from "~/session/queries";
+import { createSession } from "~/session/queries";
 import { setSettingValue } from "~/settings/queries";
 import { useConfigValue, useConfigValues } from "~/shared/config";
 import { useLatestRef } from "~/shared/hooks/useLatestRef";
@@ -37,34 +36,10 @@ const CAPTURE_IDENTITY_SQL = `
 
 const LIVE_CAPTURE_CONFIG_DEBOUNCE_MS = 750;
 
-async function shouldAutoStartNotificationSession(
-  eventId: string | null,
-  triggerAppIds: string[] | null,
-): Promise<boolean> {
-  if (triggerAppIds && triggerAppIds.length > 0) {
-    return true;
-  }
-
-  if (!eventId) {
-    return true;
-  }
-
-  const startedAt = await getCalendarEventStartedAt(eventId);
-  if (!startedAt) {
-    return false;
-  }
-
-  const startTime = new Date(String(startedAt)).getTime();
-  return !Number.isNaN(startTime) && startTime <= Date.now();
-}
-
 async function createNotificationSession(
-  eventId: string | null,
   triggerAppIds: string[] | null,
 ): Promise<{ sessionId: string; autoStart: boolean }> {
-  const sessionId = eventId
-    ? await getOrCreateSessionForEventId(eventId)
-    : await createSession();
+  const sessionId = await createSession();
 
   if (triggerAppIds && triggerAppIds.length > 0) {
     listenerStore.getState().setTriggerAppIds(triggerAppIds);
@@ -72,7 +47,7 @@ async function createNotificationSession(
 
   return {
     sessionId,
-    autoStart: await shouldAutoStartNotificationSession(eventId, triggerAppIds),
+    autoStart: true,
   };
 }
 
@@ -325,10 +300,6 @@ function useNotificationEvents() {
             return;
           }
 
-          const eventId =
-            payload.source?.type === "mic_detected"
-              ? (payload.source.event_ids?.[0] ?? null)
-              : null;
           const sourceSessionId =
             payload.source?.type === "session"
               ? payload.source.session_id
@@ -346,7 +317,7 @@ function useNotificationEvents() {
             return;
           }
 
-          void createNotificationSession(eventId, triggerAppIds)
+          void createNotificationSession(triggerAppIds)
             .then(({ sessionId, autoStart }) => {
               openNewRef.current({
                 type: "sessions",
@@ -361,16 +332,7 @@ function useNotificationEvents() {
               );
             });
         } else if (payload.type === "notification_option_selected") {
-          const selectedIndex = payload.selected_index;
-          const eventIds =
-            payload.source?.type === "mic_detected"
-              ? (payload.source.event_ids ?? [])
-              : [];
-
-          const sessionPromise =
-            selectedIndex < eventIds.length
-              ? getOrCreateSessionForEventId(eventIds[selectedIndex])
-              : createSession();
+          const sessionPromise = createSession();
 
           if (payload.source?.type === "mic_detected") {
             const triggerAppIds = payload.source.app_ids ?? [];

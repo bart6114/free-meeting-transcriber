@@ -1,7 +1,6 @@
 import {
   differenceInCalendarDays,
   differenceInCalendarMonths,
-  isPast,
   safeParseDate,
   startOfDay,
   startOfMonth,
@@ -14,21 +13,6 @@ function toTZ(date: Date, timezone?: string): Date {
   return timezone ? new TZDate(date, timezone) : date;
 }
 
-export type TimelineEventRow = {
-  title?: string | null;
-  started_at?: string | null;
-  ended_at?: string | null;
-  calendar_id?: string | null;
-  tracking_id_event?: string | null;
-  has_recurrence_rules: boolean;
-  recurrence_series_id?: string | null;
-  is_all_day?: boolean | null;
-  location?: string | null;
-  meeting_link?: string | null;
-  description?: string | null;
-  calendar_color?: string | null;
-};
-
 export type TimelineSessionRow = {
   title?: string | null;
   created_at?: string | null;
@@ -36,26 +20,16 @@ export type TimelineSessionRow = {
   folder_id?: string | null;
 };
 
-export type TimelineEventsTable =
-  | Record<string, TimelineEventRow>
-  | null
-  | undefined;
 export type TimelineSessionsTable =
   | Record<string, TimelineSessionRow>
   | null
   | undefined;
 
-export type EventTimelineItem = {
-  type: "event";
-  id: string;
-  data: TimelineEventRow;
-};
-export type SessionTimelineItem = {
+export type TimelineItem = {
   type: "session";
   id: string;
   data: TimelineSessionRow;
 };
-export type TimelineItem = EventTimelineItem | SessionTimelineItem;
 
 export type TimelinePrecision = "time" | "date";
 
@@ -66,7 +40,6 @@ export type TimelineBucket = {
 };
 
 export type TimelineWindowData = {
-  timelineEventsTable: TimelineEventsTable;
   timelineSessionsTable: TimelineSessionsTable;
   hasMoreFutureItems: boolean;
 };
@@ -203,13 +176,6 @@ export function getItemTimeRange(item: TimelineItem): {
   start: Date | null;
   end: Date | null;
 } {
-  if (item.type === "event") {
-    return {
-      start: safeParseDate(item.data.started_at),
-      end: safeParseDate(item.data.ended_at),
-    };
-  }
-
   const sessionEvent = getSessionEvent(item.data);
   return {
     start: safeParseDate(sessionEvent?.started_at ?? item.data.created_at),
@@ -291,28 +257,15 @@ function isAfterTomorrow(date: Date | null, timezone?: string): boolean {
 }
 
 export function filterTimelineTablesUpToTomorrow({
-  timelineEventsTable,
   timelineSessionsTable,
   timezone,
 }: {
-  timelineEventsTable: TimelineEventsTable;
   timelineSessionsTable: TimelineSessionsTable;
   timezone?: string;
 }): {
-  timelineEventsTable: TimelineEventsTable;
   timelineSessionsTable: TimelineSessionsTable;
 } {
   return {
-    timelineEventsTable: timelineEventsTable
-      ? Object.fromEntries(
-          Object.entries(timelineEventsTable).filter(([, row]) =>
-            isAtOrBeforeTomorrow(
-              safeParseDate(row.started_at) ?? safeParseDate(row.ended_at),
-              timezone,
-            ),
-          ),
-        )
-      : timelineEventsTable,
     timelineSessionsTable: timelineSessionsTable
       ? Object.fromEntries(
           Object.entries(timelineSessionsTable).filter(([, row]) =>
@@ -327,24 +280,12 @@ export function filterTimelineTablesUpToTomorrow({
 }
 
 export function deriveTimelineWindowData({
-  timelineEventsTable,
   timelineSessionsTable,
   timezone,
-  showIgnored = true,
-  isEventIgnored = () => false,
 }: {
-  timelineEventsTable: TimelineEventsTable;
   timelineSessionsTable: TimelineSessionsTable;
   timezone?: string;
-  showIgnored?: boolean;
-  isEventIgnored?: (
-    trackingId: string | null | undefined,
-    recurrenceSeriesId: string | null | undefined,
-  ) => boolean;
 }): TimelineWindowData {
-  const filteredEventsTable = timelineEventsTable
-    ? ({} as Record<string, TimelineEventRow>)
-    : timelineEventsTable;
   const filteredSessionsTable = timelineSessionsTable
     ? ({} as Record<string, TimelineSessionRow>)
     : timelineSessionsTable;
@@ -367,90 +308,38 @@ export function deriveTimelineWindowData({
     }
   }
 
-  if (timelineEventsTable && filteredEventsTable) {
-    for (const [eventId, row] of Object.entries(timelineEventsTable)) {
-      const ignored =
-        !showIgnored &&
-        isEventIgnored(row.tracking_id_event, row.recurrence_series_id);
-      const date = safeParseDate(row.started_at) ?? safeParseDate(row.ended_at);
-
-      if (isAfterTomorrow(date, timezone)) {
-        if (!ignored) {
-          hasMoreFutureItems = true;
-        }
-        continue;
-      }
-
-      if (!ignored && isAtOrBeforeTomorrow(date, timezone)) {
-        filteredEventsTable[eventId] = row;
-      }
-    }
-  }
-
   return {
-    timelineEventsTable: filteredEventsTable,
     timelineSessionsTable: filteredSessionsTable,
     hasMoreFutureItems,
   };
 }
 
 export function hasTimelineItemsAfterTomorrow({
-  timelineEventsTable,
   timelineSessionsTable,
   timezone,
 }: {
-  timelineEventsTable: TimelineEventsTable;
   timelineSessionsTable: TimelineSessionsTable;
   timezone?: string;
 }): boolean {
-  if (
+  return Boolean(
     timelineSessionsTable &&
     Object.values(timelineSessionsTable).some((row) =>
       isAfterTomorrow(
         safeParseDate(getSessionEvent(row)?.started_at ?? row.created_at),
         timezone,
       ),
-    )
-  ) {
-    return true;
-  }
-
-  if (
-    timelineEventsTable &&
-    Object.values(timelineEventsTable).some((row) =>
-      isAfterTomorrow(
-        safeParseDate(row.started_at) ?? safeParseDate(row.ended_at),
-        timezone,
-      ),
-    )
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-function getEventTrackingId(row: TimelineEventRow): string {
-  return row.tracking_id_event ?? "";
-}
-
-function getSessionTrackingId(row: TimelineSessionRow): string {
-  const event = getSessionEvent(row);
-  if (!event) return "";
-  return event.tracking_id;
+    ),
+  );
 }
 
 export function buildTimelineBuckets({
-  timelineEventsTable,
   timelineSessionsTable,
   timezone,
 }: {
-  timelineEventsTable: TimelineEventsTable;
   timelineSessionsTable: TimelineSessionsTable;
   timezone?: string;
 }): TimelineBucket[] {
   const items: TimelineItem[] = [];
-  const seenEventKeys = new Set<string>();
 
   if (timelineSessionsTable) {
     Object.entries(timelineSessionsTable).forEach(([sessionId, row]) => {
@@ -463,47 +352,11 @@ export function buildTimelineBuckets({
         return;
       }
 
-      const trackingId = getSessionTrackingId(row);
-      if (trackingId) {
-        if (seenEventKeys.has(trackingId)) {
-          return;
-        }
-
-        seenEventKeys.add(trackingId);
-      }
-
       items.push({
         type: "session",
         id: sessionId,
         data: row,
       });
-    });
-  }
-
-  if (timelineEventsTable) {
-    Object.entries(timelineEventsTable).forEach(([eventId, row]) => {
-      const trackingId = getEventTrackingId(row);
-      if (trackingId && seenEventKeys.has(trackingId)) {
-        return;
-      }
-      const eventStartTime = safeParseDate(row.started_at);
-      const eventEndTime = safeParseDate(row.ended_at);
-      const timeToCheck = eventEndTime || eventStartTime;
-      if (!timeToCheck) {
-        return;
-      }
-
-      if (!isPast(timeToCheck)) {
-        if (trackingId) {
-          seenEventKeys.add(trackingId);
-        }
-
-        items.push({
-          type: "event",
-          id: eventId,
-          data: row,
-        });
-      }
     });
   }
 

@@ -24,7 +24,6 @@ import { getEnhancerService } from "~/services/enhancer";
 import { catalogLocalSessionAudio } from "~/session/attachments";
 import { enqueueSessionAudioOperation } from "~/session/audio-operations";
 import { useSession, useSessionHasTranscript } from "~/session/queries";
-import { getSessionEvent } from "~/session/utils";
 import { useConfigValue } from "~/shared/config";
 import { id } from "~/shared/utils";
 import type {
@@ -458,9 +457,6 @@ export function useStartListening(sessionId: string) {
 
     void analyticsCommands.event({
       event: "session_started",
-      has_calendar_event: Boolean(
-        getSessionEvent({ event_json: session?.event_json }),
-      ),
       ...(conn
         ? {
             stt_provider: conn.provider,

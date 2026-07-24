@@ -1,10 +1,4 @@
-import {
-  act,
-  cleanup,
-  fireEvent,
-  render,
-  screen,
-} from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -20,9 +14,6 @@ const mocks = vi.hoisted(() => ({
   goBack: vi.fn(),
   goNext: vi.fn(),
   sessionModes: {} as Record<string, string>,
-  sessionEvents: {} as Record<string, any>,
-  nowMs: new Date("2026-06-05T09:50:00.000Z").getTime(),
-  openUrl: vi.fn(),
   startListening: vi.fn(),
   stopListening: vi.fn(),
   stopTranscription: vi.fn(),
@@ -30,10 +21,6 @@ const mocks = vi.hoisted(() => ({
   isMainWebviewWindow: true,
   audioExists: false,
   hasTranscriptBySession: {} as Record<string, boolean>,
-  configValues: {
-    auto_join_scheduled_meetings: false,
-    auto_start_scheduled_meetings: false,
-  } as Record<string, boolean>,
   overflowProps: [] as Array<{
     allowListening?: boolean;
     standaloneWindow?: boolean;
@@ -47,9 +34,9 @@ vi.mock("./metadata", () => ({
     renderTrigger?: (props: { open: boolean; label: string }) => ReactElement;
   }) =>
     renderTrigger ? (
-      renderTrigger({ open: false, label: "Open event metadata" })
+      renderTrigger({ open: false, label: "Open note metadata" })
     ) : (
-      <button type="button" aria-label="Open event metadata">
+      <button type="button" aria-label="Open note metadata">
         Metadata
       </button>
     ),
@@ -71,16 +58,6 @@ vi.mock("../shared", () => ({
     mocks.hasTranscriptBySession[sessionId] ?? false,
 }));
 
-vi.mock("@hypr/plugin-opener2", () => ({
-  commands: {
-    openUrl: mocks.openUrl,
-  },
-}));
-
-vi.mock("~/calendar/hooks", () => ({
-  useNow: () => new Date(mocks.nowMs),
-}));
-
 vi.mock("~/audio-player", () => ({
   useAudioPlayer: () => ({ audioExists: mocks.audioExists }),
 }));
@@ -89,15 +66,6 @@ vi.mock("~/contexts/shell", () => ({
   useShell: () => ({
     leftsidebar: mocks.leftsidebar,
   }),
-}));
-
-vi.mock("~/session/hooks/useSessionEvent", () => ({
-  useSessionEvent: (sessionId: string) =>
-    mocks.sessionEvents[sessionId] ?? null,
-}));
-
-vi.mock("~/shared/config", () => ({
-  useConfigValue: (key: string) => mocks.configValues[key],
 }));
 
 vi.mock("~/store/zustand/tabs", () => ({
@@ -144,9 +112,6 @@ describe("OuterHeader", () => {
     mocks.goBack.mockClear();
     mocks.goNext.mockClear();
     mocks.sessionModes = {};
-    mocks.sessionEvents = {};
-    mocks.nowMs = new Date("2026-06-05T09:50:00.000Z").getTime();
-    mocks.openUrl.mockClear();
     mocks.startListening.mockClear();
     mocks.stopListening.mockClear();
     mocks.stopTranscription.mockClear();
@@ -154,10 +119,6 @@ describe("OuterHeader", () => {
     mocks.isMainWebviewWindow = true;
     mocks.audioExists = false;
     mocks.hasTranscriptBySession = {};
-    mocks.configValues = {
-      auto_join_scheduled_meetings: false,
-      auto_start_scheduled_meetings: false,
-    };
     mocks.overflowProps = [];
   });
 
@@ -383,223 +344,7 @@ describe("OuterHeader", () => {
     expect(titleSlot?.className).toContain("right-[140px]");
   });
 
-  it("shows a join-and-record pill before a remote meeting with a video link", () => {
-    mocks.sessionEvents = {
-      "session-1": {
-        title: "Design Review",
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
-    mocks.nowMs = new Date("2026-06-05T09:55:00.000Z").getTime();
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-        title={<span>Session title</span>}
-      />,
-    );
-
-    const joinButton = screen.getByRole("button", { name: "Join & record" });
-    const metadataButton = screen.getByRole("button", {
-      name: "Open event metadata",
-    });
-
-    fireEvent.click(joinButton);
-
-    expect(joinButton.getAttribute("aria-label")).toBe("Join & record");
-    expect(joinButton.textContent).toContain("Join & record");
-    expect(joinButton.getAttribute("data-tauri-drag-region")).toBe("false");
-    expect(metadataButton.getAttribute("data-tauri-drag-region")).toBe("false");
-    expect(mocks.openUrl).toHaveBeenCalledWith(
-      "https://meet.google.com/abc-defg-hij",
-      null,
-    );
-    expect(mocks.startListening).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows a plain record button for the welcome note even with a stale meeting link", () => {
-    mocks.sessionEvents = {
-      "session-1": {
-        tracking_id: "fmtr-onboarding-demo-v1",
-        meeting_link: "https://github.com/bart6114/free-meeting-transcriber",
-      },
-    };
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Record" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Join & record" })).toBeNull();
-  });
-
-  it("shows the meeting countdown to the left of the header action", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-05T09:55:30.000Z"));
-    mocks.nowMs = Date.now();
-    mocks.sessionEvents = {
-      "session-1": {
-        title: "Design Review",
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-        title={<span>Session title</span>}
-      />,
-    );
-
-    const countdown = screen.getByText("starts in 4m 30s");
-    const joinButton = screen.getByRole("button", { name: "Join & record" });
-
-    expect(countdown.getAttribute("data-header-meeting-countdown")).toBe(
-      "true",
-    );
-    expect(countdown.className).toContain("timecode");
-    expect(
-      countdown.compareDocumentPosition(joinButton) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(joinButton.textContent).not.toContain("starts in");
-  });
-
-  it("starts listening without joining when only scheduled listening is enabled", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-05T09:59:58.000Z"));
-    mocks.nowMs = Date.now();
-    mocks.configValues.auto_start_scheduled_meetings = true;
-    mocks.sessionEvents = {
-      "session-1": {
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-      />,
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    expect(mocks.startListening).toHaveBeenCalledTimes(1);
-    expect(mocks.openUrl).not.toHaveBeenCalled();
-  });
-
-  it("joins and starts when both scheduled meeting settings are enabled", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-05T09:59:58.000Z"));
-    mocks.nowMs = Date.now();
-    mocks.configValues.auto_start_scheduled_meetings = true;
-    mocks.configValues.auto_join_scheduled_meetings = true;
-    mocks.sessionEvents = {
-      "session-1": {
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-      />,
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    expect(mocks.openUrl).toHaveBeenCalledWith(
-      "https://meet.google.com/abc-defg-hij",
-      null,
-    );
-    expect(mocks.startListening).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not join or start when scheduled listening is disabled", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-05T09:59:58.000Z"));
-    mocks.nowMs = Date.now();
-    mocks.configValues.auto_join_scheduled_meetings = true;
-    mocks.sessionEvents = {
-      "session-1": {
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-      />,
-    );
-
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-
-    expect(mocks.openUrl).not.toHaveBeenCalled();
-    expect(mocks.startListening).not.toHaveBeenCalled();
-  });
-
-  it("hides the meeting countdown while listening is active", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-06-05T09:55:30.000Z"));
-    mocks.nowMs = Date.now();
-    mocks.sessionModes = { "session-1": "active" };
-    mocks.sessionEvents = {
-      "session-1": {
-        title: "Design Review",
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-        title={<span>Session title</span>}
-      />,
-    );
-
-    expect(screen.getByRole("button", { name: "Stop" })).not.toBeNull();
-    expect(
-      document.querySelector("[data-header-meeting-countdown]"),
-    ).toBeNull();
-  });
-
-  it("shows record before a meeting without a video link", () => {
-    mocks.sessionEvents = {
-      "session-1": {
-        title: "Design Review",
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-      },
-    };
-    mocks.nowMs = new Date("2026-06-05T09:55:00.000Z").getTime();
-
+  it("shows record for an inactive session with no prior transcript or audio", () => {
     render(
       <OuterHeader
         sessionId="session-1"
@@ -612,7 +357,7 @@ describe("OuterHeader", () => {
 
     expect(mocks.startListening).toHaveBeenCalledTimes(1);
     expect(
-      screen.getByRole("button", { name: "Open event metadata" }),
+      screen.getByRole("button", { name: "Open note metadata" }),
     ).not.toBeNull();
   });
 
@@ -657,15 +402,7 @@ describe("OuterHeader", () => {
     expect(mocks.startListening).toHaveBeenCalledTimes(1);
   });
 
-  it("shows stop while the meeting is in progress", () => {
-    mocks.sessionEvents = {
-      "session-1": {
-        title: "Design Review",
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
+  it("shows stop while a session is actively listening", () => {
     mocks.sessionModes = { "session-1": "active" };
 
     render(
@@ -683,41 +420,9 @@ describe("OuterHeader", () => {
     expect(stopButton.querySelector("svg")?.getAttribute("class")).toContain(
       "text-recording",
     );
-    expect(screen.queryByRole("button", { name: "Join & record" })).toBeNull();
     expect(
-      screen.getByRole("button", { name: "Open event metadata" }),
+      screen.getByRole("button", { name: "Open note metadata" }),
     ).not.toBeNull();
     expect(mocks.stopListening).toHaveBeenCalledTimes(1);
-  });
-
-  it("shows resume after the meeting is over", () => {
-    mocks.sessionEvents = {
-      "session-1": {
-        title: "Design Review",
-        started_at: "2026-06-05T10:00:00.000Z",
-        ended_at: "2026-06-05T10:30:00.000Z",
-        meeting_link: "https://meet.google.com/abc-defg-hij",
-      },
-    };
-    mocks.nowMs = new Date("2026-06-05T10:31:00.000Z").getTime();
-
-    render(
-      <OuterHeader
-        sessionId="session-1"
-        currentView={{ type: "raw" } as EditorView}
-        title={<span>Session title</span>}
-      />,
-    );
-
-    const metadataButton = screen.getByRole("button", {
-      name: "Open event metadata",
-    });
-
-    fireEvent.click(screen.getByRole("button", { name: "Resume" }));
-
-    expect(screen.getByTestId("recording-icon")).not.toBeNull();
-    expect(screen.queryByRole("button", { name: "Join & record" })).toBeNull();
-    expect(metadataButton.getAttribute("data-tauri-drag-region")).toBe("false");
-    expect(mocks.startListening).toHaveBeenCalledTimes(1);
   });
 });

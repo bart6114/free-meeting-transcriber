@@ -2,8 +2,6 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  isIgnored: vi.fn(() => false),
-  timelineEventsTable: {} as Record<string, Record<string, unknown>>,
   timelineSessionsTable: {} as Record<string, Record<string, unknown>>,
 }));
 
@@ -60,28 +58,41 @@ vi.mock("~/shared/config", () => ({
   useConfigValue: () => undefined,
 }));
 
-vi.mock("~/calendar/queries", () => ({
-  useTimelineTables: () => ({
-    timelineEventsTable: mocks.timelineEventsTable,
-    timelineSessionsTable: mocks.timelineSessionsTable,
-  }),
-}));
-
-vi.mock("~/calendar/ignored-events", () => ({
-  useIgnoredEvents: () => ({
-    isIgnored: mocks.isIgnored,
-  }),
+vi.mock("./queries", () => ({
+  useTimelineSessionsTable: () => mocks.timelineSessionsTable,
 }));
 
 import { useSidebarUpcomingMeetingStatus } from "./upcoming-meeting";
+
+function sessionRow({
+  title,
+  started_at,
+  ended_at,
+}: {
+  title: string;
+  started_at: string;
+  ended_at: string;
+}) {
+  return {
+    title,
+    created_at: started_at,
+    event_json: JSON.stringify({
+      tracking_id: "",
+      calendar_id: "",
+      title,
+      started_at,
+      ended_at,
+      is_all_day: false,
+      has_recurrence_rules: false,
+    }),
+  };
+}
 
 describe("useSidebarUpcomingMeetingStatus", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
-    mocks.isIgnored.mockReturnValue(false);
-    mocks.timelineEventsTable = {};
     mocks.timelineSessionsTable = {};
   });
 
@@ -89,51 +100,19 @@ describe("useSidebarUpcomingMeetingStatus", () => {
     vi.useRealTimers();
   });
 
-  it("uses the deleted-event visibility option when deriving the badge item", () => {
-    mocks.isIgnored.mockReturnValue(true);
-    mocks.timelineEventsTable = {
-      standup: {
-        title: "Deleted standup",
-        started_at: "2024-01-15T12:03:00.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
-    };
-
-    const hidden = renderHook(() =>
-      useSidebarUpcomingMeetingStatus({ showIgnored: false }),
-    );
-
-    expect(hidden.result.current).toBeNull();
-
-    const visible = renderHook(() =>
-      useSidebarUpcomingMeetingStatus({ showIgnored: true }),
-    );
-
-    expect(visible.result.current).toMatchObject({
-      itemKey: "event-standup",
-      label: "In 3m 0s",
-      progress: 0.6,
-      title: "Deleted standup",
-    });
-  });
-
   it("keeps the meeting status active until the scheduled end time", () => {
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T11:55:00.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const active = renderHook(() => useSidebarUpcomingMeetingStatus());
 
     expect(active.result.current).toMatchObject({
-      itemKey: "event-standup",
+      itemKey: "session-standup",
       label: "Now",
       progress: 1,
       title: "Team standup",
@@ -148,14 +127,12 @@ describe("useSidebarUpcomingMeetingStatus", () => {
   });
 
   it("does not rerender every second while the active status is unchanged", () => {
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T11:55:00.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
     let renderCount = 0;
 
@@ -173,14 +150,12 @@ describe("useSidebarUpcomingMeetingStatus", () => {
   });
 
   it("refreshes the status when the window regains focus", () => {
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T11:55:00.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const active = renderHook(() => useSidebarUpcomingMeetingStatus());
@@ -192,14 +167,12 @@ describe("useSidebarUpcomingMeetingStatus", () => {
   });
 
   it("refreshes the status when the document becomes visible", () => {
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T11:55:00.000Z",
         ended_at: "2024-01-15T12:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const active = renderHook(() => useSidebarUpcomingMeetingStatus());
@@ -212,14 +185,12 @@ describe("useSidebarUpcomingMeetingStatus", () => {
 
   it("rebuilds timeline buckets after a day boundary", () => {
     vi.setSystemTime(new Date("2024-01-15T23:59:00.000Z"));
-    mocks.timelineEventsTable = {
-      standup: {
+    mocks.timelineSessionsTable = {
+      standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-17T00:01:00.000Z",
         ended_at: "2024-01-17T00:30:00.000Z",
-        tracking_id_event: "event-standup",
-        has_recurrence_rules: false,
-      },
+      }),
     };
 
     const upcoming = renderHook(() => useSidebarUpcomingMeetingStatus());
@@ -229,7 +200,7 @@ describe("useSidebarUpcomingMeetingStatus", () => {
     act(() => window.dispatchEvent(new Event("focus")));
 
     expect(upcoming.result.current).toMatchObject({
-      itemKey: "event-standup",
+      itemKey: "session-standup",
       label: "In 2m 0s",
       title: "Team standup",
     });

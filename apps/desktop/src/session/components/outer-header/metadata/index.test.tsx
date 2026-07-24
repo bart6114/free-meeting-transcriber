@@ -7,7 +7,6 @@ import { MetadataButton } from "./index";
 const mocks = vi.hoisted(() => ({
   createdAt: "2026-07-02T03:53:00.000Z" as unknown,
   setCreatedAt: vi.fn(),
-  sessionEvent: null as unknown,
 }));
 
 const lingui = vi.hoisted(() => {
@@ -31,20 +30,6 @@ vi.mock("@lingui/react/macro", () => ({
   }),
 }));
 
-vi.mock("@hypr/plugin-opener2", () => ({
-  commands: {
-    openUrl: vi.fn(),
-  },
-}));
-
-vi.mock("~/shared/config", () => ({
-  useConfigValue: () => undefined,
-}));
-
-vi.mock("~/session/hooks/useSessionEvent", () => ({
-  useSessionEvent: () => mocks.sessionEvent,
-}));
-
 vi.mock("~/session/queries", () => ({
   useSession: () => ({ created_at: mocks.createdAt }),
   useUpdateSession: () => mocks.setCreatedAt,
@@ -54,7 +39,6 @@ describe("Metadata controls", () => {
   beforeEach(() => {
     mocks.createdAt = "2026-07-02T03:53:00.000Z";
     mocks.setCreatedAt.mockClear();
-    mocks.sessionEvent = null;
   });
 
   afterEach(() => {

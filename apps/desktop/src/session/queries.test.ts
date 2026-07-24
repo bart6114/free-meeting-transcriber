@@ -30,7 +30,6 @@ import {
   buildSessionTombstoneStatements,
   createSession,
   deleteEnhancedNote,
-  getOrCreateSessionForEventId,
   isSessionEmpty,
   loadSessionEvent,
   restoreDeletedSession,
@@ -38,22 +37,6 @@ import {
   updateEnhancedNoteContent,
   updateSession,
 } from "./queries";
-
-const event = {
-  id: "event-1",
-  tracking_id_event: "external-event-1",
-  calendar_id: "calendar-1",
-  title: "Planning",
-  started_at: "2026-07-10T09:00:00.000Z",
-  ended_at: "2026-07-10T10:00:00.000Z",
-  location: "Room 1",
-  meeting_link: "https://meet.example/1",
-  description: "Plan",
-  recurrence_series_id: "series-1",
-  has_recurrence_rules: 1,
-  is_all_day: 0,
-  provider: "google",
-};
 
 describe("session SQLite operations", () => {
   beforeEach(() => {
@@ -77,17 +60,6 @@ describe("session SQLite operations", () => {
       calendar_id: "calendar-1",
       title: "Planning",
     });
-  });
-
-  it("returns the existing note for an event without writing", async () => {
-    mocks.execute
-      .mockResolvedValueOnce([event])
-      .mockResolvedValueOnce([{ id: "session-existing" }]);
-
-    await expect(getOrCreateSessionForEventId("event-1")).resolves.toBe(
-      "session-existing",
-    );
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("commits title and raw note changes in one ordered transaction", async () => {
@@ -185,52 +157,6 @@ describe("session SQLite operations", () => {
       "enhanced-note-1",
     ]);
   });
-
-  it("creates an event note with an in-transaction deduplication predicate", async () => {
-    mocks.execute
-      .mockResolvedValueOnce([event])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: "session-created" }]);
-    mocks.executeTransaction.mockResolvedValueOnce([1]);
-
-    await expect(getOrCreateSessionForEventId("event-1")).resolves.toBe(
-      "session-created",
-    );
-
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements[0].sql).toContain("WHERE NOT EXISTS");
-    expect(statements[0].params).toContain("external-event-1");
-    expect(
-      statements.some((statement) => statement.sql.includes("humans")),
-    ).toBe(false);
-    expect(
-      statements.some((statement) =>
-        statement.sql.includes("session_participants"),
-      ),
-    ).toBe(false);
-  });
-
-  it("does not wait for analytics before returning a newly created event note", async () => {
-    mocks.analyticsEventFireAndForget.mockImplementationOnce(
-      () => new Promise<never>(() => {}),
-    );
-    mocks.execute
-      .mockResolvedValueOnce([event])
-      .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([{ id: "session-created" }]);
-    mocks.executeTransaction.mockResolvedValueOnce([1]);
-
-    await expect(getOrCreateSessionForEventId("event-1")).resolves.toBe(
-      "session-created",
-    );
-    expect(mocks.analyticsEventFireAndForget).toHaveBeenCalledWith({
-      event: "note_created",
-      has_event_id: true,
-    });
-  }, 1_000);
 
   it("tombstones the session and every owned child with one timestamp", async () => {
     vi.useFakeTimers();

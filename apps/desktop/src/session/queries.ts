@@ -11,22 +11,6 @@ import { waitForPendingSoftDelete } from "~/session/pending-soft-deletes";
 import { DEFAULT_USER_ID, id } from "~/shared/utils";
 import type { DeletedSessionData } from "~/store/zustand/undo-delete";
 
-type EventSqlRow = {
-  id: string;
-  tracking_id_event: string;
-  calendar_id: string;
-  title: string;
-  started_at: string;
-  ended_at: string;
-  location: string;
-  meeting_link: string;
-  description: string;
-  recurrence_series_id: string;
-  has_recurrence_rules: boolean | number;
-  is_all_day: boolean | number;
-  provider: string;
-};
-
 type SessionIdentitySqlRow = { id: string };
 type SessionEventSqlRow = { event_json: string };
 type SessionDeleteSqlRow = { id: string; title: string };
@@ -447,109 +431,8 @@ export async function createSession(
     createEmptyNoteStatement(sessionId, now, initial?.raw_md ?? ""),
   ]);
 
-  trackNoteCreated(false);
+  trackNoteCreated();
   return sessionId;
-}
-
-export async function getOrCreateSessionForEventId(
-  eventId: string,
-  title?: string,
-  userId = DEFAULT_USER_ID,
-): Promise<string> {
-  const [event] = await liveQueryClient.execute<EventSqlRow>(
-    `
-      SELECT
-        id,
-        tracking_id_event,
-        calendar_id,
-        title,
-        started_at,
-        ended_at,
-        location,
-        meeting_link,
-        description,
-        recurrence_series_id,
-        has_recurrence_rules,
-        is_all_day,
-        provider
-      FROM events
-      WHERE id = ? AND deleted_at IS NULL
-      LIMIT 1
-    `,
-    [eventId],
-  );
-
-  if (!event) {
-    return createSession(title, userId);
-  }
-
-  const existingSessionId = await findSessionForEvent(event);
-  if (existingSessionId) {
-    return existingSessionId;
-  }
-
-  const sessionId = id();
-  const now = new Date().toISOString();
-  const sessionEvent = toSessionEvent(event);
-  const statements = [
-    {
-      sql: `
-        INSERT INTO sessions (
-          id, workspace_id, owner_user_id, title, created_at, updated_at,
-          started_at, ended_at, event_id, external_event_id, external_provider,
-          series_id, event_json, deleted_at
-        )
-        SELECT ?, NULLIF((
-          SELECT json_extract(value_json, '$.workspace_id')
-          FROM app_settings
-          WHERE id = 'cloudsync_workspace_binding'
-        ), ''), COALESCE(
-          NULLIF(NULLIF(?, ''), '${DEFAULT_USER_ID}'),
-          NULLIF((
-            SELECT json_extract(value_json, '$.workspace_id')
-            FROM app_settings
-            WHERE id = 'cloudsync_workspace_binding'
-          ), '')
-        ), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL
-        WHERE NOT EXISTS (
-          SELECT 1
-          FROM sessions
-          WHERE deleted_at IS NULL
-            AND (event_id = ? OR (? <> '' AND external_event_id = ?))
-        )
-      `,
-      params: [
-        sessionId,
-        userId,
-        title ?? sessionEvent.title,
-        now,
-        now,
-        sessionEvent.started_at,
-        sessionEvent.ended_at,
-        event.id,
-        event.tracking_id_event,
-        event.provider,
-        event.recurrence_series_id,
-        JSON.stringify(sessionEvent),
-        event.id,
-        event.tracking_id_event,
-        event.tracking_id_event,
-      ],
-    },
-    createEmptyNoteStatement(sessionId, now),
-  ];
-
-  const rowsAffected = await executeTransaction(statements);
-
-  const createdSessionId = await findSessionForEvent(event, sessionId);
-  if (!createdSessionId) {
-    throw new Error(`Failed to create a session for event ${eventId}`);
-  }
-
-  if (rowsAffected[0] === 1) {
-    trackNoteCreated(true);
-  }
-  return createdSessionId;
 }
 
 export async function softDeleteSession(
@@ -736,45 +619,6 @@ function createEmptyNoteStatement(sessionId: string, now: string, body = "") {
   };
 }
 
-async function findSessionForEvent(
-  event: EventSqlRow,
-  preferredId?: string,
-): Promise<string | null> {
-  const rows = await liveQueryClient.execute<SessionIdentitySqlRow>(
-    `
-      SELECT id
-      FROM sessions
-      WHERE deleted_at IS NULL
-        AND (event_id = ? OR (? <> '' AND external_event_id = ?))
-      ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, created_at, id
-      LIMIT 1
-    `,
-    [
-      event.id,
-      event.tracking_id_event,
-      event.tracking_id_event,
-      preferredId ?? "",
-    ],
-  );
-  return rows[0]?.id ?? null;
-}
-
-function toSessionEvent(event: EventSqlRow): SessionEvent {
-  return {
-    tracking_id: event.tracking_id_event,
-    calendar_id: event.calendar_id,
-    title: event.title,
-    started_at: event.started_at,
-    ended_at: event.ended_at,
-    is_all_day: Boolean(event.is_all_day),
-    has_recurrence_rules: Boolean(event.has_recurrence_rules),
-    location: event.location,
-    meeting_link: event.meeting_link,
-    description: event.description,
-    recurrence_series_id: event.recurrence_series_id,
-  };
-}
-
 function hasNoteContent(body: string, format: string): boolean {
   if (!body) return false;
 
@@ -832,11 +676,11 @@ function mapEnhancedNoteRow(row: EnhancedNoteSqlRow): EnhancedNoteRecord {
   };
 }
 
-function trackNoteCreated(hasEventId: boolean): void {
+function trackNoteCreated(): void {
   void analyticsCommands
     .eventFireAndForget({
       event: "note_created",
-      has_event_id: hasEventId,
+      has_event_id: false,
     })
     .catch((error) => {
       console.error(
