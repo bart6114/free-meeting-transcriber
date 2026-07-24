@@ -234,9 +234,5 @@
         "name": "X-Webhook-Signature"
       }
     }
-  },
-  "externalDocs": {
-    "url": "https://docs.anarlog.so/",
-    "description": "More information about Char webhooks"
   }
 }
