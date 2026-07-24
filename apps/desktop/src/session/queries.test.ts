@@ -218,7 +218,7 @@ describe("session SQLite operations", () => {
     expect(mocks.sessionDelete).not.toHaveBeenCalled();
   });
 
-  it("returns null instead of throwing when session_delete fails", async () => {
+  it("throws (does not swallow) a genuine session_delete command failure", async () => {
     mocks.execute.mockResolvedValueOnce([
       { id: "session-1", title: "Planning" },
     ]);
@@ -227,7 +227,10 @@ describe("session SQLite operations", () => {
       error: "boom",
     });
 
-    await expect(softDeleteSession("session-1")).resolves.toBeNull();
+    // Must reject, not resolve to null -- useDeleteSession distinguishes "already deleted"
+    // (benign null) from a real failure (must surface to its catch block's error toast) purely
+    // by whether the promise rejects.
+    await expect(softDeleteSession("session-1")).rejects.toThrow("boom");
   });
 
   it("recognizes a blank SQLite session", async () => {

@@ -410,6 +410,37 @@ describe("useStartListening", () => {
     );
   });
 
+  test("shows a toast and skips retention deletion when moving recorded audio into the session folder fails", async () => {
+    catalogLocalSessionAudioMock.mockRejectedValueOnce(new Error("disk full"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const { result } = renderHook(() => useStartListening("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
+    await act(async () => {
+      await onStopped?.("session-1", {
+        durationSeconds: 42,
+        audioPath: "/tmp/session.wav",
+        requestedLiveTranscription: false,
+        liveTranscriptionActive: false,
+        needsBatchRepair: false,
+      });
+    });
+
+    expect(sonnerToastErrorMock).toHaveBeenCalledWith(
+      "Recording audio could not be moved into the session folder — it remains at its original location",
+      { id: "audio-catalog-failed" },
+    );
+    expect(deleteProcessedAudioForRetentionMock).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   test("skips audio cataloging when capture produces no final file", async () => {
     const { result } = renderHook(() => useStartListening("session-1"));
 

@@ -1,6 +1,40 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use super::{SessionStore, StoreError, paths};
+
+/// Moves `source` to `dest` (assumed to not yet exist; `dest`'s parent must already exist).
+/// Prefers `rename` (atomic, no data-duplication window); falls back to copy+delete when
+/// `rename` fails (typically EXDEV -- source and dest on different volumes, which
+/// `std::fs::rename` can't cross). Returns whether the fallback path was taken, so callers
+/// (and tests) can tell which branch actually ran. `rename` is injected so the fallback branch
+/// can be exercised deterministically in tests without needing a real cross-device setup.
+fn move_or_copy_delete(
+    source: &Path,
+    dest: &Path,
+    rename: fn(&Path, &Path) -> std::io::Result<()>,
+) -> Result<bool, StoreError> {
+    if rename(source, dest).is_ok() {
+        return Ok(false);
+    }
+
+    std::fs::copy(source, dest)
+        .map_err(|e| StoreError::Io(format!("failed to copy audio file: {}", e)))?;
+    std::fs::remove_file(source).map_err(|e| {
+        StoreError::Io(format!(
+            "failed to remove source audio file after copy: {}",
+            e
+        ))
+    })?;
+    Ok(true)
+}
+
+/// `std::fs::rename` is generic over `AsRef<Path>`, so it doesn't coerce directly to the
+/// `for<'a, 'b> fn(&'a Path, &'b Path) -> io::Result<()>` pointer type `move_or_copy_delete`
+/// expects (a specific monomorphization isn't the same as being generic over all lifetimes) --
+/// this plain wrapper has no such generics and coerces cleanly.
+fn plain_rename(source: &Path, dest: &Path) -> std::io::Result<()> {
+    std::fs::rename(source, dest)
+}
 
 impl SessionStore {
     /// Moves a finished recording's audio file into `sessions/<id>/audio/<filename>`. Prefers
@@ -28,18 +62,7 @@ impl SessionStore {
 
             let dest_abs = audio_dir_abs.join(file_name);
 
-            if std::fs::rename(&source_path, &dest_abs).is_err() {
-                // Cross-device (EXDEV) or other rename failure: copy then remove the source
-                // so the caller doesn't end up with duplicated audio on disk.
-                std::fs::copy(&source_path, &dest_abs)
-                    .map_err(|e| StoreError::Io(format!("failed to copy audio file: {}", e)))?;
-                std::fs::remove_file(&source_path).map_err(|e| {
-                    StoreError::Io(format!(
-                        "failed to remove source audio file after copy: {}",
-                        e
-                    ))
-                })?;
-            }
+            move_or_copy_delete(&source_path, &dest_abs, plain_rename)?;
 
             let dest_rel = audio_dir_rel.join(file_name);
             dest_rel
@@ -157,14 +180,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn store_audio_falls_back_to_copy_delete_when_rename_fails() {
+    async fn store_audio_uses_plain_rename_on_the_happy_path() {
         let (store, vault) = test_store().await;
-        // Simulate a cross-device rename failure by pointing "source_path" at a directory
-        // that can never be renamed (std::fs::rename fails renaming a dir onto an existing
-        // file target in a way we can trigger deterministically): instead, we exercise the
-        // fallback path directly by using a source file and asserting the end state is
-        // correct regardless of which branch handled it -- the observable behavior (file
-        // moved, content intact, source gone) is identical either way.
         let source = vault.path().join("nested").join("take.wav");
         std::fs::create_dir_all(source.parent().unwrap()).unwrap();
         std::fs::write(&source, b"content").unwrap();
@@ -178,6 +195,43 @@ mod tests {
             std::fs::read(vault.path().join(&relative)).unwrap(),
             b"content"
         );
+        assert!(!source.exists());
+    }
+
+    /// REGRESSION (reviewer-found minor): the previous version of this test asserted only the
+    /// end state (file moved, source gone), which the plain-rename path already satisfies on a
+    /// single filesystem -- it never actually forced `rename` to fail, so the copy+delete
+    /// fallback branch went unexercised. `move_or_copy_delete` takes `rename` as a parameter
+    /// specifically so a failure can be injected deterministically here, without needing a
+    /// real cross-device mount.
+    #[test]
+    fn move_or_copy_delete_falls_back_to_copy_and_removes_the_source_when_rename_fails() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source.wav");
+        let dest = temp.path().join("dest.wav");
+        std::fs::write(&source, b"fallback-content").unwrap();
+
+        let used_fallback = move_or_copy_delete(&source, &dest, |_, _| {
+            Err(std::io::Error::other("forced rename failure"))
+        })
+        .unwrap();
+
+        assert!(used_fallback, "must report that the fallback branch ran");
+        assert_eq!(std::fs::read(&dest).unwrap(), b"fallback-content");
+        assert!(!source.exists(), "source must be removed after the copy");
+    }
+
+    #[test]
+    fn move_or_copy_delete_reports_no_fallback_when_rename_succeeds() {
+        let temp = tempfile::tempdir().unwrap();
+        let source = temp.path().join("source.wav");
+        let dest = temp.path().join("dest.wav");
+        std::fs::write(&source, b"renamed-content").unwrap();
+
+        let used_fallback = move_or_copy_delete(&source, &dest, plain_rename).unwrap();
+
+        assert!(!used_fallback, "must report that rename succeeded directly");
+        assert_eq!(std::fs::read(&dest).unwrap(), b"renamed-content");
         assert!(!source.exists());
     }
 

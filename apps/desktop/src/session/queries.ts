@@ -493,8 +493,11 @@ export async function softDeleteSession(
 
   const result = await commands.sessionDelete(sessionId);
   if (result.status === "error") {
-    console.error("[delete-session] session_delete failed", result.error);
-    return null;
+    // Distinct from "already deleted" (the pre-check SELECT above returning no rows, which is
+    // benign and returns null): the session existed and the store call itself failed. Throw so
+    // useDeleteSession's existing catch rolls back the optimistic UI and shows an error toast --
+    // a genuine command error must never look identical to a no-op idempotent delete.
+    throw new Error(`session_delete failed: ${result.error}`);
   }
 
   return {

@@ -123,6 +123,13 @@ impl SessionStore {
             let Some(buffer) = live.get_mut(session_id) else {
                 return Ok(());
             };
+            if !buffer.dirty {
+                // Nothing buffered since the last successful flush -- including right after
+                // write_transcript's batch-supersedes-buffer guard cleared this entry. Flushing
+                // clean state is a no-op by contract; persisting the (now-empty) snapshot
+                // anyway would zero out a batch write that just landed via write_transcript.
+                return Ok(());
+            }
             // Clear dirty *before* doing I/O: if an append races in while we're writing, it
             // will see a clean buffer, flip it dirty again, and schedule its own flusher --
             // so nothing gets lost even though this in-flight flush won't see that append.
@@ -587,6 +594,56 @@ mod tests {
         // Let the pending debounce timer from the earlier append fire. If the live buffer
         // weren't cleared, it would flush "stale" and clobber the batch write.
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let texts: Vec<&str> = json["transcripts"][0]["words"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(texts, vec!["batch-result"]);
+    }
+
+    /// REGRESSION (reviewer-found, Important 5): after `write_transcript` clears the live
+    /// buffer for a transcript_id (dirty=false, words=[]) -- which only happens when a buffer
+    /// entry already existed, i.e. some `append_transcript` ran first -- an explicit
+    /// `flush_transcript` call on the same session (e.g. `session_flush_transcript` from
+    /// `onStopped`) must not persist that now-empty snapshot over the batch write:
+    /// `flush_transcript` is a no-op when the buffer isn't dirty, regardless of whether an
+    /// (empty) entry still exists.
+    #[tokio::test]
+    async fn flush_transcript_after_write_transcript_does_not_zero_the_batch_write() {
+        let (store, vault) = test_store().await;
+        // Creates a live buffer entry for ("s1", "t1") so write_transcript below has something
+        // to clear -- without this, there is no buffer entry at all and the bug can't reproduce.
+        store
+            .append_transcript("s1", delta_with_words(&["stale"]))
+            .await
+            .unwrap();
+
+        store
+            .write_transcript(
+                "s1",
+                TranscriptWithData {
+                    id: "t1".to_string(),
+                    user_id: String::new(),
+                    created_at: "2026-07-24T00:00:00Z".to_string(),
+                    session_id: "s1".to_string(),
+                    started_at: 500.0,
+                    ended_at: Some(900.0),
+                    memo_md: String::new(),
+                    words: vec![word("b0", "batch-result")],
+                    speaker_hints: vec![],
+                },
+            )
+            .await
+            .unwrap();
+
+        store.flush_transcript("s1").await.unwrap();
 
         let json: serde_json::Value = serde_json::from_slice(
             &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),

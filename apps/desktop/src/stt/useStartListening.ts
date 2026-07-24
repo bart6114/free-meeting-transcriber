@@ -300,6 +300,7 @@ export function useStartListening(sessionId: string) {
       dictionaryTerms,
     });
 
+    let audioCatalogFailed = false;
     const onStopped: OnStoppedCallback = async (_sessionId, details) => {
       cancelMeetingRecordingDisclosure(sessionId);
       stopMeetingChatTasks();
@@ -310,7 +311,12 @@ export function useStartListening(sessionId: string) {
             catalogLocalSessionAudio(sessionId, audioPath),
           );
         } catch (error) {
+          audioCatalogFailed = true;
           console.error("[listener] failed to catalog recorded audio", error);
+          sonnerToast.error(
+            "Recording audio could not be moved into the session folder — it remains at its original location",
+            { id: "audio-catalog-failed" },
+          );
         }
       }
       await lastTranscriptWrite;
@@ -367,12 +373,13 @@ export function useStartListening(sessionId: string) {
         }
       }
 
-      // A failed batch repair — or a live transcript that never fully
-      // persisted — keeps the recording around as the only source for a later
-      // repair, regardless of the retention policy.
+      // A failed batch repair, a live transcript that never fully persisted, or an audio file
+      // that never made it into the session folder all keep the recording around as the only
+      // (or only correctly-located) source for a later repair, regardless of retention policy.
       if (
         (postCaptureAction !== "batch_then_enhance" || batchCompleted) &&
-        !transcriptWriteError
+        !transcriptWriteError &&
+        !audioCatalogFailed
       ) {
         await deleteProcessedAudioForRetention(audioRetention, sessionId);
       }

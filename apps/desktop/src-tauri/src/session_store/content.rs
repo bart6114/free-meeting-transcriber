@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use serde::{Deserialize, Serialize};
 
 use super::{SessionStore, StoreError, paths};
@@ -216,13 +218,15 @@ impl SessionStore {
 
         let restored = tokio::task::spawn_blocking(move || -> Result<bool, StoreError> {
             let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-            let trashed_path = vault_base
+            let trash_sessions_dir = vault_base
                 .join(".trash")
                 .join(date)
-                .join(paths::session_dir(&id_owned));
-            if !trashed_path.exists() {
+                .join(paths::sessions_root());
+
+            let Some(trashed_path) = latest_trashed_session_path(&trash_sessions_dir, &id_owned)?
+            else {
                 return Ok(false);
-            }
+            };
 
             let restored_path = vault_base.join(paths::session_dir(&id_owned));
             if let Some(parent) = restored_path.parent() {
@@ -243,6 +247,61 @@ impl SessionStore {
 
         Ok(restored)
     }
+}
+
+/// Finds the most-recently-trashed candidate for `id` under today's `.trash/<date>/sessions/`.
+/// `move_to_trash`'s `unique_path` disambiguates same-day repeat trashing of the same id as
+/// `<id>`, then `<id>-1`, `<id>-2`, ... in that chronological order (each new trash of the same
+/// id picks the first free slot) -- so the highest existing suffix is the most recent deletion,
+/// and undo should bring that one back, not the oldest. `None` when nothing matches (including
+/// a missing trash dir, e.g. the toast window lapsed past midnight).
+fn latest_trashed_session_path(
+    trash_sessions_dir: &Path,
+    id: &str,
+) -> Result<Option<PathBuf>, StoreError> {
+    let entries = match std::fs::read_dir(trash_sessions_dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => {
+            return Err(StoreError::Io(format!(
+                "failed to read trash sessions dir: {}",
+                e
+            )));
+        }
+    };
+
+    let mut best: Option<(i64, PathBuf)> = None;
+    for entry in entries {
+        let entry =
+            entry.map_err(|e| StoreError::Io(format!("failed to read dir entry: {}", e)))?;
+        if !entry.path().is_dir() {
+            continue;
+        }
+        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+            continue;
+        };
+
+        // Bare `id` is the oldest possible match (rank -1, below any real -N suffix); `<id>-N`
+        // ranks as N.
+        let rank: Option<i64> = if name == id {
+            Some(-1)
+        } else {
+            name.strip_prefix(id)
+                .and_then(|rest| rest.strip_prefix('-'))
+                .and_then(|suffix| suffix.parse::<i64>().ok())
+        };
+
+        let Some(rank) = rank else { continue };
+        let is_better = match &best {
+            Some((best_rank, _)) => rank > *best_rank,
+            None => true,
+        };
+        if is_better {
+            best = Some((rank, entry.path()));
+        }
+    }
+
+    Ok(best.map(|(_, path)| path))
 }
 
 #[cfg(test)]
@@ -484,6 +543,46 @@ mod tests {
         let (store, _vault) = test_store().await;
         let restored = store.restore_session("never-deleted").await.unwrap();
         assert!(!restored);
+    }
+
+    /// REGRESSION (reviewer-found): `move_to_trash`'s `unique_path` disambiguates a same-day
+    /// repeat trash of the same id as `<id>`, `<id>-1`, ... -- restore must pick the *latest*
+    /// (highest suffix) one, not just whichever bare `<id>` entry happens to exist.
+    #[tokio::test]
+    async fn restore_session_picks_the_most_recently_trashed_same_day_duplicate() {
+        let (store, vault) = test_store().await;
+
+        store
+            .write_meta(&meta("s1", "First version"))
+            .await
+            .unwrap();
+        store.write_note("s1", "first content").await.unwrap();
+        store.delete_session("s1").await.unwrap();
+
+        // Recreate under the same id and delete again the same day: move_to_trash finds the
+        // .trash/<date>/sessions/s1 slot already taken and disambiguates to .../s1-1.
+        store
+            .write_meta(&meta("s1", "Second version"))
+            .await
+            .unwrap();
+        store.write_note("s1", "second content").await.unwrap();
+        store.delete_session("s1").await.unwrap();
+
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let trash_sessions_dir = vault.path().join(".trash").join(&date).join("sessions");
+        assert!(trash_sessions_dir.join("s1").is_dir());
+        assert!(trash_sessions_dir.join("s1-1").is_dir());
+
+        let restored = store.restore_session("s1").await.unwrap();
+        assert!(restored);
+
+        let note = std::fs::read_to_string(vault.path().join("sessions/s1/_memo.md")).unwrap();
+        assert_eq!(
+            note, "second content",
+            "restore must bring back the most recently deleted duplicate, not the oldest"
+        );
+        // The older duplicate is left alone in trash, not silently consumed or merged.
+        assert!(trash_sessions_dir.join("s1").is_dir());
     }
 
     #[tokio::test]
