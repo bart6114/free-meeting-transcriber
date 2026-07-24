@@ -8,18 +8,30 @@ cd "$(dirname "$0")/.."   # src-tauri
 OUT_FULL=icons/src/fmt-fullbleed-1024.png     # full-bleed square (Icon Composer / actool input)
 OUT_SQUIRCLE=icons/src/fmt-squircle-1024.png  # pre-rounded with margins (tauri icon input)
 
-# --- 1. full-bleed artwork -------------------------------------------------
-magick -size 1024x1024 -define gradient:angle=135 gradient:'#312e81'-'#0f172a' \
-  \( -size 1024x1024 xc:none \
-     -fill '#f1f5f9' \
-     -draw 'roundrectangle 204,404 276,620 36,36' \
-     -draw 'roundrectangle 340,320 412,704 36,36' \
-     -fill '#f59e0b' \
-     -draw 'roundrectangle 476,224 548,800 36,36' \
-     -fill '#f1f5f9' \
-     -draw 'roundrectangle 612,320 684,704 36,36' \
-     -draw 'roundrectangle 748,404 820,620 36,36' \
-  \) -composite "$OUT_FULL"
+# --- 1. full-bleed artwork: tipsy beer mug ("free as in beer") -------------
+MUG=$(mktemp -d)/mug.png
+magick -size 1024x1024 xc:none \
+  -fill '#f59e0b' \
+  -draw 'roundrectangle 330,400 660,800 40,40' \
+  -draw 'roundrectangle 640,480 800,700 70,70' \
+  \( -size 1024x1024 xc:none -fill white -draw 'roundrectangle 696,528 748,652 26,26' \) -compose DstOut -composite -compose Over \
+  -fill '#fffbeb' \
+  -draw 'roundrectangle 353,560 389,660 18,18' \
+  -draw 'roundrectangle 415,530 451,690 18,18' \
+  -draw 'roundrectangle 477,495 513,725 18,18' \
+  -draw 'roundrectangle 539,530 575,690 18,18' \
+  -draw 'roundrectangle 601,560 637,660 18,18' \
+  -fill '#f8fafc' \
+  -draw 'roundrectangle 328,368 662,430 30,30' \
+  -draw 'circle 370,368 370,300' \
+  -draw 'circle 455,352 455,272' \
+  -draw 'circle 545,362 545,290' \
+  -draw 'circle 615,355 615,285' \
+  -draw 'ellipse 340,462 24,42 0,360' \
+  -draw 'circle 332,570 332,552' \
+  -background none -rotate -8 \
+  -gravity center -extent 1024x1024 "$MUG"
+magick -size 1024x1024 -define gradient:angle=135 gradient:'#312e81'-'#0f172a' "$MUG" -gravity center -composite "$OUT_FULL"
 
 # --- 2. squircle rendition (margins + shadow) for tauri icon ---------------
 magick "$OUT_FULL" -resize 824x824 \
