@@ -5,6 +5,7 @@ mod db;
 mod embedded_cli;
 mod ext;
 mod search_index;
+mod session_store;
 mod store;
 mod supervisor;
 mod vault_export;

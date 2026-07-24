@@ -90,6 +90,8 @@ hypr-storage = { workspace = true }
 hypr-supervisor = { workspace = true }
 hypr-tiptap = { workspace = true }
 
+sha2 = { workspace = true }
+
 chrono = { workspace = true }
 dirs = { workspace = true }
 pico-args = { workspace = true }
