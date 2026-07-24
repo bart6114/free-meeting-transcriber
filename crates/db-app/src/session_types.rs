@@ -4,8 +4,6 @@ use serde::Serialize;
 pub struct ListSessions<'a> {
     /// Case-insensitive substring matched against the session title or id.
     pub query: Option<&'a str>,
-    /// Exact recurring-series id match.
-    pub series_id: Option<&'a str>,
     pub limit: u32,
     pub offset: u32,
 }
@@ -20,7 +18,6 @@ pub struct SessionListItem {
     pub updated_at: String,
     pub started_at: String,
     pub ended_at: String,
-    pub series_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
@@ -37,12 +34,8 @@ pub struct SessionRow {
     pub ended_at: String,
     pub timezone: String,
     pub language: String,
-    pub event_id: String,
-    pub external_event_id: String,
     pub external_provider: String,
-    pub series_id: String,
     pub source_apps_json: String,
-    pub event_json: String,
     pub folder_path: String,
     pub slug: String,
     pub metadata_json: String,
@@ -83,25 +76,6 @@ pub struct SessionTranscriptRow {
     pub memo: String,
     pub words_json: String,
     pub speaker_hints_json: String,
-    pub metadata_json: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
-pub struct SessionParticipantRow {
-    pub id: String,
-    pub workspace_id: String,
-    pub owner_user_id: String,
-    pub session_id: String,
-    pub human_id: String,
-    pub display_name: String,
-    pub email: String,
-    pub role: String,
-    pub source: String,
-    pub job_title: String,
-    pub organization_id: String,
-    pub organization_name: String,
     pub metadata_json: String,
     pub created_at: String,
     pub updated_at: String,

@@ -183,7 +183,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::list_meetings,
             commands::get_meeting,
             commands::get_meeting_transcript,
-            commands::get_recurring_meeting_history,
             commands::execute,
             commands::execute_transaction,
             commands::execute_proxy,
@@ -778,16 +777,6 @@ mod test {
             .await
             .unwrap();
         sqlx::query(
-            "INSERT INTO humans (id, workspace_id, owner_user_id, name)
-             VALUES (?, ?, ?, 'Local user')",
-        )
-        .bind(&local_workspace)
-        .bind(&local_workspace)
-        .bind(&local_workspace)
-        .execute(runtime.pool())
-        .await
-        .unwrap();
-        sqlx::query(
             "INSERT INTO sessions (id, workspace_id, owner_user_id, title)
              VALUES ('session', ?, ?, 'Session')",
         )
@@ -812,12 +801,6 @@ mod test {
         .fetch_one(runtime.pool())
         .await
         .unwrap();
-        let human: (String, String, String) = sqlx::query_as(
-            "SELECT id, workspace_id, owner_user_id FROM humans WHERE name = 'Local user'",
-        )
-        .fetch_one(runtime.pool())
-        .await
-        .unwrap();
         let session: (String, String) =
             sqlx::query_as("SELECT workspace_id, owner_user_id FROM sessions WHERE id = 'session'")
                 .fetch_one(runtime.pool())
@@ -825,14 +808,6 @@ mod test {
                 .unwrap();
 
         assert_eq!(binding, (local_workspace.clone(), "user-a".to_string()));
-        assert_eq!(
-            human,
-            (
-                local_workspace.clone(),
-                local_workspace.clone(),
-                local_workspace.clone(),
-            )
-        );
         assert_eq!(session, (local_workspace.clone(), local_workspace));
         assert!(
             !runtime

@@ -26,9 +26,6 @@ enum ResourceRequest {
         offset: u32,
         limit: u32,
     },
-    Series {
-        series_id: String,
-    },
 }
 
 impl FmtrMcpServer {
@@ -59,7 +56,7 @@ impl FmtrMcpServer {
     }
 
     #[tool(
-        description = "Get one Free Meeting Transcriber meeting with its canonical note, summaries, participants, and action items. Use get_meeting_transcript separately for transcript words.",
+        description = "Get one Free Meeting Transcriber meeting with its canonical note, summaries, and action items. Use get_meeting_transcript separately for transcript words.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -95,25 +92,6 @@ impl FmtrMcpServer {
             .map_err(command_error)?;
         structured(&page)
     }
-
-    #[tool(
-        description = "List meetings in the same recurring series as the supplied meeting, newest first, with pagination metadata.",
-        annotations(
-            read_only_hint = true,
-            destructive_hint = false,
-            idempotent_hint = true,
-            open_world_hint = false
-        )
-    )]
-    async fn get_recurring_meeting_history(
-        &self,
-        Parameters(input): Parameters<access::GetRecurringMeetingHistoryInput>,
-    ) -> std::result::Result<CallToolResult, McpError> {
-        let page = access::get_recurring_meeting_history(self.db.pool(), input)
-            .await
-            .map_err(command_error)?;
-        structured(&page)
-    }
 }
 
 #[tool_handler]
@@ -131,7 +109,7 @@ impl ServerHandler for FmtrMcpServer {
             env!("CARGO_PKG_VERSION"),
         ))
         .with_instructions(
-            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, participants, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use get_recurring_meeting_history for series context. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
         )
     }
 
@@ -155,7 +133,6 @@ impl ServerHandler for FmtrMcpServer {
             self.db.pool(),
             access::ListMeetingsInput {
                 query: None,
-                series_id: None,
                 limit: Some(access::DEFAULT_LIST_LIMIT),
                 offset: Some(offset),
             },
@@ -198,7 +175,7 @@ impl ServerHandler for FmtrMcpServer {
                 "fmtr://meetings/{meeting_id}",
                 "Free Meeting Transcriber meeting",
             )
-            .with_description("Meeting metadata, note, summaries, people, and action items")
+            .with_description("Meeting metadata, note, summaries, and action items")
             .with_mime_type("text/markdown")
             .no_annotation(),
             RawResourceTemplate::new(
@@ -207,13 +184,6 @@ impl ServerHandler for FmtrMcpServer {
             )
             .with_description("A bounded page of meeting transcript text")
             .with_mime_type("text/plain")
-            .no_annotation(),
-            RawResourceTemplate::new(
-                "fmtr://series/{series_id}",
-                "Free Meeting Transcriber meeting series",
-            )
-            .with_description("Recurring meeting history")
-            .with_mime_type("text/markdown")
             .no_annotation(),
         ]))
     }
@@ -249,38 +219,6 @@ impl ServerHandler for FmtrMcpServer {
                 .await
                 .map_err(command_error)?;
                 ResourceContents::text(page.text, params.uri).with_mime_type("text/plain")
-            }
-            ResourceRequest::Series { series_id } => {
-                let page = access::list_meetings(
-                    self.db.pool(),
-                    access::ListMeetingsInput {
-                        query: None,
-                        series_id: Some(series_id),
-                        limit: Some(100),
-                        offset: Some(0),
-                    },
-                )
-                .await
-                .map_err(command_error)?;
-                let text = page
-                    .meetings
-                    .into_iter()
-                    .map(|meeting| {
-                        let title = if meeting.title.is_empty() {
-                            "Untitled"
-                        } else {
-                            &meeting.title
-                        };
-                        let date = if meeting.started_at.is_empty() {
-                            &meeting.created_at
-                        } else {
-                            &meeting.started_at
-                        };
-                        format!("- {date} — [{title}](fmtr://meetings/{})", meeting.id)
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                ResourceContents::text(text, params.uri).with_mime_type("text/markdown")
             }
         };
 
@@ -349,9 +287,6 @@ fn parse_resource_uri(uri: &str) -> std::result::Result<ResourceRequest, McpErro
                 limit: limit.clamp(1, access::MAX_TRANSCRIPT_LIMIT),
             })
         }
-        ("series", [series_id]) => Ok(ResourceRequest::Series {
-            series_id: (*series_id).to_string(),
-        }),
         _ => Err(McpError::invalid_params("unsupported resource URI", None)),
     }
 }
@@ -426,7 +361,6 @@ mod tests {
         let result = server
             .list_meetings(Parameters(access::ListMeetingsInput {
                 query: Some("plan".to_string()),
-                series_id: None,
                 limit: None,
                 offset: None,
             }))
@@ -476,12 +410,7 @@ mod tests {
         tool_names.sort();
         assert_eq!(
             tool_names,
-            [
-                "get_meeting",
-                "get_meeting_transcript",
-                "get_recurring_meeting_history",
-                "list_meetings",
-            ]
+            ["get_meeting", "get_meeting_transcript", "list_meetings",]
         );
         let mcp_docs = include_str!("../../../docs/reference/mcp.mdx");
         let mcp_skill = include_str!("../../../skills/fmtr/references/mcp.md");
@@ -536,11 +465,6 @@ mod tests {
                 (
                     "Free Meeting Transcriber meeting transcript".to_string(),
                     "fmtr://meetings/{meeting_id}/transcript{?offset,limit}".to_string(),
-                    None,
-                ),
-                (
-                    "Free Meeting Transcriber meeting series".to_string(),
-                    "fmtr://series/{series_id}".to_string(),
                     None,
                 ),
             ]

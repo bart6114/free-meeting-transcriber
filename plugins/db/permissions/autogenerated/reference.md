@@ -10,7 +10,6 @@ Default permissions for the plugin
 - `allow-list-meetings`
 - `allow-get-meeting`
 - `allow-get-meeting-transcript`
-- `allow-get-recurring-meeting-history`
 - `allow-get-legacy-import-report`
 - `allow-get-e2ee-identity-status`
 - `allow-inspect-e2ee-recovery-key`
@@ -341,32 +340,6 @@ Enables the get_meeting_transcript command without any pre-configured scope.
 <td>
 
 Denies the get_meeting_transcript command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:allow-get-recurring-meeting-history`
-
-</td>
-<td>
-
-Enables the get_recurring_meeting_history command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:deny-get-recurring-meeting-history`
-
-</td>
-<td>
-
-Denies the get_recurring_meeting_history command without any pre-configured scope.
 
 </td>
 </tr>

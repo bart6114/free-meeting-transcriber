@@ -3,7 +3,6 @@ import { useCallback } from "react";
 import { json2md, md2json } from "@hypr/editor/markdown";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
-import type { SessionEvent } from "@hypr/store";
 
 import { executeTransaction, liveQueryClient, useLiveQuery } from "~/db";
 import { enqueueDatabaseWrite } from "~/db/write-queue";
@@ -12,7 +11,6 @@ import { DEFAULT_USER_ID, id } from "~/shared/utils";
 import type { DeletedSessionData } from "~/store/zustand/undo-delete";
 
 type SessionIdentitySqlRow = { id: string };
-type SessionEventSqlRow = { event_json: string };
 type SessionDeleteSqlRow = { id: string; title: string };
 type SessionEmptySqlRow = {
   title: string;
@@ -156,28 +154,6 @@ export function useSessionSummaries(): SessionSummaryRecord[] {
     `,
   });
   return data;
-}
-
-export async function loadSessionEvent(
-  sessionId: string,
-): Promise<SessionEvent | null> {
-  const rows = await liveQueryClient.execute<SessionEventSqlRow>(
-    `
-      SELECT event_json
-      FROM sessions
-      WHERE id = ? AND deleted_at IS NULL
-      LIMIT 1
-    `,
-    [sessionId],
-  );
-  const eventJson = rows[0]?.event_json;
-  if (!eventJson) return null;
-
-  try {
-    return JSON.parse(eventJson) as SessionEvent;
-  } catch {
-    return null;
-  }
 }
 
 export function useUpdateSession(sessionId: string) {

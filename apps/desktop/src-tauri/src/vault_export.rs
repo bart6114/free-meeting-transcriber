@@ -315,26 +315,6 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
 
     sqlx::query(
         "INSERT INTO vault_export_dirty (entity_type, entity_id)
-         SELECT 'human', id FROM humans WHERE deleted_at IS NULL
-         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-           generation = vault_export_dirty.generation + 1,
-           queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "INSERT INTO vault_export_dirty (entity_type, entity_id)
-         SELECT 'organization', id FROM organizations WHERE deleted_at IS NULL
-         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-           generation = vault_export_dirty.generation + 1,
-           queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "INSERT INTO vault_export_dirty (entity_type, entity_id)
          SELECT 'chat_group', id FROM chat_groups WHERE deleted_at IS NULL
          ON CONFLICT(entity_type, entity_id) DO UPDATE SET
            generation = vault_export_dirty.generation + 1,
@@ -343,13 +323,7 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(&mut *tx)
     .await?;
 
-    for entity_type in [
-        "calendars_file",
-        "events_file",
-        "daily_notes_file",
-        "tasks_file",
-        "settings_file",
-    ] {
+    for entity_type in ["daily_notes_file", "tasks_file", "settings_file"] {
         sqlx::query(
             "INSERT INTO vault_export_dirty (entity_type, entity_id) VALUES (?, 'all')
              ON CONFLICT(entity_type, entity_id) DO UPDATE SET
@@ -516,11 +490,7 @@ async fn export_entity<R: tauri::Runtime>(
 ) -> WorkerResult<()> {
     match entity.entity_type.as_str() {
         "session" => export_session(app, pool, vault_base, &entity.entity_id).await,
-        "human" => export_human(app, pool, vault_base, &entity.entity_id).await,
-        "organization" => export_organization(app, pool, vault_base, &entity.entity_id).await,
         "chat_group" => export_chat_group(app, pool, vault_base, &entity.entity_id).await,
-        "calendars_file" => export_calendars_file(app, pool, vault_base).await,
-        "events_file" => export_events_file(app, pool, vault_base).await,
         "daily_notes_file" => export_daily_notes_file(app, pool, vault_base).await,
         "tasks_file" => export_tasks_file(app, pool, vault_base).await,
         "settings_file" => export_settings_file(app, pool, vault_base).await,
@@ -651,26 +621,10 @@ async fn export_session<R: tauri::Runtime>(
         event_json: row.get("event_json"),
     };
 
-    let participants = sqlx::query(
-        "SELECT id, owner_user_id, human_id, source, display_name, email, role
-         FROM session_participants
-         WHERE session_id = ? AND deleted_at IS NULL
-         ORDER BY created_at, id",
-    )
-    .bind(session_id)
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|row| export::SessionParticipant {
-        id: row.get("id"),
-        owner_user_id: row.get("owner_user_id"),
-        human_id: row.get("human_id"),
-        source: row.get("source"),
-        display_name: row.get("display_name"),
-        email: row.get("email"),
-        role: row.get("role"),
-    })
-    .collect::<Vec<_>>();
+    // `session_participants` is dropped (Task 3); the renderer still accepts a
+    // participants list (it dies with the rest of this worker in Task 13), so
+    // pass an empty one rather than querying a table that no longer exists.
+    let participants: Vec<export::SessionParticipant> = Vec::new();
 
     let tags: Vec<String> = sqlx::query_scalar(
         "SELECT tags.name
@@ -901,88 +855,6 @@ async fn export_session_transcript<R: tauri::Runtime>(
 }
 
 // ---------------------------------------------------------------------------
-// humans/<id>.md, organizations/<id>.md
-// ---------------------------------------------------------------------------
-
-async fn export_human<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-    id: &str,
-) -> WorkerResult<()> {
-    let path = vault_base.join("humans").join(format!("{id}.md"));
-    let row = sqlx::query(
-        "SELECT owner_user_id, organization_id, name, email, phone, job_title,
-                linkedin_username, memo, pinned, pin_order, created_at
-         FROM humans WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-
-    let Some(row) = row else {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    };
-
-    let human = export::Human {
-        owner_user_id: row.get("owner_user_id"),
-        organization_id: row.get("organization_id"),
-        name: row.get("name"),
-        email: row.get("email"),
-        phone: row.get("phone"),
-        job_title: row.get("job_title"),
-        linkedin_username: row.get("linkedin_username"),
-        memo: row.get("memo"),
-        pinned: row.get("pinned"),
-        pin_order: row.get("pin_order"),
-        created_at: row.get("created_at"),
-    };
-
-    let content = export::render_human(&human)
-        .render()
-        .map_err(|error| format!("failed to render human {id}: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
-
-async fn export_organization<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-    id: &str,
-) -> WorkerResult<()> {
-    let path = vault_base.join("organizations").join(format!("{id}.md"));
-    let row = sqlx::query(
-        "SELECT owner_user_id, name, memo, pinned, pin_order, created_at
-         FROM organizations WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-
-    let Some(row) = row else {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    };
-
-    let organization = export::Organization {
-        owner_user_id: row.get("owner_user_id"),
-        name: row.get("name"),
-        memo: row.get("memo"),
-        pinned: row.get("pinned"),
-        pin_order: row.get("pin_order"),
-        created_at: row.get("created_at"),
-    };
-
-    let content = export::render_organization(&organization)
-        .render()
-        .map_err(|error| format!("failed to render organization {id}: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // chats/<group>/messages.json
 // ---------------------------------------------------------------------------
 
@@ -1051,95 +923,8 @@ async fn export_chat_group<R: tauri::Runtime>(
 }
 
 // ---------------------------------------------------------------------------
-// calendars.json / events.json / daily_notes.json / tasks.json / settings.json
+// daily_notes.json / tasks.json / settings.json
 // ---------------------------------------------------------------------------
-
-async fn export_calendars_file<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-) -> WorkerResult<()> {
-    let path = vault_base.join("calendars.json");
-    let rows = sqlx::query(
-        "SELECT id, tracking_id_calendar, name, enabled, provider, source, color, connection_id
-         FROM calendars WHERE deleted_at IS NULL ORDER BY id",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    }
-
-    let calendars = rows
-        .into_iter()
-        .map(|row| export::Calendar {
-            id: row.get("id"),
-            tracking_id_calendar: row.get("tracking_id_calendar"),
-            name: row.get("name"),
-            enabled: row.get("enabled"),
-            provider: row.get("provider"),
-            source: row.get("source"),
-            color: row.get("color"),
-            connection_id: row.get("connection_id"),
-        })
-        .collect::<Vec<_>>();
-
-    let value = export::render_calendars(&calendars);
-    let content = hypr_fs_sync_core::json::serialize(value)
-        .map_err(|error| format!("failed to serialize calendars.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
-
-async fn export_events_file<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-) -> WorkerResult<()> {
-    let path = vault_base.join("events.json");
-    let rows = sqlx::query(
-        "SELECT id, tracking_id_event, calendar_id, title, started_at, ended_at, location,
-                meeting_link, description, note, recurrence_series_id, has_recurrence_rules,
-                is_all_day, provider, participants_json
-         FROM events WHERE deleted_at IS NULL ORDER BY id",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    }
-
-    let events = rows
-        .into_iter()
-        .map(|row| export::CalendarEvent {
-            id: row.get("id"),
-            tracking_id_event: row.get("tracking_id_event"),
-            calendar_id: row.get("calendar_id"),
-            title: row.get("title"),
-            started_at: row.get("started_at"),
-            ended_at: row.get("ended_at"),
-            location: row.get("location"),
-            meeting_link: row.get("meeting_link"),
-            description: row.get("description"),
-            note: row.get("note"),
-            recurrence_series_id: row.get("recurrence_series_id"),
-            has_recurrence_rules: row.get("has_recurrence_rules"),
-            is_all_day: row.get("is_all_day"),
-            provider: row.get("provider"),
-            participants_json: row.get("participants_json"),
-        })
-        .collect::<Vec<_>>();
-
-    let value = export::render_events(&events);
-    let content = hypr_fs_sync_core::json::serialize(value)
-        .map_err(|error| format!("failed to serialize events.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
 
 async fn export_daily_notes_file<R: tauri::Runtime>(
     app: &AppHandle<R>,
@@ -1629,10 +1414,6 @@ mod tests {
             .execute(db.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO humans (id, name) VALUES ('h1', 'Ada')")
-            .execute(db.pool())
-            .await
-            .unwrap();
         sqlx::query("DELETE FROM vault_export_dirty")
             .execute(db.pool())
             .await
@@ -1711,14 +1492,6 @@ mod tests {
             .execute(db.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO humans (id, name) VALUES ('human-1', 'Ada')")
-            .execute(db.pool())
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO organizations (id, name) VALUES ('org-1', 'Acme')")
-            .execute(db.pool())
-            .await
-            .unwrap();
         sqlx::query("INSERT INTO chat_groups (id, title) VALUES ('chat-1', 'Chat')")
             .execute(db.pool())
             .await
@@ -1751,12 +1524,8 @@ mod tests {
         assert_eq!(
             rows,
             vec![
-                ("calendars_file".to_string(), "all".to_string()),
                 ("chat_group".to_string(), "chat-1".to_string()),
                 ("daily_notes_file".to_string(), "all".to_string()),
-                ("events_file".to_string(), "all".to_string()),
-                ("human".to_string(), "human-1".to_string()),
-                ("organization".to_string(), "org-1".to_string()),
                 ("session".to_string(), "session-1".to_string()),
                 ("settings_file".to_string(), "all".to_string()),
                 ("tasks_file".to_string(), "all".to_string()),

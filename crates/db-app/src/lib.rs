@@ -1,23 +1,15 @@
 #![forbid(unsafe_code)]
 
-mod calendar_ops;
-mod calendar_types;
 mod cloudsync;
 mod e2ee;
-mod event_ops;
-mod event_types;
 mod legacy_import;
 mod session_ops;
 mod session_types;
 mod template_ops;
 mod template_types;
 
-pub use calendar_ops::*;
-pub use calendar_types::*;
 pub use cloudsync::*;
 pub use e2ee::*;
-pub use event_ops::*;
-pub use event_types::*;
 pub use legacy_import::*;
 pub use session_ops::*;
 pub use session_types::*;
@@ -101,16 +93,22 @@ pub const APP_MIGRATION_STEPS: &[hypr_db_migrate::MigrationStep] = &[
     },
     hypr_db_migrate::MigrationStep {
         id: "20260714120400_search_index_humans_triggers",
-        scope: hypr_db_migrate::MigrationScope::CloudsyncAlter {
-            table_name: "humans",
-        },
+        // Was `CloudsyncAlter { table_name: "humans" }`; downgraded to `Plain`
+        // once Task 3 dropped `humans` from `E2EE_DOMAIN_TABLES` (the table
+        // itself is dropped a few migrations later, in
+        // `20260724100000_drop_calendar_humans`). Behaviorally identical
+        // either way — see the `20260723150000_vault_export_dirty` step's
+        // comment: CloudSync is permanently disabled in this fork, so
+        // `CloudsyncAlter`'s `apply()` branch always fell through to the same
+        // plain-apply path anyway. `checksum` is computed from `sql` alone,
+        // so this doesn't affect already-applied installs.
+        scope: hypr_db_migrate::MigrationScope::Plain,
         sql: include_str!("../migrations/20260714120400_search_index_humans_triggers.sql"),
     },
     hypr_db_migrate::MigrationStep {
         id: "20260714120500_search_index_organizations_triggers",
-        scope: hypr_db_migrate::MigrationScope::CloudsyncAlter {
-            table_name: "organizations",
-        },
+        // See the `20260714120400_search_index_humans_triggers` step above.
+        scope: hypr_db_migrate::MigrationScope::Plain,
         sql: include_str!("../migrations/20260714120500_search_index_organizations_triggers.sql"),
     },
     hypr_db_migrate::MigrationStep {
@@ -195,6 +193,11 @@ pub const APP_MIGRATION_STEPS: &[hypr_db_migrate::MigrationStep] = &[
         // `Plain` here is unconditionally valid.
         scope: hypr_db_migrate::MigrationScope::Plain,
         sql: include_str!("../migrations/20260723150000_vault_export_dirty.sql"),
+    },
+    hypr_db_migrate::MigrationStep {
+        id: "20260724100000_drop_calendar_humans",
+        scope: hypr_db_migrate::MigrationScope::Plain,
+        sql: include_str!("../migrations/20260724100000_drop_calendar_humans.sql"),
     },
 ];
 
@@ -912,7 +915,6 @@ ON shared_session_cache(workspace_id);
                 "app_settings",
                 "attachment_local_state",
                 "attachment_transfer_jobs",
-                "calendars",
                 "chat_groups",
                 "chat_messages",
                 "cloudsync_session_evictions",
@@ -924,17 +926,13 @@ ON shared_session_cache(workspace_id);
                 "e2ee_witness_records",
                 "e2ee_witness_state",
                 "entity_mentions",
-                "events",
-                "humans",
                 "migration_import_items",
                 "migration_import_runs",
                 "migration_import_targets",
-                "organizations",
                 "search_index_dirty",
                 "search_index_state",
                 "session_attachments",
                 "session_documents",
-                "session_participants",
                 "session_share_sync_state",
                 "session_tags",
                 "sessions",
@@ -1063,7 +1061,7 @@ ON shared_session_cache(workspace_id);
         .fetch_one(db.pool())
         .await
         .unwrap();
-        assert_eq!(trigger_count, 15);
+        assert_eq!(trigger_count, 9);
 
         initialize_enabled_cloudsync_tables(&db).await;
 
@@ -1276,7 +1274,7 @@ ON shared_session_cache(workspace_id);
             .map(|table| table.table_name.as_str())
             .collect();
 
-        assert_eq!(registry.len(), 20);
+        assert_eq!(registry.len(), 15);
         assert_eq!(enabled, vec!["e2ee_records"]);
         assert!(
             !registry
@@ -1303,7 +1301,7 @@ ON shared_session_cache(workspace_id);
         assert!(cloudsync_alter_guard_required("e2ee_records"));
         assert!(!cloudsync_alter_guard_required("workspaces"));
         assert!(!cloudsync_alter_guard_required("workspace_memberships"));
-        assert!(!cloudsync_alter_guard_required("calendars"));
+        assert!(!cloudsync_alter_guard_required("chat_groups"));
     }
 
     #[tokio::test]
@@ -2702,11 +2700,6 @@ ON shared_session_cache(workspace_id);
                 "20260714120300_search_index_transcripts_triggers",
                 "transcripts",
             ),
-            ("20260714120400_search_index_humans_triggers", "humans"),
-            (
-                "20260714120500_search_index_organizations_triggers",
-                "organizations",
-            ),
         ] {
             let step = APP_MIGRATION_STEPS
                 .iter()
@@ -2716,6 +2709,17 @@ ON shared_session_cache(workspace_id);
                 step.scope,
                 hypr_db_migrate::MigrationScope::CloudsyncAlter { table_name }
             );
+        }
+
+        for id in [
+            "20260714120400_search_index_humans_triggers",
+            "20260714120500_search_index_organizations_triggers",
+        ] {
+            let step = APP_MIGRATION_STEPS
+                .iter()
+                .find(|step| step.id == id)
+                .unwrap();
+            assert_eq!(step.scope, hypr_db_migrate::MigrationScope::Plain);
         }
     }
 
@@ -2800,18 +2804,12 @@ ON shared_session_cache(workspace_id);
         .unwrap();
         assert_eq!(projection_version, 0);
 
-        sqlx::query("INSERT INTO sessions (id, title) VALUES ('session-1', 'One')")
-            .execute(db.pool())
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO humans (id, name) VALUES ('human-1', 'Ada')")
-            .execute(db.pool())
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO organizations (id, name) VALUES ('organization-1', 'Acme')")
-            .execute(db.pool())
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO sessions (id, title) VALUES ('session-1', 'One'), ('session-2', 'Two')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
 
         sqlx::query(
             "UPDATE sessions SET deleted_at = '2026-07-14T00:00:00Z' WHERE id = 'session-1'",
@@ -2819,11 +2817,7 @@ ON shared_session_cache(workspace_id);
         .execute(db.pool())
         .await
         .unwrap();
-        sqlx::query("UPDATE humans SET memo = 'Updated' WHERE id = 'human-1'")
-            .execute(db.pool())
-            .await
-            .unwrap();
-        sqlx::query("DELETE FROM organizations WHERE id = 'organization-1'")
+        sqlx::query("UPDATE sessions SET title = 'Updated' WHERE id = 'session-2'")
             .execute(db.pool())
             .await
             .unwrap();
@@ -2840,9 +2834,8 @@ ON shared_session_cache(workspace_id);
         assert_eq!(
             rows,
             vec![
-                ("human".to_string(), "human-1".to_string(), 2),
-                ("organization".to_string(), "organization-1".to_string(), 2,),
                 ("session".to_string(), "session-1".to_string(), 2),
+                ("session".to_string(), "session-2".to_string(), 2),
             ]
         );
     }
@@ -2895,71 +2888,6 @@ ON shared_session_cache(workspace_id);
                 );
             }
         }
-    }
-
-    #[tokio::test]
-    async fn calendar_roundtrip() {
-        let db = test_db().await;
-
-        upsert_calendar(
-            db.pool(),
-            UpsertCalendar {
-                id: "cal1",
-                tracking_id_calendar: "tracking-cal-1",
-                name: "Work",
-                enabled: true,
-                provider: "google",
-                source: "team",
-                color: "#123456",
-                connection_id: "conn-1",
-            },
-        )
-        .await
-        .unwrap();
-
-        let row = get_calendar(db.pool(), "cal1").await.unwrap().unwrap();
-        assert_eq!(row.name, "Work");
-        assert!(row.enabled);
-
-        let rows = list_calendars(db.pool()).await.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].id, "cal1");
-    }
-
-    #[tokio::test]
-    async fn event_roundtrip() {
-        let db = test_db().await;
-
-        upsert_event(
-            db.pool(),
-            UpsertEvent {
-                id: "evt1",
-                tracking_id_event: "tracking-evt-1",
-                calendar_id: "cal1",
-                title: "Standup",
-                started_at: "2026-04-15T09:00:00Z",
-                ended_at: "2026-04-15T09:30:00Z",
-                location: "",
-                meeting_link: "https://meet.example/1",
-                description: "Daily sync",
-                note: "",
-                recurrence_series_id: "series-1",
-                has_recurrence_rules: true,
-                is_all_day: false,
-                provider: "google",
-                participants_json: Some("[{\"email\":\"a@example.com\"}]"),
-            },
-        )
-        .await
-        .unwrap();
-
-        let row = get_event(db.pool(), "evt1").await.unwrap().unwrap();
-        assert_eq!(row.title, "Standup");
-        assert_eq!(row.calendar_id, "cal1");
-
-        let rows = list_events(db.pool()).await.unwrap();
-        assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].id, "evt1");
     }
 
     #[tokio::test]

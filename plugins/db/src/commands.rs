@@ -56,17 +56,6 @@ pub(crate) async fn get_meeting_transcript(
 
 #[tauri::command]
 #[specta::specta]
-pub(crate) async fn get_recurring_meeting_history(
-    state: tauri::State<'_, ManagedState>,
-    input: hypr_agent_access::GetRecurringMeetingHistoryInput,
-) -> Result<hypr_agent_access::MeetingPage, String> {
-    hypr_agent_access::get_recurring_meeting_history(state.pool(), input)
-        .await
-        .map_err(|error| error.to_string())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub(crate) async fn execute(
     state: tauri::State<'_, ManagedState>,
     sql: String,

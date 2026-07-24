@@ -11,9 +11,8 @@ to find or read meetings.
 Prefer the fmtr MCP tools when they are available:
 
 - `list_meetings` to resolve a meeting ID
-- `get_meeting` for notes, summaries, participants, and action items
+- `get_meeting` for notes, summaries, and action items
 - `get_meeting_transcript` for bounded transcript pages
-- `get_recurring_meeting_history` for meetings in the same recurring series
 
 If MCP is unavailable, use the fmtr CLI with `--json`:
 
@@ -21,7 +20,6 @@ If MCP is unavailable, use the fmtr CLI with `--json`:
 fmtr --json meetings list --query "planning"
 fmtr --json meetings get MEETING_ID
 fmtr --json meetings transcript MEETING_ID --limit 200 --offset 0
-fmtr --json meetings history MEETING_ID
 ```
 
 The CLI discovers Free Meeting Transcriber's database from the platform

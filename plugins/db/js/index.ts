@@ -3,7 +3,6 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   GetMeetingInput,
   GetMeetingTranscriptInput as GeneratedGetMeetingTranscriptInput,
-  GetRecurringMeetingHistoryInput as GeneratedGetRecurringMeetingHistoryInput,
   CloudsyncE2eeWitness,
   CloudsyncTokenConfigurationResult,
   CloudsyncWorkspaceProjection,
@@ -36,11 +35,6 @@ export type GetMeetingTranscriptInput = Pick<
   "meeting_id"
 > &
   Partial<Omit<GeneratedGetMeetingTranscriptInput, "meeting_id">>;
-export type GetRecurringMeetingHistoryInput = Pick<
-  GeneratedGetRecurringMeetingHistoryInput,
-  "meeting_id"
-> &
-  Partial<Omit<GeneratedGetRecurringMeetingHistoryInput, "meeting_id">>;
 
 export type TransactionStatement = {
   sql: string;
@@ -116,12 +110,6 @@ export async function getMeetingTranscript(
   input: GetMeetingTranscriptInput,
 ): Promise<TranscriptPage> {
   return invoke("plugin:db|get_meeting_transcript", { input });
-}
-
-export async function getRecurringMeetingHistory(
-  input: GetRecurringMeetingHistoryInput,
-): Promise<MeetingPage> {
-  return invoke("plugin:db|get_recurring_meeting_history", { input });
 }
 
 // Generic query path: returns named object rows for app-level SQL consumers.

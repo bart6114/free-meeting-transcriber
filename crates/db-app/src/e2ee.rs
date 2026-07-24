@@ -10,11 +10,8 @@ use sqlx::{Column, QueryBuilder, Row, Sqlite, SqlitePool, Transaction, TypeInfo,
 
 pub const E2EE_DOMAIN_TABLES: &[&str] = &[
     "action_items",
-    "humans",
-    "organizations",
     "session_attachments",
     "session_documents",
-    "session_participants",
     "sessions",
     "transcripts",
 ];
@@ -1289,11 +1286,8 @@ mod tests {
         let source = test_db().await;
         for (table, id) in [
             ("action_items", "action-1"),
-            ("humans", "human-1"),
-            ("organizations", "organization-1"),
             ("session_attachments", "attachment-1"),
             ("session_documents", "document-1"),
-            ("session_participants", "participant-1"),
             ("sessions", "session-1"),
             ("transcripts", "transcript-1"),
         ] {

@@ -86,7 +86,6 @@ vi.mock("@hypr/plugin-db", () => ({
   }),
   getMeeting: vi.fn(),
   getMeetingTranscript: vi.fn(),
-  getRecurringMeetingHistory: vi.fn(),
   listMeetings: vi.fn(),
   subscribe: vi.fn().mockResolvedValue(() => Promise.resolve()),
   suspendCloudsync: vi.fn().mockResolvedValue(undefined),

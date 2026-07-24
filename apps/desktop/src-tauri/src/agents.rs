@@ -13,12 +13,7 @@ mod tests {
 
     #[test]
     fn generated_guidance_prefers_typed_meeting_interfaces() {
-        for tool in [
-            "list_meetings",
-            "get_meeting",
-            "get_meeting_transcript",
-            "get_recurring_meeting_history",
-        ] {
+        for tool in ["list_meetings", "get_meeting", "get_meeting_transcript"] {
             assert!(AGENTS_CONTENT.contains(tool));
         }
 
