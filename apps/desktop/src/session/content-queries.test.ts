@@ -72,13 +72,6 @@ describe("session content SQLite snapshots", () => {
             speaker_hints_json: "[]",
           },
         ]),
-        participants_json: JSON.stringify([
-          {
-            human_id: "human-1",
-            name: "Alice",
-            job_title: "Engineer",
-          },
-        ]),
       },
     ]);
 
@@ -104,9 +97,6 @@ describe("session content SQLite snapshots", () => {
           ended_at: 200,
           words: [expect.objectContaining({ id: "word-1", text: "Hello" })],
         },
-      ],
-      participants: [
-        { humanId: "human-1", name: "Alice", jobTitle: "Engineer" },
       ],
     });
     expect(snapshot?.rawMarkdown).toContain("Raw note");

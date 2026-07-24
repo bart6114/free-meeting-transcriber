@@ -6,10 +6,6 @@ import { updateHistoryCurrent } from "./navigation";
 import { isSameTab, type Tab } from "./schema";
 
 export type StateBasicActions = {
-  updateContactsTabState: (
-    tab: Tab,
-    state: Extract<Tab, { type: "contacts" }>["state"],
-  ) => void;
   updateSessionTabState: (
     tab: Tab,
     state: Extract<Tab, { type: "sessions" }>["state"],
@@ -34,8 +30,6 @@ export const createStateUpdaterSlice = <T extends BasicState & NavigationState>(
 ): StateBasicActions => ({
   updateSessionTabState: (tab, state) =>
     updateTabState(tab, "sessions", state, get, set),
-  updateContactsTabState: (tab, state) =>
-    updateTabState(tab, "contacts", state, get, set),
   updateTemplatesTabState: (tab, state) =>
     updateTabState(tab, "templates", state, get, set),
   updateSettingsTabState: (tab, state) =>

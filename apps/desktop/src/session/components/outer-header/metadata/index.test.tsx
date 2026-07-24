@@ -50,10 +50,6 @@ vi.mock("~/session/queries", () => ({
   useUpdateSession: () => mocks.setCreatedAt,
 }));
 
-vi.mock("./participants", () => ({
-  ParticipantsDisplay: () => null,
-}));
-
 describe("Metadata controls", () => {
   beforeEach(() => {
     mocks.createdAt = "2026-07-02T03:53:00.000Z";

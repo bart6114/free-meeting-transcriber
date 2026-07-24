@@ -8,9 +8,7 @@ const mocks = vi.hoisted(() => ({
   formatMeetingChatContext: vi.fn(),
   loadMeetingChatRecords: vi.fn(),
   loadSessionContentSnapshot: vi.fn(),
-  loadHumansByIds: vi.fn(),
   buildRenderTranscriptRequestFromRows: vi.fn(),
-  collectAssignedHumanIdsFromTranscriptRows: vi.fn(),
   renderTranscriptSegments: vi.fn(),
 }));
 
@@ -31,15 +29,9 @@ vi.mock("~/stt/meeting-chat-records", () => ({
   loadMeetingChatRecords: mocks.loadMeetingChatRecords,
 }));
 
-vi.mock("~/contacts/queries", () => ({
-  loadHumansByIds: mocks.loadHumansByIds,
-}));
-
 vi.mock("~/stt/render-transcript", () => ({
   buildRenderTranscriptRequestFromRows:
     mocks.buildRenderTranscriptRequestFromRows,
-  collectAssignedHumanIdsFromTranscriptRows:
-    mocks.collectAssignedHumanIdsFromTranscriptRows,
   renderTranscriptSegments: mocks.renderTranscriptSegments,
 }));
 
@@ -67,7 +59,6 @@ function createSnapshot() {
         speaker_hints: [],
       },
     ],
-    participants: [{ humanId: "human-1", name: "Alice", jobTitle: "Engineer" }],
   };
 }
 
@@ -83,8 +74,6 @@ describe("enhanceTransform.transformArgs", () => {
     mocks.formatMeetingChatContext.mockReturnValue("");
     mocks.loadMeetingChatRecords.mockResolvedValue([]);
     mocks.loadSessionContentSnapshot.mockResolvedValue(createSnapshot());
-    mocks.loadHumansByIds.mockResolvedValue([{ id: "human-1", name: "Alice" }]);
-    mocks.collectAssignedHumanIdsFromTranscriptRows.mockReturnValue([]);
     mocks.buildRenderTranscriptRequestFromRows.mockReturnValue(null);
     mocks.renderTranscriptSegments.mockResolvedValue([]);
     consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
@@ -115,9 +104,7 @@ describe("enhanceTransform.transformArgs", () => {
       description: "Daily sync",
       sections: [{ title: "Updates", description: null }],
     });
-    expect(result.participants).toEqual([
-      { name: "Alice", jobTitle: "Engineer" },
-    ]);
+    expect(result.participants).toEqual([]);
   });
 
   it("uses the saved prompt override for Auto summaries", async () => {
@@ -197,28 +184,18 @@ describe("enhanceTransform.transformArgs", () => {
     ]);
   });
 
-  it("builds speaker identity context from SQLite humans", async () => {
-    mocks.collectAssignedHumanIdsFromTranscriptRows.mockReturnValue([
-      "human-2",
-    ]);
-
+  it("builds the render request straight from the transcript's own owner, without a humans lookup", async () => {
     await enhanceTransform.transformArgs(
       { sessionId: "session-1", enhancedNoteId: "note-1" },
       settingsValues,
     );
 
-    expect(mocks.loadHumansByIds).toHaveBeenCalledWith([
-      "user-1",
-      "human-1",
-      "human-2",
-    ]);
     expect(mocks.buildRenderTranscriptRequestFromRows).toHaveBeenCalledWith(
       expect.any(Array),
       {
         selfHumanId: "user-1",
-        humans: [{ human_id: "human-1", name: "Alice" }],
+        humans: [],
       },
-      ["human-1"],
     );
   });
 

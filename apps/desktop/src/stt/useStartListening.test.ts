@@ -20,7 +20,6 @@ const {
   useListenerMock,
   useSessionMock,
   useSessionHasTranscriptMock,
-  useSessionParticipantHumanIdsMock,
   createLiveTranscriptMock,
   applyLiveTranscriptDeltaToDatabaseMock,
   softDeleteTranscriptMock,
@@ -49,7 +48,6 @@ const {
   useListenerMock: vi.fn(),
   useSessionMock: vi.fn(),
   useSessionHasTranscriptMock: vi.fn(),
-  useSessionParticipantHumanIdsMock: vi.fn(),
   createLiveTranscriptMock: vi.fn(),
   applyLiveTranscriptDeltaToDatabaseMock: vi.fn(),
   softDeleteTranscriptMock: vi.fn(),
@@ -166,7 +164,6 @@ vi.mock("~/stt/queries", () => ({
   applyLiveTranscriptDeltaToDatabase: applyLiveTranscriptDeltaToDatabaseMock,
   createLiveTranscript: createLiveTranscriptMock,
   softDeleteTranscript: softDeleteTranscriptMock,
-  useSessionParticipantHumanIds: useSessionParticipantHumanIdsMock,
 }));
 
 let disclosureSessionSequence = 0;
@@ -265,7 +262,6 @@ describe("useStartListening", () => {
       raw_md: "Existing memo",
     });
     useSessionHasTranscriptMock.mockReturnValue(false);
-    useSessionParticipantHumanIdsMock.mockReturnValue([]);
     createLiveTranscriptMock.mockResolvedValue(undefined);
     applyLiveTranscriptDeltaToDatabaseMock.mockResolvedValue(undefined);
     softDeleteTranscriptMock.mockResolvedValue(undefined);

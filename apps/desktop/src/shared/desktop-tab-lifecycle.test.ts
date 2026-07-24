@@ -6,7 +6,7 @@ import {
 } from "./desktop-tab-lifecycle";
 
 import {
-  createContactsTab,
+  createSettingsTab,
   createSessionTab,
 } from "~/store/zustand/tabs/test-utils";
 
@@ -164,7 +164,7 @@ describe("desktop tab lifecycle", () => {
         });
 
         handler(createSessionTab({ id: `session-${sessionMode}` }));
-        handler(createContactsTab());
+        handler(createSettingsTab());
 
         expect(invalidateSessionResource).not.toHaveBeenCalled();
         expect(deleteSessionFn).not.toHaveBeenCalled();

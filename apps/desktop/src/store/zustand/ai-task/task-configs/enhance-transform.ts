@@ -9,7 +9,6 @@ import { sessionEventSchema } from "@hypr/store";
 import type { TaskArgsMap, TaskArgsMapTransformed, TaskConfig } from ".";
 import { collectEnhanceImageContext } from "./enhance-images";
 
-import { loadHumansByIds } from "~/contacts/queries";
 import {
   loadSessionContentSnapshot,
   type SessionContentSnapshot,
@@ -22,7 +21,6 @@ import {
 } from "~/stt/meeting-chat-records";
 import {
   buildRenderTranscriptRequestFromRows,
-  collectAssignedHumanIdsFromTranscriptRows,
   renderTranscriptSegments,
   type TranscriptRow,
 } from "~/stt/render-transcript";
@@ -211,13 +209,8 @@ function getSessionData(snapshot: SessionContentSnapshot): Session {
   };
 }
 
-function getParticipants(snapshot: SessionContentSnapshot): Participant[] {
-  return snapshot.participants
-    .filter((participant) => participant.name)
-    .map((participant) => ({
-      name: participant.name,
-      jobTitle: participant.jobTitle || null,
-    }));
+function getParticipants(_snapshot: SessionContentSnapshot): Participant[] {
+  return [];
 }
 
 async function getTranscriptSegments(
@@ -234,22 +227,10 @@ async function getTranscriptSegments(
       speaker_hints: transcript.speaker_hints,
     }),
   );
-  const humanIds = [
-    snapshot.ownerUserId,
-    ...snapshot.participants.map((participant) => participant.humanId),
-    ...collectAssignedHumanIdsFromTranscriptRows(transcriptRows),
-  ];
-  const humans = await loadHumansByIds(humanIds);
-  const request = buildRenderTranscriptRequestFromRows(
-    transcriptRows,
-    {
-      selfHumanId: snapshot.ownerUserId || undefined,
-      humans: humans
-        .filter((human) => human.name)
-        .map((human) => ({ human_id: human.id, name: human.name })),
-    },
-    snapshot.participants.map((participant) => participant.humanId),
-  );
+  const request = buildRenderTranscriptRequestFromRows(transcriptRows, {
+    selfHumanId: snapshot.ownerUserId || undefined,
+    humans: [],
+  });
   if (!request) {
     return [];
   }

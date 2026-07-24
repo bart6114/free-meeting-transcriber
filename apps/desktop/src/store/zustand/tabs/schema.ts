@@ -1,25 +1,21 @@
 import type {
   ChangelogState,
-  ContactsSelection,
-  ContactsState,
   EditorView,
   SessionsState,
   TabInput as WindowsTabInput,
   TemplatesState,
 } from "@hypr/plugin-windows";
 
-export type {
-  ChangelogState,
-  ContactsSelection,
-  ContactsState,
-  EditorView,
-  SessionsState,
-  TemplatesState,
-};
+export type { ChangelogState, EditorView, SessionsState, TemplatesState };
 
 export type SupportedWindowTabInput = Exclude<
   WindowsTabInput,
-  { type: "extension" } | { type: "extensions" } | { type: "folders" }
+  | { type: "extension" }
+  | { type: "extensions" }
+  | { type: "folders" }
+  | { type: "contacts" }
+  | { type: "humans" }
+  | { type: "organizations" }
 >;
 
 export type TabInput = SupportedWindowTabInput;
@@ -30,7 +26,10 @@ export const isTabInputSupported = (
   return (
     tab.type !== "extension" &&
     tab.type !== "extensions" &&
-    tab.type !== "folders"
+    tab.type !== "folders" &&
+    tab.type !== "contacts" &&
+    tab.type !== "humans" &&
+    tab.type !== "organizations"
   );
 };
 
@@ -93,18 +92,9 @@ export type Tab =
       state: SessionsState;
     })
   | (BaseTab & {
-      type: "contacts";
-      state: ContactsState;
-    })
-  | (BaseTab & {
       type: "templates";
       state: TemplatesState;
     })
-  | (BaseTab & {
-      type: "humans";
-      id: string;
-    })
-  | (BaseTab & { type: "organizations"; id: string })
   | (BaseTab & { type: "empty" })
   | (BaseTab & {
       type: "changelog";
@@ -138,14 +128,6 @@ export const getDefaultState = (tab: TabInput): Tab => {
         id: tab.id,
         state: tab.state ?? { view: null, autoStart: null },
       };
-    case "contacts":
-      return {
-        ...base,
-        type: "contacts",
-        state: tab.state ?? {
-          selected: null,
-        },
-      };
     case "templates":
       return {
         ...base,
@@ -157,10 +139,6 @@ export const getDefaultState = (tab: TabInput): Tab => {
           selectedWebIndex: null,
         },
       };
-    case "humans":
-      return { ...base, type: "humans", id: tab.id };
-    case "organizations":
-      return { ...base, type: "organizations", id: tab.id };
     case "empty":
       return { ...base, type: "empty" };
     case "changelog":
@@ -191,12 +169,6 @@ export const uniqueIdfromTab = (tab: Tab): string => {
   switch (tab.type) {
     case "sessions":
       return `sessions-${tab.id}`;
-    case "humans":
-      return `humans-${tab.id}`;
-    case "organizations":
-      return `organizations-${tab.id}`;
-    case "contacts":
-      return `contacts`;
     case "templates":
       return `templates`;
     case "empty":

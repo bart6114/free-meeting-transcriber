@@ -12,7 +12,6 @@ import {
 import { cn, safeFormat, safeParseDate, TZDate } from "@hypr/utils";
 
 import { DateEditor } from "./date";
-import { ParticipantsDisplay } from "./participants";
 
 import { useSessionEvent } from "~/session/hooks/useSessionEvent";
 import { useConfigValue } from "~/shared/config";
@@ -93,12 +92,7 @@ function ContentInner({ sessionId }: { sessionId: string }) {
   return (
     <div className="flex flex-col gap-4 p-4">
       {!eventDisplayData && <DateEditor sessionId={sessionId} />}
-      {eventDisplayData && (
-        <EventDisplay event={eventDisplayData}>
-          <ParticipantsDisplay sessionId={sessionId} />
-        </EventDisplay>
-      )}
-      {!eventDisplayData && <ParticipantsDisplay sessionId={sessionId} />}
+      {eventDisplayData && <EventDisplay event={eventDisplayData} />}
     </div>
   );
 }

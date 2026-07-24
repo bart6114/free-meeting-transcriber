@@ -15,7 +15,6 @@ type SessionContentSqlRow = {
   raw_body_format: string;
   enhanced_notes_json: string;
   transcripts_json: string;
-  participants_json: string;
 };
 
 type EnhancedNoteJson = {
@@ -34,12 +33,6 @@ type TranscriptJson = {
   memo: string;
   words_json: string;
   speaker_hints_json: string;
-};
-
-type ParticipantJson = {
-  human_id: string;
-  name: string;
-  job_title: string;
 };
 
 export type SessionContentSnapshot = {
@@ -70,11 +63,6 @@ export type SessionContentSnapshot = {
     wordsJson: string;
     words: WordWithId[];
     speaker_hints: SpeakerHintWithId[];
-  }>;
-  participants: Array<{
-    humanId: string;
-    name: string;
-    jobTitle: string;
   }>;
 };
 
@@ -115,22 +103,7 @@ const SESSION_CONTENT_SQL = `
       FROM transcripts AS transcript
       WHERE transcript.session_id = session.id
         AND transcript.deleted_at IS NULL
-    ), '[]') AS transcripts_json,
-    COALESCE((
-      SELECT json_group_array(json_object(
-        'human_id', participant.human_id,
-        'name', COALESCE(NULLIF(human.name, ''), participant.display_name),
-        'job_title', COALESCE(human.job_title, '')
-      ))
-      FROM session_participants AS participant
-      LEFT JOIN humans AS human
-        ON human.id = participant.human_id
-        AND human.deleted_at IS NULL
-      WHERE participant.session_id = session.id
-        AND participant.human_id <> ''
-        AND participant.source <> 'excluded'
-        AND participant.deleted_at IS NULL
-    ), '[]') AS participants_json
+    ), '[]') AS transcripts_json
   FROM sessions AS session
   LEFT JOIN session_documents AS note
     ON note.id = COALESCE(
@@ -219,18 +192,6 @@ function mapSessionContentRow(
         left.started_at - right.started_at || left.id.localeCompare(right.id),
     );
 
-  const participants = parseJsonArray<ParticipantJson>(row.participants_json)
-    .map((participant) => ({
-      humanId: participant.human_id,
-      name: participant.name,
-      jobTitle: participant.job_title,
-    }))
-    .sort(
-      (left, right) =>
-        left.name.localeCompare(right.name) ||
-        left.humanId.localeCompare(right.humanId),
-    );
-
   return {
     sessionId: row.id,
     ownerUserId: row.owner_user_id,
@@ -244,7 +205,6 @@ function mapSessionContentRow(
     rawMarkdown: bodyToMarkdown(row.raw_body, row.raw_body_format),
     enhancedNotes,
     transcripts,
-    participants,
   };
 }
 

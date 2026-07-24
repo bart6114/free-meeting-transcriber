@@ -18,11 +18,7 @@ import { cn } from "@hypr/utils";
 import { formatDate, formatDuration } from "./export-utils";
 
 import { useTranscriptExportSegments } from "~/session/components/note-input/transcript/export-data";
-import {
-  useEnhancedNote,
-  useSession,
-  useSessionParticipants,
-} from "~/session/queries";
+import { useEnhancedNote, useSession } from "~/session/queries";
 import { getSessionEvent } from "~/session/utils";
 import type { EditorView } from "~/store/zustand/tabs/schema";
 import { useSessionTranscripts } from "~/stt/queries";
@@ -56,6 +52,8 @@ function markdownToOrg(content: string): string {
     .trim();
 }
 
+const EMPTY_PARTICIPANT_NAMES: string[] = [];
+
 export function ExportModal({
   sessionId,
   currentView,
@@ -82,12 +80,7 @@ export function ExportModal({
 
   const enhancedNoteId = currentView.type === "enhanced" ? currentView.id : "";
   const enhancedNoteContent = useEnhancedNote(enhancedNoteId)?.content;
-  const participants = useSessionParticipants(sessionId);
-
-  const participantNames = useMemo(
-    () => participants.map((participant) => participant.name).filter(Boolean),
-    [participants],
-  );
+  const participantNames: string[] = EMPTY_PARTICIPANT_NAMES;
 
   const { data: transcriptItems, isLoading: isTranscriptLoading } =
     useTranscriptExportSegments(sessionId);

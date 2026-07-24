@@ -11,7 +11,7 @@ import {
   deleteProcessedAudioForRetention,
   normalizeAudioRetention,
 } from "~/services/audio-retention";
-import { useSession, useSessionParticipants } from "~/session/queries";
+import { useSession } from "~/session/queries";
 import { useConfigValue } from "~/shared/config";
 import { id } from "~/shared/utils";
 import type { BatchPersistCallback } from "~/store/zustand/listener/transcript";
@@ -125,7 +125,6 @@ export function getSessionSpeakerCount(
 
 export const useRunBatch = (sessionId: string) => {
   const session = useSession(sessionId);
-  const participants = useSessionParticipants(sessionId);
 
   const startTranscription = useListener((state) => state.startTranscription);
   const { conn } = useSTTConnection();
@@ -200,12 +199,7 @@ export const useRunBatch = (sessionId: string) => {
         options?.numSpeakers === undefined &&
         options?.minSpeakers === undefined &&
         options?.maxSpeakers === undefined
-          ? getSessionSpeakerCount(
-              participants
-                .filter((participant) => participant.source !== "excluded")
-                .map((participant) => participant.humanId),
-              session?.user_id,
-            )
+          ? getSessionSpeakerCount([], session?.user_id)
           : undefined;
 
       const handlePersist: BatchPersistCallback | undefined =
@@ -332,7 +326,6 @@ export const useRunBatch = (sessionId: string) => {
       audioRetention,
       dictionaryTerms,
       session,
-      participants,
       spokenLanguages,
       startTranscription,
       sessionId,

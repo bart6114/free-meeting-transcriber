@@ -4,15 +4,10 @@ import { computeHistoryFlags, type TabHistory } from "./navigation";
 import { id } from "~/shared/utils";
 
 type SessionTab = Extract<Tab, { type: "sessions" }>;
-type ContactsTab = Extract<Tab, { type: "contacts" }>;
 type SettingsTab = Extract<Tab, { type: "settings" }>;
 
 type SessionOverrides = Partial<Omit<SessionTab, "type" | "state">> & {
   state?: Partial<SessionTab["state"]>;
-};
-
-type ContactsOverrides = Partial<Omit<ContactsTab, "type" | "state">> & {
-  state?: Partial<ContactsTab["state"]>;
 };
 
 type SettingsOverrides = Partial<Omit<SettingsTab, "type" | "state">> & {
@@ -30,19 +25,6 @@ export const createSessionTab = (
   state: {
     view: null,
     autoStart: null,
-    ...overrides.state,
-  },
-});
-
-export const createContactsTab = (
-  overrides: ContactsOverrides = {},
-): ContactsTab => ({
-  type: "contacts",
-  active: overrides.active ?? false,
-  pinned: overrides.pinned ?? false,
-  slotId: id(),
-  state: {
-    selected: null,
     ...overrides.state,
   },
 });

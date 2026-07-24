@@ -60,15 +60,9 @@ msgstr "Accessibility"
 msgid "Activity"
 msgstr "Activity"
 
-#: src/contacts/shared.tsx
 #: src/settings/dictionary/index.tsx
 msgid "Add"
 msgstr "Add"
-
-#. placeholder {0}: option.name
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Add \"{0}\""
-msgstr "Add \"{0}\""
 
 #: src/session/components/note-input/enhanced/config-error.tsx
 msgid "Add API key"
@@ -85,18 +79,6 @@ msgstr "Add names, jargon, and product terms to improve transcription."
 #: src/settings/dictionary/index.tsx
 msgid "Add names, jargon, or product terms to prefer"
 msgstr "Add names, jargon, or product terms to prefer"
-
-#: src/contacts/details.tsx
-msgid "Add notes about this contact..."
-msgstr "Add notes about this contact..."
-
-#: src/contacts/details.tsx
-msgid "Add organization"
-msgstr "Add organization"
-
-#: src/contacts/new-person-form.tsx
-msgid "Add person"
-msgstr "Add person"
 
 #: src/settings/general/spoken-languages.tsx
 msgid "Add spoken language"
@@ -117,10 +99,6 @@ msgstr "Advanced"
 #: src/settings/ai/stt/select.tsx
 msgid "After recording"
 msgstr "After recording"
-
-#: src/contacts/details.tsx
-msgid "AI-generated summary of all interactions and notes with this contact will appear here. This will synthesize key discussion points, action items, and relationship context across all meetings and notes."
-msgstr "AI-generated summary of all interactions and notes with this contact will appear here. This will synthesize key discussion points, action items, and relationship context across all meetings and notes."
 
 #: src/shared/open-note-dialog.tsx
 msgid "All Notes"
@@ -154,10 +132,6 @@ msgstr "App restarts to apply. Existing files are copied, not moved."
 #: src/settings/general/theme.tsx
 msgid "Appearance"
 msgstr "Appearance"
-
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Apply to all"
-msgstr "Apply to all"
 
 #: src/task/resource-view.tsx
 msgid "Assignees:"
@@ -258,7 +232,6 @@ msgstr "Choose storage location"
 msgid "Choose template icon"
 msgstr "Choose template icon"
 
-#: src/contacts/shared.tsx
 #: src/templates/template-sidebar.tsx
 msgid "Clear search"
 msgstr "Clear search"
@@ -293,10 +266,6 @@ msgstr "commented on"
 msgid "comments"
 msgstr "comments"
 
-#: src/contacts/details.tsx
-msgid "Company"
-msgstr "Company"
-
 #: src/session/components/floating/options-menu.tsx
 msgid "Configure"
 msgstr "Configure"
@@ -306,18 +275,8 @@ msgid "Configure Providers"
 msgstr "Configure Providers"
 
 #: src/onboarding/folder-location.tsx
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "Confirm"
 msgstr "Confirm"
-
-#: src/sidebar/contacts.tsx
-#: src/sidebar/settings.tsx
-msgid "Contacts"
-msgstr "Contacts"
-
-#: src/sidebar/settings.tsx
-msgid "Context"
-msgstr "Context"
 
 #: src/templates/auto-form.tsx
 msgid "Context always provided"
@@ -440,10 +399,6 @@ msgstr "Edit date"
 msgid "Edit the complete system prompt used when Auto generates a summary."
 msgstr "Edit the complete system prompt used when Auto generates a summary."
 
-#: src/contacts/details.tsx
-msgid "Email"
-msgstr "Email"
-
 #: src/templates/template-icon-picker.tsx
 msgid "Emojis"
 msgstr "Emojis"
@@ -452,14 +407,6 @@ msgstr "Emojis"
 #: src/onboarding/permissions.tsx
 msgid "Enable {0}"
 msgstr "Enable {0}"
-
-#: src/session/components/outer-header/metadata/participants/chip.tsx
-msgid "Enhance contact"
-msgstr "Enhance contact"
-
-#: src/session/components/outer-header/metadata/participants/chip.tsx
-msgid "Enhance contact {label}"
-msgstr "Enhance contact {label}"
 
 #: src/session/components/outer-header/metadata/date.tsx
 msgid "Enter a valid date and time"
@@ -612,10 +559,6 @@ msgstr "How long recorded meeting audio is kept on this device."
 msgid "How long the mic must be active before triggering"
 msgstr "How long the mic must be active before triggering"
 
-#: src/contacts/humans.tsx
-msgid "Human"
-msgstr "Human"
-
 #: src/templates/template-icon-picker.tsx
 msgid "Icons"
 msgstr "Icons"
@@ -644,10 +587,6 @@ msgstr "Insert below"
 #: src/sidebar/settings.tsx
 msgid "Intelligence"
 msgstr "Intelligence"
-
-#: src/contacts/details.tsx
-msgid "Job Title"
-msgstr "Job Title"
 
 #: src/session/components/outer-header/index.tsx
 msgid "Join & record"
@@ -684,10 +623,6 @@ msgstr "Language model is needed to make Free Meeting Transcriber summarize and 
 #: src/settings/general/theme.tsx
 msgid "Light"
 msgstr "Light"
-
-#: src/contacts/details.tsx
-msgid "LinkedIn"
-msgstr "LinkedIn"
 
 #: src/settings/ai/stt/select.tsx
 msgid "Live"
@@ -738,14 +673,6 @@ msgstr "Meeting notes"
 msgid "Meetings"
 msgstr "Meetings"
 
-#: src/contacts/organization-details.tsx
-msgid "member"
-msgstr "member"
-
-#: src/contacts/organization-details.tsx
-msgid "members"
-msgstr "members"
-
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Memo"
 msgstr "Memo"
@@ -792,18 +719,9 @@ msgstr "Move down"
 msgid "Move up"
 msgstr "Move up"
 
-#: src/contacts/details.tsx
-#: src/contacts/organization-details.tsx
-msgid "Name"
-msgstr "Name"
-
 #: src/main/empty.tsx
 msgid "New Note"
 msgstr "New Note"
-
-#: src/contacts/shared.tsx
-msgid "Newest"
-msgstr "Newest"
 
 #: src/session/components/note-input/search/bar.tsx
 msgid "Next match"
@@ -850,10 +768,6 @@ msgstr "No match"
 msgid "No matching languages found"
 msgstr "No matching languages found"
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "No matching people"
-msgstr "No matching people"
-
 #: src/settings/ai/shared/model-combobox.tsx
 msgid "No models available."
 msgstr "No models available."
@@ -865,18 +779,6 @@ msgstr "No models ready to use."
 #: src/shared/open-note-dialog.tsx
 msgid "No notes found."
 msgstr "No notes found."
-
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "No people"
-msgstr "No people"
-
-#: src/contacts/organization-details.tsx
-msgid "No people in this organization"
-msgstr "No people in this organization"
-
-#: src/contacts/details.tsx
-msgid "No related notes found"
-msgstr "No related notes found"
 
 #: src/settings/ai/shared/model-combobox.tsx
 #: src/settings/general/searchable-select.tsx
@@ -891,10 +793,6 @@ msgstr "No templates yet"
 msgid "Note breadcrumb"
 msgstr "Note breadcrumb"
 
-#: src/contacts/details.tsx
-msgid "Notes"
-msgstr "Notes"
-
 #: src/settings/general/index.tsx
 #: src/sidebar/settings.tsx
 msgid "Notifications"
@@ -908,10 +806,6 @@ msgstr "Now"
 #: src/templates/template-icon-picker.tsx
 msgid "Objects"
 msgstr "Objects"
-
-#: src/contacts/shared.tsx
-msgid "Oldest"
-msgstr "Oldest"
 
 #: src/settings/todo/permission.tsx
 #: src/task/resource-view.tsx
@@ -947,28 +841,14 @@ msgstr "Open on GitHub"
 msgid "or"
 msgstr "or"
 
-#: src/contacts/details.tsx
-msgid "Organization"
-msgstr "Organization"
-
-#: src/contacts/organization-details.tsx
-msgid "Organization name"
-msgstr "Organization name"
-
 #: src/settings/general/timezone.tsx
 msgid "Override the timezone used for the sidebar timeline"
 msgstr "Override the timezone used for the sidebar timeline"
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx
 #: src/templates/auto-form.tsx
 msgid "Participants"
 msgstr "Participants"
-
-#: src/contacts/organization-details.tsx
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "People"
-msgstr "People"
 
 #: src/settings/todo/permission.tsx
 msgid "permission panel."
@@ -982,10 +862,6 @@ msgstr "Permissions"
 #: src/onboarding/index.tsx
 msgid "Permissions granted"
 msgstr "Permissions granted"
-
-#: src/contacts/details.tsx
-msgid "Phone"
-msgstr "Phone"
 
 #: src/settings/general/app-settings.tsx
 msgid "Post recording disclosure in meeting chat"
@@ -1026,10 +902,6 @@ msgstr "Recent"
 #: src/session/components/outer-header/index.tsx
 msgid "Record"
 msgstr "Record"
-
-#: src/contacts/details.tsx
-msgid "Related Notes"
-msgstr "Related Notes"
 
 #: src/settings/todo/provider-content.tsx
 msgid "Reminders"
@@ -1118,10 +990,6 @@ msgstr "Save"
 msgid "Save date"
 msgstr "Save date"
 
-#: src/contacts/shared.tsx
-msgid "Search contacts..."
-msgstr "Search contacts..."
-
 #: src/templates/template-icon-picker.tsx
 msgid "Search emoji..."
 msgstr "Search emoji..."
@@ -1142,17 +1010,9 @@ msgstr "Search installed apps..."
 msgid "Search language..."
 msgstr "Search language..."
 
-#: src/contacts/details.tsx
-msgid "Search or add company"
-msgstr "Search or add company"
-
 #: src/settings/ai/shared/model-combobox.tsx
 msgid "Search or create new"
 msgstr "Search or create new"
-
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Search people"
-msgstr "Search people"
 
 #: src/session/components/note-input/header.tsx
 #: src/templates/template-sidebar.tsx
@@ -1181,18 +1041,10 @@ msgstr "See all templates"
 msgid "Select a model"
 msgstr "Select a model"
 
-#: src/contacts/details.tsx
-msgid "Select a person to view details"
-msgstr "Select a person to view details"
-
 #: src/settings/ai/llm/select.tsx
 #: src/settings/ai/stt/select.tsx
 msgid "Select a provider"
 msgstr "Select a provider"
-
-#: src/contacts/organization-details.tsx
-msgid "Select an organization to view details"
-msgstr "Select an organization to view details"
 
 #: src/settings/general/theme.tsx
 msgid "Select appearance"
@@ -1213,10 +1065,6 @@ msgstr "Select..."
 #: src/settings/general/app-settings.tsx
 msgid "Send anonymous usage analytics to help improve Free Meeting Transcriber."
 msgstr "Send anonymous usage analytics to help improve Free Meeting Transcriber."
-
-#: src/contacts/organization-details.tsx
-msgid "Send email"
-msgstr "Send email"
 
 #: src/templates/auto-form.tsx
 msgid "Session details"
@@ -1297,17 +1145,9 @@ msgstr "Skip"
 msgid "Smileys & People"
 msgstr "Smileys & People"
 
-#: src/contacts/details.tsx
-msgid "Software Engineer"
-msgstr "Software Engineer"
-
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 msgid "Something went wrong while generating the summary."
 msgstr "Something went wrong while generating the summary."
-
-#: src/contacts/shared.tsx
-msgid "Sort options"
-msgstr "Sort options"
 
 #: src/settings/general/app-settings.tsx
 msgid "Start Free Meeting Transcriber at login"
@@ -1359,7 +1199,6 @@ msgstr "Storage configured"
 msgid "Storage Updated"
 msgstr "Storage Updated"
 
-#: src/contacts/details.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Summary"
 msgstr "Summary"
@@ -1438,10 +1277,6 @@ msgstr "Transcription model is needed to make Free Meeting Transcriber listen to
 msgid "Travel & Places"
 msgstr "Travel & Places"
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Unknown"
-msgstr "Unknown"
-
 #: src/session/components/outer-header/metadata/date.tsx
 msgid "Unknown date"
 msgstr "Unknown date"
@@ -1449,10 +1284,6 @@ msgstr "Unknown date"
 #: src/settings/ai/shared/index.tsx
 msgid "Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically."
 msgstr "Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically."
-
-#: src/contacts/organization-details.tsx
-msgid "Unnamed"
-msgstr "Unnamed"
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
 #: src/session/components/title-input.tsx
@@ -1463,10 +1294,6 @@ msgstr "Unnamed"
 #: src/templates/sections-editor.tsx
 msgid "Untitled"
 msgstr "Untitled"
-
-#: src/contacts/details.tsx
-msgid "Untitled Note"
-msgstr "Untitled Note"
 
 #: src/session/components/floating/options-menu.tsx
 #: src/session/components/outer-header/overflow/index.tsx
@@ -1489,10 +1316,6 @@ msgstr "Use your microphone to capture your voice"
 #: src/templates/auto-form.tsx
 msgid "Variables"
 msgstr "Variables"
-
-#: src/contacts/organization-details.tsx
-msgid "View LinkedIn profile"
-msgstr "View LinkedIn profile"
 
 #: src/onboarding/index.tsx
 msgid "Welcome to Free Meeting Transcriber"

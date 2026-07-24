@@ -57,14 +57,6 @@ type PastSessionRow = {
   event_json: string;
 };
 
-type PastParticipantRow = {
-  session_id: string;
-  human_id: string;
-  user_id: string;
-  source: string;
-  name: string;
-};
-
 type PastEnhancedNoteRow = {
   session_id: string;
   content: string;
@@ -82,7 +74,6 @@ type PastKeyFactsRow = {
 
 export type PastSessionNotesData = {
   sessions: Record<string, PastSessionRow>;
-  participants: PastParticipantRow[];
   enhancedNotes: PastEnhancedNoteRow[];
   keyFacts: Record<string, PastKeyFactsRow>;
 };
@@ -94,7 +85,6 @@ const KEY_FACTS_GENERATION_TIMEOUT_MS = 30_000;
 const SPACE_REGEX = /\s+/g;
 const GENERIC_TITLE_KEYS = new Set(["new note", "untitled"]);
 const EMPTY_SESSIONS: Record<string, PastSessionRow> = {};
-const EMPTY_PARTICIPANTS: PastParticipantRow[] = [];
 const EMPTY_ENHANCED_NOTES: PastEnhancedNoteRow[] = [];
 const EMPTY_KEY_FACTS: Record<string, PastKeyFactsRow> = {};
 
@@ -111,7 +101,7 @@ export function usePastSessionNotes(
     [sessionId],
   );
   const activeMutationCount = useIsMutating({ mutationKey });
-  const { sessions, participants, enhancedNotes, keyFacts } =
+  const { sessions, enhancedNotes, keyFacts } =
     usePastSessionNotesData(enabled);
   const userId = sessions[sessionId]?.user_id || null;
   const model = useLanguageModel("enhance");
@@ -122,19 +112,11 @@ export function usePastSessionNotes(
     }
 
     return buildPastSessionNotes(
-      { sessions, participants, enhancedNotes, keyFacts },
+      { sessions, enhancedNotes, keyFacts },
       sessionId,
       userId,
     );
-  }, [
-    enabled,
-    sessionId,
-    userId,
-    sessions,
-    participants,
-    enhancedNotes,
-    keyFacts,
-  ]);
+  }, [enabled, sessionId, userId, sessions, enhancedNotes, keyFacts]);
 
   const {
     mutate: generateNotes,
@@ -238,30 +220,6 @@ function usePastSessionNotesData(enabled: boolean): PastSessionNotesData {
         PastSessionRow
       >,
   });
-  const { data: participants = EMPTY_PARTICIPANTS } = useLiveQuery<
-    PastParticipantRow,
-    PastParticipantRow[]
-  >({
-    sql: `
-      SELECT
-        participant.session_id,
-        participant.human_id,
-        participant.owner_user_id AS user_id,
-        participant.source,
-        COALESCE(
-          NULLIF(human.name, ''),
-          NULLIF(participant.display_name, ''),
-          participant.human_id
-        ) AS name
-      FROM session_participants AS participant
-      LEFT JOIN humans AS human
-        ON human.id = participant.human_id AND human.deleted_at IS NULL
-      WHERE participant.deleted_at IS NULL
-      ORDER BY participant.session_id, participant.created_at, participant.id
-    `,
-    enabled,
-    mapRows: (rows) => rows,
-  });
   const { data: enhancedNotes = EMPTY_ENHANCED_NOTES } = useLiveQuery<
     PastEnhancedNoteRow,
     PastEnhancedNoteRow[]
@@ -302,7 +260,7 @@ function usePastSessionNotesData(enabled: boolean): PastSessionNotesData {
     },
   });
 
-  return { sessions, participants, enhancedNotes, keyFacts };
+  return { sessions, enhancedNotes, keyFacts };
 }
 
 export function buildPastSessionNotes(
@@ -319,11 +277,6 @@ export function buildPastSessionNotes(
     return { notes: [], missing: [], requests: [] };
   }
 
-  const currentParticipantIds = getSessionParticipantIds(
-    data.participants,
-    sessionId,
-    userId,
-  );
   const currentEvent = getSessionEvent(currentSession);
   const currentSeriesId = getRecurrenceSeriesId(currentEvent);
   const currentTitleKey = getSessionTitleKey(currentSession);
@@ -354,17 +307,10 @@ export function buildPastSessionNotes(
     }
 
     const candidateEvent = getSessionEvent(candidateSession);
-    const candidateParticipantIds = getSessionParticipantIds(
-      data.participants,
-      candidateSessionId,
-      userId,
-    );
     if (
       !isRelatedPastSession({
-        currentParticipantIds,
         currentSeriesId,
         currentTitleKey,
-        candidateParticipantIds,
         candidateSeriesId: getRecurrenceSeriesId(candidateEvent),
         candidateTitleKey: getSessionTitleKey(candidateSession),
       })
@@ -389,10 +335,7 @@ export function buildPastSessionNotes(
       sourceHash,
     );
     const ownerUserId = getSessionUserId(candidateSession, userId);
-    const participantNames = getSessionParticipantNames(
-      data.participants,
-      new Set([...currentParticipantIds, ...candidateParticipantIds]),
-    );
+    const participantNames: string[] = [];
     const request = {
       sessionId: candidateSessionId,
       userId: ownerUserId,
@@ -657,76 +600,14 @@ function truncateAtWord(text: string, maxLength: number): string {
   return `${slice.slice(0, end).trim()}...`;
 }
 
-function getSessionParticipantIds(
-  participants: PastParticipantRow[],
-  sessionId: string,
-  userId: string | null,
-): Set<string> {
-  const participantIds = new Set<string>();
-
-  for (const mapping of participants) {
-    if (
-      mapping.session_id !== sessionId ||
-      mapping.source === "excluded" ||
-      !mapping.human_id
-    ) {
-      continue;
-    }
-
-    const ownerUserId =
-      typeof mapping.user_id === "string" && mapping.user_id.trim()
-        ? mapping.user_id
-        : null;
-    const isCurrentUser =
-      (userId && mapping.human_id === userId) ||
-      (!userId && ownerUserId && mapping.human_id === ownerUserId);
-    if (!isCurrentUser) {
-      participantIds.add(mapping.human_id);
-    }
-  }
-
-  return participantIds;
-}
-
-function getSessionParticipantNames(
-  participants: PastParticipantRow[],
-  participantIds: Set<string>,
-): string[] {
-  const namesByHumanId = new Map<string, string>();
-  for (const participant of participants) {
-    if (participant.name.trim()) {
-      namesByHumanId.set(participant.human_id, participant.name.trim());
-    }
-  }
-  const seen = new Set<string>();
-  const names: string[] = [];
-
-  for (const participantId of participantIds) {
-    const name = namesByHumanId.get(participantId) || participantId;
-    const key = name.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-
-    seen.add(key);
-    names.push(name);
-  }
-
-  return names.sort((a, b) => a.localeCompare(b));
-}
-
 function isRelatedPastSession({
-  currentParticipantIds,
   currentSeriesId,
   currentTitleKey,
-  candidateParticipantIds,
   candidateSeriesId,
   candidateTitleKey,
 }: {
-  currentParticipantIds: Set<string>;
   currentSeriesId: string | null;
   currentTitleKey: string;
-  candidateParticipantIds: Set<string>;
   candidateSeriesId: string | null;
   candidateTitleKey: string;
 }) {
@@ -734,21 +615,7 @@ function isRelatedPastSession({
     return true;
   }
 
-  if (!currentTitleKey || currentTitleKey !== candidateTitleKey) {
-    return false;
-  }
-
-  if (currentParticipantIds.size === 0 || candidateParticipantIds.size === 0) {
-    return true;
-  }
-
-  for (const participantId of candidateParticipantIds) {
-    if (currentParticipantIds.has(participantId)) {
-      return true;
-    }
-  }
-
-  return false;
+  return Boolean(currentTitleKey) && currentTitleKey === candidateTitleKey;
 }
 
 function getSessionTitle(session: { title?: string }): string {

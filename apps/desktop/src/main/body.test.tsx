@@ -368,7 +368,6 @@ describe("ClassicMainBody", () => {
 
   it.each([
     ["settings", { state: { tab: "app" } }],
-    ["contacts", { state: { selected: null } }],
     ["templates", { state: { selectedMineId: null, selectedWebIndex: null } }],
   ])("keeps the %s left sidebar fixed", (type, extraTabState) => {
     mocks.currentTab = {

@@ -27,14 +27,12 @@ vi.mock("~/db", () => ({
 }));
 
 import {
-  addSessionParticipant,
   buildSessionTombstoneStatements,
   createSession,
   deleteEnhancedNote,
   getOrCreateSessionForEventId,
   isSessionEmpty,
   loadSessionEvent,
-  removeSessionParticipant,
   restoreDeletedSession,
   softDeleteSession,
   updateEnhancedNoteContent,
@@ -55,9 +53,6 @@ const event = {
   has_recurrence_rules: 1,
   is_all_day: 0,
   provider: "google",
-  participants_json: JSON.stringify([
-    { name: "Alice", email: "alice@example.com" },
-  ]),
 };
 
 describe("session SQLite operations", () => {
@@ -144,38 +139,6 @@ describe("session SQLite operations", () => {
     }>;
     expect(statements[0].sql).toContain("NULLIF(NULLIF(?, '')");
     expect(statements[0].sql).toContain("00000000-0000-0000-0000-000000000000");
-    expect(statements[2].sql).toContain("SELECT session.owner_user_id");
-    expect(statements[2].params).not.toContain(
-      "00000000-0000-0000-0000-000000000000",
-    );
-    expect(statements[3].sql).toContain("session.owner_user_id");
-    expect(statements[3].params).not.toContain(
-      "00000000-0000-0000-0000-000000000000",
-    );
-  });
-
-  it("links a human to a session without creating duplicate active mappings", async () => {
-    await addSessionParticipant("session-1", "human-1");
-
-    const statements = mocks.executeTransaction.mock.calls[0][0];
-    expect(statements[0].sql).toContain("source = 'excluded'");
-    expect(statements[0].sql).toContain("? <> 'auto'");
-    expect(statements[1].sql).toContain("INSERT INTO session_participants");
-    expect(statements[1].sql).toContain("session.workspace_id");
-    expect(statements[1].sql).toContain("NOT EXISTS");
-    expect(statements[1].params).toContain("session-1");
-    expect(statements[1].params).toContain("human-1");
-    expect(statements[1].params).toContain("manual");
-  });
-
-  it("excludes auto participants and tombstones manual participants", async () => {
-    await removeSessionParticipant("mapping-1");
-
-    const statement = mocks.executeTransaction.mock.calls[0][0][0];
-    expect(statement.sql).toContain("source = 'auto'");
-    expect(statement.sql).toContain("THEN 'excluded'");
-    expect(statement.sql).toContain("deleted_at = CASE");
-    expect(statement.params).toContain("mapping-1");
   });
 
   it("commits enhanced note content and the derived session title together", async () => {
@@ -227,7 +190,6 @@ describe("session SQLite operations", () => {
     mocks.execute
       .mockResolvedValueOnce([event])
       .mockResolvedValueOnce([])
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: "session-created" }]);
     mocks.executeTransaction.mockResolvedValueOnce([1]);
 
@@ -243,12 +205,12 @@ describe("session SQLite operations", () => {
     expect(statements[0].params).toContain("external-event-1");
     expect(
       statements.some((statement) => statement.sql.includes("humans")),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       statements.some((statement) =>
         statement.sql.includes("session_participants"),
       ),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("does not wait for analytics before returning a newly created event note", async () => {
@@ -257,7 +219,6 @@ describe("session SQLite operations", () => {
     );
     mocks.execute
       .mockResolvedValueOnce([event])
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([{ id: "session-created" }]);
     mocks.executeTransaction.mockResolvedValueOnce([1]);
@@ -277,7 +238,7 @@ describe("session SQLite operations", () => {
     mocks.execute.mockResolvedValueOnce([
       { id: "session-1", title: "Planning" },
     ]);
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1, 1, 1]);
+    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1, 1]);
 
     const deleted = await softDeleteSession("session-1");
 
@@ -290,7 +251,7 @@ describe("session SQLite operations", () => {
       sql: string;
       params: unknown[];
     }>;
-    expect(statements).toHaveLength(8);
+    expect(statements).toHaveLength(7);
     expect(
       statements.every((statement) =>
         statement.sql.includes("deleted_at IS NULL"),
@@ -307,7 +268,7 @@ describe("session SQLite operations", () => {
     mocks.execute.mockResolvedValueOnce([
       { id: "session-1", title: "Planning" },
     ]);
-    mocks.executeTransaction.mockResolvedValueOnce([0, 0, 0, 0, 0, 0, 0, 0]);
+    mocks.executeTransaction.mockResolvedValueOnce([0, 0, 0, 0, 0, 0, 0]);
 
     await expect(softDeleteSession("session-1")).resolves.toBeNull();
   });
@@ -325,7 +286,6 @@ describe("session SQLite operations", () => {
         transcript_count: 0,
         enhanced_note_count: 0,
         meeting_chat_count: 0,
-        manual_participant_count: 0,
         tag_count: 0,
       },
     ]);
@@ -339,7 +299,6 @@ describe("session SQLite operations", () => {
     ["transcript", { transcript_count: 1 }],
     ["enhanced note", { enhanced_note_count: 1 }],
     ["captured meeting chat", { meeting_chat_count: 1 }],
-    ["manual participant", { manual_participant_count: 1 }],
     ["tag", { tag_count: 1 }],
   ])("keeps a session with %s data", async (_label, overrides) => {
     mocks.execute.mockResolvedValueOnce([
@@ -351,7 +310,6 @@ describe("session SQLite operations", () => {
         transcript_count: 0,
         enhanced_note_count: 0,
         meeting_chat_count: 0,
-        manual_participant_count: 0,
         tag_count: 0,
         ...overrides,
       },
@@ -361,7 +319,7 @@ describe("session SQLite operations", () => {
   });
 
   it("restores only rows carrying the deletion's exact tombstone", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1, 1, 1]);
+    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1, 1]);
     await restoreDeletedSession({
       session: { id: "session-1", title: "Planning" },
       tombstone: "2026-07-10T12:00:00.000Z",
@@ -372,7 +330,7 @@ describe("session SQLite operations", () => {
       sql: string;
       params: unknown[];
     }>;
-    expect(statements).toHaveLength(8);
+    expect(statements).toHaveLength(7);
     expect(
       statements.every((statement) => statement.sql.includes("deleted_at = ?")),
     ).toBe(true);
@@ -393,7 +351,6 @@ describe("session SQLite operations", () => {
       "sessions",
       "session_documents",
       "transcripts",
-      "session_participants",
       "session_tags",
       "action_items",
       "session_attachments",

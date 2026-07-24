@@ -47,74 +47,6 @@ describe("buildPastSessionNotes", () => {
           raw_md: "Should not show up.",
         },
       },
-      mapping_session_participant: {
-        current_self: {
-          session_id: "current",
-          human_id: "self",
-          user_id: "self",
-          source: "manual",
-        },
-        current_alex: {
-          session_id: "current",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        current_jamie: {
-          session_id: "current",
-          human_id: "jamie",
-          user_id: "self",
-          source: "auto",
-        },
-        previous_alex: {
-          session_id: "previous",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        previous_jamie: {
-          session_id: "previous",
-          human_id: "jamie",
-          user_id: "self",
-          source: "auto",
-        },
-        same_title_alex: {
-          session_id: "same_title",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        same_title_jamie: {
-          session_id: "same_title",
-          human_id: "jamie",
-          user_id: "self",
-          source: "auto",
-        },
-        older_alex: {
-          session_id: "older",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        older_jamie: {
-          session_id: "older",
-          human_id: "jamie",
-          user_id: "self",
-          source: "auto",
-        },
-        future_alex: {
-          session_id: "future",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        future_jamie: {
-          session_id: "future",
-          human_id: "jamie",
-          user_id: "self",
-          source: "auto",
-        },
-      },
       enhanced_notes: {
         previous_summary: {
           session_id: "previous",
@@ -137,7 +69,7 @@ describe("buildPastSessionNotes", () => {
         sessionId: "previous",
         title: "Weekly Product Sync",
         dateLabel: "May 28, 2026",
-        participantNames: ["alex", "jamie"],
+        participantNames: [],
         summary: null,
         isGenerating: false,
       },
@@ -145,7 +77,7 @@ describe("buildPastSessionNotes", () => {
         sessionId: "same_title",
         title: "Weekly Product Sync",
         dateLabel: "May 27, 2026",
-        participantNames: ["alex", "jamie"],
+        participantNames: [],
         summary: null,
         isGenerating: false,
       },
@@ -160,7 +92,7 @@ describe("buildPastSessionNotes", () => {
     ]);
   });
 
-  it("does not treat matching participants alone as related past notes", () => {
+  it("does not treat sessions with a different title or series as related", () => {
     const data = makeData({
       sessions: {
         current: {
@@ -174,32 +106,6 @@ describe("buildPastSessionNotes", () => {
           created_at: "2026-06-01T10:00:00.000Z",
           event_json: "",
           raw_md: "Discussed release branch status.",
-        },
-      },
-      mapping_session_participant: {
-        current_alex: {
-          session_id: "current",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        current_jamie: {
-          session_id: "current",
-          human_id: "jamie",
-          user_id: "self",
-          source: "auto",
-        },
-        different_topic_alex: {
-          session_id: "different_topic",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        different_topic_jamie: {
-          session_id: "different_topic",
-          human_id: "jamie",
-          user_id: "self",
-          source: "auto",
         },
       },
     });
@@ -246,15 +152,6 @@ function makeData(
           event_json: String(row.event_json ?? ""),
         },
       ]),
-    ),
-    participants: Object.values(tables.mapping_session_participant ?? {}).map(
-      (row) => ({
-        session_id: String(row.session_id ?? ""),
-        human_id: String(row.human_id ?? ""),
-        user_id: String(row.user_id ?? ""),
-        source: String(row.source ?? ""),
-        name: String(row.name ?? row.human_id ?? ""),
-      }),
     ),
     enhancedNotes: Object.values(tables.enhanced_notes ?? {}).map((row) => ({
       session_id: String(row.session_id ?? ""),

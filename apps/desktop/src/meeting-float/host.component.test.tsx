@@ -53,7 +53,7 @@ vi.mock("@hypr/plugin-windows", () => ({
 
 vi.mock("./hooks", () => ({
   createMeetingFloatLabelContext: vi.fn(() => undefined),
-  loadMeetingFloatData: vi.fn(async () => ({ sessions: {}, humanNames: {} })),
+  loadMeetingFloatData: vi.fn(async () => ({ sessions: {} })),
   subscribeMeetingFloatData: mocks.subscribeMeetingFloatData,
 }));
 

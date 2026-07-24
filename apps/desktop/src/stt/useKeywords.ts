@@ -12,7 +12,7 @@ import type { VFile } from "vfile";
 
 import { useSessionEventParticipants } from "~/calendar/queries";
 import { liveQueryClient } from "~/db";
-import { useSession, useSessionParticipants } from "~/session/queries";
+import { useSession } from "~/session/queries";
 import { useConfigValue } from "~/shared/config";
 import { normalizeKeywordList } from "~/stt/keywords";
 
@@ -20,7 +20,6 @@ const MAX_TRANSCRIPTION_HINTS = 50;
 
 export function useKeywords(sessionId: string) {
   const session = useSession(sessionId);
-  const participants = useSessionParticipants(sessionId);
   const eventParticipants = useSessionEventParticipants(sessionId);
   const dictionaryTerms = useConfigValue("personalization_dictionary_terms");
 
@@ -30,11 +29,6 @@ export function useKeywords(sessionId: string) {
         rawMd: session?.raw_md,
         title: session?.title,
         eventJson: session?.event_json,
-        sessionParticipantTerms: participants.flatMap((participant) =>
-          participant.source !== "excluded" && participant.name
-            ? [participant.name]
-            : [],
-        ),
         eventParticipantTerms: eventParticipants.flatMap((participant) =>
           !participant.is_current_user && participant.name
             ? [participant.name]
@@ -42,7 +36,7 @@ export function useKeywords(sessionId: string) {
         ),
         dictionaryTerms,
       }),
-    [dictionaryTerms, eventParticipants, participants, session],
+    [dictionaryTerms, eventParticipants, session],
   );
 }
 
@@ -50,7 +44,6 @@ type KeywordSnapshotSqlRow = {
   raw_md: string;
   title: string;
   event_json: string;
-  participant_names_json: string;
   event_participants_json: string;
 };
 
@@ -67,21 +60,6 @@ export async function getSessionKeywords({
         COALESCE(note.body, '') AS raw_md,
         session.title,
         session.event_json,
-        COALESCE((
-          SELECT json_group_array(name)
-          FROM (
-            SELECT COALESCE(NULLIF(human.name, ''), participant.display_name) AS name
-            FROM session_participants AS participant
-            LEFT JOIN humans AS human
-              ON human.id = participant.human_id
-              AND human.deleted_at IS NULL
-            WHERE participant.session_id = session.id
-              AND participant.source <> 'excluded'
-              AND participant.deleted_at IS NULL
-              AND COALESCE(NULLIF(human.name, ''), participant.display_name) <> ''
-            ORDER BY name, participant.id
-          )
-        ), '[]') AS participant_names_json,
         COALESCE((
           SELECT event.participants_json
           FROM events AS event
@@ -119,7 +97,6 @@ export async function getSessionKeywords({
     rawMd: snapshot?.raw_md,
     title: snapshot?.title,
     eventJson: snapshot?.event_json,
-    sessionParticipantTerms: parseStringList(snapshot?.participant_names_json),
     eventParticipantTerms: parseEventParticipantNames(
       snapshot?.event_participants_json,
     ),
@@ -131,14 +108,12 @@ export function buildKeywords({
   rawMd,
   title,
   eventJson,
-  sessionParticipantTerms = [],
   eventParticipantTerms = [],
   dictionaryTerms,
 }: {
   rawMd: unknown;
   title: unknown;
   eventJson: unknown;
-  sessionParticipantTerms?: string[];
   eventParticipantTerms?: string[];
   dictionaryTerms: string[];
 }) {
@@ -153,7 +128,6 @@ export function buildKeywords({
       : { keywords: [], keyphrases: [] };
 
   return normalizeKeywordList([
-    ...sessionParticipantTerms,
     ...eventParticipantTerms,
     ...dictionaryTerms,
     ...keywords,
@@ -270,18 +244,6 @@ const eventKeywordFields = (eventJson: unknown): string[] => {
         return text ? [text] : [];
       },
     );
-  } catch {
-    return [];
-  }
-};
-
-const parseStringList = (value: unknown): string[] => {
-  if (typeof value !== "string" || !value) return [];
-  try {
-    const parsed = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === "string")
-      : [];
   } catch {
     return [];
   }

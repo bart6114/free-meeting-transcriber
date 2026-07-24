@@ -26,22 +26,13 @@ import {
 type CaptureIdentitySqlRow = {
   session_id: string;
   owner_user_id: string;
-  human_id: string | null;
 };
 
 const CAPTURE_IDENTITY_SQL = `
-  SELECT
-    session.id AS session_id,
-    session.owner_user_id,
-    participant.human_id
+  SELECT session.id AS session_id, session.owner_user_id
   FROM sessions AS session
-  LEFT JOIN session_participants AS participant
-    ON participant.session_id = session.id
-    AND participant.human_id <> ''
-    AND participant.source <> 'excluded'
-    AND participant.deleted_at IS NULL
   WHERE session.deleted_at IS NULL
-  ORDER BY session.id, participant.human_id
+  ORDER BY session.id
 `;
 
 const LIVE_CAPTURE_CONFIG_DEBOUNCE_MS = 750;
@@ -107,26 +98,6 @@ function handleAutoStopEndedNotification(
   }
 
   return true;
-}
-
-function getSessionParticipantHumanIds(
-  rows: CaptureIdentitySqlRow[],
-  sessionId: string,
-) {
-  const seen = new Set<string>();
-  const participantHumanIds: string[] = [];
-
-  for (const row of rows) {
-    const humanId = row.human_id;
-    if (row.session_id !== sessionId || !humanId || seen.has(humanId)) {
-      continue;
-    }
-
-    seen.add(humanId);
-    participantHumanIds.push(humanId);
-  }
-
-  return participantHumanIds;
 }
 
 function createCaptureConfigSignature(config: {
@@ -227,10 +198,7 @@ function LiveCaptureConfigSyncReady({
       const nextConfig = {
         session_id: live.sessionId,
         languages: liveConfig.languages,
-        participant_human_ids: getSessionParticipantHumanIds(
-          rows,
-          live.sessionId,
-        ),
+        participant_human_ids: [],
         self_human_id: session?.owner_user_id || null,
       };
       const signature = createCaptureConfigSignature(nextConfig);

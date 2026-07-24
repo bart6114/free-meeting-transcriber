@@ -1,6 +1,4 @@
 import { TabContentChangelog } from "~/changelog";
-import { TabContentContact } from "~/contacts";
-import { TabContentHuman } from "~/contacts/humans";
 import { TabContentOnboarding } from "~/onboarding";
 import { TabContentNote } from "~/session";
 import { TabContentSettings } from "~/settings";
@@ -11,12 +9,6 @@ import { TabContentTemplate } from "~/templates";
 export function MainTabContent({ tab }: { tab: Tab }) {
   if (tab.type === "sessions") {
     return <TabContentNote tab={tab} />;
-  }
-  if (tab.type === "humans") {
-    return <TabContentHuman tab={tab} />;
-  }
-  if (tab.type === "contacts") {
-    return <TabContentContact tab={tab} />;
   }
   if (tab.type === "changelog") {
     return <TabContentChangelog tab={tab} />;

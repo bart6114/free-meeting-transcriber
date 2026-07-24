@@ -9,8 +9,6 @@ const mocks = vi.hoisted(() => ({
     (_statements: Array<{ sql: string; params: unknown[] }>) =>
       Promise.resolve([1]),
   ),
-  humanRows: [] as Array<Record<string, unknown>>,
-  participantRows: [] as Array<Record<string, unknown>>,
   queryOptions: [] as Array<{
     sql: string;
     params?: unknown[];
@@ -29,19 +27,14 @@ vi.mock("~/db", () => ({
     mapRows?: (rows: Array<Record<string, unknown>>) => unknown;
   }) => {
     mocks.queryOptions.push(options);
-    const rows = options.sql.includes("FROM session_participants")
-      ? mocks.participantRows
-      : options.sql.includes("FROM humans")
-        ? mocks.humanRows
-        : mocks.transcriptRows;
 
     return {
       data:
         options.enabled === false
           ? undefined
           : options.mapRows
-            ? options.mapRows(rows)
-            : rows,
+            ? options.mapRows(mocks.transcriptRows)
+            : mocks.transcriptRows,
     };
   },
 }));
@@ -52,19 +45,14 @@ import {
   assignTranscriptSpeaker,
   createLiveTranscript,
   createTranscript,
-  removeHumanSpeakerAssignments,
-  useSessionParticipantHumanIds,
   useSessionTranscripts,
   useTranscript,
-  useTranscriptHumans,
   useTranscriptLabelContext,
 } from "./queries";
 
 describe("transcript SQLite queries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.humanRows = [];
-    mocks.participantRows = [];
     mocks.queryOptions = [];
     mocks.transcriptRows = [];
   });
@@ -135,35 +123,7 @@ describe("transcript SQLite queries", () => {
     );
   });
 
-  it("reads distinct participant human ids", () => {
-    mocks.participantRows = [{ human_id: "human-1" }, { human_id: "human-2" }];
-
-    const { result } = renderHook(() =>
-      useSessionParticipantHumanIds("session-1"),
-    );
-
-    expect(result.current).toEqual(["human-1", "human-2"]);
-    expect(mocks.queryOptions[0]?.sql).toContain("deleted_at IS NULL");
-  });
-
-  it("deduplicates and sorts ids before loading named humans", () => {
-    mocks.humanRows = [
-      { id: "human-1", name: "Alice" },
-      { id: "human-2", name: "Bob" },
-    ];
-
-    const { result } = renderHook(() =>
-      useTranscriptHumans(["human-2", "human-1", "human-2", ""]),
-    );
-
-    expect(result.current).toEqual([
-      { human_id: "human-1", name: "Alice" },
-      { human_id: "human-2", name: "Bob" },
-    ]);
-    expect(mocks.queryOptions[0]?.params).toEqual(["human-1", "human-2"]);
-  });
-
-  it("builds speaker labels from canonical owner, participant, and human rows", () => {
+  it("resolves speaker labels straight from assigned hint values, not a lookup", () => {
     mocks.transcriptRows = [
       {
         id: "transcript-1",
@@ -172,13 +132,15 @@ describe("transcript SQLite queries", () => {
         started_at_ms: 1000,
         ended_at_ms: null,
         words_json: "[]",
-        speaker_hints_json: "[]",
+        speaker_hints_json: JSON.stringify([
+          {
+            id: "hint-1",
+            word_id: "word-1",
+            type: "speaker_label",
+            value: "Alice",
+          },
+        ]),
       },
-    ];
-    mocks.participantRows = [{ human_id: "self" }, { human_id: "human-1" }];
-    mocks.humanRows = [
-      { id: "self", name: "John" },
-      { id: "human-1", name: "Alice" },
     ];
 
     const { result } = renderHook(() =>
@@ -186,11 +148,9 @@ describe("transcript SQLite queries", () => {
     );
 
     expect(result.current?.getSelfHumanId()).toBe("self");
-    expect(result.current?.getHumanName("human-1")).toBe("Alice");
-    expect(result.current?.getParticipantHumanIds?.()).toEqual([
-      "self",
-      "human-1",
-    ]);
+    expect(result.current?.getHumanName("Alice")).toBe("Alice");
+    expect(result.current?.getHumanName("self")).toBeUndefined();
+    expect(result.current?.getParticipantHumanIds?.()).toEqual([]);
   });
 
   it("creates the first live transcript delta in one insert", async () => {
@@ -323,7 +283,7 @@ describe("transcript SQLite queries", () => {
     expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("persists speaker assignments through the optimistic transcript update", async () => {
+  it("persists a plain-string speaker label through the optimistic transcript update", async () => {
     mocks.execute.mockResolvedValueOnce([
       {
         words_json: JSON.stringify([
@@ -346,49 +306,17 @@ describe("transcript SQLite queries", () => {
         speaker_index: 0,
         speaker_human_id: null,
       },
-      humanId: "human-1",
+      speakerLabel: "Alice",
       anchorWordId: "word-1",
-      mode: "all",
-      wordIds: ["word-1"],
     });
 
     const statement = mocks.executeTransaction.mock.calls[0]?.[0]?.[0];
     expect(JSON.parse(String(statement?.params[1]))).toEqual([
       expect.objectContaining({
         word_id: "word-1",
-        type: "user_speaker_assignment",
+        type: "speaker_label",
+        value: "Alice",
       }),
-    ]);
-  });
-
-  it("removes one human's assignments from every session transcript", async () => {
-    mocks.execute
-      .mockResolvedValueOnce([{ id: "transcript-1" }])
-      .mockResolvedValueOnce([
-        {
-          words_json: "[]",
-          speaker_hints_json: JSON.stringify([
-            {
-              id: "assignment-1",
-              word_id: "word-1",
-              type: "user_speaker_assignment",
-              value: JSON.stringify({ human_id: "human-1" }),
-            },
-            {
-              id: "assignment-2",
-              word_id: "word-2",
-              type: "user_speaker_assignment",
-              value: JSON.stringify({ human_id: "human-2" }),
-            },
-          ]),
-        },
-      ]);
-
-    await removeHumanSpeakerAssignments("session-1", "human-1");
-
-    const statement = mocks.executeTransaction.mock.calls[0]?.[0]?.[0];
-    expect(JSON.parse(String(statement?.params[1]))).toEqual([
-      expect.objectContaining({ id: "assignment-2" }),
     ]);
   });
 });

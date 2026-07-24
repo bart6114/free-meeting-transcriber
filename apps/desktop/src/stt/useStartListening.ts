@@ -39,7 +39,6 @@ import {
   applyLiveTranscriptDeltaToDatabase,
   createLiveTranscript,
   softDeleteTranscript,
-  useSessionParticipantHumanIds,
 } from "~/stt/queries";
 
 export const MEETING_DISCLOSURE_MESSAGE =
@@ -254,7 +253,6 @@ export function getPostCaptureAction(
 export function useStartListening(sessionId: string) {
   const session = useSession(sessionId);
   const hadTranscriptBeforeStart = useSessionHasTranscript(sessionId);
-  const participantHumanIds = useSessionParticipantHumanIds(sessionId);
   const getSessionMode = useListener((state) => state.getSessionMode);
 
   const aiLanguage = useConfigValue("ai_language");
@@ -426,7 +424,7 @@ export function useStartListening(sessionId: string) {
         api_key: conn?.apiKey ?? "",
         keywords,
         transcription_mode: liveTranscriptionConfig.transcriptionMode,
-        participant_human_ids: participantHumanIds,
+        participant_human_ids: [],
         self_human_id: session?.user_id || null,
       },
       {
@@ -477,7 +475,6 @@ export function useStartListening(sessionId: string) {
     dictionaryTerms,
     getSessionMode,
     hadTranscriptBeforeStart,
-    participantHumanIds,
     session,
     sessionId,
     setLeftSidebarExpanded,

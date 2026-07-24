@@ -12,7 +12,6 @@ const {
   startTranscriptionMock,
   useListenerMock,
   useSessionMock,
-  useSessionParticipantsMock,
   useSTTConnectionMock,
   useConfigValueMock,
   isSupportedLanguagesBatchMock,
@@ -25,7 +24,6 @@ const {
   startTranscriptionMock: vi.fn(),
   useListenerMock: vi.fn(),
   useSessionMock: vi.fn(),
-  useSessionParticipantsMock: vi.fn(),
   useSTTConnectionMock: vi.fn(),
   useConfigValueMock: vi.fn(),
   isSupportedLanguagesBatchMock: vi.fn(),
@@ -63,7 +61,6 @@ vi.mock("~/services/audio-retention", () => ({
 
 vi.mock("~/session/queries", () => ({
   useSession: useSessionMock,
-  useSessionParticipants: useSessionParticipantsMock,
 }));
 
 vi.mock("~/shared/config", () => ({
@@ -160,7 +157,6 @@ describe("useRunBatch", () => {
       user_id: "user-1",
       raw_md: "Existing memo",
     });
-    useSessionParticipantsMock.mockReturnValue([]);
     // STT is on-device only: useSTTConnection() only ever returns a
     // "fmtr" + local-model connection (or null) — never a hosted one.
     useSTTConnectionMock.mockReturnValue({

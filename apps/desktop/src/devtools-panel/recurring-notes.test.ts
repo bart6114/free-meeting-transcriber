@@ -49,15 +49,16 @@ describe("populateRecurringMeetingNotes", () => {
         String(statement.params[0]).startsWith("workspace-1:"),
       ),
     ).toBe(true);
-    const participantInserts = statements.filter((statement) =>
-      statement.sql.includes("INSERT INTO session_participants"),
-    );
-    expect(participantInserts).toHaveLength(12);
     expect(
-      participantInserts.every((statement) =>
-        statement.sql.includes("session.workspace_id"),
+      statements.some((statement) =>
+        statement.sql.includes("INSERT INTO session_participants"),
       ),
-    ).toBe(true);
+    ).toBe(false);
+    expect(
+      statements.some((statement) =>
+        statement.sql.includes("INSERT INTO humans"),
+      ),
+    ).toBe(false);
     const keyFactInserts = statements.filter(
       (statement) =>
         statement.sql.includes("INSERT INTO session_documents") &&

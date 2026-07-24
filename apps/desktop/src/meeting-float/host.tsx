@@ -277,7 +277,7 @@ function FloatingMeetingWindowSync({
   const refreshSettingsRef = useRef<() => void>(() => {});
 
   useMountEffect(() => {
-    let meetingData: MeetingFloatData = { sessions: {}, humanNames: {} };
+    let meetingData: MeetingFloatData = { sessions: {} };
     let routeState = getCurrentFloatingRouteState(
       listenerStore.getState(),
       undefined,

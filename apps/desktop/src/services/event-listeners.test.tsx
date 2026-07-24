@@ -231,7 +231,6 @@ describe("EventListeners notification events", () => {
       {
         session_id: "session-1",
         owner_user_id: "human-self",
-        human_id: "human-remote",
       },
     ]);
     await vi.runOnlyPendingTimersAsync();
@@ -239,7 +238,7 @@ describe("EventListeners notification events", () => {
     expect(updateCaptureConfigMock).toHaveBeenCalledWith({
       session_id: "session-1",
       languages: ["ko"],
-      participant_human_ids: ["human-remote"],
+      participant_human_ids: [],
       self_human_id: "human-self",
     });
   });

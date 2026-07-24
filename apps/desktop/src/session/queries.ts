@@ -3,7 +3,7 @@ import { useCallback } from "react";
 import { json2md, md2json } from "@hypr/editor/markdown";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
-import type { EventParticipant, SessionEvent } from "@hypr/store";
+import type { SessionEvent } from "@hypr/store";
 
 import { executeTransaction, liveQueryClient, useLiveQuery } from "~/db";
 import { enqueueDatabaseWrite } from "~/db/write-queue";
@@ -25,10 +25,8 @@ type EventSqlRow = {
   has_recurrence_rules: boolean | number;
   is_all_day: boolean | number;
   provider: string;
-  participants_json: string | null;
 };
 
-type HumanEmailSqlRow = { id: string; email: string };
 type SessionIdentitySqlRow = { id: string };
 type SessionEventSqlRow = { event_json: string };
 type SessionDeleteSqlRow = { id: string; title: string };
@@ -40,7 +38,6 @@ type SessionEmptySqlRow = {
   transcript_count: number;
   enhanced_note_count: number;
   meeting_chat_count: number;
-  manual_participant_count: number;
   tag_count: number;
 };
 
@@ -63,19 +60,6 @@ type SessionSummarySqlRow = {
 
 type SessionTranscriptStateSqlRow = {
   has_transcript: boolean | number;
-};
-
-type SessionParticipantSqlRow = {
-  id: string;
-  session_id: string;
-  human_id: string;
-  source: string;
-  name: string;
-  email: string;
-  job_title: string;
-  linkedin_username: string;
-  organization_id: string;
-  organization_name: string;
 };
 
 type EnhancedNoteSqlRow = {
@@ -120,21 +104,7 @@ export type EnhancedNoteRecord = {
   position: number;
 };
 
-export type SessionParticipantRecord = {
-  id: string;
-  sessionId: string;
-  humanId: string;
-  source: string;
-  name: string;
-  email: string;
-  jobTitle: string;
-  linkedinUsername: string;
-  organizationId: string;
-  organizationName: string;
-};
-
 const EMPTY_ENHANCED_NOTES: EnhancedNoteRecord[] = [];
-const EMPTY_SESSION_PARTICIPANTS: SessionParticipantRecord[] = [];
 const EMPTY_SESSION_SUMMARIES: SessionSummaryRecord[] = [];
 
 const SESSION_SELECT_SQL = `
@@ -252,150 +222,6 @@ export function useSessionHasTranscript(sessionId: string): boolean {
     mapRows: (rows) => Boolean(rows[0]?.has_transcript),
   });
   return sessionId ? data : false;
-}
-
-export function useSessionParticipants(
-  sessionId: string,
-): SessionParticipantRecord[] {
-  const { data = EMPTY_SESSION_PARTICIPANTS } = useLiveQuery<
-    SessionParticipantSqlRow,
-    SessionParticipantRecord[]
-  >({
-    sql: `
-      SELECT
-        participant.id,
-        participant.session_id,
-        participant.human_id,
-        participant.source,
-        COALESCE(NULLIF(human.name, ''), participant.display_name) AS name,
-        COALESCE(NULLIF(human.email, ''), participant.email) AS email,
-        COALESCE(human.job_title, '') AS job_title,
-        COALESCE(human.linkedin_username, '') AS linkedin_username,
-        COALESCE(human.organization_id, '') AS organization_id,
-        COALESCE(organization.name, '') AS organization_name
-      FROM session_participants AS participant
-      LEFT JOIN humans AS human
-        ON human.id = participant.human_id AND human.deleted_at IS NULL
-      LEFT JOIN organizations AS organization
-        ON organization.id = human.organization_id
-        AND organization.deleted_at IS NULL
-      WHERE participant.session_id = ?
-        AND participant.deleted_at IS NULL
-      ORDER BY name, email, participant.id
-    `,
-    params: [sessionId],
-    enabled: Boolean(sessionId),
-    mapRows: (rows) => rows.map(mapSessionParticipantRow),
-  });
-  return sessionId ? data : EMPTY_SESSION_PARTICIPANTS;
-}
-
-export function useSessionParticipant(
-  mappingId: string,
-): SessionParticipantRecord | null {
-  const { data = null } = useLiveQuery<
-    SessionParticipantSqlRow,
-    SessionParticipantRecord | null
-  >({
-    sql: `
-      SELECT
-        participant.id,
-        participant.session_id,
-        participant.human_id,
-        participant.source,
-        COALESCE(NULLIF(human.name, ''), participant.display_name) AS name,
-        COALESCE(NULLIF(human.email, ''), participant.email) AS email,
-        COALESCE(human.job_title, '') AS job_title,
-        COALESCE(human.linkedin_username, '') AS linkedin_username,
-        COALESCE(human.organization_id, '') AS organization_id,
-        COALESCE(organization.name, '') AS organization_name
-      FROM session_participants AS participant
-      LEFT JOIN humans AS human
-        ON human.id = participant.human_id AND human.deleted_at IS NULL
-      LEFT JOIN organizations AS organization
-        ON organization.id = human.organization_id
-        AND organization.deleted_at IS NULL
-      WHERE participant.id = ? AND participant.deleted_at IS NULL
-      LIMIT 1
-    `,
-    params: [mappingId],
-    enabled: Boolean(mappingId),
-    mapRows: (rows) => (rows[0] ? mapSessionParticipantRow(rows[0]) : null),
-  });
-  return mappingId ? data : null;
-}
-
-export function addSessionParticipant(
-  sessionId: string,
-  humanId: string,
-  source = "manual",
-): Promise<void> {
-  return enqueueDatabaseWrite("session-participants", async () => {
-    const participantId = id();
-    const now = new Date().toISOString();
-    await executeTransaction([
-      {
-        sql: `
-          UPDATE session_participants
-          SET source = ?, updated_at = ?
-          WHERE id = (
-            SELECT id
-            FROM session_participants
-            WHERE session_id = ?
-              AND human_id = ?
-              AND source = 'excluded'
-              AND deleted_at IS NULL
-              AND ? <> 'auto'
-            ORDER BY created_at, id
-            LIMIT 1
-          )
-        `,
-        params: [source, now, sessionId, humanId, source],
-      },
-      {
-        sql: `
-          INSERT INTO session_participants (
-            id, workspace_id, owner_user_id, session_id, human_id,
-            display_name, email, role, source, metadata_json, created_at,
-            updated_at, deleted_at
-          )
-          SELECT ?, session.workspace_id, session.owner_user_id, session.id, human.id,
-            human.name, human.email, '', ?, '{}', ?, ?, NULL
-          FROM sessions AS session
-          JOIN humans AS human ON human.id = ? AND human.deleted_at IS NULL
-          WHERE session.id = ?
-            AND session.deleted_at IS NULL
-            AND NOT EXISTS (
-              SELECT 1
-              FROM session_participants AS existing
-              WHERE existing.session_id = session.id
-                AND existing.human_id = human.id
-                AND existing.deleted_at IS NULL
-            )
-        `,
-        params: [participantId, source, now, now, humanId, sessionId],
-      },
-    ]);
-  });
-}
-
-export function removeSessionParticipant(mappingId: string): Promise<void> {
-  return enqueueDatabaseWrite("session-participants", async () => {
-    const now = new Date().toISOString();
-    await executeTransaction([
-      {
-        sql: `
-          UPDATE session_participants
-          SET
-            source = CASE WHEN source = 'auto' THEN 'excluded' ELSE source END,
-            deleted_at = CASE WHEN source = 'auto' THEN NULL ELSE ? END,
-            updated_at = ?
-          WHERE id = ? AND deleted_at IS NULL
-        `,
-        params: [now, now, mappingId],
-      },
-    ]);
-  });
 }
 
 export function useEnhancedNoteRecords(
@@ -593,7 +419,6 @@ export async function createSession(
   initial?: Pick<SessionChanges, "event_json" | "raw_md">,
 ): Promise<string> {
   const sessionId = id();
-  const participantId = id();
   const now = new Date().toISOString();
 
   await executeTransaction([
@@ -620,34 +445,6 @@ export async function createSession(
       params: [sessionId, userId, title, initial?.event_json ?? "", now, now],
     },
     createEmptyNoteStatement(sessionId, now, initial?.raw_md ?? ""),
-    {
-      sql: `
-        INSERT INTO humans (
-          id, workspace_id, owner_user_id, updated_at, deleted_at
-        )
-        SELECT session.owner_user_id, session.workspace_id,
-          session.owner_user_id, ?, NULL
-        FROM sessions AS session
-        WHERE session.id = ? AND session.deleted_at IS NULL
-        ON CONFLICT(id) DO UPDATE SET
-          deleted_at = NULL,
-          updated_at = excluded.updated_at
-      `,
-      params: [now, sessionId],
-    },
-    {
-      sql: `
-        INSERT INTO session_participants (
-          id, workspace_id, owner_user_id, session_id, human_id, source,
-          created_at, updated_at, deleted_at
-        )
-        SELECT ?, session.workspace_id, session.owner_user_id, session.id,
-          session.owner_user_id, 'manual', ?, ?, NULL
-        FROM sessions AS session
-        WHERE session.id = ? AND session.deleted_at IS NULL
-      `,
-      params: [participantId, now, now, sessionId],
-    },
   ]);
 
   trackNoteCreated(false);
@@ -674,8 +471,7 @@ export async function getOrCreateSessionForEventId(
         recurrence_series_id,
         has_recurrence_rules,
         is_all_day,
-        provider,
-        participants_json
+        provider
       FROM events
       WHERE id = ? AND deleted_at IS NULL
       LIMIT 1
@@ -695,8 +491,6 @@ export async function getOrCreateSessionForEventId(
   const sessionId = id();
   const now = new Date().toISOString();
   const sessionEvent = toSessionEvent(event);
-  const participants = parseEventParticipants(event.participants_json);
-  const humansByEmail = await findHumansByEmail(participants);
   const statements = [
     {
       sql: `
@@ -744,72 +538,6 @@ export async function getOrCreateSessionForEventId(
     },
     createEmptyNoteStatement(sessionId, now),
   ];
-
-  const seenEmails = new Set<string>();
-  for (const participant of participants) {
-    const email = participant.email?.trim();
-    if (!email) continue;
-    const emailKey = email.toLowerCase();
-    if (seenEmails.has(emailKey)) continue;
-    seenEmails.add(emailKey);
-
-    const humanId = humansByEmail.get(emailKey) ?? id();
-    if (!humansByEmail.has(emailKey)) {
-      statements.push({
-        sql: `
-          INSERT INTO humans (
-            id, workspace_id, owner_user_id, name, email, created_at,
-            updated_at, deleted_at
-          )
-          SELECT ?, session.workspace_id, session.owner_user_id, ?, ?, ?, ?, NULL
-          FROM sessions AS session
-          WHERE session.id = ? AND session.deleted_at IS NULL
-            AND NOT EXISTS (
-              SELECT 1
-              FROM humans
-              WHERE lower(email) = lower(?) AND deleted_at IS NULL
-            )
-        `,
-        params: [
-          humanId,
-          participant.name || email,
-          email,
-          now,
-          now,
-          sessionId,
-          email,
-        ],
-      });
-    }
-
-    statements.push({
-      sql: `
-        INSERT INTO session_participants (
-          id, workspace_id, owner_user_id, session_id, human_id, display_name,
-          email, source, created_at, updated_at, deleted_at
-        )
-        SELECT ?, session.workspace_id, session.owner_user_id, session.id,
-          ?, ?, ?, 'auto', ?, ?, NULL
-        FROM sessions AS session
-        WHERE session.id = ? AND session.deleted_at IS NULL
-          AND NOT EXISTS (
-            SELECT 1
-            FROM session_participants
-            WHERE session_id = session.id AND human_id = ? AND deleted_at IS NULL
-          )
-      `,
-      params: [
-        id(),
-        humanId,
-        participant.name || email,
-        email,
-        now,
-        now,
-        sessionId,
-        humanId,
-      ],
-    });
-  }
 
   const rowsAffected = await executeTransaction(statements);
 
@@ -875,14 +603,6 @@ export async function isSessionEmpty(sessionId: string): Promise<boolean> {
         ) AS meeting_chat_count,
         (
           SELECT COUNT(*)
-          FROM session_participants
-          WHERE session_id = sessions.id
-            AND source NOT IN ('auto', 'excluded')
-            AND human_id <> sessions.owner_user_id
-            AND deleted_at IS NULL
-        ) AS manual_participant_count,
-        (
-          SELECT COUNT(*)
           FROM session_tags
           WHERE session_id = sessions.id AND deleted_at IS NULL
         ) AS tag_count
@@ -905,7 +625,6 @@ export async function isSessionEmpty(sessionId: string): Promise<boolean> {
     Number(row.transcript_count) === 0 &&
     Number(row.enhanced_note_count) === 0 &&
     Number(row.meeting_chat_count) === 0 &&
-    Number(row.manual_participant_count) === 0 &&
     Number(row.tag_count) === 0
   );
 }
@@ -964,7 +683,6 @@ export function buildSessionTombstoneStatements(
   const directTables = [
     "session_documents",
     "transcripts",
-    "session_participants",
     "session_tags",
     "action_items",
     "session_attachments",
@@ -1041,41 +759,6 @@ async function findSessionForEvent(
   return rows[0]?.id ?? null;
 }
 
-async function findHumansByEmail(
-  participants: EventParticipant[],
-): Promise<Map<string, string>> {
-  const emails = Array.from(
-    new Set(
-      participants
-        .map((participant) => participant.email?.trim().toLowerCase())
-        .filter((email): email is string => Boolean(email)),
-    ),
-  );
-  if (emails.length === 0) return new Map();
-
-  const rows = await liveQueryClient.execute<HumanEmailSqlRow>(
-    `
-      SELECT id, email
-      FROM humans
-      WHERE deleted_at IS NULL
-        AND lower(email) IN (${emails.map(() => "?").join(", ")})
-      ORDER BY id
-    `,
-    emails,
-  );
-  return new Map(rows.map((row) => [row.email.toLowerCase(), row.id]));
-}
-
-function parseEventParticipants(value: string | null): EventParticipant[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? (parsed as EventParticipant[]) : [];
-  } catch {
-    return [];
-  }
-}
-
 function toSessionEvent(event: EventSqlRow): SessionEvent {
   return {
     tracking_id: event.tracking_id_event,
@@ -1126,23 +809,6 @@ function mapSessionRow(row: SessionSqlRow): SessionRecord {
     event_json: row.event_json,
     title: row.title,
     raw_md: rawMd,
-  };
-}
-
-function mapSessionParticipantRow(
-  row: SessionParticipantSqlRow,
-): SessionParticipantRecord {
-  return {
-    id: row.id,
-    sessionId: row.session_id,
-    humanId: row.human_id,
-    source: row.source,
-    name: row.name,
-    email: row.email,
-    jobTitle: row.job_title,
-    linkedinUsername: row.linkedin_username,
-    organizationId: row.organization_id,
-    organizationName: row.organization_name,
   };
 }
 

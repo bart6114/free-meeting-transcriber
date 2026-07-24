@@ -9,10 +9,7 @@ export type NavigationState = {
   canGoNext: boolean;
 };
 
-type InvalidatableResourceType = Extract<
-  Tab["type"],
-  "sessions" | "humans" | "organizations"
->;
+type InvalidatableResourceType = Extract<Tab["type"], "sessions">;
 
 export type NavigationActions = {
   goBack: () => void;

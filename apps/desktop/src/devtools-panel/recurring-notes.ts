@@ -10,39 +10,12 @@ import {
 import { DEFAULT_USER_ID } from "~/shared/utils";
 
 type SqlStatement = { sql: string; params: unknown[] };
-type SeedParticipant = {
-  humanId: string;
-  name: string;
-  email: string;
-  jobTitle: string;
-};
 
 const CURRENT_SESSION_ID = "devtools-recurring-notes-current";
 const SERIES_ID = "devtools-recurring-product-sync";
 const CALENDAR_ID = "devtools-calendar";
 const MEETING_TITLE = "Devtools Weekly Product Sync";
 const DAY_MS = 24 * 60 * 60 * 1000;
-
-const PARTICIPANTS = [
-  {
-    humanId: "devtools-human-alex-rivera",
-    name: "Alex Rivera",
-    email: "alex.rivera@example.com",
-    jobTitle: "Product Lead",
-  },
-  {
-    humanId: "devtools-human-maya-chen",
-    name: "Maya Chen",
-    email: "maya.chen@example.com",
-    jobTitle: "Design Lead",
-  },
-  {
-    humanId: "devtools-human-jordan-lee",
-    name: "Jordan Lee",
-    email: "jordan.lee@example.com",
-    jobTitle: "Engineering Lead",
-  },
-] as const;
 
 const PAST_NOTES = [
   {
@@ -102,24 +75,13 @@ export async function populateRecurringMeetingNotes({
   const workspaceId = await loadCloudsyncWorkspaceId();
   const ownerUserId = normalizeUserId(userId, workspaceId);
   const currentSessionId = namespacedId(workspaceId, CURRENT_SESSION_ID);
-  const participants = PARTICIPANTS.map((participant) => ({
-    ...participant,
-    humanId: namespacedId(workspaceId, participant.humanId),
-  }));
   const createdAt = now.toISOString();
   const statements: SqlStatement[] = [];
   const data: PastSessionNotesData = {
     sessions: {},
-    participants: [],
     enhancedNotes: [],
     keyFacts: {},
   };
-
-  for (const participant of participants) {
-    statements.push(
-      buildHumanStatement(participant, workspaceId, ownerUserId, createdAt),
-    );
-  }
 
   const seeds = [
     {
@@ -150,15 +112,6 @@ export async function populateRecurringMeetingNotes({
       content: seed.rawMd,
       position: 0,
     });
-    data.participants.push(
-      ...participants.map((participant) => ({
-        session_id: seed.sessionId,
-        human_id: participant.humanId,
-        user_id: ownerUserId,
-        source: "auto",
-        name: participant.name,
-      })),
-    );
     statements.push(
       ...buildSessionStatements({
         ownerUserId,
@@ -168,7 +121,6 @@ export async function populateRecurringMeetingNotes({
         rawMd: seed.rawMd,
         event,
         eventJson,
-        participants,
       }),
     );
   }
@@ -218,7 +170,6 @@ function buildSessionStatements({
   rawMd,
   event,
   eventJson,
-  participants,
 }: {
   ownerUserId: string;
   workspaceId: string;
@@ -227,7 +178,6 @@ function buildSessionStatements({
   rawMd: string;
   event: SessionEvent;
   eventJson: string;
-  participants: SeedParticipant[];
 }): SqlStatement[] {
   const createdAt = startedAt.toISOString();
   const statements: SqlStatement[] = [
@@ -284,76 +234,7 @@ function buildSessionStatements({
     }),
   ];
 
-  for (const participant of participants) {
-    statements.push({
-      sql: `
-        INSERT INTO session_participants (
-          id, workspace_id, owner_user_id, session_id, human_id, display_name,
-          email, source, created_at, updated_at, deleted_at
-        )
-        SELECT ?, session.workspace_id, ?, session.id, ?, ?, ?, 'auto', ?, ?, NULL
-        FROM sessions AS session
-        WHERE session.id = ? AND session.deleted_at IS NULL
-        ON CONFLICT(id) DO UPDATE SET
-          owner_user_id = excluded.owner_user_id,
-          session_id = excluded.session_id,
-          human_id = excluded.human_id,
-          display_name = excluded.display_name,
-          email = excluded.email,
-          source = excluded.source,
-          updated_at = excluded.updated_at,
-          deleted_at = NULL
-      `,
-      params: [
-        `${sessionId}:${participant.humanId}`,
-        ownerUserId,
-        participant.humanId,
-        participant.name,
-        participant.email,
-        createdAt,
-        createdAt,
-        sessionId,
-      ],
-    });
-  }
-
   return statements;
-}
-
-function buildHumanStatement(
-  participant: SeedParticipant,
-  workspaceId: string,
-  ownerUserId: string,
-  now: string,
-): SqlStatement {
-  return {
-    sql: `
-      INSERT INTO humans (
-        id, workspace_id, owner_user_id, name, email, job_title, created_at,
-        updated_at, deleted_at
-      )
-      VALUES (
-        ?, ?, ?, ?, ?, ?, ?, ?, NULL
-      )
-      ON CONFLICT(id) DO UPDATE SET
-        owner_user_id = excluded.owner_user_id,
-        name = excluded.name,
-        email = excluded.email,
-        job_title = excluded.job_title,
-        updated_at = excluded.updated_at,
-        deleted_at = NULL
-    `,
-    params: [
-      participant.humanId,
-      workspaceId,
-      ownerUserId,
-      participant.name,
-      participant.email,
-      participant.jobTitle,
-      now,
-      now,
-    ],
-  };
 }
 
 function buildDocumentStatement({

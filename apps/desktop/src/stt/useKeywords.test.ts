@@ -161,7 +161,6 @@ describe("getSessionKeywords", () => {
           description: "Airborne Brothers follow-up",
           location: "Zoom",
         }),
-        participant_names_json: "[]",
         event_participants_json: "[]",
       },
     ]);
@@ -174,7 +173,7 @@ describe("getSessionKeywords", () => {
     ).resolves.toEqual(expect.arrayContaining(["Vertex", "Launch"]));
   });
 
-  it("prioritizes mapped participants and attached event attendees", async () => {
+  it("prioritizes attached event attendees", async () => {
     execute.mockResolvedValue([
       {
         raw_md: "Discuss #Launch and production systems",
@@ -184,7 +183,6 @@ describe("getSessionKeywords", () => {
           description: "Airborne Brothers follow-up",
           location: "Zoom",
         }),
-        participant_names_json: JSON.stringify(["Alice Kim"]),
         event_participants_json: JSON.stringify([
           { name: "Alice Kim", email: "alice@example.com" },
           { name: "Mina Park", email: "mina@example.com" },
@@ -214,8 +212,7 @@ describe("buildKeywords", () => {
       rawMd: "",
       title: "",
       eventJson: "",
-      sessionParticipantTerms: ["Alice Kim"],
-      eventParticipantTerms: ["alice kim", "Mina Park"],
+      eventParticipantTerms: ["Alice Kim", "Mina Park"],
       dictionaryTerms: Array.from(
         { length: 60 },
         (_, index) => `Term ${index}`,
@@ -229,7 +226,6 @@ describe("buildKeywords", () => {
       "Term 0",
       "Term 1",
     ]);
-    expect(result).not.toContain("alice kim");
   });
 });
 

@@ -4,7 +4,6 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { type Tab, useTabs } from ".";
 import {
-  createContactsTab,
   createSettingsTab,
   createSessionTab,
   resetTabsStore,
@@ -24,17 +23,17 @@ describe("Basic Tab Actions", () => {
       active: false,
       state: { view: { type: "enhanced", id: "note-1" } },
     });
-    const contacts = createContactsTab({ active: false });
+    const settings = createSettingsTab({ active: false });
 
     useTabs.getState().openNew(session1);
     useTabs.getState().openNew(session2);
-    useTabs.getState().openNew(contacts);
+    useTabs.getState().openNew(settings);
 
-    expect(useTabs.getState()).toHaveCurrentTab({ type: "contacts" });
+    expect(useTabs.getState()).toHaveCurrentTab({ type: "settings" });
     expect(useTabs.getState()).toMatchTabsInOrder([
       { id: session1.id, active: false, type: "sessions" },
       { id: session2.id, active: false, type: "sessions" },
-      { type: "contacts", active: true },
+      { type: "settings", active: true },
     ]);
     expect(useTabs.getState()).toHaveHistoryLength(1);
     expect(useTabs.getState()).toHaveNavigationState({
@@ -419,7 +418,7 @@ describe("Basic Tab Actions", () => {
 
   test("closeAll clears store state and notifies handlers", () => {
     const first = createSessionTab({ active: true });
-    const second = createContactsTab({ active: false });
+    const second = createSettingsTab({ active: false });
     const onClose = vi.fn();
     const onEmpty = vi.fn();
 
@@ -443,7 +442,7 @@ describe("Basic Tab Actions", () => {
       expect.objectContaining({ id: first.id }),
     );
     expect(onClose).toHaveBeenCalledWith(
-      expect.objectContaining({ type: "contacts" }),
+      expect.objectContaining({ type: "settings" }),
     );
     expect(onEmpty).toHaveBeenCalledTimes(1);
   });

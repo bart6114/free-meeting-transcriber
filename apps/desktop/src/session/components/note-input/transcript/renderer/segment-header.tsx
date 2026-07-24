@@ -2,7 +2,7 @@ import { useMemo } from "react";
 
 import { cn } from "@hypr/utils";
 
-import { SpeakerAssignPopover } from "./speaker-assign";
+import { SpeakerRenameControl } from "./speaker-assign";
 import { useSegmentColorVars } from "./utils";
 
 import type { Segment } from "~/stt/live-segment";
@@ -31,7 +31,7 @@ export function SegmentHeader({
 
   return (
     <div className={headerClassName} style={colorVars}>
-      <SpeakerAssignPopover
+      <SpeakerRenameControl
         segment={segment}
         transcriptId={transcriptId}
         color="var(--segment-color)"

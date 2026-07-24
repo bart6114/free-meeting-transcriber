@@ -24,14 +24,12 @@ export type WordLike = {
 
 export type PartialWord = WordLike;
 
-type SpeakerHintData =
-  | {
-      type: "provider_speaker_index";
-      speaker_index: number;
-      provider?: string;
-      channel?: number;
-    }
-  | { type: "user_speaker_assignment"; human_id: string };
+type SpeakerHintData = {
+  type: "provider_speaker_index";
+  speaker_index: number;
+  provider?: string;
+  channel?: number;
+};
 
 export type RuntimeSpeakerHint = {
   wordIndex: number;
