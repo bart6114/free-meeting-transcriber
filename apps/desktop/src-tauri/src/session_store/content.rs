@@ -55,12 +55,17 @@ impl SessionStore {
         let result =
             tokio::task::spawn_blocking(move || -> Result<Option<SessionMeta>, StoreError> {
                 let path = vault_base.join(paths::meta_path(&id));
-                if !path.exists() {
-                    return Ok(None);
-                }
 
-                let bytes = std::fs::read(&path)
-                    .map_err(|e| StoreError::Io(format!("failed to read meta file: {}", e)))?;
+                // Attempt-then-match, not exists()-then-read: `Path::exists()` swallows
+                // permission-denied/stat failures as `false`, which would misreport a
+                // transiently-unreadable file as "no session" to callers like rebuild.
+                let bytes = match std::fs::read(&path) {
+                    Ok(bytes) => bytes,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+                    Err(e) => {
+                        return Err(StoreError::Io(format!("failed to read meta file: {}", e)));
+                    }
+                };
 
                 let meta: SessionMeta = serde_json::from_slice(&bytes).map_err(|e| {
                     StoreError::Serialize(format!("failed to deserialize meta: {}", e))
@@ -105,14 +110,13 @@ impl SessionStore {
 
         let result = tokio::task::spawn_blocking(move || -> Result<Option<String>, StoreError> {
             let path = vault_base.join(paths::note_path(&id));
-            if !path.exists() {
-                return Ok(None);
+
+            // Same attempt-then-match rationale as read_meta above.
+            match std::fs::read_to_string(&path) {
+                Ok(content) => Ok(Some(content)),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+                Err(e) => Err(StoreError::Io(format!("failed to read note file: {}", e))),
             }
-
-            let content = std::fs::read_to_string(&path)
-                .map_err(|e| StoreError::Io(format!("failed to read note file: {}", e)))?;
-
-            Ok(Some(content))
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;

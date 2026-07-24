@@ -11,8 +11,13 @@ use super::{SessionStore, StoreError, paths};
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct RebuildReport {
     pub sessions: usize,
+    /// Upserted `session_documents` rows this pass -- every `<kind>.md` file including the
+    /// note (`_memo.md`), not just the note.
     pub notes: usize,
     pub transcripts: usize,
+    /// Folder ids that have at least one recognized content file (a `<kind>.md` document or
+    /// `transcript.json`) but no `_meta.json` -- left deliberately unindexed; files untouched.
+    pub ghost_sessions: Vec<String>,
     pub errors: Vec<String>,
 }
 
@@ -24,7 +29,9 @@ impl SessionStore {
 
         let folder_ids = self.scan_session_ids().await?;
         for id in &folder_ids {
-            self.refresh_one(id, &mut report).await?;
+            // The per-session raw error (if any) is only useful to refresh_session's single-id
+            // caller; rebuild_index already has the full picture in report.errors.
+            let _ = self.refresh_one(id, &mut report).await?;
         }
 
         let present: HashSet<&str> = folder_ids.iter().map(String::as_str).collect();
@@ -39,11 +46,18 @@ impl SessionStore {
 
     /// Watcher + focus entry point: re-read one session's files, refresh its index rows.
     /// Missing `_meta.json` -> delete the session's index rows. Never touches files.
+    ///
+    /// `Err` does not mean nothing happened: any upserts that succeeded before the failing
+    /// artifact are already committed to the index. rebuild/refresh are idempotent, so a
+    /// caller can simply retry -- the next pass converges on the same result rather than
+    /// double-applying anything.
     pub async fn refresh_session(&self, session_id: &str) -> Result<(), StoreError> {
         let mut report = RebuildReport::default();
-        self.refresh_one(session_id, &mut report).await?;
-        if let Some(first) = report.errors.into_iter().next() {
-            return Err(StoreError::Serialize(first));
+        if let Some(first_error) = self.refresh_one(session_id, &mut report).await? {
+            // Propagate the original variant (Io/Db/Serialize) rather than relabeling every
+            // per-artifact failure as Serialize -- callers may want to distinguish, e.g., a
+            // transient permission error (Io, worth retrying) from real corruption.
+            return Err(first_error);
         }
         Ok(())
     }
@@ -52,17 +66,43 @@ impl SessionStore {
     /// A missing `_meta.json` means this id has no session identity in the index -- every
     /// row for it is wiped and we return early without inspecting the other files. Anything
     /// else that fails to parse is logged and its existing row is left exactly as it was.
-    async fn refresh_one(&self, id: &str, report: &mut RebuildReport) -> Result<(), StoreError> {
+    ///
+    /// Returns the first raw `StoreError` encountered among the per-artifact reads (already
+    /// also logged into `report.errors` as a formatted string) so `refresh_session` can hand
+    /// its caller the real error variant. The outer `Result` is reserved for failures that
+    /// must abort this session's refresh entirely (index writes, task-join failures).
+    async fn refresh_one(
+        &self,
+        id: &str,
+        report: &mut RebuildReport,
+    ) -> Result<Option<StoreError>, StoreError> {
+        let mut first_error: Option<StoreError> = None;
+
         match self.read_meta(id).await {
             Ok(None) => {
                 self.delete_session_index_tx(id).await?;
-                return Ok(());
+                match self.session_has_content(id).await {
+                    Ok(true) => report.ghost_sessions.push(id.to_string()),
+                    Ok(false) => {}
+                    Err(e) => record_error(
+                        &mut report.errors,
+                        &mut first_error,
+                        &format!("{id}: ghost-content scan"),
+                        e,
+                    ),
+                }
+                return Ok(first_error);
             }
             Ok(Some(meta)) => {
                 self.upsert_session_row(&meta).await?;
                 report.sessions += 1;
             }
-            Err(e) => report.errors.push(format!("{id}: _meta.json: {e}")),
+            Err(e) => record_error(
+                &mut report.errors,
+                &mut first_error,
+                &format!("{id}: _meta.json"),
+                e,
+            ),
         }
 
         match self.read_note(id).await {
@@ -71,7 +111,12 @@ impl SessionStore {
                 self.upsert_document_row(id, "note", &body).await?;
                 report.notes += 1;
             }
-            Err(e) => report.errors.push(format!("{id}: _memo.md: {e}")),
+            Err(e) => record_error(
+                &mut report.errors,
+                &mut first_error,
+                &format!("{id}: _memo.md"),
+                e,
+            ),
         }
 
         // "note" is always protected here: either just upserted above, deliberately left
@@ -80,14 +125,19 @@ impl SessionStore {
         let mut keep_kinds = vec!["note".to_string()];
         match self.scan_document_files(id).await {
             Ok(doc_files) => {
-                for (kind, content) in &doc_files {
+                for (kind, content) in doc_files {
                     keep_kinds.push(kind.clone());
                     match content {
                         Ok(body) => {
-                            self.upsert_document_row(id, kind, body).await?;
+                            self.upsert_document_row(id, &kind, &body).await?;
                             report.notes += 1;
                         }
-                        Err(e) => report.errors.push(format!("{id}: {kind}.md: {e}")),
+                        Err(e) => record_error(
+                            &mut report.errors,
+                            &mut first_error,
+                            &format!("{id}: {kind}.md"),
+                            e,
+                        ),
                     }
                 }
                 self.prune_document_rows(id, &keep_kinds).await?;
@@ -96,7 +146,7 @@ impl SessionStore {
                 // Couldn't even list the directory -- treat like any other unparseable file:
                 // log it, touch nothing. Pruning here would risk mistaking "can't tell" for
                 // "definitely gone".
-                report.errors.push(format!("{id}: {e}"));
+                record_error(&mut report.errors, &mut first_error, id, e);
             }
         }
 
@@ -112,10 +162,15 @@ impl SessionStore {
                 // so this also correctly prunes every row when the file itself is gone.
                 self.prune_transcript_rows(id, &keep_ids).await?;
             }
-            Err(e) => report.errors.push(format!("{id}: transcript.json: {e}")),
+            Err(e) => record_error(
+                &mut report.errors,
+                &mut first_error,
+                &format!("{id}: transcript.json"),
+                e,
+            ),
         }
 
-        Ok(())
+        Ok(first_error)
     }
 
     // -- filesystem reads (read-only; never writes to the vault) --
@@ -157,18 +212,23 @@ impl SessionStore {
     async fn scan_document_files(
         &self,
         id: &str,
-    ) -> Result<Vec<(String, Result<String, String>)>, String> {
+    ) -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
         let dir = self.vault_base.join(paths::session_dir(id));
         tokio::task::spawn_blocking(
-            move || -> Result<Vec<(String, Result<String, String>)>, String> {
+            move || -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
                 let mut out = Vec::new();
                 let entries = match std::fs::read_dir(&dir) {
                     Ok(entries) => entries,
                     Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
-                    Err(e) => return Err(format!("failed to read session directory: {e}")),
+                    Err(e) => {
+                        return Err(StoreError::Io(format!(
+                            "failed to read session directory: {e}"
+                        )));
+                    }
                 };
                 for entry in entries {
-                    let entry = entry.map_err(|e| format!("failed to read dir entry: {e}"))?;
+                    let entry = entry
+                        .map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
                     let path = entry.path();
                     if !path.is_file() {
                         continue;
@@ -182,16 +242,50 @@ impl SessionStore {
                     if stem == "_memo" {
                         continue;
                     }
-                    out.push((
-                        stem.to_string(),
-                        std::fs::read_to_string(&path).map_err(|e| e.to_string()),
-                    ));
+                    let content = std::fs::read_to_string(&path)
+                        .map_err(|e| StoreError::Io(format!("failed to read {stem}.md: {e}")));
+                    out.push((stem.to_string(), content));
                 }
                 Ok(out)
             },
         )
         .await
-        .unwrap_or_else(|e| Err(format!("task join error: {e}")))
+        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
+    }
+
+    /// Existence-only scan used to populate `RebuildReport.ghost_sessions`: true if the
+    /// session directory has at least one recognized content file (a `<kind>.md` document or
+    /// `transcript.json`) despite having no `_meta.json`. Never reads file contents.
+    async fn session_has_content(&self, id: &str) -> Result<bool, StoreError> {
+        let dir = self.vault_base.join(paths::session_dir(id));
+        tokio::task::spawn_blocking(move || -> Result<bool, StoreError> {
+            let entries = match std::fs::read_dir(&dir) {
+                Ok(entries) => entries,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+                Err(e) => {
+                    return Err(StoreError::Io(format!(
+                        "failed to read session directory: {e}"
+                    )));
+                }
+            };
+            for entry in entries {
+                let entry =
+                    entry.map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
+                let path = entry.path();
+                if !path.is_file() {
+                    continue;
+                }
+                let is_md = path.extension().and_then(|e| e.to_str()) == Some("md");
+                let is_transcript =
+                    path.file_name().and_then(|n| n.to_str()) == Some("transcript.json");
+                if is_md || is_transcript {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        })
+        .await
+        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
     }
 
     // -- index writes (never touch the filesystem) --
@@ -360,6 +454,21 @@ impl SessionStore {
             .await
             .map_err(|e| StoreError::Db(format!("failed to commit transaction: {e}")))?;
         Ok(())
+    }
+}
+
+/// Pushes a human-readable line to `errors` and remembers the first raw `StoreError`
+/// encountered this pass, so `refresh_session` can propagate the real variant instead of
+/// relabeling every per-artifact failure as `StoreError::Serialize`.
+fn record_error(
+    errors: &mut Vec<String>,
+    first: &mut Option<StoreError>,
+    context: &str,
+    err: StoreError,
+) {
+    errors.push(format!("{context}: {err}"));
+    if first.is_none() {
+        *first = Some(err);
     }
 }
 
@@ -559,5 +668,61 @@ mod tests {
                 .await
                 .unwrap();
         assert!(words_json.contains("restored-word"));
+    }
+
+    /// REGRESSION: `Path::exists()` swallows permission-denied as "false", which used to make
+    /// a transiently-unreadable `_meta.json` look identical to a missing one and delete a
+    /// live session's index rows. read_meta must now distinguish "not found" from "exists but
+    /// unreadable" and rebuild must treat the latter as an error, not a deletion.
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn rebuild_unreadable_meta_leaves_existing_row_and_logs_error() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "Original")).await.unwrap();
+
+        let meta_path = vault.path().join("sessions/s1/_meta.json");
+        let original_perms = std::fs::metadata(&meta_path).unwrap().permissions();
+        std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o000)).unwrap();
+
+        let report = store.rebuild_index().await.unwrap();
+
+        // Restore permissions before any assertion can panic, so tempdir cleanup never trips
+        // over a file it can't stat/delete.
+        std::fs::set_permissions(&meta_path, original_perms).unwrap();
+
+        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id='s1'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            title, "Original",
+            "existing row must survive a transiently-unreadable file, not just a corrupt one"
+        );
+        assert!(
+            !report.errors.is_empty(),
+            "an unreadable file must be reported, not silently treated as absent"
+        );
+    }
+
+    #[tokio::test]
+    async fn rebuild_reports_ghost_sessions_without_indexing_them() {
+        let (store, _vault) = test_store().await;
+        // A "ghost" session: transcript.json written without ever calling write_meta, matching
+        // Task 7's recording_into_unknown_session_still_persists regression.
+        store
+            .write_transcript("ghost", transcript("t1", "hi"))
+            .await
+            .unwrap();
+
+        let report = store.rebuild_index().await.unwrap();
+
+        assert_eq!(report.ghost_sessions, vec!["ghost".to_string()]);
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id='ghost'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(n, 0, "ghost sessions must not be indexed");
     }
 }

@@ -280,14 +280,23 @@ impl SessionStore {
 
         tokio::task::spawn_blocking(move || -> Result<TranscriptJson, StoreError> {
             let path = vault_base.join(&relative);
-            if !path.exists() {
-                return Ok(TranscriptJson {
-                    transcripts: Vec::new(),
-                });
-            }
 
-            let bytes = std::fs::read(&path)
-                .map_err(|e| StoreError::Io(format!("failed to read transcript file: {}", e)))?;
+            // Attempt-then-match, not exists()-then-read: see read_meta's comment in
+            // content.rs for why exists() alone is unsafe to gate on here.
+            let bytes = match std::fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(TranscriptJson {
+                        transcripts: Vec::new(),
+                    });
+                }
+                Err(e) => {
+                    return Err(StoreError::Io(format!(
+                        "failed to read transcript file: {}",
+                        e
+                    )));
+                }
+            };
 
             serde_json::from_slice(&bytes).map_err(|e| {
                 StoreError::Serialize(format!("failed to deserialize transcript.json: {}", e))
