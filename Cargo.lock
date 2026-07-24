@@ -4185,6 +4185,7 @@ dependencies = [
  "db-app",
  "db-core",
  "dirs 6.0.0",
+ "fs-format",
  "fs-sync-core",
  "host",
  "intercept",

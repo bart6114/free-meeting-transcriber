@@ -1,19 +1,26 @@
 use sqlx::SqlitePool;
+use std::collections::HashMap;
 use std::path::PathBuf;
+use std::sync::Arc;
 
 pub mod content;
 pub mod journal;
 pub mod paths;
+pub mod transcript;
 
 #[allow(unused_imports)] // re-export consumed by Task 9 (Tauri commands)
 pub use content::SessionMeta;
+#[allow(unused_imports)] // re-export consumed by Task 9 (Tauri commands)
+pub use transcript::TranscriptDelta;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SessionStore {
     vault_base: PathBuf,
     pool: SqlitePool,
-    journal: journal::WriteJournal,
-    write_lock: tokio::sync::Mutex<()>, // single store-wide lock; can become per-path if contention matters
+    journal: Arc<journal::WriteJournal>,
+    write_lock: Arc<tokio::sync::Mutex<()>>, // single store-wide lock; can become per-path if contention matters
+    // one live buffer per actively-recording session; guards the debounced-flush lifecycle
+    live: Arc<tokio::sync::Mutex<HashMap<String, transcript::LiveTranscriptBuffer>>>,
 }
 
 #[derive(Debug)]
@@ -46,8 +53,9 @@ impl SessionStore {
         Self {
             vault_base,
             pool,
-            journal: journal::WriteJournal::new(),
-            write_lock: tokio::sync::Mutex::new(()),
+            journal: Arc::new(journal::WriteJournal::new()),
+            write_lock: Arc::new(tokio::sync::Mutex::new(())),
+            live: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         }
     }
 

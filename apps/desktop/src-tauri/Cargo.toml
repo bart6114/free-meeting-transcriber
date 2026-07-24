@@ -84,6 +84,7 @@ hypr-audio-actual = { workspace = true }
 hypr-audio-mock = { workspace = true, optional = true }
 hypr-db-app = { workspace = true }
 hypr-db-core = { workspace = true }
+hypr-fs-format = { workspace = true }
 hypr-fs-sync-core = { workspace = true }
 hypr-host = { workspace = true }
 hypr-storage = { workspace = true }
@@ -103,7 +104,7 @@ specta-typescript = { workspace = true }
 sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 strum = { workspace = true, features = ["derive"] }
 tauri-specta = { workspace = true, features = ["derive", "typescript"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
 tracing = { workspace = true }
 
 [features]
