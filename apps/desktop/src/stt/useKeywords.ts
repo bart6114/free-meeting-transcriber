@@ -46,6 +46,10 @@ export async function getSessionKeywords({
   sessionId: string;
   dictionaryTerms: string[];
 }): Promise<string[]> {
+  // COALESCE mirrors session/queries.ts's SESSION_SELECT_SQL: the store (Tasks 5-8) writes
+  // the note row under id "<sessionId>:note", not "<sessionId>". The store-written row must
+  // win when both exist -- the legacy "<sessionId>" row is now seeded permanently empty by
+  // `createSession`, so preferring it would freeze keyword extraction at "no note" forever.
   const [snapshot] = await liveQueryClient.execute<KeywordSnapshotSqlRow>(
     `
       SELECT
@@ -54,8 +58,26 @@ export async function getSessionKeywords({
         session.event_json
       FROM sessions AS session
       LEFT JOIN session_documents AS note
-        ON note.id = session.id
-        AND note.kind = 'note'
+        ON note.id = COALESCE(
+          (
+            SELECT store_note.id
+            FROM session_documents AS store_note
+            WHERE store_note.id = session.id || ':note'
+              AND store_note.session_id = session.id
+              AND store_note.kind = 'note'
+              AND store_note.deleted_at IS NULL
+            LIMIT 1
+          ),
+          (
+            SELECT legacy_note.id
+            FROM session_documents AS legacy_note
+            WHERE legacy_note.id = session.id
+              AND legacy_note.session_id = session.id
+              AND legacy_note.kind = 'note'
+              AND legacy_note.deleted_at IS NULL
+            LIMIT 1
+          )
+        )
         AND note.deleted_at IS NULL
       WHERE session.id = ? AND session.deleted_at IS NULL
       LIMIT 1

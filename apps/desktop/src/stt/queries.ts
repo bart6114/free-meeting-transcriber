@@ -1,7 +1,5 @@
 import { useMemo } from "react";
 
-import type { LiveTranscriptDelta } from "@hypr/plugin-transcription";
-
 import { executeTransaction, liveQueryClient, useLiveQuery } from "~/db";
 import { enqueueDatabaseWrite } from "~/db/write-queue";
 import type { RenderLabelContext, SegmentKey } from "~/stt/live-segment";
@@ -11,10 +9,11 @@ import {
 } from "~/stt/render-transcript";
 import type { SpeakerHintWithId, WordWithId } from "~/stt/types";
 import {
-  applyLiveTranscriptDelta,
   createTranscriptAccumulator,
   upsertSpeakerAssignment,
 } from "~/stt/utils";
+import type { TranscriptSpeakerHint, TranscriptWord } from "~/types/tauri.gen";
+import { commands } from "~/types/tauri.gen";
 
 type TranscriptSqlRow = {
   id: string;
@@ -27,6 +26,8 @@ type TranscriptSqlRow = {
 };
 
 type TranscriptMutationSqlRow = {
+  session_id: string;
+  started_at_ms: number;
   words_json: string;
   speaker_hints_json: string;
 };
@@ -134,78 +135,39 @@ export function useTranscriptLabelContext(
   }, [assignedSpeakerLabels, transcript]);
 }
 
+// `source`/`provider`/`model`/`language` are accepted for caller compatibility but not yet
+// persisted -- the store's `TranscriptWithData` shape (Tasks 6-8) has no columns for them.
 export function createTranscript(input: TranscriptInsert): Promise<void> {
   return enqueueDatabaseWrite(`transcript:${input.id}`, async () => {
-    const now = new Date().toISOString();
-    const statements: Array<{ sql: string; params: unknown[] }> = [];
-
     if (input.replaceSession) {
-      statements.push({
-        sql: `
-          UPDATE transcripts
-          SET deleted_at = ?, updated_at = ?
-          WHERE session_id = ? AND deleted_at IS NULL
-        `,
-        params: [now, now, input.sessionId],
-      });
+      // `session_write_transcript` upserts one transcript by id; it has no "replace the whole
+      // session's transcript set" primitive. Tombstone every other row via the index (index
+      // bookkeeping, not a content write -- the words/hints payload below still goes through
+      // the store) so a batch re-run doesn't show the old and new transcript side by side.
+      const now = new Date().toISOString();
+      await executeTransaction([
+        {
+          sql: `
+            UPDATE transcripts
+            SET deleted_at = ?, updated_at = ?
+            WHERE session_id = ? AND id != ? AND deleted_at IS NULL
+          `,
+          params: [now, now, input.sessionId, input.id],
+        },
+      ]);
     }
 
-    statements.push({
-      sql: `
-        INSERT INTO transcripts (
-          id, owner_user_id, session_id, source, provider,
-          model, language, started_at_ms, ended_at_ms, audio_attachment_id,
-          memo, words_json, speaker_hints_json, metadata_json, created_at,
-          updated_at, deleted_at
-        )
-        SELECT ?, ?, session.id, ?, ?, ?, ?, ?, ?, '',
-          ?, ?, ?, '{}', ?, ?, NULL
-        FROM sessions AS session
-        WHERE session.id = ? AND session.deleted_at IS NULL
-      `,
-      params: [
-        input.id,
-        input.ownerUserId,
-        input.source ?? "",
-        input.provider ?? "",
-        input.model ?? "",
-        input.language ?? "",
-        input.startedAt,
-        input.endedAt ?? null,
-        input.memo ?? "",
-        JSON.stringify(input.words ?? []),
-        JSON.stringify(input.speakerHints ?? []),
-        input.createdAt,
-        now,
-        input.sessionId,
-      ],
+    await writeTranscriptOrThrow(input.sessionId, {
+      id: input.id,
+      user_id: input.ownerUserId,
+      created_at: input.createdAt,
+      session_id: input.sessionId,
+      started_at: input.startedAt,
+      ended_at: input.endedAt ?? null,
+      memo_md: input.memo ?? "",
+      words: (input.words ?? []).map(toTranscriptWord),
+      speaker_hints: (input.speakerHints ?? []).map(toTranscriptSpeakerHint),
     });
-
-    await executeTransaction(statements);
-  });
-}
-
-export function createLiveTranscript(
-  input: Omit<TranscriptInsert, "words" | "speakerHints">,
-  delta: LiveTranscriptDelta,
-): Promise<void> {
-  const snapshot = mutateTranscriptSnapshot("[]", "[]", input.id, (store) =>
-    applyLiveTranscriptDelta(store, input.id, delta),
-  );
-
-  return createTranscript({
-    ...input,
-    words: JSON.parse(snapshot.wordsJson) as WordWithId[],
-    speakerHints: JSON.parse(snapshot.hintsJson) as SpeakerHintWithId[],
-  });
-}
-
-export function applyLiveTranscriptDeltaToDatabase(
-  transcriptId: string,
-  delta: LiveTranscriptDelta,
-): Promise<void> {
-  return mutateTranscript(transcriptId, (store) => {
-    applyLiveTranscriptDelta(store, transcriptId, delta);
   });
 }
 
@@ -244,20 +206,74 @@ export function assignTranscriptSpeaker({
   });
 }
 
-export function softDeleteTranscript(transcriptId: string): Promise<void> {
-  return enqueueDatabaseWrite(`transcript:${transcriptId}`, async () => {
-    const now = new Date().toISOString();
-    await executeTransaction([
-      {
-        sql: `
-          UPDATE transcripts
-          SET deleted_at = ?, updated_at = ?
-          WHERE id = ? AND deleted_at IS NULL
-        `,
-        params: [now, now, transcriptId],
-      },
-    ]);
-  });
+// Zeroes the transcript's content via a full overwrite rather than truly deleting the row --
+// the store has no per-transcript delete, only per-session (`sessionDelete`). An empty
+// `words_json` reads the same as "no transcript" everywhere the index is queried
+// (`useSessionHasTranscript` etc).
+export function softDeleteTranscript(
+  sessionId: string,
+  transcriptId: string,
+): Promise<void> {
+  return enqueueDatabaseWrite(`transcript:${transcriptId}`, () =>
+    writeTranscriptOrThrow(sessionId, {
+      id: transcriptId,
+      session_id: sessionId,
+      words: [],
+      speaker_hints: [],
+    }),
+  );
+}
+
+async function writeTranscriptOrThrow(
+  sessionId: string,
+  transcript: Parameters<typeof commands.sessionWriteTranscript>[1],
+): Promise<void> {
+  const result = await commands.sessionWriteTranscript(sessionId, transcript);
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
+}
+
+// `WordWithId`/`SpeakerHintWithId` are TinyBase storage types: every field is typed
+// `T | undefined` regardless of whether the zod schema marks it optional, because storage
+// cells can be genuinely absent at runtime. The Rust `TranscriptWord`/`TranscriptSpeakerHint`
+// types are stricter (`text`/`start_ms`/`end_ms`/`channel`/`word_id` are required) -- default
+// missing values rather than reject the word outright, so a partially-populated live word
+// still lands on disk instead of silently vanishing from the transcript.
+function toTranscriptWord(word: WordWithId): TranscriptWord {
+  return {
+    id: word.id ?? null,
+    text: word.text ?? "",
+    start_ms: word.start_ms ?? 0,
+    end_ms: word.end_ms ?? 0,
+    channel: word.channel ?? 0,
+    speaker: word.speaker ?? null,
+    metadata: parseMetadata(word.metadata),
+  };
+}
+
+// `WordWithId.metadata` is TinyBase's JSON-stringified storage representation (see the
+// ToStorageType comment above); the Rust command wants the parsed object.
+function parseMetadata(
+  metadata: string | undefined,
+): TranscriptWord["metadata"] {
+  if (!metadata) return null;
+  try {
+    return JSON.parse(metadata) as TranscriptWord["metadata"];
+  } catch {
+    return null;
+  }
+}
+
+function toTranscriptSpeakerHint(
+  hint: SpeakerHintWithId,
+): TranscriptSpeakerHint {
+  return {
+    id: hint.id ?? null,
+    word_id: hint.word_id ?? "",
+    type: hint.type ?? "",
+    value: hint.value ?? null,
+  };
 }
 
 function mapTranscriptRow(row: TranscriptSqlRow): TranscriptRecord {
@@ -287,64 +303,49 @@ function parseJsonArray<T>(value: string, rowId: string, field: string): T[] {
   return [];
 }
 
+// `enqueueDatabaseWrite`'s per-`transcriptId` queue already serializes every caller in this
+// module (append/speaker-rename), so the read-compute-write below no longer needs its own
+// compare-and-swap -- the old SQL CAS guarded against concurrent *SQL* writers, and
+// `write_transcript` doesn't have an equivalent primitive to CAS against. A live-recording
+// debounced flush can still race this from the Rust side (out of this queue's reach); see
+// `write_transcript`'s doc for the one direction that's guarded (batch-supersedes-buffer).
 async function mutateTranscript(
   transcriptId: string,
   mutation: (store: MemoryTranscriptStore) => void,
 ): Promise<void> {
   return enqueueDatabaseWrite(`transcript:${transcriptId}`, async () => {
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const rows = await liveQueryClient.execute<TranscriptMutationSqlRow>(
-        `
-          SELECT words_json, speaker_hints_json
-          FROM transcripts
-          WHERE id = ? AND deleted_at IS NULL
-          LIMIT 1
-        `,
-        [transcriptId],
-      );
-      const current = rows[0];
-      if (!current) {
-        throw new Error(`Transcript ${transcriptId} does not exist`);
-      }
-
-      assertJsonArray(current.words_json, transcriptId, "words");
-      assertJsonArray(
-        current.speaker_hints_json,
-        transcriptId,
-        "speaker hints",
-      );
-      const next = mutateTranscriptSnapshot(
-        current.words_json,
-        current.speaker_hints_json,
-        transcriptId,
-        mutation,
-      );
-      const now = new Date().toISOString();
-      const [updated = 0] = await executeTransaction([
-        {
-          sql: `
-            UPDATE transcripts
-            SET words_json = ?, speaker_hints_json = ?, updated_at = ?
-            WHERE id = ?
-              AND words_json = ?
-              AND speaker_hints_json = ?
-              AND deleted_at IS NULL
-          `,
-          params: [
-            next.wordsJson,
-            next.hintsJson,
-            now,
-            transcriptId,
-            current.words_json,
-            current.speaker_hints_json,
-          ],
-        },
-      ]);
-
-      if (updated === 1) return;
+    const rows = await liveQueryClient.execute<TranscriptMutationSqlRow>(
+      `
+        SELECT session_id, started_at_ms, words_json, speaker_hints_json
+        FROM transcripts
+        WHERE id = ? AND deleted_at IS NULL
+        LIMIT 1
+      `,
+      [transcriptId],
+    );
+    const current = rows[0];
+    if (!current) {
+      throw new Error(`Transcript ${transcriptId} does not exist`);
     }
 
-    throw new Error(`Transcript ${transcriptId} changed too frequently`);
+    assertJsonArray(current.words_json, transcriptId, "words");
+    assertJsonArray(current.speaker_hints_json, transcriptId, "speaker hints");
+    const next = mutateTranscriptSnapshot(
+      current.words_json,
+      current.speaker_hints_json,
+      transcriptId,
+      mutation,
+    );
+
+    await writeTranscriptOrThrow(current.session_id, {
+      id: transcriptId,
+      session_id: current.session_id,
+      started_at: current.started_at_ms,
+      words: (JSON.parse(next.wordsJson) as WordWithId[]).map(toTranscriptWord),
+      speaker_hints: (JSON.parse(next.hintsJson) as SpeakerHintWithId[]).map(
+        toTranscriptSpeakerHint,
+      ),
+    });
   });
 }
 

@@ -7,6 +7,27 @@ const mocks = vi.hoisted(() => ({
     (_statements: Array<{ sql: string; params: unknown[] }>) =>
       Promise.resolve([1]),
   ),
+  sessionWriteMeta: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
+  sessionWriteNote: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
+  sessionDelete: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
+  sessionRestore: vi.fn(
+    (): Promise<
+      { status: "ok"; data: boolean } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: true }),
+  ),
+  waitForPendingSoftDelete: vi.fn(() => Promise.resolve()),
 }));
 
 vi.mock("@hypr/plugin-analytics", () => ({
@@ -26,8 +47,20 @@ vi.mock("~/db", () => ({
   liveQueryClient: { execute: mocks.execute },
 }));
 
+vi.mock("~/session/pending-soft-deletes", () => ({
+  waitForPendingSoftDelete: mocks.waitForPendingSoftDelete,
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionWriteMeta: mocks.sessionWriteMeta,
+    sessionWriteNote: mocks.sessionWriteNote,
+    sessionDelete: mocks.sessionDelete,
+    sessionRestore: mocks.sessionRestore,
+  },
+}));
+
 import {
-  buildSessionTombstoneStatements,
   createSession,
   deleteEnhancedNote,
   isSessionEmpty,
@@ -41,56 +74,79 @@ describe("session SQLite operations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    mocks.sessionWriteMeta.mockResolvedValue({ status: "ok", data: null });
+    mocks.sessionWriteNote.mockResolvedValue({ status: "ok", data: null });
+    mocks.sessionDelete.mockResolvedValue({ status: "ok", data: null });
+    mocks.sessionRestore.mockResolvedValue({ status: "ok", data: true });
+    mocks.waitForPendingSoftDelete.mockResolvedValue(undefined);
   });
 
-  it("commits title and raw note changes in one ordered transaction", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1]);
+  it("commits title changes as bookkeeping only -- note content never goes through SQL", async () => {
+    mocks.executeTransaction.mockResolvedValueOnce([1]);
 
-    await updateSession("session-1", {
-      title: "Updated title",
-      raw_md: '{"type":"doc"}',
-    });
+    await updateSession("session-1", { title: "Updated title" });
 
     const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
       sql: string;
       params: unknown[];
     }>;
-    expect(statements).toHaveLength(2);
+    expect(statements).toHaveLength(1);
     expect(statements[0].sql).toContain("UPDATE sessions");
     expect(statements[0].params).toContain("Updated title");
-    expect(statements[1].sql).toContain("session_documents");
-    expect(statements[1].params).toContain('{"type":"doc"}');
   });
 
-  it("creates a session with its initial event and note content atomically", async () => {
+  it("is a no-op when there is nothing to change", async () => {
+    await updateSession("session-1", {});
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
+  });
+
+  it("creates a session via the store, then seeds initial content as markdown", async () => {
     await createSession("Welcome", "user-1", {
       event_json: '{"tracking_id":"welcome"}',
-      raw_md: '{"type":"doc"}',
+      raw_md: JSON.stringify({
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Hi" }] },
+        ],
+      }),
     });
 
+    expect(mocks.sessionWriteMeta).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Welcome" }),
+    );
+
+    // Bookkeeping placeholder (always-empty body) + the event_json update.
     const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
       sql: string;
       params: unknown[];
     }>;
-    expect(statements[0].sql).toContain("INSERT INTO sessions");
-    expect(statements[0].sql).toContain("event_json");
-    expect(statements[0].params).toContain("user-1");
-    expect(statements[0].params).toContain('{"tracking_id":"welcome"}');
-    expect(statements[1].sql).toContain("session_documents");
-    expect(statements[1].sql).toContain("FROM sessions");
-    expect(statements[1].params).toContain('{"type":"doc"}');
+    expect(statements[0].sql).toContain("session_documents");
+    expect(statements[0].params).toContain("");
+    expect(statements[1].sql).toContain("UPDATE sessions");
+    expect(statements[1].params).toContain('{"tracking_id":"welcome"}');
+
+    // Real content lands in the file-canonical store as markdown, not SQL.
+    expect(mocks.sessionWriteNote).toHaveBeenCalledWith(
+      expect.any(String),
+      "Hi",
+    );
   });
 
-  it("defaults to the sentinel local user id when no owner is given", async () => {
-    await createSession("Local note");
+  it("creates a session with no initial content and does not touch the note store", async () => {
+    await createSession("Untitled");
 
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements[0].params).toContain(
-      "00000000-0000-0000-0000-000000000000",
-    );
+    expect(mocks.sessionWriteMeta).toHaveBeenCalled();
+    expect(mocks.sessionWriteNote).not.toHaveBeenCalled();
+  });
+
+  it("throws when the store fails to create the session", async () => {
+    mocks.sessionWriteMeta.mockResolvedValueOnce({
+      status: "error",
+      error: "disk full",
+    });
+
+    await expect(createSession("Untitled")).rejects.toThrow("disk full");
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("commits enhanced note content and the derived session title together", async () => {
@@ -138,13 +194,12 @@ describe("session SQLite operations", () => {
     ]);
   });
 
-  it("tombstones the session and every owned child with one timestamp", async () => {
+  it("deletes the session through the store, capturing its title first for the undo toast", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-10T12:00:00.000Z"));
     mocks.execute.mockResolvedValueOnce([
       { id: "session-1", title: "Planning" },
     ]);
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1]);
 
     const deleted = await softDeleteSession("session-1");
 
@@ -153,28 +208,24 @@ describe("session SQLite operations", () => {
       tombstone: "2026-07-10T12:00:00.000Z",
       deletedAt: Date.parse("2026-07-10T12:00:00.000Z"),
     });
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements).toHaveLength(6);
-    expect(
-      statements.every((statement) =>
-        statement.sql.includes("deleted_at IS NULL"),
-      ),
-    ).toBe(true);
-    expect(
-      statements.every((statement) =>
-        statement.params.includes("2026-07-10T12:00:00.000Z"),
-      ),
-    ).toBe(true);
+    expect(mocks.sessionDelete).toHaveBeenCalledWith("session-1");
   });
 
-  it("does not register a deletion when another window won the tombstone", async () => {
+  it("does not call session_delete when the session no longer exists", async () => {
+    mocks.execute.mockResolvedValueOnce([]);
+
+    await expect(softDeleteSession("session-1")).resolves.toBeNull();
+    expect(mocks.sessionDelete).not.toHaveBeenCalled();
+  });
+
+  it("returns null instead of throwing when session_delete fails", async () => {
     mocks.execute.mockResolvedValueOnce([
       { id: "session-1", title: "Planning" },
     ]);
-    mocks.executeTransaction.mockResolvedValueOnce([0, 0, 0, 0, 0, 0]);
+    mocks.sessionDelete.mockResolvedValueOnce({
+      status: "error",
+      error: "boom",
+    });
 
     await expect(softDeleteSession("session-1")).resolves.toBeNull();
   });
@@ -224,44 +275,41 @@ describe("session SQLite operations", () => {
     await expect(isSessionEmpty("session-1")).resolves.toBe(false);
   });
 
-  it("restores only rows carrying the deletion's exact tombstone", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1]);
+  it("waits for a pending delete to settle, then restores through the store", async () => {
     await restoreDeletedSession({
       session: { id: "session-1", title: "Planning" },
       tombstone: "2026-07-10T12:00:00.000Z",
       deletedAt: 1,
     });
 
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements).toHaveLength(6);
-    expect(
-      statements.every((statement) => statement.sql.includes("deleted_at = ?")),
-    ).toBe(true);
-    expect(statements.every((statement) => statement.params[0] === null)).toBe(
-      true,
-    );
+    expect(mocks.waitForPendingSoftDelete).toHaveBeenCalledWith("session-1");
+    expect(mocks.sessionRestore).toHaveBeenCalledWith("session-1");
   });
 
-  it("covers all session-owned tables in the tombstone transaction", () => {
-    const sql = buildSessionTombstoneStatements(
-      "session-1",
-      "2026-07-10T12:00:00.000Z",
-    )
-      .map((statement) => statement.sql)
-      .join("\n");
+  it("throws when nothing was trashed to restore", async () => {
+    mocks.sessionRestore.mockResolvedValueOnce({ status: "ok", data: false });
 
-    for (const table of [
-      "sessions",
-      "session_documents",
-      "transcripts",
-      "session_tags",
-      "action_items",
-      "entity_mentions",
-    ]) {
-      expect(sql).toContain(table);
-    }
+    await expect(
+      restoreDeletedSession({
+        session: { id: "session-1", title: "Planning" },
+        tombstone: "2026-07-10T12:00:00.000Z",
+        deletedAt: 1,
+      }),
+    ).rejects.toThrow("was never soft-deleted");
+  });
+
+  it("throws when the store restore call fails", async () => {
+    mocks.sessionRestore.mockResolvedValueOnce({
+      status: "error",
+      error: "boom",
+    });
+
+    await expect(
+      restoreDeletedSession({
+        session: { id: "session-1", title: "Planning" },
+        tombstone: "2026-07-10T12:00:00.000Z",
+        deletedAt: 1,
+      }),
+    ).rejects.toThrow("boom");
   });
 });

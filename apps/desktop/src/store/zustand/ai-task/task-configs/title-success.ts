@@ -92,8 +92,12 @@ function createTitledDocumentUpdate(
   contentFormat: string,
   title: string,
 ): SessionDocumentContentUpdate {
+  // "markdown" is the legacy-import sentinel; "md" is what the session store
+  // (session_write_note/session_write_document, Tasks 5-8/9) writes -- both need md2json.
   const parsed =
-    contentFormat === "markdown" ? md2json(content) : parseJsonContent(content);
+    contentFormat === "markdown" || contentFormat === "md"
+      ? md2json(content)
+      : parseJsonContent(content);
   return {
     id,
     currentContent: content,

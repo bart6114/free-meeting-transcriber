@@ -34,11 +34,8 @@ import {
   getLiveTranscriptionConfig,
   getTranscriptionLanguages,
 } from "~/stt/capabilities";
-import {
-  applyLiveTranscriptDeltaToDatabase,
-  createLiveTranscript,
-  softDeleteTranscript,
-} from "~/stt/queries";
+import { softDeleteTranscript } from "~/stt/queries";
+import { commands } from "~/types/tauri.gen";
 
 export const MEETING_DISCLOSURE_MESSAGE =
   "I'm using Free Meeting Transcriber to record and transcribe this meeting.";
@@ -285,15 +282,18 @@ export function useStartListening(sessionId: string) {
     stopMeetingChatTasks();
     let transcriptId: string | null = null;
     const startedAt = Date.now();
-    const memoMd = session?.raw_md ?? "";
-    const createdAt = new Date().toISOString();
     let lastTranscriptWrite = Promise.resolve();
     let transcriptWriteError: unknown;
-    const trackTranscriptWrite = (write: Promise<void>) => {
-      lastTranscriptWrite = write.catch((error) => {
-        transcriptWriteError = error;
-        console.error("[listener] failed to persist transcript", error);
+    const reportTranscriptWriteError = (error: unknown) => {
+      transcriptWriteError = error;
+      console.error("[listener] failed to persist transcript", error);
+      sonnerToast.error(`Transcript is NOT being saved: ${error}`, {
+        id: "live-transcript-persist-failed",
+        duration: Infinity,
       });
+    };
+    const trackTranscriptWrite = (write: Promise<void>) => {
+      lastTranscriptWrite = write.catch(reportTranscriptWriteError);
     };
     const keywords = await getSessionKeywords({
       sessionId,
@@ -304,20 +304,23 @@ export function useStartListening(sessionId: string) {
       cancelMeetingRecordingDisclosure(sessionId);
       stopMeetingChatTasks();
       if (details.audioPath) {
+        const audioPath = details.audioPath;
         try {
           await enqueueSessionAudioOperation(sessionId, () =>
-            catalogLocalSessionAudio(sessionId),
+            catalogLocalSessionAudio(sessionId, audioPath),
           );
         } catch (error) {
           console.error("[listener] failed to catalog recorded audio", error);
         }
       }
       await lastTranscriptWrite;
-      if (transcriptWriteError) {
-        sonnerToast.error(
-          "Free Meeting Transcriber could not save part of the live transcript.",
-          { id: "live-transcript-persist-failed" },
-        );
+      if (transcriptId) {
+        try {
+          const result = await commands.sessionFlushTranscript(sessionId);
+          if (result.status === "error") throw new Error(result.error);
+        } catch (error) {
+          reportTranscriptWriteError(error);
+        }
       }
 
       const postCaptureAction = getPostCaptureAction(
@@ -379,30 +382,22 @@ export function useStartListening(sessionId: string) {
       if (delta.new_words.length === 0 && delta.replaced_ids.length === 0) {
         return;
       }
-
-      if (!transcriptId) {
-        transcriptId = id();
-        trackTranscriptWrite(
-          createLiveTranscript(
-            {
-              id: transcriptId,
-              sessionId,
-              ownerUserId: session?.user_id ?? "",
-              createdAt,
-              startedAt,
-              memo: memoMd,
-              source: "live_capture",
-              provider: conn?.provider,
-              model: conn?.model,
-            },
-            delta,
-          ),
-        );
-        return;
-      }
+      if (!transcriptId) transcriptId = id();
 
       trackTranscriptWrite(
-        applyLiveTranscriptDeltaToDatabase(transcriptId, delta),
+        commands
+          .sessionAppendTranscript(sessionId, {
+            transcript_id: transcriptId,
+            new_words: delta.new_words,
+            replaced_ids: delta.replaced_ids,
+            // Live deltas from the transcription plugin carry no speaker-hint data (that's
+            // produced by the separate batch/assignment paths) -- nothing to forward here.
+            new_hints: [],
+            started_at_ms: startedAt,
+          })
+          .then((result) => {
+            if (result.status === "error") throw new Error(result.error);
+          }),
       );
     };
 
@@ -436,7 +431,7 @@ export function useStartListening(sessionId: string) {
       stopMeetingChatTasks();
       await lastTranscriptWrite;
       if (transcriptId) {
-        await softDeleteTranscript(transcriptId);
+        await softDeleteTranscript(sessionId, transcriptId);
       }
       return;
     }

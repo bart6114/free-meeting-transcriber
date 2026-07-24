@@ -3,6 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   audioDelete: vi.fn(),
   audioMetadata: vi.fn(),
+  sessionStoreAudio: vi.fn(),
+  sessionListAudio: vi.fn(),
+  sessionDeleteAudio: vi.fn(),
   execute: vi.fn(),
   executeTransaction: vi.fn().mockResolvedValue([0, 1, 1]),
   enqueueDatabaseWrite: vi.fn(
@@ -14,6 +17,14 @@ vi.mock("@hypr/plugin-fs-sync", () => ({
   commands: {
     audioDelete: mocks.audioDelete,
     audioMetadata: mocks.audioMetadata,
+  },
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionStoreAudio: mocks.sessionStoreAudio,
+    sessionListAudio: mocks.sessionListAudio,
+    sessionDeleteAudio: mocks.sessionDeleteAudio,
   },
 }));
 
@@ -49,12 +60,18 @@ describe("attachment catalog", () => {
         sha256: "d".repeat(64),
       },
     });
+    mocks.sessionStoreAudio.mockResolvedValue({
+      status: "ok",
+      data: "sessions/session-1/audio/recording.wav",
+    });
+    mocks.sessionListAudio.mockResolvedValue({ status: "ok", data: [] });
+    mocks.sessionDeleteAudio.mockResolvedValue({ status: "ok", data: null });
   });
 
-  // catalogLocalNoteAttachment/catalogLocalSessionAudio are a graceful no-op
-  // pending Task 9 (Session store scaffold) — session_attachments/
-  // attachment_local_state were dropped in Task 4. See the comment above
-  // their definitions in attachments.ts.
+  // catalogLocalNoteAttachment is a graceful no-op pending a file-canonical
+  // home for note attachments (deferred past Task 9) — session_attachments/
+  // attachment_local_state were dropped in Task 4. See the comment above its
+  // definition in attachments.ts.
   it("resolves without touching the database", async () => {
     await expect(
       catalogLocalNoteAttachment({
@@ -79,25 +96,48 @@ describe("attachment catalog", () => {
     );
   });
 
-  it("resolves without querying audio metadata or the database", async () => {
+  it("moves a finished recording into the session's audio folder via the store", async () => {
     await expect(
-      catalogLocalSessionAudio("session-1"),
+      catalogLocalSessionAudio("session-1", "/tmp/recording.wav"),
     ).resolves.toBeUndefined();
 
-    expect(mocks.audioMetadata).not.toHaveBeenCalled();
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
+    expect(mocks.sessionStoreAudio).toHaveBeenCalledWith(
+      "session-1",
+      "/tmp/recording.wav",
+    );
+  });
+
+  it("surfaces a store failure instead of swallowing it", async () => {
+    mocks.sessionStoreAudio.mockResolvedValue({
+      status: "error",
+      error: "disk full",
+    });
+
+    await expect(
+      catalogLocalSessionAudio("session-1", "/tmp/recording.wav"),
+    ).rejects.toThrow("disk full");
   });
 
   // markSessionAudioAvailability/tombstoneSessionAudioMetadata are a
-  // graceful no-op pending Task 9 (Session store scaffold) —
-  // attachment_local_state/session_attachments were dropped in Task 4. The
-  // on-disk file deletion they accompany keeps working unchanged. See the
-  // comments above their definitions in attachments.ts.
-  it("deletes local audio bytes without touching the database", async () => {
+  // graceful no-op — attachment_local_state/session_attachments were
+  // dropped in Task 4. The on-disk file deletion they accompany (both the
+  // legacy flat layout and the store-owned audio/ folder) keeps working
+  // unchanged. See the comments above their definitions in attachments.ts.
+  it("deletes local audio bytes from both the flat and store-owned locations", async () => {
+    mocks.sessionListAudio.mockResolvedValue({
+      status: "ok",
+      data: ["recording.wav"],
+    });
+
     await expect(
       deleteLocalSessionAudio("session-1", () => true),
     ).resolves.toBe(true);
     expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
+    expect(mocks.sessionListAudio).toHaveBeenCalledWith("session-1");
+    expect(mocks.sessionDeleteAudio).toHaveBeenCalledWith(
+      "session-1",
+      "recording.wav",
+    );
     expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 

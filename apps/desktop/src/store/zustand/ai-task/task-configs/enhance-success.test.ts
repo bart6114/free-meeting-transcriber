@@ -13,6 +13,12 @@ const mocks = vi.hoisted(() => ({
   loadSessionContentSnapshot: vi.fn(),
   persistGeneratedEnhancedNote: vi.fn().mockResolvedValue(undefined),
   persistGeneratedTitle: vi.fn().mockResolvedValue(true),
+  executeTransaction: vi.fn().mockResolvedValue([1]),
+  sessionWriteDocument: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
 }));
 
 vi.mock("~/session/content-queries", () => ({
@@ -21,6 +27,16 @@ vi.mock("~/session/content-queries", () => ({
 
 vi.mock("~/session/content-mutations", () => ({
   persistGeneratedEnhancedNote: mocks.persistGeneratedEnhancedNote,
+}));
+
+vi.mock("~/db", () => ({
+  executeTransaction: mocks.executeTransaction,
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionWriteDocument: mocks.sessionWriteDocument,
+  },
 }));
 
 vi.mock("./title-success", async (importOriginal) => ({
@@ -106,6 +122,8 @@ describe("enhanceSuccess.onSuccess", () => {
     mocks.loadSessionContentSnapshot.mockResolvedValue(createSnapshot());
     mocks.persistGeneratedEnhancedNote.mockResolvedValue(undefined);
     mocks.persistGeneratedTitle.mockResolvedValue(true);
+    mocks.executeTransaction.mockResolvedValue([1]);
+    mocks.sessionWriteDocument.mockResolvedValue({ status: "ok", data: null });
   });
 
   it("persists generated content and tags through one guarded SQLite write", async () => {

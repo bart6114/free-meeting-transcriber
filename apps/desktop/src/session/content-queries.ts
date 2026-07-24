@@ -105,21 +105,21 @@ const SESSION_CONTENT_SQL = `
   LEFT JOIN session_documents AS note
     ON note.id = COALESCE(
       (
-        SELECT canonical.id
-        FROM session_documents AS canonical
-        WHERE canonical.id = session.id
-          AND canonical.session_id = session.id
-          AND canonical.kind = 'note'
-          AND canonical.deleted_at IS NULL
+        SELECT store_note.id
+        FROM session_documents AS store_note
+        WHERE store_note.id = session.id || ':note'
+          AND store_note.session_id = session.id
+          AND store_note.kind = 'note'
+          AND store_note.deleted_at IS NULL
         LIMIT 1
       ),
       (
-        SELECT fallback.id
-        FROM session_documents AS fallback
-        WHERE fallback.session_id = session.id
-          AND fallback.kind = 'note'
-          AND fallback.deleted_at IS NULL
-        ORDER BY fallback.created_at, fallback.id
+        SELECT legacy_note.id
+        FROM session_documents AS legacy_note
+        WHERE legacy_note.id = session.id
+          AND legacy_note.session_id = session.id
+          AND legacy_note.kind = 'note'
+          AND legacy_note.deleted_at IS NULL
         LIMIT 1
       )
     )
@@ -205,7 +205,10 @@ function mapSessionContentRow(
 }
 
 function bodyToMarkdown(body: string, format: string): string {
-  if (!body || format === "markdown") return body;
+  // "markdown" is the legacy-import sentinel; "md" is what the session store
+  // (session_write_note/session_write_document, Tasks 5-8/9) writes -- both are
+  // already plain markdown and need no prosemirror-JSON conversion.
+  if (!body || format === "markdown" || format === "md") return body;
   try {
     return json2md(JSON.parse(body));
   } catch {

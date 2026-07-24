@@ -29,7 +29,7 @@ import {
 import { shouldShowSessionTopAudioPlayer } from "./top-audio-player";
 
 import * as AudioPlayer from "~/audio-player";
-import { useSession } from "~/session/queries";
+import { useSession, useSessionRawMd } from "~/session/queries";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
 import { useListener } from "~/stt/contexts";
 import { consumePendingUpload } from "~/stt/pending-upload";
@@ -152,6 +152,7 @@ function TabContentNoteInner({
   });
   const enhancedNoteIds = useEnhancedNotes(sessionId);
   const session = useSession(sessionId);
+  const rawMd = useSessionRawMd(sessionId);
   const contentHydrated = session !== null;
   useEnsureDefaultSummaryFromState({
     batchError: Boolean(batchError),
@@ -230,11 +231,11 @@ function TabContentNoteInner({
             </div>
           ) : null}
           <div className="min-h-0 flex-1">
-            {session ? (
+            {session && rawMd !== null ? (
               <NoteInput
                 ref={noteInputRef}
                 tab={tab}
-                rawMd={session.raw_md}
+                rawMd={rawMd}
                 sessionTitle={session.title}
                 editorTabs={editorTabs}
                 currentTab={currentView}

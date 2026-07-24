@@ -20,8 +20,8 @@ const {
   useListenerMock,
   useSessionMock,
   useSessionHasTranscriptMock,
-  createLiveTranscriptMock,
-  applyLiveTranscriptDeltaToDatabaseMock,
+  sessionAppendTranscriptMock,
+  sessionFlushTranscriptMock,
   softDeleteTranscriptMock,
   useConfigValueMock,
   useSTTConnectionMock,
@@ -48,8 +48,8 @@ const {
   useListenerMock: vi.fn(),
   useSessionMock: vi.fn(),
   useSessionHasTranscriptMock: vi.fn(),
-  createLiveTranscriptMock: vi.fn(),
-  applyLiveTranscriptDeltaToDatabaseMock: vi.fn(),
+  sessionAppendTranscriptMock: vi.fn(),
+  sessionFlushTranscriptMock: vi.fn(),
   softDeleteTranscriptMock: vi.fn(),
   useConfigValueMock: vi.fn(),
   useSTTConnectionMock: vi.fn(),
@@ -161,9 +161,14 @@ vi.mock("~/shared/utils", () => ({
 }));
 
 vi.mock("~/stt/queries", () => ({
-  applyLiveTranscriptDeltaToDatabase: applyLiveTranscriptDeltaToDatabaseMock,
-  createLiveTranscript: createLiveTranscriptMock,
   softDeleteTranscript: softDeleteTranscriptMock,
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionAppendTranscript: sessionAppendTranscriptMock,
+    sessionFlushTranscript: sessionFlushTranscriptMock,
+  },
 }));
 
 let disclosureSessionSequence = 0;
@@ -262,8 +267,8 @@ describe("useStartListening", () => {
       raw_md: "Existing memo",
     });
     useSessionHasTranscriptMock.mockReturnValue(false);
-    createLiveTranscriptMock.mockResolvedValue(undefined);
-    applyLiveTranscriptDeltaToDatabaseMock.mockResolvedValue(undefined);
+    sessionAppendTranscriptMock.mockResolvedValue({ status: "ok", data: null });
+    sessionFlushTranscriptMock.mockResolvedValue({ status: "ok", data: null });
     softDeleteTranscriptMock.mockResolvedValue(undefined);
     catalogLocalSessionAudioMock.mockResolvedValue(undefined);
     useConfigValueMock.mockImplementation((key) =>
@@ -389,7 +394,10 @@ describe("useStartListening", () => {
     });
 
     expect(runBatchMock).toHaveBeenCalledWith("/tmp/session.wav");
-    expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith("session-1");
+    expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith(
+      "session-1",
+      "/tmp/session.wav",
+    );
     expect(
       catalogLocalSessionAudioMock.mock.invocationCallOrder[0],
     ).toBeLessThan(runBatchMock.mock.invocationCallOrder[0]!);
@@ -424,7 +432,10 @@ describe("useStartListening", () => {
   });
 
   test("catalogs finalized audio even when transcript persistence fails", async () => {
-    createLiveTranscriptMock.mockRejectedValueOnce(new Error("write failed"));
+    sessionAppendTranscriptMock.mockResolvedValueOnce({
+      status: "error",
+      error: "write failed",
+    });
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => {});
@@ -459,11 +470,14 @@ describe("useStartListening", () => {
       });
     });
 
-    expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith("session-1");
+    expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith(
+      "session-1",
+      "/tmp/session.wav",
+    );
     expect(runBatchMock).not.toHaveBeenCalled();
     expect(sonnerToastErrorMock).toHaveBeenCalledWith(
-      "Free Meeting Transcriber could not save part of the live transcript.",
-      { id: "live-transcript-persist-failed" },
+      expect.stringContaining("Transcript is NOT being saved"),
+      { id: "live-transcript-persist-failed", duration: Infinity },
     );
     expect(queueAutoEnhanceIfSummaryEmptyMock).toHaveBeenCalledWith(
       "session-1",
@@ -644,7 +658,10 @@ describe("useStartListening", () => {
     releaseBlocker?.();
     await blocker;
     await act(async () => await stopped);
-    expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith("session-1");
+    expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith(
+      "session-1",
+      "/tmp/session.wav",
+    );
   });
 
   test("cleans up processed audio after live capture stops", async () => {
@@ -677,10 +694,12 @@ describe("useStartListening", () => {
   });
 
   test("regenerates the summary after resumed live capture writes transcript", async () => {
-    let resolveTranscriptWrite: (() => void) | undefined;
-    createLiveTranscriptMock.mockImplementationOnce(
+    let resolveTranscriptWrite:
+      | ((value: { status: "ok"; data: null }) => void)
+      | undefined;
+    sessionAppendTranscriptMock.mockImplementationOnce(
       () =>
-        new Promise<void>((resolve) => {
+        new Promise((resolve) => {
           resolveTranscriptWrite = resolve;
         }),
     );
@@ -721,10 +740,10 @@ describe("useStartListening", () => {
     });
 
     expect(resetEnhanceTasksMock).not.toHaveBeenCalled();
-    resolveTranscriptWrite?.();
+    resolveTranscriptWrite?.({ status: "ok", data: null });
     await act(async () => await stopped);
 
-    expect(createLiveTranscriptMock).toHaveBeenCalledTimes(1);
+    expect(sessionAppendTranscriptMock).toHaveBeenCalledTimes(1);
     expect(resetEnhanceTasksMock).toHaveBeenCalledWith("session-1");
     expect(queueAutoEnhanceMock).toHaveBeenCalledWith("session-1");
     expect(queueAutoEnhanceIfSummaryEmptyMock).not.toHaveBeenCalled();
