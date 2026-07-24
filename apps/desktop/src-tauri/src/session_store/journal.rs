@@ -16,6 +16,7 @@ impl WriteJournal {
         }
     }
 
+    #[allow(dead_code)] // consumed by Task 10/11 (vault watcher: own-write vs external-edit)
     pub fn matches_current_file(&self, vault_base: &Path, relative: &str) -> bool {
         let abs = vault_base.join(relative);
         let stored_hash = self.0.lock().ok().and_then(|j| j.get(relative).cloned());
@@ -29,6 +30,7 @@ impl WriteJournal {
     }
 }
 
+#[allow(dead_code)] // consumed by matches_current_file, see its Task 10/11 note above
 fn sha256(bytes: &[u8]) -> String {
     use sha2::{Digest, Sha256};
     use std::fmt::Write;

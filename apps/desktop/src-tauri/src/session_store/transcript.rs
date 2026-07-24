@@ -182,6 +182,12 @@ impl SessionStore {
     }
 
     /// Replace a whole transcript (batch/upload path) — writes file + index in one call.
+    ///
+    /// Clears any live (debounce-buffered) state for this transcript_id first: a batch
+    /// overwrite supersedes whatever was buffered, and a still-pending debounced flush from
+    /// `append_transcript` must not fire afterward and clobber this call's words with
+    /// older, now-stale buffered content. Clearing (not just marking clean) also stops
+    /// `append_transcript`'s dirty check from seeing anything left to flush.
     pub async fn write_transcript(
         &self,
         session_id: &str,
@@ -189,6 +195,18 @@ impl SessionStore {
     ) -> Result<(), StoreError> {
         let transcript_id = t.id.clone();
         let started_at_ms = t.started_at;
+
+        {
+            let mut live = self.live.lock().await;
+            if let Some(buffer) = live.get_mut(session_id) {
+                if buffer.transcript_id == transcript_id {
+                    buffer.words.clear();
+                    buffer.hints.clear();
+                    buffer.dirty = false;
+                }
+            }
+        }
+
         self.persist_transcript(
             session_id,
             &transcript_id,
@@ -530,6 +548,57 @@ mod tests {
     async fn flush_all_is_noop_when_nothing_dirty() {
         let (store, _vault) = test_store().await;
         store.flush_all().await.unwrap();
+    }
+
+    /// REGRESSION for the Task 7 review's standing checklist item: `write_transcript` (batch
+    /// path) must sync/clear the live debounce buffer for the same transcript_id, so a racing
+    /// debounced flush from an earlier `append_transcript` can't fire afterward and clobber
+    /// the batch overwrite with stale buffered words.
+    #[tokio::test]
+    async fn write_transcript_clears_live_buffer_so_pending_debounce_cannot_clobber_it() {
+        let (store, vault) = test_store().await;
+        // Buffer a word via append_transcript but never flush it -- this leaves a dirty
+        // buffer with a debounce timer already scheduled.
+        store
+            .append_transcript("s1", delta_with_words(&["stale"]))
+            .await
+            .unwrap();
+
+        // Batch overwrite for the same transcript_id ("t1", per delta_with_words) supersedes
+        // whatever is buffered.
+        store
+            .write_transcript(
+                "s1",
+                TranscriptWithData {
+                    id: "t1".to_string(),
+                    user_id: String::new(),
+                    created_at: "2026-07-24T00:00:00Z".to_string(),
+                    session_id: "s1".to_string(),
+                    started_at: 500.0,
+                    ended_at: Some(900.0),
+                    memo_md: String::new(),
+                    words: vec![word("b0", "batch-result")],
+                    speaker_hints: vec![],
+                },
+            )
+            .await
+            .unwrap();
+
+        // Let the pending debounce timer from the earlier append fire. If the live buffer
+        // weren't cleared, it would flush "stale" and clobber the batch write.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let texts: Vec<&str> = json["transcripts"][0]["words"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(texts, vec!["batch-result"]);
     }
 
     #[tokio::test]

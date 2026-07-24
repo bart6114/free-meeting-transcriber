@@ -5,7 +5,6 @@ mod db;
 mod embedded_cli;
 mod ext;
 mod search_index;
-#[allow(dead_code)] // no production consumers until Task 9 (Tauri commands) wires it in
 mod session_store;
 mod store;
 mod supervisor;
@@ -18,7 +17,7 @@ use store::*;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_permissions::{Permission, PermissionsPluginExt};
 use tauri_plugin_windows::{AppWindow, WindowsPluginExt};
 
@@ -229,6 +228,22 @@ pub async fn main() {
                 }
             }
 
+            {
+                use tauri_plugin_settings::SettingsPluginExt;
+                match app_handle.settings().vault_base() {
+                    Ok(base) => {
+                        let store = std::sync::Arc::new(session_store::SessionStore::new(
+                            base.as_std_path().to_path_buf(),
+                            db.pool().clone(),
+                        ));
+                        app_handle.manage(store);
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to resolve vault_base for session_store: {}", e);
+                    }
+                }
+            }
+
             if let (Some(ctx), Some(handle)) = (&root_supervisor_ctx, root_supervisor_handle) {
                 supervisor::monitor_supervisor(handle, ctx.is_exiting.clone(), app_handle.clone());
             }
@@ -412,6 +427,19 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::check_embedded_cli::<tauri::Wry>,
             commands::install_embedded_cli::<tauri::Wry>,
             vault_export::export_vault_now::<tauri::Wry>,
+            session_store::commands::session_write_meta::<tauri::Wry>,
+            session_store::commands::session_write_note::<tauri::Wry>,
+            session_store::commands::session_read_note::<tauri::Wry>,
+            session_store::commands::session_write_document::<tauri::Wry>,
+            session_store::commands::session_append_transcript::<tauri::Wry>,
+            session_store::commands::session_flush_transcript::<tauri::Wry>,
+            session_store::commands::session_write_transcript::<tauri::Wry>,
+            session_store::commands::session_delete::<tauri::Wry>,
+            session_store::commands::session_restore::<tauri::Wry>,
+            session_store::commands::session_rebuild_index::<tauri::Wry>,
+            session_store::commands::session_store_audio::<tauri::Wry>,
+            session_store::commands::session_list_audio::<tauri::Wry>,
+            session_store::commands::session_delete_audio::<tauri::Wry>,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }

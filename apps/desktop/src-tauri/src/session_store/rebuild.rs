@@ -8,7 +8,7 @@ use super::{SessionStore, StoreError, paths};
 /// pass, not the resulting table size. `errors` never aborts the scan -- an unparseable file
 /// is logged here and its existing index row is left untouched (see the hard rule in each
 /// match arm below: corruption must never look like deletion).
-#[derive(Debug, Default, Clone, PartialEq)]
+#[derive(Debug, Default, Clone, PartialEq, serde::Serialize, specta::Type)]
 pub struct RebuildReport {
     pub sessions: usize,
     /// Upserted `session_documents` rows this pass -- every `<kind>.md` file including the

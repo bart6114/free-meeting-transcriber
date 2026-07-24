@@ -204,6 +204,45 @@ impl SessionStore {
 
         Ok(())
     }
+
+    /// Undoes a `delete_session` from earlier today: moves the folder back from
+    /// `.trash/<today>/sessions/<id>` and reindexes it. Only looks at today's trash dir --
+    /// this backs the undo-toast window, not a general-purpose recovery tool. `Ok(false)`
+    /// (not an error) when there's nothing to restore, e.g. the toast window already lapsed
+    /// past midnight or the session was never deleted.
+    pub async fn restore_session(&self, id: &str) -> Result<bool, StoreError> {
+        let vault_base = self.vault_base.clone();
+        let id_owned = id.to_string();
+
+        let restored = tokio::task::spawn_blocking(move || -> Result<bool, StoreError> {
+            let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+            let trashed_path = vault_base
+                .join(".trash")
+                .join(date)
+                .join(paths::session_dir(&id_owned));
+            if !trashed_path.exists() {
+                return Ok(false);
+            }
+
+            let restored_path = vault_base.join(paths::session_dir(&id_owned));
+            if let Some(parent) = restored_path.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| StoreError::Io(format!("failed to create sessions dir: {}", e)))?;
+            }
+            std::fs::rename(&trashed_path, &restored_path).map_err(|e| {
+                StoreError::Io(format!("failed to restore session from trash: {}", e))
+            })?;
+            Ok(true)
+        })
+        .await
+        .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
+
+        if restored {
+            self.refresh_session(id).await?;
+        }
+
+        Ok(restored)
+    }
 }
 
 #[cfg(test)]
@@ -406,6 +445,45 @@ mod tests {
         // (trash no-ops since path doesn't exist, deletes affect 0 rows)
         let result = store.delete_session("nonexistent").await;
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn restore_session_moves_folder_back_and_reindexes() {
+        let (store, vault) = test_store().await;
+        store
+            .write_meta(&meta("s1", "Jury feedback"))
+            .await
+            .unwrap();
+        store.write_note("s1", "Some notes").await.unwrap();
+
+        store.delete_session("s1").await.unwrap();
+        assert!(!vault.path().join("sessions/s1").is_dir());
+
+        let restored = store.restore_session("s1").await.unwrap();
+        assert!(restored);
+
+        assert!(vault.path().join("sessions/s1/_meta.json").is_file());
+        assert!(vault.path().join("sessions/s1/_memo.md").is_file());
+
+        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id='s1'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(title, "Jury feedback");
+
+        let body: String =
+            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:note'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(body, "Some notes");
+    }
+
+    #[tokio::test]
+    async fn restore_session_returns_false_when_nothing_was_trashed_today() {
+        let (store, _vault) = test_store().await;
+        let restored = store.restore_session("never-deleted").await.unwrap();
+        assert!(!restored);
     }
 
     #[tokio::test]

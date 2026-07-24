@@ -1,4 +1,8 @@
-use crate::{AppExt, embedded_cli::EmbeddedCliStatus};
+use std::sync::Arc;
+
+use tauri::Manager;
+
+use crate::{AppExt, embedded_cli::EmbeddedCliStatus, session_store::SessionStore};
 
 const STAGING_BUNDLE_ID: &str = "org.freemeetingtranscriber.staging";
 
@@ -55,7 +59,17 @@ pub fn show_devtool<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> bool {
 
 #[tauri::command]
 #[specta::specta]
-pub fn complete_app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+pub async fn complete_app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
+    // Last-chance flush before the process actually exits: any transcript words still sitting
+    // in the debounce buffer must land on disk now, or a quit right after a burst of speech
+    // could lose up to ~1s of audio's worth of words. Best-effort -- a failure here must not
+    // block quitting (the user already chose to exit), just get logged.
+    if let Some(store) = app.try_state::<Arc<SessionStore>>()
+        && let Err(err) = store.flush_all().await
+    {
+        tracing::error!(error = %err, "session_store flush_all failed while completing app exit");
+    }
+
     crate::mark_exit_flush_complete();
     app.exit(0);
 }
