@@ -34,7 +34,7 @@
 //! # Startup ordering
 //!
 //! `sync_from_vault` (Task 12's reconcile) runs inside
-//! `tauri_plugin_db::init_with_cloudsync`'s plugin `setup()` hook, which — by
+//! `tauri_plugin_db::init`'s plugin `setup()` hook, which — by
 //! Tauri's plugin lifecycle — completes before the *app*-level
 //! `tauri::Builder::setup()` closure in `lib.rs` runs. `vault_export::spawn`
 //! (like `search_index::spawn`) is called from that app-level closure, so
@@ -987,8 +987,8 @@ async fn export_tasks_file<R: tauri::Runtime>(
 /// which is exactly how a controller physical drill caught a live
 /// `no such column: owner_user_id` error this SQL used to have.
 /// `action_items` has no `owner_user_id` column (it's `created_by` — this
-/// table doesn't follow the `owner_user_id`/`workspace_id` convention most
-/// other tables do; verified against the live schema in
+/// table doesn't follow the `owner_user_id` convention most other tables do;
+/// verified against the live schema in
 /// `crates/db-app/migrations/20260710223922_canonical_data_model.sql`, not
 /// just the `LegacyActionItem`/`export::ActionItem` field name).
 async fn fetch_action_items(pool: &SqlitePool) -> Result<Vec<export::ActionItem>, sqlx::Error> {
@@ -1266,11 +1266,10 @@ mod tests {
             .execute(db.pool())
             .await
             .unwrap();
-        // `test_db()`'s `prepare_schema` bootstraps a `cloudsync_workspace_binding`
-        // row in `app_settings`, which the `settings_file` trigger also
-        // enqueues — irrelevant here, so drop it and keep only the one
-        // entity this test cares about (same pattern as
-        // `tags_trigger_propagates_to_every_session_that_references_the_tag`).
+        // `test_db()`'s `prepare_schema` can enqueue unrelated dirty rows
+        // (e.g. default template seeding) — irrelevant here, so drop
+        // everything but the one entity this test cares about (same pattern
+        // as `tags_trigger_propagates_to_every_session_that_references_the_tag`).
         sqlx::query(
             "DELETE FROM vault_export_dirty WHERE NOT (entity_type = 'session' AND entity_id = 'bad-1')",
         )

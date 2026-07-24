@@ -39,21 +39,6 @@ type SourceSubscription = {
 };
 
 const emptyTasks: TaskRecord[] = [];
-const resolvedOwnerSql = `
-  COALESCE(
-    NULLIF(?, ?),
-    (
-      SELECT NULLIF(json_extract(value_json, '$.account_user_id'), '')
-      FROM app_settings
-      WHERE id = 'cloudsync_workspace_binding'
-    ),
-    (
-      SELECT NULLIF(json_extract(value_json, '$.workspace_id'), '')
-      FROM app_settings
-      WHERE id = 'cloudsync_workspace_binding'
-    )
-  )
-`;
 
 const defaultDependencies: TaskStorageDependencies = {
   subscribe: liveQueryClient.subscribe.bind(liveQueryClient),
@@ -214,7 +199,7 @@ export function createSqliteTaskStorage(
         {
           sql: `
             UPDATE action_items
-            SET deleted_at = ?, updated_at = ?, updated_by = ${resolvedOwnerSql}
+            SET deleted_at = ?, updated_at = ?, updated_by = ?
             WHERE source_type = ?
               AND source_id = ?
               AND deleted_at IS NULL
@@ -224,7 +209,6 @@ export function createSqliteTaskStorage(
             now,
             now,
             ownerUserId,
-            DEFAULT_USER_ID,
             source.type,
             source.id,
             JSON.stringify(retainedTaskIds),
@@ -247,7 +231,7 @@ export function createSqliteTaskStorage(
         {
           sql: `
             UPDATE action_items
-            SET deleted_at = ?, updated_at = ?, updated_by = ${resolvedOwnerSql}
+            SET deleted_at = ?, updated_at = ?, updated_by = ?
             WHERE source_type = ?
               AND source_id = ?
               AND deleted_at IS NULL
@@ -257,7 +241,6 @@ export function createSqliteTaskStorage(
             now,
             now,
             ownerUserId,
-            DEFAULT_USER_ID,
             source.type,
             source.id,
             JSON.stringify(taskIds),
@@ -282,7 +265,7 @@ export function createSqliteTaskStorage(
               source_id = ?,
               source_order = ?,
               updated_at = ?,
-              updated_by = ${resolvedOwnerSql}
+              updated_by = ?
             WHERE id = ? AND deleted_at IS NULL
           `,
           params: [
@@ -292,7 +275,6 @@ export function createSqliteTaskStorage(
             insertionOrder + index,
             now,
             ownerUserId,
-            DEFAULT_USER_ID,
             taskId,
           ],
         })),
@@ -323,7 +305,6 @@ function buildTaskUpsertStatement(
     sql: `
       INSERT INTO action_items (
         id,
-        workspace_id,
         session_id,
         source_type,
         source_id,
@@ -341,18 +322,7 @@ function buildTaskUpsertStatement(
         deleted_at
       )
       VALUES (
-        ?, COALESCE(
-          (
-            SELECT NULLIF(workspace_id, '')
-            FROM sessions
-            WHERE id = ? AND deleted_at IS NULL
-          ),
-          (
-            SELECT NULLIF(json_extract(value_json, '$.workspace_id'), '')
-            FROM app_settings
-            WHERE id = 'cloudsync_workspace_binding'
-          )
-        ), ?, ?, ?, ?, '', ?, ?, ?, ?, ${resolvedOwnerSql}, ${resolvedOwnerSql}, '{}', ?, ?, NULL
+        ?, ?, ?, ?, ?, '', ?, ?, ?, ?, ?, ?, '{}', ?, ?, NULL
       )
       ON CONFLICT(id) DO UPDATE SET
         session_id = excluded.session_id,
@@ -370,7 +340,6 @@ function buildTaskUpsertStatement(
     params: [
       task.taskId,
       task.sourceType === "session" ? task.sourceId : "",
-      task.sourceType === "session" ? task.sourceId : "",
       task.sourceType,
       task.sourceId,
       task.sourceOrder,
@@ -379,9 +348,7 @@ function buildTaskUpsertStatement(
       JSON.stringify(task.body),
       task.dueDate ?? "",
       ownerUserId,
-      DEFAULT_USER_ID,
       ownerUserId,
-      DEFAULT_USER_ID,
       now,
       now,
     ],

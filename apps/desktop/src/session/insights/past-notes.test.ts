@@ -118,7 +118,7 @@ describe("buildPastSessionNotes", () => {
 });
 
 describe("buildSessionKeyFactsStatements", () => {
-  it("copies workspace ownership from the parent session", () => {
+  it("inserts the key-facts document scoped to the parent session", () => {
     const statements = buildSessionKeyFactsStatements(
       [
         {
@@ -131,7 +131,7 @@ describe("buildSessionKeyFactsStatements", () => {
       "2026-07-13T00:00:00.000Z",
     );
 
-    expect(statements[1]?.sql).toContain("session.workspace_id");
+    expect(statements[1]?.sql).toContain("session.id");
     expect(statements[1]?.sql).toContain("FROM sessions AS session");
     expect(statements[1]?.params).toContain("session-1");
   });

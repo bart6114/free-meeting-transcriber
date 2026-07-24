@@ -441,12 +441,12 @@ export function buildSessionKeyFactsStatements(
     {
       sql: `
         INSERT INTO session_documents (
-          id, workspace_id, session_id, kind, template_id, title,
+          id, session_id, kind, template_id, title,
           body_format, body, source_hash, generation_metadata_json,
           sort_order, created_by, updated_by, created_at, updated_at,
           deleted_at
         )
-        SELECT ?, session.workspace_id, session.id, 'key_facts', '',
+        SELECT ?, session.id, 'key_facts', '',
           'Key facts', 'markdown', ?, ?, '{}', 0, ?, ?, ?, ?, NULL
         FROM sessions AS session
         WHERE session.id = ? AND session.deleted_at IS NULL

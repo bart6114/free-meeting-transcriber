@@ -75,7 +75,7 @@
 //!
 //! Wired from `lib.rs`'s app-level `setup()` closure, after
 //! `vault_export::spawn` — which itself runs after the plugin-level
-//! `sync_from_vault` reconcile (`tauri_plugin_db::init_with_cloudsync`'s
+//! `sync_from_vault` reconcile (`tauri_plugin_db::init`'s
 //! `setup()`, per Tauri's plugin-then-app lifecycle). So by the time this
 //! module's listener is registered, `app.db` has already been reconciled
 //! from whatever the vault held at launch, and the export worker has

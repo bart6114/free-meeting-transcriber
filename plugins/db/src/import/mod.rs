@@ -319,6 +319,10 @@ pub async fn import_legacy_data<R: tauri::Runtime>(
     }
 }
 
+// Its only production caller was the CloudSync startup gate, removed with
+// CloudSync itself in Task 4 — kept as a `parity_verified` assertion helper
+// for the legacy-import test suite below.
+#[allow(dead_code)]
 pub(crate) async fn legacy_migration_verified(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT EXISTS(

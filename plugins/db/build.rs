@@ -6,20 +6,8 @@ const COMMANDS: &[&str] = &[
     "get_meeting_transcript",
     "get_legacy_import_report",
     "list_meetings",
-    "get_e2ee_identity_status",
-    "inspect_e2ee_recovery_key",
-    "create_e2ee_identity",
-    "import_e2ee_identity",
     "subscribe",
     "unsubscribe",
-    "configure_cloudsync",
-    "bind_cloudsync_account",
-    "configure_cloudsync_token",
-    "start_cloudsync",
-    "stop_cloudsync",
-    "suspend_cloudsync",
-    "get_cloudsync_status",
-    "sync_cloudsync_now",
 ];
 
 fn main() {

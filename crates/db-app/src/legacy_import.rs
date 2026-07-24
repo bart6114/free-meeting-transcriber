@@ -779,10 +779,8 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::Organization(row) => sqlx::query(
             "INSERT INTO organizations \
-             (id, workspace_id, owner_user_id, name, memo, pinned, pin_order, created_at, updated_at) \
-             VALUES (?, NULLIF((SELECT json_extract(value_json, '$.workspace_id') \
-               FROM app_settings WHERE id = 'cloudsync_workspace_binding'), ''), \
-               ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+             (id, owner_user_id, name, memo, pinned, pin_order, created_at, updated_at) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
         )
         .bind(&row.id)
         .bind(&row.owner_user_id)
@@ -796,11 +794,9 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::Human(row) => sqlx::query(
             "INSERT INTO humans \
-             (id, workspace_id, owner_user_id, organization_id, name, email, phone, job_title, \
+             (id, owner_user_id, organization_id, name, email, phone, job_title, \
               linkedin_username, memo, pinned, pin_order, created_at, updated_at) \
-             VALUES (?, NULLIF((SELECT json_extract(value_json, '$.workspace_id') \
-               FROM app_settings WHERE id = 'cloudsync_workspace_binding'), ''), \
-               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
         )
         .bind(&row.id)
         .bind(&row.owner_user_id)
@@ -819,12 +815,10 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::Session(row) => sqlx::query(
             "INSERT INTO sessions \
-             (id, workspace_id, owner_user_id, title, created_at, updated_at, started_at, \
+             (id, owner_user_id, title, created_at, updated_at, started_at, \
               ended_at, event_id, external_event_id, external_provider, series_id, event_json, \
               metadata_json, folder_path) \
-             VALUES (?, NULLIF((SELECT json_extract(value_json, '$.workspace_id') \
-               FROM app_settings WHERE id = 'cloudsync_workspace_binding'), ''), \
-               ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
         )
         .bind(&row.id)
         .bind(&row.owner_user_id)
@@ -844,9 +838,9 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::Document(row) => sqlx::query(
             "INSERT INTO session_documents \
-             (id, workspace_id, session_id, kind, template_id, title, body_format, body, source_hash, \
+             (id, session_id, kind, template_id, title, body_format, body, source_hash, \
               sort_order, created_by, updated_by, created_at, updated_at, generation_metadata_json) \
-             SELECT ?, session.workspace_id, session.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? \
+             SELECT ?, session.id, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? \
              FROM sessions AS session \
              WHERE session.id = ? AND session.deleted_at IS NULL \
              ON CONFLICT(id) DO NOTHING",
@@ -869,9 +863,9 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::Transcript(row) => sqlx::query(
             "INSERT INTO transcripts \
-             (id, workspace_id, owner_user_id, session_id, started_at_ms, ended_at_ms, memo, \
+             (id, owner_user_id, session_id, started_at_ms, ended_at_ms, memo, \
               words_json, speaker_hints_json, created_at, updated_at, metadata_json) \
-             SELECT ?, session.workspace_id, ?, session.id, ?, ?, ?, ?, ?, ?, ?, ? \
+             SELECT ?, ?, session.id, ?, ?, ?, ?, ?, ?, ?, ? \
              FROM sessions AS session \
              WHERE session.id = ? AND session.deleted_at IS NULL \
              ON CONFLICT(id) DO NOTHING",
@@ -891,8 +885,8 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::Participant(row) => sqlx::query(
             "INSERT INTO session_participants \
-             (id, workspace_id, owner_user_id, session_id, human_id, source) \
-             SELECT ?, session.workspace_id, ?, session.id, ?, ? \
+             (id, owner_user_id, session_id, human_id, source) \
+             SELECT ?, ?, session.id, ?, ? \
              FROM sessions AS session \
              WHERE session.id = ? AND session.deleted_at IS NULL \
              ON CONFLICT(id) DO NOTHING",
@@ -906,9 +900,9 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::ActionItem(row) => sqlx::query(
             "INSERT INTO action_items \
-             (id, workspace_id, created_by, session_id, source_type, source_id, source_order, \
+             (id, created_by, session_id, source_type, source_id, source_order, \
               status, text, body_json, due_at) \
-             SELECT ?, session.workspace_id, ?, session.id, ?, ?, ?, ?, ?, ?, ? \
+             SELECT ?, ?, session.id, ?, ?, ?, ?, ?, ?, ? \
              FROM sessions AS session \
              WHERE session.id = ? AND session.deleted_at IS NULL \
              ON CONFLICT(id) DO NOTHING",
@@ -927,9 +921,9 @@ async fn insert_row_if_missing(
         .await?,
         LegacyImportRow::Attachment(row) => sqlx::query(
             "INSERT INTO session_attachments \
-             (id, workspace_id, session_id, filename, relative_path, content_type, size_bytes, \
+             (id, session_id, filename, relative_path, content_type, size_bytes, \
               sha256, source_type, source_id) \
-             SELECT ?, session.workspace_id, session.id, ?, ?, ?, ?, ?, 'legacy_file', ? \
+             SELECT ?, session.id, ?, ?, ?, ?, ?, 'legacy_file', ? \
              FROM sessions AS session \
              WHERE session.id = ? AND session.deleted_at IS NULL \
              ON CONFLICT(id) DO NOTHING",
@@ -2043,56 +2037,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn import_fails_closed_without_a_workspace_binding() {
-        let db = test_db().await;
-        sqlx::query("DELETE FROM app_settings WHERE id = 'cloudsync_workspace_binding'")
-            .execute(db.pool())
-            .await
-            .unwrap();
-        begin_legacy_import_run(db.pool(), "run-1", "/vault", false)
-            .await
-            .unwrap();
-
-        let error = apply_legacy_import_item(
-            db.pool(),
-            LegacyImportItem {
-                id: "item-1",
-                run_id: "run-1",
-                source_path: "sessions/session-1/_meta.json",
-                source_kind: "session_meta",
-                source_sha256: "hash-1",
-            },
-            &session_batch(),
-            false,
-        )
-        .await
-        .unwrap_err();
-
-        assert!(matches!(error, sqlx::Error::Database(_)));
-        let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-        let item_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM migration_import_items")
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-        assert_eq!(session_count, 0);
-        assert_eq!(item_count, 0);
-    }
-
-    #[tokio::test]
     async fn import_item_is_atomic_and_existing_sqlite_rows_win() {
         let db = test_db().await;
-        sqlx::query(
-            "INSERT INTO app_settings (id, value_json) \
-             VALUES ('cloudsync_workspace_binding', \
-               '{\"workspace_id\":\"workspace-1\",\"account_user_id\":\"user-1\"}') \
-             ON CONFLICT(id) DO UPDATE SET value_json = excluded.value_json",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
         begin_legacy_import_run(db.pool(), "run-1", "/vault", false)
             .await
             .unwrap();
@@ -2114,12 +2060,11 @@ mod tests {
 
         assert_eq!(result.imported_count, 1);
         assert_eq!(result.conflict_count, 0);
-        let workspace_id: String =
-            sqlx::query_scalar("SELECT workspace_id FROM sessions WHERE id = 'session-1'")
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        assert_eq!(workspace_id, "workspace-1");
+        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id = 'session-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+        assert_eq!(title, "Planning");
 
         begin_legacy_import_run(db.pool(), "run-2", "/vault", false)
             .await
@@ -2528,17 +2473,8 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn imported_session_children_inherit_parent_workspace() {
+    async fn imported_session_children_are_written_alongside_the_parent() {
         let db = test_db().await;
-        sqlx::query(
-            "INSERT INTO app_settings (id, value_json) \
-             VALUES ('cloudsync_workspace_binding', \
-               '{\"workspace_id\":\"workspace-1\",\"account_user_id\":\"user-1\"}') \
-             ON CONFLICT(id) DO UPDATE SET value_json = excluded.value_json",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
         begin_legacy_import_run(db.pool(), "run-1", "/vault", false)
             .await
             .unwrap();
@@ -2586,16 +2522,12 @@ mod tests {
                 body_json: "{}".to_string(),
                 due_at: String::new(),
             }),
-            LegacyImportRow::Attachment(LegacyAttachment {
-                id: "attachment-1".to_string(),
-                session_id: "session-1".to_string(),
-                filename: "notes.txt".to_string(),
-                relative_path: "notes.txt".to_string(),
-                content_type: "text/plain".to_string(),
-                size_bytes: 5,
-                sha256: "hash".to_string(),
-                source_id: "legacy-1".to_string(),
-            }),
+            // No `LegacyImportRow::Attachment` case here: `session_attachments`
+            // is dropped by Task 4's `20260724110000_drop_cloud_tables`
+            // migration, so attachment import now hits "no such table" — the
+            // same class of breakage Task 3 left for humans/organizations,
+            // fixed in Task 13 when this legacy-vault import machinery is
+            // deleted outright.
         ]);
 
         let result = apply_legacy_import_item(
@@ -2613,20 +2545,20 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(result.imported_count, 5);
-        for table in [
-            "sessions",
-            "session_documents",
-            "transcripts",
-            "action_items",
-            "session_attachments",
+        assert_eq!(result.imported_count, 4);
+        for (table, id_column, id_value) in [
+            ("sessions", "id", "session-1"),
+            ("session_documents", "session_id", "session-1"),
+            ("transcripts", "session_id", "session-1"),
+            ("action_items", "session_id", "session-1"),
         ] {
-            let sql = format!("SELECT workspace_id FROM {table} LIMIT 1");
-            let workspace_id: String = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
+            let sql = format!("SELECT COUNT(*) FROM {table} WHERE {id_column} = ?");
+            let count: i64 = sqlx::query_scalar(sqlx::AssertSqlSafe(sql.as_str()))
+                .bind(id_value)
                 .fetch_one(db.pool())
                 .await
                 .unwrap();
-            assert_eq!(workspace_id, "workspace-1", "table {table}");
+            assert_eq!(count, 1, "table {table}");
         }
     }
 

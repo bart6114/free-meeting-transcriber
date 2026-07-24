@@ -13,14 +13,14 @@ const SESSION_LIST_COLUMNS: &str = "
 ";
 
 const SESSION_COLUMNS: &str = "
-    SELECT id, workspace_id, owner_user_id, title, kind, status, created_at, updated_at,
+    SELECT id, owner_user_id, title, kind, status, created_at, updated_at,
            started_at, ended_at, timezone, language, external_provider, source_apps_json,
            folder_path, slug, metadata_json
     FROM sessions
 ";
 
 const SESSION_DOCUMENT_COLUMNS: &str = "
-    SELECT document.id, document.workspace_id, document.session_id, document.kind,
+    SELECT document.id, document.session_id, document.kind,
            document.template_id, document.title, document.body_format, document.body,
            document.source_hash, document.generation_metadata_json, document.sort_order,
            document.created_by, document.updated_by, document.created_at, document.updated_at
@@ -29,7 +29,7 @@ const SESSION_DOCUMENT_COLUMNS: &str = "
 ";
 
 const SESSION_TRANSCRIPT_COLUMNS: &str = "
-    SELECT transcript.id, transcript.workspace_id, transcript.owner_user_id,
+    SELECT transcript.id, transcript.owner_user_id,
            transcript.session_id, transcript.source, transcript.provider, transcript.model,
            transcript.language, transcript.started_at_ms, transcript.ended_at_ms,
            transcript.audio_attachment_id, transcript.memo, transcript.words_json,
@@ -40,7 +40,7 @@ const SESSION_TRANSCRIPT_COLUMNS: &str = "
 ";
 
 const SESSION_ACTION_ITEM_COLUMNS: &str = "
-    SELECT action_item.id, action_item.workspace_id, action_item.session_id,
+    SELECT action_item.id, action_item.session_id,
            action_item.source_type, action_item.source_id, action_item.source_order,
            action_item.assignee_human_id, action_item.status, action_item.text,
            action_item.body_json, action_item.due_at, action_item.completed_at,

@@ -72,26 +72,25 @@ describe("session SQLite operations", () => {
       sql: string;
       params: unknown[];
     }>;
+    expect(statements[0].sql).toContain("INSERT INTO sessions");
     expect(statements[0].sql).toContain("event_json");
-    expect(statements[0].sql).toContain("cloudsync_workspace_binding");
-    expect(statements[0].sql).toContain("NULLIF((");
-    expect(statements[0].sql).not.toContain("COALESCE((");
+    expect(statements[0].params).toContain("user-1");
     expect(statements[0].params).toContain('{"tracking_id":"welcome"}');
     expect(statements[1].sql).toContain("session_documents");
-    expect(statements[1].sql).toContain("workspace_id");
     expect(statements[1].sql).toContain("FROM sessions");
     expect(statements[1].params).toContain('{"type":"doc"}');
   });
 
-  it("derives the default self identity from the bound workspace", async () => {
+  it("defaults to the sentinel local user id when no owner is given", async () => {
     await createSession("Local note");
 
     const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
       sql: string;
       params: unknown[];
     }>;
-    expect(statements[0].sql).toContain("NULLIF(NULLIF(?, '')");
-    expect(statements[0].sql).toContain("00000000-0000-0000-0000-000000000000");
+    expect(statements[0].params).toContain(
+      "00000000-0000-0000-0000-000000000000",
+    );
   });
 
   it("commits enhanced note content and the derived session title together", async () => {

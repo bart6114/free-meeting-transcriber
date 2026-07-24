@@ -34,18 +34,8 @@ export async function catalogLocalNoteAttachment(input: {
 
   const relativePath = `attachments/${attachmentId}`;
   const metadataId = id();
-  const deleteJobId = id();
-  const uploadJobId = id();
   const results = await enqueueDatabaseWrite(`session:${sessionId}`, () =>
     executeTransaction([
-      enqueueReplacedAttachmentDeleteStatement({
-        jobId: deleteJobId,
-        sessionId,
-        attachmentId: null,
-        relativePath,
-        nextSha256: input.sha256,
-        nextSizeBytes: input.sizeBytes,
-      }),
       {
         sql: `
           UPDATE session_attachments
@@ -100,7 +90,6 @@ export async function catalogLocalNoteAttachment(input: {
         sql: `
           INSERT INTO session_attachments (
             id,
-            workspace_id,
             session_id,
             filename,
             relative_path,
@@ -115,7 +104,6 @@ export async function catalogLocalNoteAttachment(input: {
           )
           SELECT
             ?,
-            session.workspace_id,
             session.id,
             ?,
             ?,
@@ -180,16 +168,10 @@ export async function catalogLocalNoteAttachment(input: {
         params: [sessionId, relativePath],
         expectedRowsAffected: 1,
       },
-      enqueueAttachmentUploadStatement({
-        jobId: uploadJobId,
-        sessionId,
-        attachmentId: null,
-        relativePath,
-      }),
     ]),
   );
 
-  if ((results[1] ?? 0) + (results[2] ?? 0) !== 1 || (results[3] ?? 0) !== 1) {
+  if ((results[0] ?? 0) + (results[1] ?? 0) !== 1 || (results[2] ?? 0) !== 1) {
     throw new Error("attachment session is unavailable");
   }
 }
@@ -224,17 +206,7 @@ export async function catalogLocalSessionAudio(
     }
 
     const attachmentId = `session-audio:${sessionId}`;
-    const deleteJobId = id();
-    const uploadJobId = id();
     const results = await executeTransaction([
-      enqueueReplacedAttachmentDeleteStatement({
-        jobId: deleteJobId,
-        sessionId,
-        attachmentId,
-        relativePath: null,
-        nextSha256: result.data.sha256,
-        nextSizeBytes: result.data.sizeBytes,
-      }),
       {
         sql: `
           UPDATE session_attachments
@@ -286,7 +258,6 @@ export async function catalogLocalSessionAudio(
         sql: `
           INSERT INTO session_attachments (
             id,
-            workspace_id,
             session_id,
             filename,
             relative_path,
@@ -301,7 +272,6 @@ export async function catalogLocalSessionAudio(
           )
           SELECT
             ?,
-            session.workspace_id,
             session.id,
             ?,
             ?,
@@ -361,153 +331,15 @@ export async function catalogLocalSessionAudio(
         params: [attachmentId, sessionId],
         expectedRowsAffected: 1,
       },
-      enqueueAttachmentUploadStatement({
-        jobId: uploadJobId,
-        sessionId,
-        attachmentId,
-        relativePath: null,
-      }),
     ]);
 
     if (
-      (results[1] ?? 0) + (results[2] ?? 0) !== 1 ||
-      (results[3] ?? 0) !== 1
+      (results[0] ?? 0) + (results[1] ?? 0) !== 1 ||
+      (results[2] ?? 0) !== 1
     ) {
       throw new Error("audio session is unavailable");
     }
   });
-}
-
-export async function setAttachmentCloudSyncEnabled(
-  inputSessionId: string,
-  inputAttachmentId: string,
-  enabled: boolean,
-): Promise<void> {
-  const sessionId = requireText(inputSessionId, "session ID", 512);
-  const attachmentId = requireText(inputAttachmentId, "attachment ID", 512);
-  const now = new Date().toISOString();
-  const statements = [
-    {
-      sql: `
-        UPDATE session_attachments
-        SET cloud_sync_enabled = ?, updated_at = ?
-        WHERE id = ? AND session_id = ? AND deleted_at IS NULL
-      `,
-      params: [enabled ? 1 : 0, now, attachmentId, sessionId],
-    },
-    {
-      sql: `
-        UPDATE attachment_transfer_jobs
-        SET phase = 'completed', completed_at = ?, updated_at = ?, last_error = ''
-        WHERE attachment_id = ?
-          AND direction IN (${enabled ? "'delete'" : "'upload', 'download'"})
-          AND phase IN ('queued', 'retry_wait', 'failed')
-      `,
-      params: [now, now, attachmentId],
-    },
-  ];
-
-  if (enabled) {
-    statements.push(
-      enqueueAttachmentUploadStatement({
-        jobId: id(),
-        sessionId,
-        attachmentId,
-        relativePath: null,
-      }),
-      {
-        sql: `
-          INSERT OR IGNORE INTO attachment_transfer_jobs (
-            id,
-            attachment_id,
-            session_id,
-            workspace_id,
-            direction,
-            expected_sha256,
-            expected_size_bytes,
-            object_key
-          )
-          SELECT ?, attachment.id, attachment.session_id, attachment.workspace_id,
-            'download', attachment.sha256, attachment.size_bytes,
-            attachment.cloud_object_key
-          FROM session_attachments AS attachment
-          LEFT JOIN attachment_local_state AS local
-            ON local.attachment_id = attachment.id
-          WHERE attachment.id = ?
-            AND attachment.session_id = ?
-            AND attachment.cloud_sync_enabled = 1
-            AND attachment.cloud_object_key <> ''
-            AND attachment.deleted_at IS NULL
-            AND COALESCE(local.availability, 'absent') <> 'present'
-        `,
-        params: [id(), attachmentId, sessionId],
-      },
-    );
-  } else {
-    statements.push(
-      {
-        sql: `
-          INSERT OR IGNORE INTO attachment_transfer_jobs (
-            id,
-            attachment_id,
-            session_id,
-            workspace_id,
-            direction,
-            expected_sha256,
-            expected_size_bytes,
-            object_key
-          )
-          SELECT ?, attachment.id, attachment.session_id, attachment.workspace_id,
-            'download', attachment.sha256, attachment.size_bytes,
-            attachment.cloud_object_key
-          FROM session_attachments AS attachment
-          LEFT JOIN attachment_local_state AS local
-            ON local.attachment_id = attachment.id
-          WHERE attachment.id = ?
-            AND attachment.session_id = ?
-            AND attachment.cloud_sync_enabled = 0
-            AND attachment.cloud_object_key <> ''
-            AND attachment.deleted_at IS NULL
-            AND COALESCE(local.availability, 'absent') <> 'present'
-        `,
-        params: [id(), attachmentId, sessionId],
-      },
-      {
-        sql: `
-          INSERT OR IGNORE INTO attachment_transfer_jobs (
-            id,
-            attachment_id,
-            session_id,
-            workspace_id,
-            direction,
-            expected_sha256,
-            expected_size_bytes,
-            object_key
-          )
-          SELECT ?, attachment.id, attachment.session_id, attachment.workspace_id,
-            'delete', attachment.sha256, attachment.size_bytes,
-            attachment.cloud_object_key
-          FROM session_attachments AS attachment
-          JOIN attachment_local_state AS local
-            ON local.attachment_id = attachment.id
-            AND local.availability = 'present'
-          WHERE attachment.id = ?
-            AND attachment.session_id = ?
-            AND attachment.cloud_sync_enabled = 0
-            AND attachment.cloud_object_key <> ''
-            AND attachment.deleted_at IS NULL
-        `,
-        params: [id(), attachmentId, sessionId],
-      },
-    );
-  }
-
-  const [updated = 0] = await enqueueDatabaseWrite(`session:${sessionId}`, () =>
-    executeTransaction(statements),
-  );
-  if (updated !== 1) {
-    throw new Error("attachment is unavailable");
-  }
 }
 
 export async function deleteLocalSessionAudio(
@@ -637,94 +469,6 @@ export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   return Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, "0"),
   ).join("");
-}
-
-function enqueueReplacedAttachmentDeleteStatement(input: {
-  jobId: string;
-  sessionId: string;
-  attachmentId: string | null;
-  relativePath: string | null;
-  nextSha256: string;
-  nextSizeBytes: number;
-}) {
-  const selector = input.attachmentId
-    ? "attachment.id = ?"
-    : "attachment.relative_path = ?";
-  return {
-    sql: `
-      INSERT OR IGNORE INTO attachment_transfer_jobs (
-        id,
-        attachment_id,
-        session_id,
-        workspace_id,
-        direction,
-        expected_sha256,
-        expected_size_bytes,
-        object_key
-      )
-      SELECT ?, attachment.id, attachment.session_id, attachment.workspace_id,
-        'delete', attachment.sha256, attachment.size_bytes,
-        attachment.cloud_object_key
-      FROM session_attachments AS attachment
-      WHERE attachment.session_id = ?
-        AND ${selector}
-        AND (attachment.sha256 <> ? OR attachment.size_bytes <> ?)
-        AND attachment.cloud_object_key <> ''
-      ORDER BY attachment.deleted_at IS NULL DESC,
-        attachment.updated_at DESC,
-        attachment.id
-      LIMIT 1
-    `,
-    params: [
-      input.jobId,
-      input.sessionId,
-      input.attachmentId ?? input.relativePath ?? "",
-      input.nextSha256,
-      input.nextSizeBytes,
-    ],
-  };
-}
-
-function enqueueAttachmentUploadStatement(input: {
-  jobId: string;
-  sessionId: string;
-  attachmentId: string | null;
-  relativePath: string | null;
-}) {
-  const selector = input.attachmentId
-    ? "attachment.id = ?"
-    : "attachment.relative_path = ?";
-  return {
-    sql: `
-      INSERT OR IGNORE INTO attachment_transfer_jobs (
-        id,
-        attachment_id,
-        session_id,
-        workspace_id,
-        direction,
-        expected_sha256,
-        expected_size_bytes
-      )
-      SELECT ?, attachment.id, attachment.session_id, attachment.workspace_id,
-        'upload', attachment.sha256, attachment.size_bytes
-      FROM session_attachments AS attachment
-      JOIN attachment_local_state AS local
-        ON local.attachment_id = attachment.id
-        AND local.availability = 'present'
-      WHERE attachment.session_id = ?
-        AND ${selector}
-        AND attachment.cloud_sync_enabled = 1
-        AND attachment.cloud_object_key = ''
-        AND attachment.deleted_at IS NULL
-      ORDER BY attachment.updated_at DESC, attachment.id
-      LIMIT 1
-    `,
-    params: [
-      input.jobId,
-      input.sessionId,
-      input.attachmentId ?? input.relativePath ?? "",
-    ],
-  };
 }
 
 function requireBasename(value: unknown, label: string) {

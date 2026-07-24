@@ -17,15 +17,6 @@ pub async fn open_desktop_db(identifier: &str) -> Arc<Db> {
     Arc::new(db)
 }
 
-/// CloudSync is permanently disabled in this fork: there is no server to sync
-/// against, so this always returns `None`. Signature is kept so `lib.rs`
-/// continues to compile unchanged and the CloudSync/E2EE commands it wires up
-/// remain registered (they just report "not configured").
-pub fn cloudsync_runtime_config_from_env()
--> Result<Option<hypr_db_core::CloudsyncRuntimeConfig>, String> {
-    Ok(None)
-}
-
 fn desktop_db_dir(identifier: &str) -> Option<std::path::PathBuf> {
     let data_dir = dirs::data_dir().expect("data_dir must be available");
     let default_dir =
@@ -48,10 +39,5 @@ mod tests {
         let db_dir = desktop_db_dir("org.freemeetingtranscriber.dev").unwrap();
 
         assert!(db_dir.ends_with("org.freemeetingtranscriber.dev"));
-    }
-
-    #[test]
-    fn cloudsync_is_always_off() {
-        assert!(cloudsync_runtime_config_from_env().unwrap().is_none());
     }
 }

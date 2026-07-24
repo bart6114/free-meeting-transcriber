@@ -184,7 +184,7 @@ describe("transcript SQLite queries", () => {
     }>;
     expect(statements).toHaveLength(1);
     expect(statements[0]?.sql).toContain("INSERT INTO transcripts");
-    expect(statements[0]?.sql).toContain("session.workspace_id");
+    expect(statements[0]?.sql).toContain("FROM sessions AS session");
     expect(statements[0]?.params.slice(0, 8)).toEqual([
       "transcript-1",
       "user-1",

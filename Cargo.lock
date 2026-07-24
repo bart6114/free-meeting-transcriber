@@ -3886,17 +3886,12 @@ checksum = "be1e0bca6c3637f992fc1cc7cbc52a78c1ef6db076dbf1059c4323d6a2048376"
 name = "db-app"
 version = "0.1.0"
 dependencies = [
- "base64 0.22.1",
  "db-core",
  "db-migrate",
- "e2ee",
  "serde",
  "serde_json",
- "sha2 0.11.0",
  "sqlx",
- "thiserror 2.0.18",
  "tokio",
- "uuid",
 ]
 
 [[package]]
@@ -16483,10 +16478,7 @@ dependencies = [
  "db-execute",
  "db-migrate",
  "db-reactive",
- "e2ee",
  "fs-sync-core",
- "futures-util",
- "reqwest 0.13.2",
  "serde",
  "serde_json",
  "sha2 0.11.0",
@@ -16496,7 +16488,6 @@ dependencies = [
  "storage",
  "tauri",
  "tauri-plugin",
- "tauri-plugin-store2",
  "tauri-specta",
  "tauri-utils 0.1.0",
  "tempfile",
@@ -16505,7 +16496,6 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "wiremock",
 ]
 
 [[package]]

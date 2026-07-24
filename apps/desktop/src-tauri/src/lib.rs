@@ -10,7 +10,7 @@ mod supervisor;
 mod vault_export;
 mod vault_watch;
 
-use db::{cloudsync_runtime_config_from_env, open_desktop_db};
+use db::open_desktop_db;
 use ext::*;
 use store::*;
 
@@ -73,13 +73,6 @@ pub async fn main() {
         create_audio_provider(&context.config().identifier);
 
     let db = open_desktop_db(&context.config().identifier).await;
-    let cloudsync_config = match cloudsync_runtime_config_from_env() {
-        Ok(config) => config,
-        Err(error) => {
-            tracing::warn!(%error, "invalid CloudSync environment configuration; CloudSync disabled");
-            None
-        }
-    };
 
     let mut builder = tauri_plugin_windows::extend_builder(tauri::Builder::default())
         .manage(audio)
@@ -106,10 +99,7 @@ pub async fn main() {
         .plugin(tauri_plugin_tracing::init())
         .plugin(tauri_plugin_analytics::init())
         .plugin(tauri_plugin_agent::init())
-        .plugin(tauri_plugin_db::init_with_cloudsync(
-            db.clone(),
-            cloudsync_config,
-        ))
+        .plugin(tauri_plugin_db::init(db.clone()))
         .plugin(tauri_plugin_bedrock::init());
 
     #[cfg(target_os = "macos")]
@@ -251,8 +241,8 @@ pub async fn main() {
             search_index::spawn(app_handle.clone(), db.clone());
             // Spawned after `search_index`; both start here in the app-level
             // `setup()` closure, which Tauri runs only after every plugin's
-            // own `setup()` — including `tauri_plugin_db::init_with_cloudsync`,
-            // whose `setup()` runs `sync_from_vault` synchronously
+            // own `setup()` — including `tauri_plugin_db::init`, whose
+            // `setup()` runs `sync_from_vault` synchronously
             // (`import::import_legacy_data` via `hypr_tauri_utils::block_on`).
             // So the vault-to-DB reconcile is always complete before this
             // DB-to-vault mirror starts draining — reconcile first, mirror

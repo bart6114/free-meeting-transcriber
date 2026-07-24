@@ -23,7 +23,6 @@ pub struct SessionListItem {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
 pub struct SessionRow {
     pub id: String,
-    pub workspace_id: String,
     pub owner_user_id: String,
     pub title: String,
     pub kind: String,
@@ -44,7 +43,6 @@ pub struct SessionRow {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
 pub struct SessionDocumentRow {
     pub id: String,
-    pub workspace_id: String,
     pub session_id: String,
     pub kind: String,
     pub template_id: String,
@@ -63,7 +61,6 @@ pub struct SessionDocumentRow {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
 pub struct SessionTranscriptRow {
     pub id: String,
-    pub workspace_id: String,
     pub owner_user_id: String,
     pub session_id: String,
     pub source: String,
@@ -84,7 +81,6 @@ pub struct SessionTranscriptRow {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, sqlx::FromRow)]
 pub struct SessionActionItemRow {
     pub id: String,
-    pub workspace_id: String,
     pub session_id: String,
     pub source_type: String,
     pub source_id: String,

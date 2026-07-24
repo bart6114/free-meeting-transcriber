@@ -153,12 +153,12 @@ export function createTranscript(input: TranscriptInsert): Promise<void> {
     statements.push({
       sql: `
         INSERT INTO transcripts (
-          id, workspace_id, owner_user_id, session_id, source, provider,
+          id, owner_user_id, session_id, source, provider,
           model, language, started_at_ms, ended_at_ms, audio_attachment_id,
           memo, words_json, speaker_hints_json, metadata_json, created_at,
           updated_at, deleted_at
         )
-        SELECT ?, session.workspace_id, ?, session.id, ?, ?, ?, ?, ?, ?, '',
+        SELECT ?, ?, session.id, ?, ?, ?, ?, ?, ?, '',
           ?, ?, ?, '{}', ?, ?, NULL
         FROM sessions AS session
         WHERE session.id = ? AND session.deleted_at IS NULL

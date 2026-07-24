@@ -351,10 +351,10 @@ export function updateSession(
       statements.push({
         sql: `
           INSERT INTO session_documents (
-            id, workspace_id, session_id, kind, body_format, body, created_by,
+            id, session_id, kind, body_format, body, created_by,
             updated_by, created_at, updated_at, deleted_at
           )
-          SELECT ?, workspace_id, id, 'note', 'prosemirror_json', ?,
+          SELECT ?, id, 'note', 'prosemirror_json', ?,
             owner_user_id, owner_user_id, ?, ?, NULL
           FROM sessions
           WHERE id = ? AND deleted_at IS NULL
@@ -385,21 +385,10 @@ export async function createSession(
     {
       sql: `
         INSERT INTO sessions (
-          id, workspace_id, owner_user_id, title, event_json, created_at,
+          id, owner_user_id, title, event_json, created_at,
           updated_at, deleted_at
         ) VALUES (
-          ?, NULLIF((
-            SELECT json_extract(value_json, '$.workspace_id')
-            FROM app_settings
-            WHERE id = 'cloudsync_workspace_binding'
-          ), ''), COALESCE(
-            NULLIF(NULLIF(?, ''), '${DEFAULT_USER_ID}'),
-            NULLIF((
-              SELECT json_extract(value_json, '$.workspace_id')
-              FROM app_settings
-              WHERE id = 'cloudsync_workspace_binding'
-            ), '')
-          ), ?, ?, ?, ?, NULL
+          ?, ?, ?, ?, ?, ?, NULL
         )
       `,
       params: [sessionId, userId, title, initial?.event_json ?? "", now, now],
@@ -583,10 +572,10 @@ function createEmptyNoteStatement(sessionId: string, now: string, body = "") {
   return {
     sql: `
       INSERT INTO session_documents (
-        id, workspace_id, session_id, kind, body_format, body, created_by,
+        id, session_id, kind, body_format, body, created_by,
         updated_by, created_at, updated_at, deleted_at
       )
-      SELECT ?, workspace_id, id, 'note', 'prosemirror_json', ?,
+      SELECT ?, id, 'note', 'prosemirror_json', ?,
         owner_user_id, owner_user_id, ?, ?, NULL
       FROM sessions
       WHERE id = ? AND deleted_at IS NULL
