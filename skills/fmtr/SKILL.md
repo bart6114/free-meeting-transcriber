@@ -1,6 +1,6 @@
 ---
 name: fmtr
-description: Query local Free Meeting Transcriber meetings, notes, summaries, transcripts, participants, action items, and recurring history. Use when a user asks about their Free Meeting Transcriber meeting data or wants meeting context for another task.
+description: Query local Free Meeting Transcriber meetings, notes, summaries, transcripts, and action items. Use when a user asks about their Free Meeting Transcriber meeting data or wants meeting context for another task.
 ---
 
 # Free Meeting Transcriber
@@ -9,7 +9,7 @@ Use Free Meeting Transcriber's read-only data surfaces. Prefer the MCP server wh
 
 ## Choose a transport
 
-1. If `list_meetings`, `get_meeting`, `get_meeting_transcript`, and `get_recurring_meeting_history` are available, use MCP.
+1. If `list_meetings`, `get_meeting`, and `get_meeting_transcript` are available, use MCP.
 2. Otherwise, check `fmtr --version` and use CLI commands with `--json`.
 3. If neither surface is available, direct the user to [setup](references/setup.md). Do not install software unless the user asks.
 
@@ -19,8 +19,7 @@ Never query or modify Free Meeting Transcriber's SQLite database directly. The C
 
 1. List recent meetings or search by a short title fragment.
 2. Resolve the meeting ID from the result. Do not guess an ID.
-3. Get the meeting before requesting a transcript. Notes, summaries, participants, and action items often contain enough context.
-4. Ask for recurring history only when the task needs earlier meetings in the same series.
+3. Get the meeting before requesting a transcript. Notes, summaries, and action items often contain enough context.
 
 See [CLI commands](references/cli.md) and [MCP tools](references/mcp.md).
 

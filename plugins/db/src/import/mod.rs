@@ -740,6 +740,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
     async fn stale_snapshots_for_preexisting_sqlite_domains_do_not_block_cutover() {
         let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
         hypr_db_app::prepare_schema(&db).await.unwrap();

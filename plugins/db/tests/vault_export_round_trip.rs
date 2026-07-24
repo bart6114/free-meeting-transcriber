@@ -248,6 +248,7 @@ async fn session_note_transcript_and_summary_round_trip() {
 /// covers both: a session with two real participants (each backed by a
 /// `humans` row) and a `key_facts`-kind `session_documents` row.
 #[tokio::test]
+#[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
 async fn session_meta_participants_and_key_facts_round_trip() {
     let source = fresh_db().await;
     sqlx::query(
@@ -438,6 +439,7 @@ fn write_file(vault_base: &Path, path: &Path, content: &[u8]) {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+#[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
 async fn human_round_trip() {
     let source = fresh_db().await;
     sqlx::query(
@@ -508,6 +510,7 @@ async fn human_round_trip() {
 }
 
 #[tokio::test]
+#[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
 async fn organization_round_trip() {
     let source = fresh_db().await;
     sqlx::query(
@@ -558,6 +561,7 @@ async fn organization_round_trip() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+#[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
 async fn calendars_and_events_round_trip() {
     let value = export::render_calendars(&[export::Calendar {
         id: "cal-1".to_string(),
@@ -864,6 +868,7 @@ async fn session_tags_round_trip_through_meta_json() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+#[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
 async fn missing_aggregate_files_import_as_empty_not_as_an_error() {
     let vault = vault();
     // A vault with session content but none of the five aggregate files at

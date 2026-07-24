@@ -2513,6 +2513,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
     async fn shadow_import_is_non_destructive_idempotent_and_audited() {
         let db = test_db().await;
         let dir = tempfile::tempdir().unwrap();
