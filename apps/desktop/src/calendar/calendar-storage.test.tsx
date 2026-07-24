@@ -31,10 +31,7 @@ vi.mock("~/db/write-queue", () => ({
   ): Promise<unknown> => write(),
 }));
 
-import {
-  getCalendarEventStartedAt,
-  getNearbyCalendarEvents,
-} from "./queries";
+import { getCalendarEventStartedAt, getNearbyCalendarEvents } from "./queries";
 
 describe("calendar SQLite selection", () => {
   beforeEach(() => {

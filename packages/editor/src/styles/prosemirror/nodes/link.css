@@ -1,8 +1,10 @@
 .prosemirror-editor {
   a {
-    color: #3b82f6;
+    color: inherit;
     cursor: text;
     text-decoration: underline;
+    text-decoration-color: hsl(var(--brand) / 0.6);
+    text-underline-offset: 2px;
 
     &.mention {
       text-decoration: none;
@@ -20,7 +22,7 @@
     }
 
     &:hover {
-      color: #1d4ed8;
+      text-decoration-color: hsl(var(--brand));
       cursor: pointer;
     }
   }

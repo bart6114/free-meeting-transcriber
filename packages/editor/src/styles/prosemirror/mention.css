@@ -1,10 +1,8 @@
 /* Mention dropdown */
 .mention-container {
-  background: white;
+  background: hsl(var(--popover));
   border-radius: 0.5rem;
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.05),
-    0 6px 12px -3px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 0 0 1px hsl(var(--border)), 0 6px 12px -3px rgba(0, 0, 0, 0.15);
   padding: 0.3rem;
   overflow: hidden;
   z-index: 999;
@@ -27,11 +25,11 @@
 }
 
 .mention-item.is-selected {
-  background-color: #f5f5f5;
+  background-color: hsl(var(--accent));
 }
 
 .mention-item:hover {
-  background-color: #fafafa;
+  background-color: hsl(var(--accent) / 0.5);
 }
 
 .mention-label {
@@ -46,7 +44,7 @@
   width: 0.9rem;
   height: 0.9rem;
   flex-shrink: 0;
-  color: #a3a3a3;
+  color: hsl(var(--muted-foreground));
 }
 
 /* Inline mention chip */
@@ -80,7 +78,7 @@
   border-radius: 0;
   overflow: visible;
   background: none;
-  color: #737373;
+  color: hsl(var(--muted-foreground));
 }
 
 .mention .mention-inline-icon {

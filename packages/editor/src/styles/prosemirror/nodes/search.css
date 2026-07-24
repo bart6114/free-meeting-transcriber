@@ -1,7 +1,7 @@
 .ProseMirror .ProseMirror-search-match {
-  background-color: #fef08a;
+  background-color: hsl(var(--brand) / 0.25);
 }
 
 .ProseMirror .ProseMirror-active-search-match {
-  background-color: #fb923c;
+  background-color: hsl(var(--brand) / 0.6);
 }

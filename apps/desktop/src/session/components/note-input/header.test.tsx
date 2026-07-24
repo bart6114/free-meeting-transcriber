@@ -378,7 +378,7 @@ describe("Header", () => {
     expect(memoTab.textContent).toBe("Memos");
     expect(memoTab.className).toContain("h-[26px]");
     expect(memoTab.className).not.toContain("-my-px");
-    expect(memoTab.className).toContain("bg-white");
+    expect(memoTab.className).toContain("bg-card");
     expect(memoTab.className).toContain("text-foreground");
     expect(memoTab.className).toContain("shadow-xs");
     expect(memoTab.className).toContain("dark:text-foreground");
@@ -468,7 +468,7 @@ describe("Header", () => {
     expect(viewSwitcher.className).not.toContain("rounded-full");
     expect(memoTab.textContent).toBe("Memos");
     expect(memoTab.className).toContain("h-7");
-    expect(memoTab.className).toContain("bg-white");
+    expect(memoTab.className).toContain("bg-card");
     expect(memoTab.className).toContain("border-0");
     expect(memoTab.className).not.toContain("border-border");
     expect(memoTab.className).toContain("shadow-none");
@@ -903,8 +903,8 @@ describe("Header", () => {
     expect(screen.getByTestId("dancing-sticks")).not.toBeNull();
     expect(transcriptTab.className).toContain("text-muted-foreground/70");
     expect(transcriptTab.className).toContain("hover:bg-background/60");
-    expect(transcriptTab.className).not.toContain("bg-red-50");
-    expect(transcriptTab.className).not.toContain("dark:bg-red-950/50");
+    expect(transcriptTab.className).not.toContain("bg-recording/10");
+    expect(transcriptTab.className).not.toContain("text-recording");
     expect(transcriptTab.getAttribute("title")).toBeNull();
 
     fireEvent.click(transcriptTab);
@@ -935,7 +935,7 @@ describe("Header", () => {
     const transcriptTab = screen.getByRole("button", { name: "Transcript" });
 
     expect(screen.getByTestId("dancing-sticks")).not.toBeNull();
-    expect(transcriptTab.className).toContain("bg-red-50");
+    expect(transcriptTab.className).toContain("bg-recording/10");
     expect(transcriptTab.getAttribute("title")).toBeNull();
     expect(transcriptTab.getAttribute("data-hover-label")).toBeNull();
 

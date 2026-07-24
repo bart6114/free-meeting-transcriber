@@ -1,8 +1,8 @@
 .prosemirror-editor {
   .hashtag {
-    color: #f59e0b;
+    color: hsl(var(--brand));
     text-decoration: underline;
-    text-decoration-color: #f59e0b;
+    text-decoration-color: hsl(var(--brand));
     display: inline;
     padding: 0 2px;
     border-radius: 0;

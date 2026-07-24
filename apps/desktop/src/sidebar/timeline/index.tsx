@@ -754,7 +754,7 @@ function TimelineNowChip({
       onClick={onClick}
     >
       {direction === "up" ? <DirectionIcon size={12} /> : null}
-      <SunIcon size={13} className="shrink-0 text-yellow-400" />
+      <SunIcon size={13} className="text-brand shrink-0" />
       <span>
         <Trans>Now</Trans>
       </span>

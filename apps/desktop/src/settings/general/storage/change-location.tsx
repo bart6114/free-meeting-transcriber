@@ -18,10 +18,10 @@ import {
 } from "@hypr/ui/components/ui/dialog";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
-import { scheduleAutomaticRelaunch } from "~/shared/relaunch";
-
 import { ObsidianVaultList } from "./obsidian-vault-list";
 import { displayPath } from "./path-utils";
+
+import { scheduleAutomaticRelaunch } from "~/shared/relaunch";
 
 const VAULT_BASE_QUERY_KEY = ["vault-base-path"] as const;
 
@@ -172,16 +172,16 @@ export function ChangeLocationRow() {
             </p>
 
             {destinationHasFiles && (
-              <p className="text-xs text-yellow-600">
+              <p className="text-brand text-xs">
                 <Trans>
-                  This folder already contains files. Copied vault files will
-                  be mixed in with them.
+                  This folder already contains files. Copied vault files will be
+                  mixed in with them.
                 </Trans>
               </p>
             )}
 
             {changeMutation.error && (
-              <p className="text-sm text-red-500">
+              <p className="text-destructive text-sm">
                 {changeMutation.error.message}
               </p>
             )}

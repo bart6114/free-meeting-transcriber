@@ -207,8 +207,8 @@ export function TemplateForm({
             onClick={setSelectedTemplateId}
             title={isDefault ? "Remove as default" : "Set as default"}
             className={cn([
-              "text-muted-foreground shrink-0 hover:text-black",
-              isDefault ? "bg-muted hover:bg-accent text-black" : null,
+              "text-muted-foreground hover:text-foreground shrink-0",
+              isDefault ? "bg-muted hover:bg-accent text-foreground" : null,
             ])}
           >
             {isDefault ? "Current default" : "Set as default"}
@@ -220,7 +220,7 @@ export function TemplateForm({
             onClick={() => toggleTemplateFavorite(id)}
             className={cn([
               "text-muted-foreground hover:text-foreground",
-              template.pinned && "text-rose-500 hover:text-rose-600",
+              template.pinned && "text-brand hover:text-brand/80",
             ])}
             title={
               template.pinned ? "Unfavorite template" : "Favorite template"
@@ -259,7 +259,7 @@ export function TemplateForm({
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => handleDeleteTemplate(id)}
-                  className="cursor-pointer text-red-600 focus:text-red-600"
+                  className="text-destructive focus:text-destructive cursor-pointer"
                 >
                   <Trans>Delete</Trans>
                 </DropdownMenuItem>

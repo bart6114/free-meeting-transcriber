@@ -77,7 +77,7 @@ export function AccessPermissionRow({
         <div
           className={cn([
             "mb-1 flex items-center gap-2",
-            !isAuthorized && "text-red-500",
+            !isAuthorized && "text-destructive",
           ])}
         >
           {!isAuthorized && <AlertCircleIcon className="size-4" />}

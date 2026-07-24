@@ -5,7 +5,7 @@
   h4,
   h5,
   h6 {
-    color: #374151;
+    color: hsl(var(--foreground));
     font-weight: 600;
     margin-top: 0;
     margin-bottom: 0.25rem;
@@ -70,6 +70,7 @@
 }
 
 .prosemirror-editor.note-title-editor > h1:first-child {
+  font-family: var(--font-sans);
   font-size: 1.75rem;
   line-height: 2.125rem;
   margin-bottom: 1rem;
@@ -83,7 +84,7 @@
 
 .blog-editor .prosemirror-editor {
   h1 {
-    font-size: 1.875rem;
+    font-size: 1.75rem;
     margin-top: 2rem;
     margin-bottom: 1rem;
   }
@@ -95,7 +96,7 @@
   }
 
   h3 {
-    color: #374151;
+    color: hsl(var(--foreground));
     font-weight: 600;
     font-size: 1.25rem;
     margin-top: 1.5rem;
@@ -103,7 +104,7 @@
   }
 
   h4 {
-    color: #374151;
+    color: hsl(var(--foreground));
     font-weight: 600;
     font-size: 1.125rem;
     margin-top: 1.25rem;
@@ -111,7 +112,7 @@
   }
 
   h5 {
-    color: #374151;
+    color: hsl(var(--foreground));
     font-weight: 600;
     font-size: 1rem;
     margin-top: 1rem;
@@ -119,7 +120,7 @@
   }
 
   h6 {
-    color: #374151;
+    color: hsl(var(--foreground));
     font-weight: 600;
     font-size: 0.875rem;
     margin-top: 1rem;

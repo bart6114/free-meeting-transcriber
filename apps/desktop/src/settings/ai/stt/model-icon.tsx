@@ -57,7 +57,7 @@ export function getLocalModelIcon(model: string): ModelIconSpec | null {
     return {
       label: "G",
       title: "GGML",
-      className: "border-amber-200 bg-amber-50 text-amber-700",
+      className: "border-brand/30 bg-brand/10 text-brand",
     };
   }
 
@@ -65,7 +65,7 @@ export function getLocalModelIcon(model: string): ModelIconSpec | null {
     return {
       label: "S",
       title: "Soniqo",
-      className: "border-blue-200 bg-blue-50 text-blue-700",
+      className: "border-border bg-card text-muted-foreground",
     };
   }
 
@@ -95,7 +95,7 @@ export function getLocalModelBackendBadge(model: string): ModelIconSpec | null {
     return {
       label: "GGML",
       title: "GGML runtime",
-      className: "border-amber-200 bg-amber-50 text-amber-700",
+      className: "border-brand/30 bg-brand/10 text-brand",
     };
   }
 

@@ -197,7 +197,7 @@ function HeaderMeetingActionPill({
       return {
         label: t`Stop`,
         title: t`Stop listening`,
-        icon: <SquareIcon className="size-3 fill-current text-red-500" />,
+        icon: <SquareIcon className="text-recording size-3 fill-current" />,
         onClick: stopListening,
       };
     }
@@ -206,7 +206,7 @@ function HeaderMeetingActionPill({
       return {
         label: t`Stop`,
         title: t`Stop transcription`,
-        icon: <SquareIcon className="size-3 fill-current text-red-500" />,
+        icon: <SquareIcon className="text-recording size-3 fill-current" />,
         onClick: () => {
           void stopTranscription(sessionId);
         },
@@ -258,7 +258,7 @@ function HeaderMeetingActionPill({
       {showCountdown ? (
         <div
           data-header-meeting-countdown
-          className="text-muted-foreground max-w-40 truncate font-mono text-xs whitespace-nowrap"
+          className="text-muted-foreground timecode max-w-40 truncate whitespace-nowrap"
         >
           {countdown.label}
         </div>

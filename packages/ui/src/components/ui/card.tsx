@@ -12,7 +12,7 @@ export const Card = forwardRef<HTMLDivElement, CardProps>(
       ref={ref}
       className={cn([
         "rounded-lg",
-        variant === "default" && "bg-background border shadow-xs",
+        variant === "default" && "bg-background border",
         variant === "outline-solid" && "border",
         variant === "ghost" && "border-none shadow-none",
         className,
@@ -67,7 +67,7 @@ export const CardDescription = forwardRef<
 >(({ className, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn(["text-sm text-neutral-500", className])}
+    className={cn(["text-muted-foreground text-sm", className])}
     {...props}
   />
 ));

@@ -280,7 +280,7 @@ export function SelectProviderAndModel() {
               </SelectValue>
               {isConfigured && <HealthStatusIndicator />}
               {isConfigured && health.status === "success" && (
-                <Check className="-mr-1 h-4 w-4 shrink-0 text-green-600" />
+                <Check className="text-brand -mr-1 h-4 w-4 shrink-0" />
               )}
             </SelectTrigger>
             <SelectContent align="end">
@@ -358,7 +358,7 @@ function TranscriptionLanguageWarningToastLifecycle({
     sonnerToast.warning(description, {
       id: TRANSCRIPTION_LANGUAGE_WARNING_TOAST_ID,
       duration: Infinity,
-      icon: <AlertTriangle className="size-4 shrink-0 text-amber-500" />,
+      icon: <AlertTriangle className="text-brand size-4 shrink-0" />,
       action: {
         label: actionLabel,
         onClick: () => {
@@ -692,7 +692,7 @@ function ModelModeBadge({ mode }: { mode?: ModelEntry["mode"] }) {
           className={cn([
             "shrink-0 cursor-help rounded-md px-1.5 py-0.5 text-[11px] font-medium",
             isRealtime
-              ? "bg-sky-50 text-sky-700"
+              ? "bg-recording/10 text-recording"
               : "bg-muted text-muted-foreground",
           ])}
         >
@@ -786,7 +786,7 @@ function LocalModelDropdownActions({ model }: { model: LocalModel }) {
         disabled={deleteModel.isPending}
         className={cn([
           "flex size-6 items-center justify-center rounded-full",
-          "text-red-500 hover:text-red-600",
+          "text-destructive hover:text-destructive/80",
           "disabled:opacity-70",
         ])}
         onPointerDown={stopSelect}

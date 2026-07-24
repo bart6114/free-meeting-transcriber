@@ -23,7 +23,7 @@ export function NoteTitleBreadcrumb({
       data-tauri-drag-region="false"
       className={cn([
         "ml-1.5 flex max-w-full min-w-0 items-center overflow-hidden",
-        "text-xs text-neutral-700",
+        "text-muted-foreground text-xs",
       ])}
     >
       <ol className="flex min-w-0 flex-nowrap items-center gap-0.5 overflow-hidden">
@@ -63,7 +63,7 @@ function BreadcrumbFolderCrumb({
     <>
       {showSeparator ? <BreadcrumbSeparator /> : null}
       <li className="min-w-0 overflow-hidden">
-        <span className="truncate text-neutral-600">{name}</span>
+        <span className="text-muted-foreground truncate">{name}</span>
       </li>
     </>
   );

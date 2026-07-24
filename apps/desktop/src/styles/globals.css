@@ -26,8 +26,9 @@
 
 @theme {
   --font-sans:
-    system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-hand: "Bradley Hand", "Segoe Print", "Comic Sans MS", cursive;
+    "Bricolage Grotesque Variable", system-ui, -apple-system, sans-serif;
+  --font-serif: "Literata Variable", Georgia, "Times New Roman", serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-border: hsl(var(--border));
   --color-input: hsl(var(--input));
@@ -46,12 +47,16 @@
   --color-accent-foreground: hsl(var(--accent-foreground));
   --color-popover: hsl(var(--popover));
   --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-recording: hsl(var(--recording));
+  --color-recording-foreground: hsl(var(--recording-foreground));
+  --color-brand: hsl(var(--brand));
+  --color-brand-foreground: hsl(var(--brand-foreground));
 
   --color-sidebar-accent: hsl(var(--sidebar-accent));
 
   --kbd-press-shadow-outer: rgba(0, 0, 0, 0.1);
   --kbd-press-shadow-inset: rgba(255, 255, 255, 0.8);
-  --selection-overlay: rgba(59, 130, 246, 0.3);
+  --selection-overlay: hsla(39, 70%, 45%, 0.25);
 
   --animate-shimmer: shimmer 2s infinite;
   --animate-reveal-left: reveal-left 0.5s ease-out forwards;
@@ -126,6 +131,15 @@
         inset 0 1px 0 0 var(--kbd-press-shadow-inset);
     }
   }
+}
+
+@utility timecode {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
 }
 
 /*
@@ -255,13 +269,12 @@
   }
 }
 
-/* Search result highlighting styles — matches transcript's bg-yellow-200/50 and bg-yellow-500 */
 .ProseMirror-search-match {
-  background-color: rgb(254 240 138 / 0.5);
+  background-color: hsl(39 70% 45% / 0.25);
   border-radius: 2px;
 }
 
 .ProseMirror-active-search-match {
-  background-color: rgb(234 179 8) !important;
+  background-color: hsl(39 70% 45% / 0.6) !important;
   border-radius: 2px;
 }

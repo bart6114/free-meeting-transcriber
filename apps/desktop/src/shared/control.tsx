@@ -40,7 +40,7 @@ export const ErrorComponent: ErrorRouteComponent = ({ error }) => {
           <div className="border-border bg-card rounded-xl border p-6 shadow-xs">
             <div className="flex flex-col items-center gap-4 text-center">
               <motion.div
-                className="flex h-12 w-12 items-center justify-center rounded-full bg-red-50"
+                className="bg-destructive/10 flex h-12 w-12 items-center justify-center rounded-full"
                 initial={{ scale: 0.8 }}
                 animate={{ scale: 1 }}
                 transition={{
@@ -49,7 +49,7 @@ export const ErrorComponent: ErrorRouteComponent = ({ error }) => {
                   stiffness: 200,
                 }}
               >
-                <AlertTriangle className="h-6 w-6 text-red-500" />
+                <AlertTriangle className="text-destructive h-6 w-6" />
               </motion.div>
 
               <div className="flex flex-col gap-1.5">

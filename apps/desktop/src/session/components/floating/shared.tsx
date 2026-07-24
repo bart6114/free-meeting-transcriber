@@ -46,7 +46,7 @@ export function FloatingButton({
       className={cn([
         "rounded-full border-2 transition-[background-color,border-color,color,opacity,box-shadow] duration-200 focus-visible:ring-0",
         floatingActionSurfaceClassName,
-        error && "border-red-500",
+        error && "border-destructive",
         subtle && "opacity-40 hover:opacity-100",
         className,
       ])}

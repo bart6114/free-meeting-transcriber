@@ -18,8 +18,7 @@ export function ConfigError() {
         </p>
         <p className="text-muted-foreground text-sm leading-relaxed">
           <Trans>
-            Add your own LLM API key to generate a summary from this
-            transcript.
+            Add your own LLM API key to generate a summary from this transcript.
           </Trans>
         </p>
       </div>

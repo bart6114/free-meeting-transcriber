@@ -79,12 +79,12 @@ export function DetailsColumn({
 
           <div className="flex-1 overflow-y-auto">
             {duplicatesWithData.length > 0 && (
-              <div className="border-border border-b bg-red-50 px-6 py-4">
-                <h4 className="mb-1 text-sm font-semibold text-red-900">
+              <div className="border-border bg-destructive/10 border-b px-6 py-4">
+                <h4 className="text-destructive mb-1 text-sm font-semibold">
                   Duplicate Contact
                   {duplicatesWithData.length > 1 ? "s" : ""} Found
                 </h4>
-                <p className="mb-3 text-sm text-red-800">
+                <p className="text-destructive/90 mb-3 text-sm">
                   {duplicatesWithData.length > 1
                     ? `${duplicatesWithData.length} contacts`
                     : "Another contact"}{" "}
@@ -438,7 +438,7 @@ function EditPersonOrganizationSelector({
               <span className="text-base">{organization.name}</span>
               <span className="group text-muted-foreground ml-2">
                 <CircleMinus
-                  className="text-muted-foreground size-4 cursor-pointer hover:text-red-600"
+                  className="text-muted-foreground hover:text-destructive size-4 cursor-pointer"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleRemoveOrganization();

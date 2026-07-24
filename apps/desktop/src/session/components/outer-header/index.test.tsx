@@ -469,7 +469,7 @@ describe("OuterHeader", () => {
     expect(countdown.getAttribute("data-header-meeting-countdown")).toBe(
       "true",
     );
-    expect(countdown.className).toContain("font-mono");
+    expect(countdown.className).toContain("timecode");
     expect(
       countdown.compareDocumentPosition(joinButton) &
         Node.DOCUMENT_POSITION_FOLLOWING,
@@ -684,7 +684,7 @@ describe("OuterHeader", () => {
     fireEvent.click(stopButton);
 
     expect(stopButton.querySelector("svg")?.getAttribute("class")).toContain(
-      "text-red-500",
+      "text-recording",
     );
     expect(screen.queryByRole("button", { name: "Join & record" })).toBeNull();
     expect(

@@ -152,7 +152,7 @@ function iconHeaderViewClassName(
     "group/header-view flex shrink-0 items-center justify-center rounded-full transition-colors select-none [&>svg]:shrink-0",
     isActive
       ? [
-          "text-foreground bg-white shadow-xs",
+          "text-foreground bg-card shadow-xs",
           "dark:bg-accent dark:text-foreground dark:shadow-none",
         ]
       : [
@@ -559,12 +559,11 @@ function HeaderViewEnhancedActive({
           isGenerating ? "cursor-not-allowed opacity-70" : "cursor-pointer",
           isError
             ? [
-                "text-red-600 hover:bg-red-50 hover:text-red-700 focus-visible:bg-red-50",
-                "dark:text-red-400 dark:hover:bg-red-950/50 dark:hover:text-red-300 dark:focus-visible:bg-red-950/50",
+                "text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10",
               ]
             : [
-                "focus-visible:text-foreground focus-visible:bg-white",
-                "dark:focus-visible:text-primary dark:focus-visible:bg-white",
+                "focus-visible:text-foreground focus-visible:bg-card",
+                "dark:focus-visible:text-foreground dark:focus-visible:bg-accent",
               ],
         ]),
       )}
@@ -665,14 +664,8 @@ function HeaderViewTranscriptButton({
               isActive ? "w-[98px] min-w-[98px] gap-1.5 pr-1.5 pl-2" : null,
               isActive
                 ? live.degraded
-                  ? [
-                      "bg-amber-50 text-amber-500 hover:bg-amber-100 hover:text-amber-600",
-                      "dark:bg-amber-950/50 dark:text-amber-300 dark:hover:bg-amber-950 dark:hover:text-amber-200",
-                    ]
-                  : [
-                      "bg-red-50 text-red-500 hover:bg-red-100 hover:text-red-600",
-                      "dark:bg-red-950/50 dark:text-red-300 dark:hover:bg-red-950 dark:hover:text-red-200",
-                    ]
+                  ? ["bg-brand/10 text-brand hover:bg-brand/20"]
+                  : ["bg-recording/10 text-recording hover:bg-recording/20"]
                 : null,
             ]
           : null,
@@ -690,7 +683,7 @@ function HeaderViewTranscriptLiveIcon({
     muted: boolean;
   };
 }) {
-  const color = live.degraded ? "#f59e0b" : "#ef4444";
+  const color = live.degraded ? "hsl(var(--brand))" : "hsl(var(--recording))";
 
   return (
     <span className="relative flex size-4 items-center justify-center">
@@ -1111,7 +1104,7 @@ function TemplatePickerPopover({
       {
         key: "create",
         title: "Create new template",
-        icon: <PlusIcon className="h-3.5 w-3.5 text-blue-500" />,
+        icon: <PlusIcon className="text-brand h-3.5 w-3.5" />,
         uppercase: false,
         items: [
           {
@@ -1544,7 +1537,7 @@ function TemplateResultButton({
       {isFavorite ? (
         <HeartIcon
           aria-hidden
-          className="size-3.5 shrink-0 fill-rose-500 text-rose-500"
+          className="fill-brand text-brand size-3.5 shrink-0"
         />
       ) : null}
     </button>

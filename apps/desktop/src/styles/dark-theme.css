@@ -13,24 +13,24 @@
     --provider-brand-filter: brightness(0) invert(1);
     --kbd-press-shadow-outer: rgba(0, 0, 0, 0.35);
     --kbd-press-shadow-inset: rgba(255, 255, 255, 0.08);
-    --selection-overlay: rgba(96, 165, 250, 0.25);
+    --selection-overlay: hsla(40, 75%, 55%, 0.22);
   }
 }
 
 .dark .ProseMirror-search-match {
-  background-color: rgb(113 63 18 / 0.45);
+  background-color: hsl(40 75% 55% / 0.25);
   border-radius: 2px;
 }
 
 .dark .ProseMirror-active-search-match {
-  background-color: rgb(202 138 4) !important;
+  background-color: hsl(40 75% 55% / 0.5) !important;
   border-radius: 2px;
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: #44403c;
+  background: hsl(30 9% 26%);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: #57534e;
+  background: hsl(30 8% 33%);
 }

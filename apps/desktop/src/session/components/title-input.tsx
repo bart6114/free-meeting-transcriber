@@ -86,7 +86,7 @@ export const TitleInput = forwardRef<
               "text-muted-foreground animate-pulse",
               variant === "breadcrumb"
                 ? "text-sm leading-5"
-                : "text-xl font-semibold",
+                : "text-xl font-semibold tracking-tight",
             ])}
           >
             <Trans>Generating title...</Trans>
@@ -109,7 +109,7 @@ export const TitleInput = forwardRef<
               "animate-reveal-left whitespace-nowrap",
               variant === "breadcrumb"
                 ? "text-sm leading-5"
-                : "text-xl font-semibold",
+                : "text-xl font-semibold tracking-tight",
             ])}
           >
             {generatedTitle}
@@ -368,7 +368,7 @@ const TitleInputInner = memo(
             "group/title-input relative flex max-w-full items-center overflow-hidden",
             variant === "breadcrumb"
               ? "h-5 text-sm leading-5"
-              : "h-8 text-xl font-semibold",
+              : "h-8 text-xl font-semibold tracking-tight",
           ])}
         >
           <input
@@ -410,8 +410,8 @@ const TitleInputInner = memo(
               "border-none bg-transparent focus:outline-hidden",
               "placeholder:text-muted-foreground text-left",
               variant === "breadcrumb"
-                ? "h-5 appearance-none p-0 text-sm leading-5 text-neutral-700 focus:underline"
-                : "text-xl font-semibold",
+                ? "text-muted-foreground h-5 appearance-none p-0 text-sm leading-5 focus:underline"
+                : "text-xl font-semibold tracking-tight",
               variant === "breadcrumb" &&
                 (isTitleFocused
                   ? "overflow-x-auto whitespace-nowrap"
@@ -430,7 +430,7 @@ const TitleInputInner = memo(
                   "group-hover/title-input:animate-title-hover-scroll whitespace-nowrap group-hover/title-input:will-change-transform",
                   variant === "breadcrumb"
                     ? "text-sm leading-5"
-                    : "text-xl font-semibold",
+                    : "text-xl font-semibold tracking-tight",
                 ])}
               >
                 {title}

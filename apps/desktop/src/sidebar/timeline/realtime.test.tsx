@@ -29,7 +29,7 @@ describe("CurrentTimeIndicator", () => {
     );
   });
 
-  test("uses red current-time colors in light and dark mode", () => {
+  test("uses recording current-time colors", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2024, 0, 15, 12, 0, 0));
 
@@ -37,14 +37,11 @@ describe("CurrentTimeIndicator", () => {
     const line = container.querySelector("[data-sidebar-current-time-line]");
     const label = container.querySelector("[data-sidebar-current-time-label]");
 
-    expect(line?.className).toContain("bg-red-500/85");
-    expect(line?.className).toContain("dark:bg-red-400/70");
-    expect(label?.className).toContain("border-red-500");
-    expect(label?.className).toContain("bg-red-500");
-    expect(label?.className).toContain("text-white");
-    expect(label?.className).toContain("dark:border-red-500");
-    expect(label?.className).toContain("dark:bg-red-500");
-    expect(label?.className).toContain("dark:text-white");
+    expect(line?.className).toContain("bg-recording/80");
+    expect(label?.className).toContain("border-recording/40");
+    expect(label?.className).toContain("text-recording");
+    expect(label?.className).toContain("timecode");
+    expect(label?.textContent).toContain("●");
   });
 
   test("syncs the label at the next wall-clock minute", () => {

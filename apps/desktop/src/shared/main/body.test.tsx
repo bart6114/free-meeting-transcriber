@@ -367,8 +367,8 @@ describe("ClassicMainBody", () => {
     );
 
     expect(badge).toBeTruthy();
-    expect(badge.className.split(" ")).toContain("bg-blue-500");
-    expect(badge.className.split(" ")).not.toContain("bg-red-500");
+    expect(badge.className.split(" ")).toContain("bg-brand");
+    expect(badge.className.split(" ")).not.toContain("bg-recording");
     expect(mocks.toggleLeftSidebar).toHaveBeenCalledTimes(1);
   });
 
@@ -390,8 +390,8 @@ describe("ClassicMainBody", () => {
     );
 
     expect(badge).toBeTruthy();
-    expect(badge.className.split(" ")).toContain("bg-red-500");
-    expect(badge.className.split(" ")).not.toContain("bg-blue-500");
+    expect(badge.className.split(" ")).toContain("bg-recording");
+    expect(badge.className.split(" ")).not.toContain("bg-brand");
     expect(
       within(sidebarToggle).queryByTestId("collapsed-sidebar-update-badge"),
     ).toBeNull();

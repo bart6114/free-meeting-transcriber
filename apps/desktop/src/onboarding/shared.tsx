@@ -65,10 +65,7 @@ export function OnboardingSection({
         ])}
       >
         {isCompleted && (
-          <CheckIcon
-            className="size-4 shrink-0 text-green-600"
-            strokeWidth={2.5}
-          />
+          <CheckIcon className="text-brand size-4 shrink-0" strokeWidth={2.5} />
         )}
         <div className="flex min-w-0 flex-col gap-3">
           <div className="flex items-center gap-2">
@@ -174,16 +171,16 @@ export function StepRow({
 }) {
   return (
     <div className="flex items-center gap-2 text-sm">
-      {status === "done" && (
-        <CheckCircle2Icon className="size-4 text-emerald-600" />
-      )}
+      {status === "done" && <CheckCircle2Icon className="text-brand size-4" />}
       {status === "active" && (
         <Loader2Icon className="text-muted-foreground size-4 animate-spin" />
       )}
-      {status === "failed" && <XCircleIcon className="size-4 text-red-400" />}
+      {status === "failed" && (
+        <XCircleIcon className="text-destructive size-4" />
+      )}
       <span
         className={
-          status === "failed" ? "text-red-500" : "text-muted-foreground"
+          status === "failed" ? "text-destructive" : "text-muted-foreground"
         }
       >
         {label}

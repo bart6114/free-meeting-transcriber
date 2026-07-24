@@ -15,7 +15,7 @@
     -webkit-appearance: none;
     width: 18px;
     height: 18px;
-    border: 2px solid #ccc;
+    border: 2px solid hsl(var(--border));
     border-radius: 4px;
     margin: 0;
     transition: all 0.2s ease;
@@ -30,13 +30,13 @@
     }
 
     &[data-selected="true"] {
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      border-color: hsl(var(--brand));
+      box-shadow: 0 0 0 2px hsl(var(--brand) / 0.3);
     }
 
     &:checked {
-      background-color: #3b82f6;
-      border-color: #3b82f6;
+      background-color: hsl(var(--brand));
+      border-color: hsl(var(--brand));
     }
 
     &:checked::after {
@@ -46,18 +46,18 @@
       top: 1px;
       width: 5px;
       height: 10px;
-      border: solid white;
+      border: solid hsl(var(--brand-foreground));
       border-width: 0 2px 2px 0;
       transform: rotate(45deg);
     }
 
     &:focus {
       outline: none;
-      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 0 0 2px hsl(var(--brand) / 0.3);
     }
 
     &[data-interactive="true"]:hover:not(:checked) {
-      border-color: #9ca3af;
+      border-color: hsl(var(--muted-foreground));
     }
   }
 

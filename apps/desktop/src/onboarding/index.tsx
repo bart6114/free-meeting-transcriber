@@ -190,7 +190,7 @@ function OnboardingScreenContent({
           headerClassName,
         ])}
       >
-        <h1 className="font-hand text-foreground text-4xl leading-none font-semibold tracking-normal">
+        <h1 className="text-foreground text-4xl leading-none font-semibold tracking-tight">
           <Trans>Welcome to Free Meeting Transcriber</Trans>
         </h1>
       </div>

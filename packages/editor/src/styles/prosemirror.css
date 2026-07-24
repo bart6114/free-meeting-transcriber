@@ -14,7 +14,6 @@
 @import "./prosemirror/nodes/hashtag.css";
 @import "./prosemirror/nodes/comment-anchor.css";
 
-@import "./prosemirror/dark.css";
 @import "./prosemirror/mention.css";
 
 .ProseMirror.prompt-editor {
@@ -46,7 +45,7 @@
 .ProseMirror .is-editor-empty:first-child::before {
   content: attr(data-placeholder);
   float: left;
-  color: #e5e5e5;
+  color: hsl(var(--muted-foreground) / 0.5);
   pointer-events: none;
   height: 0;
 }
@@ -54,7 +53,7 @@
 .ProseMirror .is-empty::before {
   content: attr(data-placeholder);
   float: left;
-  color: #e5e5e5;
+  color: hsl(var(--muted-foreground) / 0.5);
   pointer-events: none;
   height: 0;
 }
@@ -64,5 +63,5 @@
   pointer-events: auto;
   user-select: none;
   height: 0;
-  color: #e5e5e5;
+  color: hsl(var(--muted-foreground) / 0.5);
 }

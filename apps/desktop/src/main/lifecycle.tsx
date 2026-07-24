@@ -65,7 +65,13 @@ function ToolRegistration() {
         getEnhancedNoteId,
         openEditTab,
       }),
-    [search, getContactSearchResults, getSessionId, getEnhancedNoteId, openEditTab],
+    [
+      search,
+      getContactSearchResults,
+      getSessionId,
+      getEnhancedNoteId,
+      openEditTab,
+    ],
   );
 
   return null;

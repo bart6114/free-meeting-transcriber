@@ -344,7 +344,7 @@ export function TemplatesSidebarContent({
                 <Button
                   size="icon"
                   variant="ghost"
-                  className="text-muted-foreground relative z-[60] hover:text-black"
+                  className="text-muted-foreground hover:text-foreground relative z-[60]"
                 >
                   <ArrowDownUp size={16} />
                 </Button>
@@ -369,7 +369,7 @@ export function TemplatesSidebarContent({
           <Button
             size="icon"
             variant="ghost"
-            className="text-muted-foreground relative z-[60] hover:text-black"
+            className="text-muted-foreground hover:text-foreground relative z-[60]"
             onClick={createDefaultTemplate}
           >
             <Plus size={16} />
@@ -452,7 +452,7 @@ export function TemplatesSidebarContent({
                       ])}
                     >
                       <div className="flex items-center gap-2">
-                        <SparklesIcon className="size-4 text-violet-500" />
+                        <SparklesIcon className="text-brand size-4" />
                         <div className="min-w-0 flex-1">
                           <div className="truncate font-medium">
                             {item.title}

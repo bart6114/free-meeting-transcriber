@@ -35,7 +35,7 @@ function generatePattern(count: number): number[] {
 }
 
 export const DancingSticks = memo(function DancingSticks({
-  color = "#e5e5e5",
+  color = "currentColor",
   amplitude,
   height,
   width,

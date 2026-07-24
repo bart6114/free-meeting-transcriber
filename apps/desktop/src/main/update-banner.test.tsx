@@ -182,7 +182,7 @@ describe("SidebarTimelineUpdateButton", () => {
       expect.arrayContaining(["h-7", "w-7", "min-h-7", "min-w-7", "p-0"]),
     );
     expect(button.className.split(" ")).toEqual(
-      expect.arrayContaining(["bg-blue-500", "hover:bg-blue-600"]),
+      expect.arrayContaining(["bg-brand/10", "hover:bg-brand/20"]),
     );
     expect(button.className.split(" ")).not.toContain("bg-primary");
 

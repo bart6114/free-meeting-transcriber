@@ -17,7 +17,7 @@
   white-space: pre-wrap;
   hyphens: auto;
   padding-bottom: 24px;
-  caret-color: #374151;
+  caret-color: hsl(var(--foreground));
   min-height: 100%;
 
   :first-child {
@@ -62,5 +62,17 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-user-drag: none;
+  }
+}
+
+.prosemirror-editor.session-note-editor,
+.prosemirror-editor.enhanced-summary-editor,
+.blog-editor .prosemirror-editor {
+  font-family: var(--font-serif);
+  line-height: 1.65;
+
+  p {
+    line-height: 1.65;
+    margin-bottom: 0.5rem;
   }
 }

@@ -216,14 +216,12 @@ function CliStatus({
   return (
     <div className="mt-2 flex items-start gap-1.5 text-xs">
       {status.state === "installed" ? (
-        <CheckCircle2Icon className="mt-0.5 size-3.5 shrink-0 text-emerald-600" />
+        <CheckCircle2Icon className="text-brand mt-0.5 size-3.5 shrink-0" />
       ) : (
         <span
           className={cn([
             "mt-1 size-2 shrink-0 rounded-full",
-            status.state === "conflict"
-              ? "bg-amber-500"
-              : "bg-muted-foreground/50",
+            status.state === "conflict" ? "bg-brand" : "bg-muted-foreground/50",
           ])}
         />
       )}

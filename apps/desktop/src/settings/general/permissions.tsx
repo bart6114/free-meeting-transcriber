@@ -40,7 +40,7 @@ function PermissionRow({
         <div
           className={cn([
             "mb-1 flex items-center gap-2",
-            !isAuthorized && "text-red-500",
+            !isAuthorized && "text-destructive",
           ])}
         >
           {!isAuthorized && <AlertCircleIcon className="size-4" />}
@@ -55,8 +55,7 @@ function PermissionRow({
         disabled={isPending}
         className={cn([
           "size-8",
-          isAuthorized &&
-            "text-green-600 hover:bg-transparent hover:text-green-600",
+          isAuthorized && "text-brand hover:text-brand hover:bg-transparent",
         ])}
         aria-label={
           isAuthorized || isDenied

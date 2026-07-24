@@ -16,7 +16,7 @@
 
 .ProseMirror td,
 .ProseMirror th {
-  border: 1px solid #d1d5db;
+  border: 1px solid hsl(var(--border));
   box-sizing: border-box;
   min-width: 1em;
   padding: 0.5rem 0.75rem;
@@ -25,13 +25,13 @@
 }
 
 .ProseMirror th {
-  background-color: #f3f4f6;
+  background-color: hsl(var(--muted));
   font-weight: 600;
   text-align: left;
 }
 
 .ProseMirror .selectedCell:after {
-  background: rgba(59, 130, 246, 0.1);
+  background: hsl(var(--brand) / 0.1);
   content: "";
   left: 0;
   right: 0;
@@ -43,7 +43,7 @@
 }
 
 .ProseMirror .column-resize-handle {
-  background-color: #3b82f6;
+  background-color: hsl(var(--brand));
   bottom: -2px;
   pointer-events: none;
   position: absolute;

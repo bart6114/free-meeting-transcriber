@@ -118,7 +118,7 @@ export function AutoPromptForm({
     >
       <div className="flex h-12 shrink-0 items-center justify-between gap-3 pr-1 pl-3">
         <div className="flex min-w-0 items-center gap-2">
-          <SparklesIcon className="size-4 shrink-0 text-violet-500" />
+          <SparklesIcon className="text-brand size-4 shrink-0" />
           <span className="truncate text-sm font-semibold">Auto</span>
           <Badge variant="secondary" className="h-5 rounded-full text-[10px]">
             {isCustomized ? <Trans>Customized</Trans> : <Trans>Default</Trans>}
@@ -129,8 +129,8 @@ export function AutoPromptForm({
           size="sm"
           variant="ghost"
           className={cn([
-            "text-muted-foreground shrink-0 hover:text-black",
-            isDefault ? "bg-muted hover:bg-accent text-black" : null,
+            "text-muted-foreground hover:text-foreground shrink-0",
+            isDefault ? "bg-muted hover:bg-accent text-foreground" : null,
           ])}
           onClick={() => {
             void setSettingValue("selected_template_id", "").catch((error) => {

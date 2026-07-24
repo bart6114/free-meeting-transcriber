@@ -222,7 +222,7 @@ const ItemBase = memo(function ItemBase({
             {displayTime && (
               <div
                 className={cn([
-                  "font-mono text-xs",
+                  "timecode",
                   isLive
                     ? "text-destructive-foreground/65"
                     : "text-muted-foreground",
@@ -266,8 +266,8 @@ const ItemBase = memo(function ItemBase({
           }}
           className={cn([
             "absolute top-1/2 right-3 flex size-5 -translate-y-1/2 items-center justify-center rounded-sm",
-            "text-white/80 transition-colors hover:bg-white/15 hover:text-white",
-            "focus-visible:ring-2 focus-visible:ring-white/70 focus-visible:outline-hidden",
+            "text-destructive-foreground/80 hover:bg-destructive-foreground/15 hover:text-destructive-foreground transition-colors",
+            "focus-visible:ring-destructive-foreground/70 focus-visible:ring-2 focus-visible:outline-hidden",
           ])}
         >
           <span

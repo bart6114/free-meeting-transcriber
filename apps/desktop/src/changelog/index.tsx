@@ -67,7 +67,7 @@ function ExternalLink({
 }) {
   return (
     <a
-      className="text-blue-600 underline decoration-blue-400/40 underline-offset-2 hover:text-blue-700 dark:text-blue-400 dark:decoration-blue-500/50 dark:hover:text-blue-300"
+      className="text-brand decoration-brand/40 hover:text-brand/80 underline underline-offset-2"
       href={href}
       onClick={(e) => {
         e.preventDefault();

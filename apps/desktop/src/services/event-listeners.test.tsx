@@ -407,5 +407,4 @@ describe("EventListeners notification events", () => {
     );
     expect(openNewMock).toHaveBeenCalledTimes(1);
   });
-
 });

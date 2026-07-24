@@ -64,10 +64,10 @@ describe("ChatCTA", () => {
     expect(surface?.className).toContain("dark:h-3");
     expect(surface?.className).toContain("rounded-full");
     expect(surface?.className).toContain(
-      "bg-[linear-gradient(180deg,#faf8f6_0%,#e3e1df_100%)]",
+      "bg-[linear-gradient(180deg,hsl(var(--card))_0%,hsl(var(--muted))_100%)]",
     );
     expect(surface?.className).toContain(
-      "dark:bg-[linear-gradient(180deg,#211d1d_0%,#574f3b_100%)]",
+      "dark:bg-[linear-gradient(180deg,hsl(var(--secondary))_0%,hsl(var(--accent))_100%)]",
     );
     expect(surface?.className).toContain(
       "shadow-[0_0_0_1px_rgba(0,0,0,0.1),0_4px_12px_rgba(0,0,0,0.16),0_4px_16px_rgba(0,0,0,0.1),inset_0_-1px_0_rgba(0,0,0,0.25),inset_0_1px_0_rgba(255,255,255,0.4)]",
@@ -88,10 +88,7 @@ describe("ChatCTA", () => {
     expect(surface?.className).toContain(
       "group-hover/chat-cta:border-border/70",
     );
-    expect(surface?.className).toContain("group-hover/chat-cta:bg-[#f4f4f5]");
-    expect(surface?.className).toContain(
-      "dark:group-hover/chat-cta:bg-[#202020]",
-    );
+    expect(surface?.className).toContain("group-hover/chat-cta:bg-muted");
     expect(surface?.className).toContain("group-hover/chat-cta:h-10");
     expect(surface?.className).toContain(
       "group-hover/chat-cta:w-[min(640px,calc(100cqw_-_2rem))]",
@@ -103,7 +100,7 @@ describe("ChatCTA", () => {
     expect(surface?.className).not.toContain("inset_0_0_0_1px");
     expect(button.querySelectorAll("svg")).toHaveLength(0);
     expect(label.className).toContain("opacity-0");
-    expect(label.className).toContain("text-white/55");
+    expect(label.className).toContain("text-foreground/55");
     expect(label.className).not.toContain("ml-2");
     expect(label.className).toContain(
       "group-hover/chat-cta:text-muted-foreground",

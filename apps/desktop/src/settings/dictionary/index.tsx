@@ -100,7 +100,7 @@ export function DictionarySettings({
                   className={cn([
                     "rounded-full px-3",
                     hasInput
-                      ? "bg-black text-white hover:bg-black/90 hover:text-white dark:bg-white dark:text-black dark:hover:bg-white/90 dark:hover:text-black"
+                      ? "bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground"
                       : null,
                   ])}
                   disabled={!canAdd}

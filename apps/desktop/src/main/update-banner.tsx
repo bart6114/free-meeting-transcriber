@@ -352,9 +352,9 @@ export function SidebarTimelineUpdateButton({
       disabled={isDownloading || update.downloadStarting || update.installing}
       className={cn([
         "relative flex h-7 min-h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full p-0",
-        "bg-blue-500 text-white shadow-sm transition-colors hover:bg-blue-600",
+        "bg-brand/10 text-brand hover:bg-brand/20 shadow-sm transition-colors",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden",
-        "disabled:cursor-default disabled:bg-blue-500 disabled:text-white disabled:opacity-70 disabled:hover:bg-blue-500",
+        "disabled:bg-brand/10 disabled:text-brand disabled:hover:bg-brand/10 disabled:cursor-default disabled:opacity-70",
       ])}
       onClick={isReady ? update.installUpdate : update.downloadUpdate}
     >

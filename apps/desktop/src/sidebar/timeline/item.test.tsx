@@ -195,8 +195,8 @@ describe("TimelineItemComponent", () => {
     expect(screen.getByTestId("dancing-sticks").dataset.amplitude).toBe("0.5");
 
     const stopButton = screen.getByRole("button", { name: "Stop listening" });
-    expect(stopButton.className).toContain("text-white/80");
-    expect(stopButton.className).toContain("hover:text-white");
+    expect(stopButton.className).toContain("text-destructive-foreground/80");
+    expect(stopButton.className).toContain("hover:text-destructive-foreground");
 
     fireEvent.click(stopButton);
 

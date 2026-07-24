@@ -1026,7 +1026,7 @@ function LeftSurfaceChromeButton({
           }
           className={cn([
             "ring-background pointer-events-none absolute top-1 right-1 size-1.5 rounded-full ring-2",
-            badge === "upcomingMeeting" ? "bg-red-500" : "bg-blue-500",
+            badge === "upcomingMeeting" ? "bg-recording" : "bg-brand",
           ])}
         />
       ) : null}

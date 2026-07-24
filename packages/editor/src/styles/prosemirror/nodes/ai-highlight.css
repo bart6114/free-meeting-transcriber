@@ -1,8 +1,8 @@
 /* AI highlight - DEAD SIMPLE APPROACH */
 .prosemirror-editor mark[data-ai-highlight="true"] {
   color: inherit !important;
-  background: rgba(59, 130, 246, 0.08) !important;
-  border-bottom: 2px dotted rgba(59, 130, 246, 0.6) !important;
+  background: hsl(var(--brand) / 0.08) !important;
+  border-bottom: 2px dotted hsl(var(--brand) / 0.6) !important;
   padding: 0.1rem 0.2rem !important;
   margin: 0 !important;
   border-radius: 0 !important;
