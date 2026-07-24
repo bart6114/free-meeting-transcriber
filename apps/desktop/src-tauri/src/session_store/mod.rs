@@ -65,6 +65,17 @@ impl SessionStore {
         &self.pool
     }
 
+    /// Whether the current on-disk bytes at `relative` match the hash this store itself last
+    /// wrote there via `write_file`. `false` for anything this store has never written, or
+    /// whose bytes have since changed. This is `vault_watch.rs`'s authoritative own-write
+    /// filter -- no TTL, unlike `plugins/notify`'s upstream `mark_own_writes` mechanism (see
+    /// that module's doc for why a TTL caused a real data-loss incident in the previous
+    /// watcher).
+    pub fn journal_matches_current_file(&self, relative: &str) -> bool {
+        self.journal
+            .matches_current_file(&self.vault_base, relative)
+    }
+
     pub async fn write_file(&self, relative: PathBuf, bytes: Vec<u8>) -> Result<(), StoreError> {
         let _lock = self.write_lock.lock().await;
 

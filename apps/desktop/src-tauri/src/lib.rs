@@ -343,12 +343,13 @@ pub async fn main() {
             // module doc for the full loop-prevention analysis.
             vault_export::spawn(app_handle.clone(), db.clone());
             // Spawned last, after both the startup reconcile (above, via the
-            // session-store block) and the export worker: an external edit's import
+            // session-store block) and the export worker: an external edit's refresh
             // only needs to account for vault state from here on, since everything the
             // vault held (or the export worker had queued) at launch is already
-            // reconciled. See `vault_watch.rs`'s module doc for the full ordering + loop
-            // prevention rationale.
-            vault_watch::spawn(app_handle, db.clone());
+            // reconciled. Relies on the session-store block above having already
+            // `.manage()`d the `Arc<SessionStore>` this looks up. See `vault_watch.rs`'s
+            // module doc for the full ordering + loop prevention rationale.
+            vault_watch::spawn(app_handle);
 
             Ok(())
         })

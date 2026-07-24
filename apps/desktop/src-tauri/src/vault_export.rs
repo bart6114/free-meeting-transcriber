@@ -571,11 +571,34 @@ async fn export_session<R: tauri::Runtime>(
     .await?;
 
     let Some(row) = session_row else {
-        // The row is genuinely absent from the table, not just
-        // soft-deleted — nothing in production hard-deletes a session
-        // today, but this is the safest fallback for a state this function
-        // otherwise can't interpret (matches the pre-existing behavior).
-        trash_if_exists(app, vault_base, &session_dir).await?;
+        // REGRESSION (found via Task 11's manual incident-scenario
+        // verification): this used to unconditionally trash the folder
+        // here, on the assumption that "nothing in production hard-deletes
+        // a session" -- that assumption died with Task 8's
+        // `session_store::rebuild::refresh_session`/`rebuild_index`, which
+        // now hard-`DELETE`s a session's index row (via
+        // `delete_session_index_tx`) any time its `_meta.json` goes
+        // missing, including the exact transient/external case
+        // `should_trash_soft_deleted_session`'s doc above already
+        // identifies as needing protection -- an `rm _meta.json` (or a sync
+        // client's delete-then-recreate) reaches this branch through the
+        // *same* `vault_export_dirty` trigger fire that used to require the
+        // soft-hide marker to opt out of, but a hard-deleted row can never
+        // carry that marker, so it fell straight through to trashing
+        // `_memo.md` etc. -- reproducing the very incident this rewrite
+        // fixes, just one hop downstream in this still-active (Task 13)
+        // legacy mirror instead of in `vault_watch.rs` itself.
+        //
+        // `SessionStore::delete_session` -- the one legitimate,
+        // user-initiated deletion path in the current architecture -- does
+        // its own `move_to_trash` directly, before it ever deletes the
+        // index rows (see `session_store/content.rs`), so by the time this
+        // function's dirty-queue entry drains, the folder found by
+        // `find_session_dir` above is already gone and this branch is a
+        // no-op for that path either way. So: never trash here. Files are
+        // this app's filesystem-first source of truth; an absent index row
+        // is not, by itself, evidence that a user asked for the vault files
+        // to go away.
         return Ok(());
     };
 
@@ -1197,6 +1220,82 @@ mod tests {
         assert!(
             !hypr_db_app::is_externally_soft_hidden(&metadata_json_after_revival),
             "revival must clear the external-soft-hide marker"
+        );
+    }
+
+    /// REGRESSION (found via Task 11's manual incident-scenario verification -- see the
+    /// `Some(row) = session_row` branch's doc in `export_session` above): pins the actual
+    /// chain of causation that branch now has to defend against.
+    /// `session_store::SessionStore::refresh_session` (Task 8, the real production path an
+    /// external `_meta.json` removal drives -- via the rewritten `vault_watch.rs`, the
+    /// startup/focus `rebuild_index` rescans, or the `session_rebuild_index` command) does a
+    /// genuine hard `DELETE FROM sessions`, and that `DELETE` really does fire this crate's
+    /// own `vault_export_sessions_delete` trigger, queuing a `('session', id)` entry -- the
+    /// exact entry whose drain used to reach `export_session`'s old unconditional-trash
+    /// fallback for a row it can no longer find. `export_session` itself still can't be
+    /// exercised here (no live `AppHandle` in a unit test, see
+    /// `should_trash_soft_deleted_session`'s doc), but this proves the DB-state precondition
+    /// is real and reachable through the actual filesystem-first session store, not
+    /// hypothetical -- and confirms the fix's own reasoning: `refresh_session` never touches
+    /// files, whether or not this crate's export worker later mishandles the DB side.
+    #[tokio::test]
+    async fn hard_deleting_a_session_index_row_still_queues_a_vault_export_dirty_entry() {
+        let db = test_db().await;
+        let vault = tempfile::tempdir().unwrap();
+        let store =
+            crate::session_store::SessionStore::new(vault.path().to_path_buf(), db.pool().clone());
+
+        store
+            .write_meta(&crate::session_store::SessionMeta {
+                id: "session-hard-delete".to_string(),
+                title: "Test".to_string(),
+                started_at: None,
+                ended_at: None,
+                created_at: "2026-07-24T00:00:00Z".to_string(),
+                tags: vec![],
+            })
+            .await
+            .unwrap();
+        store
+            .write_note("session-hard-delete", "keep me")
+            .await
+            .unwrap();
+
+        sqlx::query("DELETE FROM vault_export_dirty")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        std::fs::remove_file(vault.path().join("sessions/session-hard-delete/_meta.json")).unwrap();
+        store.refresh_session("session-hard-delete").await.unwrap();
+
+        let row_exists: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id = 'session-hard-delete'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            row_exists, 0,
+            "refresh_session must hard-delete the row, not soft-delete it"
+        );
+
+        let queued: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM vault_export_dirty WHERE entity_type = 'session' AND entity_id = 'session-hard-delete'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            queued, 1,
+            "the hard delete must still reach export_session's now-fixed row-absent branch"
+        );
+
+        assert!(
+            vault
+                .path()
+                .join("sessions/session-hard-delete/_memo.md")
+                .is_file(),
+            "sanity: refresh_session itself never touches files"
         );
     }
 
