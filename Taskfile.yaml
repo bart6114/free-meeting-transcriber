@@ -7,19 +7,6 @@ tasks:
 
   bacon: bacon {{.CLI_ARGS}}
 
-  cli:ui:
-    platforms: [darwin]
-    cmds:
-      - cd apps/cli-ui && swift build -c release --arch arm64 --arch x86_64
-
-  cli:dev:
-    platforms: [darwin]
-    cmds:
-      - task: cli:ui
-      - cp apps/cli-ui/.build/apple/Products/Release/char-cli-ui target/debug/
-      - cargo run -p cli --features standalone-macos -- {{.CLI_ARGS}}
-  stat: btop -f hyprnote -u 500 --preset 1
-
   clean-plugins:
     cmds:
       - find plugins -mindepth 1 -maxdepth 1 -type d ! -exec test -f {}/Cargo.toml \; -exec rm -rf {} \;
@@ -57,69 +44,9 @@ tasks:
       - chmod +x ./apps/desktop/src-tauri/resources/stt-aarch64-apple-darwin
       - chmod +x ./apps/desktop/src-tauri/resources/passthrough-aarch64-apple-darwin
 
-  db:
-    env:
-      DB: /Users/yujonglee/Library/Application Support/hyprnote/db.sqlite
-    cmds:
-      - |
-          sqlite3 -json "$DB" 'SELECT store FROM main LIMIT 1;' |
-          jq -r '.[0].store' |
-          jless
-
   env-sample:
     vars:
       INPUT_ENV: '{{.INPUT_ENV | default ".env"}}'
       OUTPUT_ENV: '{{.OUTPUT_ENV | default ".env.sample"}}'
     cmds:
       - sed -E '/^[A-Z_][A-Z0-9_]*=/s/=.*/=""/' {{.INPUT_ENV}} > {{.OUTPUT_ENV}}
-
-  nango-dev-connection:
-    silent: true
-    requires:
-      vars: [DEV_NANGO_CONNECTION_ID]
-    vars:
-      USER_ID: '{{.USER_ID | default ""}}'
-      INTEGRATION_ID: '{{.INTEGRATION_ID | default "google-calendar"}}'
-      PROVIDER: '{{.PROVIDER | default "google-calendar"}}'
-    cmds:
-      - |
-          DB_URL=$(pnpm exec supabase status --output=env 2>/dev/null | awk -F= '/^DB_URL=/{gsub(/^"|"$/, "", $2); print $2}')
-          if [ -z "$DB_URL" ]; then
-            echo "DB_URL not found. Start local Supabase first (e.g. task supabase-start)." >&2
-            exit 1
-          fi
-
-          USER_ID="{{.USER_ID}}"
-          if [ -z "$USER_ID" ]; then
-            USER_ID=$(psql "$DB_URL" -tAc "SELECT id::text FROM auth.users ORDER BY created_at DESC LIMIT 1")
-          fi
-          if [ -z "$USER_ID" ]; then
-            echo "No user found in auth.users. Sign in once, or pass USER_ID explicitly." >&2
-            exit 1
-          fi
-
-          psql "$DB_URL" \
-            -v ON_ERROR_STOP=1 \
-            -c "INSERT INTO nango_connections (user_id, integration_id, connection_id, provider) VALUES ('$USER_ID'::uuid, '{{.INTEGRATION_ID}}', '{{.DEV_NANGO_CONNECTION_ID}}', '{{.PROVIDER}}') ON CONFLICT (user_id, integration_id) DO UPDATE SET connection_id = EXCLUDED.connection_id, provider = EXCLUDED.provider, updated_at = now(), status = 'connected', last_error_type = NULL, last_error_description = NULL, last_error_at = NULL;" \
-            >/dev/null
-
-          printf 'ok user_id=%s integration_id=%s connection_id=%s\n' "$USER_ID" "{{.INTEGRATION_ID}}" "{{.DEV_NANGO_CONNECTION_ID}}"
-
-  nango-dev-user-id:
-    silent: true
-    internal: true
-    cmds:
-      - |
-          DB_URL=$(pnpm exec supabase status --output=env 2>/dev/null | awk -F= '/^DB_URL=/{gsub(/^"|"$/, "", $2); print $2}')
-          if [ -z "$DB_URL" ]; then
-            echo "DB_URL not found. Start local Supabase first (e.g. task supabase-start)." >&2
-            exit 1
-          fi
-
-          USER_ID=$(psql "$DB_URL" -tAc "SELECT id::text FROM auth.users ORDER BY created_at DESC LIMIT 1")
-          if [ -z "$USER_ID" ]; then
-            echo "No user found in auth.users. Sign in once first." >&2
-            exit 1
-          fi
-
-          printf 'user_id=%s\n' "$USER_ID"

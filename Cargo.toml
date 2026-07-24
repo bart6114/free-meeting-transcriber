@@ -13,7 +13,6 @@ members = [
   "apps/cli",
   "apps/desktop/src-tauri",
   "crates/*",
-  "legacy/*",
   "plugins/*",
 ]
 exclude = [
@@ -160,9 +159,6 @@ hypr-whisper-local-model = { path = "crates/whisper-local-model", package = "whi
 hypr-ws-client = { path = "crates/ws-client", package = "ws-client" }
 hypr-ws-utils = { path = "crates/ws-utils", package = "ws-utils" }
 keyring = "4.1.4"
-legacy-db-core = { path = "legacy/db-core", package = "legacy-db-core" }
-legacy-db-parser = { path = "legacy/db-parser", package = "db-parser" }
-legacy-db-user = { path = "legacy/db-user", package = "db-user" }
 progenitor-client = "0.13"
 
 openai-transcription = { path = "crates/openai-transcription", package = "openai-transcription" }

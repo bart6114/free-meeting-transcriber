@@ -62,7 +62,7 @@ impl RealtimeSttAdapter for CartesiaAdapter {
             Err(error) => {
                 tracing::warn!(
                     error = ?error,
-                    hyprnote.payload.size_bytes = raw.len() as u64,
+                    fmtr.payload.size_bytes = raw.len() as u64,
                     "cartesia_json_parse_failed"
                 );
                 return vec![];

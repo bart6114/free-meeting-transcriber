@@ -37,16 +37,6 @@
     "cwd": "${configDir}",
     "commands": [
       {
-        "command": "gofmt",
-        "exts": [
-          "go"
-        ],
-        "cacheKeyFiles": [
-          "go.mod",
-          "go.sum"
-        ]
-      },
-      {
         "command": "rustfmt --edition 2024",
         "exts": [
           "rs"
@@ -74,12 +64,6 @@
         "cacheKeyFiles": [
           ".oxfmtrc.json",
           "package.json"
-        ]
-      },
-      {
-        "command": "node apps/web/scripts/format-mdx.js",
-        "exts": [
-          "mdx"
         ]
       }
     ]

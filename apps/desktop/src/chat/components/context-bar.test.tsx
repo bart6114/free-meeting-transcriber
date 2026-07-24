@@ -56,7 +56,7 @@ describe("ContextBar", () => {
             humanId: "artem",
             name: "Artem",
             email: "artem@example.com",
-            organizationName: "Char",
+            organizationName: "Acme",
             pending: true,
           },
         ]}

@@ -1,7 +1,7 @@
 import { Spinner } from "@hypr/ui/components/ui/spinner";
 
 import { useConfigValues } from "~/shared/config";
-import { isHyprnoteLocalSttModel } from "~/stt/capabilities";
+import { isFmtrLocalSttModel } from "~/stt/capabilities";
 import { useSTTConnection } from "~/stt/useSTTConnection";
 
 export type HealthStatus = {
@@ -26,16 +26,12 @@ export function useConnectionHealth(): HealthStatus {
     "current_stt_model",
   ] as const);
 
-  const isLocalModel = isHyprnoteLocalSttModel(
+  const isLocalModel = isFmtrLocalSttModel(
     current_stt_provider,
     current_stt_model,
   );
 
-  if (
-    current_stt_provider === "hyprnote" &&
-    current_stt_model &&
-    !isLocalModel
-  ) {
+  if (current_stt_provider === "fmtr" && current_stt_model && !isLocalModel) {
     return {
       status: "error",
       message: "Selected model is no longer available.",

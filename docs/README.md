@@ -1,16 +1,7 @@
-# Anarlog documentation
+# Free Meeting Transcriber documentation
 
-This Mintlify project is published at [docs.anarlog.so](https://docs.anarlog.so).
-
-## Deployment
-
-Configure the Mintlify project with `docs/` as its documentation directory and `docs.anarlog.so` as its custom domain. In Mintlify's domain setup:
-
-1. Add the verification records shown in the dashboard.
-2. Wait for both records and TLS provisioning to verify.
-3. Point the `docs` CNAME to the target shown by Mintlify.
-
-The website redirects the previous `anarlog.so/docs/*` routes to the matching path on the custom domain.
+This Mintlify project holds the Free Meeting Transcriber docs. It is not
+currently published anywhere.
 
 ## Local preview
 

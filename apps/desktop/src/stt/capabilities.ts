@@ -49,11 +49,11 @@ export function isSupportedLocalSttModel(
   );
 }
 
-export function isHyprnoteLocalSttModel(
+export function isFmtrLocalSttModel(
   provider?: string | null,
   model?: string | null,
 ): model is LocalModel {
-  return provider === "hyprnote" && isSupportedLocalSttModel(model);
+  return provider === "fmtr" && isSupportedLocalSttModel(model);
 }
 
 export function isConfiguredSttModel(
@@ -64,7 +64,7 @@ export function isConfiguredSttModel(
     return false;
   }
 
-  if (provider === "hyprnote") {
+  if (provider === "fmtr") {
     return isSupportedLocalSttModel(model);
   }
 
@@ -178,7 +178,7 @@ export async function getLiveTranscriptionConfig({
   model?: string | null;
   languages: readonly string[];
 }): Promise<LiveTranscriptionConfig> {
-  if (isHyprnoteLocalSttModel(provider, model)) {
+  if (isFmtrLocalSttModel(provider, model)) {
     return getOnDeviceTranscriptionConfig(model, languages);
   }
 

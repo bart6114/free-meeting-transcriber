@@ -31,11 +31,6 @@ describe("deterministicGenerationSettings", () => {
         model("openrouter", "anthropic/claude-opus-4-8"),
       ),
     ).toEqual({});
-    expect(
-      deterministicGenerationSettings(
-        model("hyprnote", "anthropic/claude-opus-4-8"),
-      ),
-    ).toEqual({});
   });
 
   it("omits temperature for dotted Claude 4.8 model ids", () => {

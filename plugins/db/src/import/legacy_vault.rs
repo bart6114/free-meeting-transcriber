@@ -325,10 +325,12 @@ pub(crate) async fn reconcile_vault_conflicts(
         }
 
         resolved += 1;
-        sqlx::query("UPDATE migration_import_targets SET status = 'reconciled_from_vault' WHERE id = ?")
-            .bind(&target_row_id)
-            .execute(pool)
-            .await?;
+        sqlx::query(
+            "UPDATE migration_import_targets SET status = 'reconciled_from_vault' WHERE id = ?",
+        )
+        .bind(&target_row_id)
+        .execute(pool)
+        .await?;
         sqlx::query(
             "UPDATE migration_import_items
              SET conflict_count = MAX(conflict_count - 1, 0),
@@ -373,15 +375,13 @@ async fn reconcile_session_target(
         return Ok(false);
     }
 
-    let Some((title, event_json, updated_at, deleted_at)) = sqlx::query_as::<
-        _,
-        (String, String, String, Option<String>),
-    >(
-        "SELECT title, event_json, updated_at, deleted_at FROM sessions WHERE id = ?",
-    )
-    .bind(target_id)
-    .fetch_optional(pool)
-    .await?
+    let Some((title, event_json, updated_at, deleted_at)) =
+        sqlx::query_as::<_, (String, String, String, Option<String>)>(
+            "SELECT title, event_json, updated_at, deleted_at FROM sessions WHERE id = ?",
+        )
+        .bind(target_id)
+        .fetch_optional(pool)
+        .await?
     else {
         return Ok(false);
     };
@@ -451,17 +451,15 @@ async fn reconcile_document_target(
         return Ok(false);
     }
 
-    let Some((session_id, title, body_format, body, updated_at, deleted_at)) = sqlx::query_as::<
-        _,
-        (String, String, String, String, String, Option<String>),
-    >(
-        "SELECT session_id, title, body_format, body, updated_at, deleted_at
+    let Some((session_id, title, body_format, body, updated_at, deleted_at)) =
+        sqlx::query_as::<_, (String, String, String, String, String, Option<String>)>(
+            "SELECT session_id, title, body_format, body, updated_at, deleted_at
          FROM session_documents
          WHERE id = ?",
-    )
-    .bind(target_id)
-    .fetch_optional(pool)
-    .await?
+        )
+        .bind(target_id)
+        .fetch_optional(pool)
+        .await?
     else {
         return Ok(false);
     };
@@ -475,7 +473,10 @@ async fn reconcile_document_target(
             file_path,
             ConflictBackup::Markdown {
                 frontmatter: [
-                    ("id".to_string(), serde_json::Value::String(target_id.to_string())),
+                    (
+                        "id".to_string(),
+                        serde_json::Value::String(target_id.to_string()),
+                    ),
                     (
                         "session_id".to_string(),
                         serde_json::Value::String(document.session_id.clone()),
@@ -631,10 +632,16 @@ enum ConflictBackup {
 /// relying on `std::fs::write`'s buffered, unflushed write.
 fn export_conflict_backup(file_path: &Path, backup: ConflictBackup) -> crate::Result<PathBuf> {
     let rendered = match backup {
-        ConflictBackup::Markdown { frontmatter, content } => ParsedDocument { frontmatter, content }
-            .render()
-            .map_err(|error| std::io::Error::other(error.to_string()))?
-            .into_bytes(),
+        ConflictBackup::Markdown {
+            frontmatter,
+            content,
+        } => ParsedDocument {
+            frontmatter,
+            content,
+        }
+        .render()
+        .map_err(|error| std::io::Error::other(error.to_string()))?
+        .into_bytes(),
         ConflictBackup::Json(value) => serde_json::to_vec_pretty(&value)?,
     };
 

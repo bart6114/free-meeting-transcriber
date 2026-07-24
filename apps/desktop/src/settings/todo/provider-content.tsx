@@ -1,14 +1,17 @@
 import { useLingui } from "@lingui/react/macro";
 
-import type { TodoProvider } from "./shared";
-
 import { AccessPermissionRow, TroubleShootingLink } from "./permission";
+import type { TodoProvider } from "./shared";
 
 import { usePermission } from "~/shared/hooks/usePermissions";
 
 // GitHub/Linear OAuth todo providers were removed (Task 4 review fix) — see
 // ./shared.tsx. Apple Reminders is the only remaining provider.
-export function TodoProviderContent({ config: _config }: { config: TodoProvider }) {
+export function TodoProviderContent({
+  config: _config,
+}: {
+  config: TodoProvider;
+}) {
   return <AppleRemindersProviderContent />;
 }
 

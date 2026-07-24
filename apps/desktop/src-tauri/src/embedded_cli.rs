@@ -271,50 +271,6 @@ fn is_replaceable_symlink_target(target: &Path, managed_path: &Path) -> bool {
     managed_path
         .parent()
         .is_some_and(|managed_dir| target.parent() == Some(managed_dir))
-        || is_legacy_app_cli_target(target)
-}
-
-#[cfg(target_os = "macos")]
-fn is_legacy_app_cli_target(target: &Path) -> bool {
-    let Some(file_name) = target.file_name().and_then(|name| name.to_str()) else {
-        return false;
-    };
-    if !matches!(
-        file_name,
-        "anarlog-cli" | "anarlog-cli-aarch64-apple-darwin" | "anarlog-cli-x86_64-apple-darwin"
-    ) {
-        return false;
-    }
-
-    let Some(parent) = target.parent() else {
-        return false;
-    };
-    let contents_dir = match parent.file_name().and_then(|name| name.to_str()) {
-        Some("MacOS") | Some("Resources") => parent.parent(),
-        Some("cli") => parent
-            .parent()
-            .filter(|path| path.file_name().is_some_and(|name| name == "Resources"))
-            .and_then(Path::parent),
-        _ => None,
-    };
-    let Some(app_name) = contents_dir
-        .filter(|path| path.file_name().is_some_and(|name| name == "Contents"))
-        .and_then(|path| path.parent())
-        .and_then(|path| path.file_name())
-        .and_then(|name| name.to_str())
-    else {
-        return false;
-    };
-
-    matches!(
-        app_name,
-        "Free Meeting Transcriber.app"
-            | "Free Meeting Transcriber Staging.app"
-            | "Free Meeting Transcriber Dev.app"
-            | "Anarlog.app"
-            | "Anarlog Staging.app"
-            | "Anarlog Dev.app"
-    )
 }
 
 #[cfg(target_os = "macos")]
@@ -513,10 +469,10 @@ mod tests {
     #[test]
     fn classifies_missing_install() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = dir.path().join("anarlog-cli");
+        let resource_path = dir.path().join("fmtr-cli");
         std::fs::write(&resource_path, "cli").unwrap();
 
-        let state = classify_installation(&dir.path().join("anarlog"), &resource_path).unwrap();
+        let state = classify_installation(&dir.path().join("fmtr"), &resource_path).unwrap();
         assert_eq!(state, EmbeddedCliState::Missing);
     }
 
@@ -524,10 +480,10 @@ mod tests {
     #[test]
     fn classifies_installed_symlink() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("managed-anarlog-cli");
+        let managed_path = dir.path().join("managed-fmtr-cli");
         std::fs::write(&managed_path, "cli").unwrap();
         std::fs::set_permissions(&managed_path, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let install_path = dir.path().join("anarlog");
+        let install_path = dir.path().join("fmtr");
         std::os::unix::fs::symlink(&managed_path, &install_path).unwrap();
 
         let state = classify_installation(&install_path, &managed_path).unwrap();
@@ -538,10 +494,10 @@ mod tests {
     #[test]
     fn classifies_non_executable_managed_cli_as_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("managed-anarlog-cli");
+        let managed_path = dir.path().join("managed-fmtr-cli");
         std::fs::write(&managed_path, "cli").unwrap();
         std::fs::set_permissions(&managed_path, std::fs::Permissions::from_mode(0o644)).unwrap();
-        let install_path = dir.path().join("anarlog");
+        let install_path = dir.path().join("fmtr");
         std::os::unix::fs::symlink(&managed_path, &install_path).unwrap();
 
         assert_eq!(
@@ -554,9 +510,9 @@ mod tests {
     #[test]
     fn classifies_stale_symlinks_as_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("anarlog-cli");
-        let old_managed_path = dir.path().join("old-anarlog-cli");
-        let install_path = dir.path().join("anarlog");
+        let managed_path = dir.path().join("fmtr-cli");
+        let old_managed_path = dir.path().join("old-fmtr-cli");
+        let install_path = dir.path().join("fmtr");
         std::fs::write(&managed_path, "new cli").unwrap();
         std::fs::write(&old_managed_path, "old cli").unwrap();
         std::os::unix::fs::symlink(&old_managed_path, &install_path).unwrap();
@@ -575,85 +531,11 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn classifies_legacy_app_resource_symlink_as_missing() {
-        let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("managed-anarlog-cli");
-        let app_resource_path = dir
-            .path()
-            .join("Anarlog.app/Contents/Resources/anarlog-cli");
-        let install_path = dir.path().join("anarlog");
-        std::fs::create_dir_all(app_resource_path.parent().unwrap()).unwrap();
-        std::fs::write(&app_resource_path, "cli").unwrap();
-        std::os::unix::fs::symlink(&app_resource_path, &install_path).unwrap();
-
-        assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Missing
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn classifies_legacy_app_executable_symlink_as_missing() {
-        let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join(".anarlog-cli/anarlog/1.2.0");
-        let app_executable_path = dir.path().join("Anarlog.app/Contents/MacOS/anarlog-cli");
-        let install_path = dir.path().join("anarlog");
-        std::fs::create_dir_all(app_executable_path.parent().unwrap()).unwrap();
-        std::fs::write(&app_executable_path, "cli").unwrap();
-        std::os::unix::fs::symlink(&app_executable_path, &install_path).unwrap();
-
-        assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Missing
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn classifies_renamed_app_executable_symlink_as_missing() {
-        let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
-        let app_executable_path = dir
-            .path()
-            .join("Free Meeting Transcriber.app/Contents/MacOS/anarlog-cli");
-        let install_path = dir.path().join("fmtr");
-        std::fs::create_dir_all(app_executable_path.parent().unwrap()).unwrap();
-        std::fs::write(&app_executable_path, "cli").unwrap();
-        std::os::unix::fs::symlink(&app_executable_path, &install_path).unwrap();
-
-        assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Missing
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn installer_replaces_legacy_app_executable_symlink() {
-        let dir = tempfile::tempdir().unwrap();
-        let resource_path = dir.path().join("bundled-anarlog-cli");
-        let managed_path = dir.path().join(".anarlog-cli/anarlog/1.2.0");
-        let app_executable_path = dir.path().join("Anarlog.app/Contents/MacOS/anarlog-cli");
-        let install_path = dir.path().join("anarlog");
-        std::fs::write(&resource_path, "new cli").unwrap();
-        std::fs::create_dir_all(app_executable_path.parent().unwrap()).unwrap();
-        std::fs::write(&app_executable_path, "old cli").unwrap();
-        std::os::unix::fs::symlink(&app_executable_path, &install_path).unwrap();
-
-        install_managed_cli(&resource_path, &managed_path, &install_path).unwrap();
-
-        assert_eq!(std::fs::read_link(&install_path).unwrap(), managed_path);
-        assert_eq!(std::fs::read_to_string(&install_path).unwrap(), "new cli");
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
     fn classifies_foreign_symlink_as_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join(".anarlog-cli/anarlog/1.2.0");
-        let install_path = dir.path().join("anarlog");
-        std::os::unix::fs::symlink("/opt/homebrew/bin/anarlog", &install_path).unwrap();
+        let managed_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
+        let install_path = dir.path().join("fmtr");
+        std::os::unix::fs::symlink("/opt/homebrew/bin/fmtr", &install_path).unwrap();
 
         assert_eq!(
             classify_installation(&install_path, &managed_path).unwrap(),
@@ -665,10 +547,10 @@ mod tests {
     #[test]
     fn installer_refuses_to_replace_foreign_symlink() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = dir.path().join("bundled-anarlog-cli");
-        let managed_path = dir.path().join(".anarlog-cli/anarlog/1.2.0");
-        let install_path = dir.path().join("anarlog");
-        let foreign_target = Path::new("/opt/homebrew/bin/anarlog");
+        let resource_path = dir.path().join("bundled-fmtr-cli");
+        let managed_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
+        let install_path = dir.path().join("fmtr");
+        let foreign_target = Path::new("/opt/homebrew/bin/fmtr");
         std::fs::write(&resource_path, "cli").unwrap();
         std::os::unix::fs::symlink(foreign_target, &install_path).unwrap();
 
@@ -680,15 +562,17 @@ mod tests {
     #[test]
     fn installed_cli_survives_bundled_resource_move() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = dir.path().join("Anarlog.app/Contents/MacOS/anarlog-cli");
-        let install_path = dir.path().join("home/.local/bin/anarlog");
-        let managed_path = managed_binary_path(&install_path, "anarlog", "1.2.0").unwrap();
+        let resource_path = dir
+            .path()
+            .join("Free Meeting Transcriber.app/Contents/MacOS/fmtr-cli");
+        let install_path = dir.path().join("home/.local/bin/fmtr");
+        let managed_path = managed_binary_path(&install_path, "fmtr", "1.2.0").unwrap();
         std::fs::create_dir_all(resource_path.parent().unwrap()).unwrap();
         std::fs::write(&resource_path, "cli").unwrap();
         std::fs::set_permissions(&resource_path, std::fs::Permissions::from_mode(0o644)).unwrap();
 
         install_managed_cli(&resource_path, &managed_path, &install_path).unwrap();
-        std::fs::remove_dir_all(dir.path().join("Anarlog.app")).unwrap();
+        std::fs::remove_dir_all(dir.path().join("Free Meeting Transcriber.app")).unwrap();
 
         assert_eq!(std::fs::read_to_string(&install_path).unwrap(), "cli");
         assert_ne!(
@@ -709,11 +593,11 @@ mod tests {
     #[test]
     fn app_update_requires_installing_the_new_cli_version() {
         let dir = tempfile::tempdir().unwrap();
-        let install_path = dir.path().join("home/.local/bin/anarlog");
+        let install_path = dir.path().join("home/.local/bin/fmtr");
         let old_resource_path = dir.path().join("old-cli");
         let new_resource_path = dir.path().join("new-cli");
-        let old_managed_path = managed_binary_path(&install_path, "anarlog", "1.2.0").unwrap();
-        let new_managed_path = managed_binary_path(&install_path, "anarlog", "1.3.0").unwrap();
+        let old_managed_path = managed_binary_path(&install_path, "fmtr", "1.2.0").unwrap();
+        let new_managed_path = managed_binary_path(&install_path, "fmtr", "1.3.0").unwrap();
         std::fs::write(&old_resource_path, "old cli").unwrap();
         std::fs::write(&new_resource_path, "new cli").unwrap();
         install_managed_cli(&old_resource_path, &old_managed_path, &install_path).unwrap();
@@ -735,8 +619,8 @@ mod tests {
     #[test]
     fn classifies_regular_file_as_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("anarlog-cli");
-        let install_path = dir.path().join("anarlog");
+        let managed_path = dir.path().join("fmtr-cli");
+        let install_path = dir.path().join("fmtr");
         std::fs::write(&managed_path, "cli").unwrap();
         std::fs::write(&install_path, "other").unwrap();
 

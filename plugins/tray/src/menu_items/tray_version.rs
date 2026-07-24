@@ -10,15 +10,12 @@ pub struct TrayVersion;
 impl TrayVersion {
     fn get_channel(identifier: &str, app_name: &str) -> &'static str {
         match identifier {
-            "org.freemeetingtranscriber.stable" | "com.hyprnote.stable" | "com.hyprnote.Hyprnote" => {
-                "stable"
-            }
-            "org.freemeetingtranscriber.staging" | "com.hyprnote.staging" => "staging",
-            "org.freemeetingtranscriber.dev" | "com.hyprnote.dev" => "dev",
+            "org.freemeetingtranscriber.stable" => "stable",
+            "org.freemeetingtranscriber.staging" => "staging",
+            "org.freemeetingtranscriber.dev" => "dev",
             _ => match app_name {
-                "Free Meeting Transcriber" | "Anarlog" | "Char" | "Hyprnote" => "stable",
-                "Free Meeting Transcriber Staging" | "Anarlog Staging" | "Char Staging"
-                | "Hyprnote Staging" => "staging",
+                "Free Meeting Transcriber" => "stable",
+                "Free Meeting Transcriber Staging" => "staging",
                 _ => "dev",
             },
         }
@@ -49,7 +46,10 @@ mod tests {
     #[test]
     fn gets_channel_from_identifier() {
         assert_eq!(
-            TrayVersion::get_channel("org.freemeetingtranscriber.stable", "Free Meeting Transcriber"),
+            TrayVersion::get_channel(
+                "org.freemeetingtranscriber.stable",
+                "Free Meeting Transcriber"
+            ),
             "stable"
         );
         assert_eq!(
@@ -64,18 +64,6 @@ mod tests {
                 "org.freemeetingtranscriber.dev",
                 "Free Meeting Transcriber Dev"
             ),
-            "dev"
-        );
-        assert_eq!(
-            TrayVersion::get_channel("com.hyprnote.stable", "Anarlog"),
-            "stable"
-        );
-        assert_eq!(
-            TrayVersion::get_channel("com.hyprnote.staging", "Anarlog Staging"),
-            "staging"
-        );
-        assert_eq!(
-            TrayVersion::get_channel("com.hyprnote.dev", "Anarlog Dev"),
             "dev"
         );
     }
@@ -94,11 +82,5 @@ mod tests {
             TrayVersion::get_channel("unknown", "Free Meeting Transcriber Dev"),
             "dev"
         );
-        assert_eq!(TrayVersion::get_channel("unknown", "Anarlog"), "stable");
-        assert_eq!(
-            TrayVersion::get_channel("unknown", "Anarlog Staging"),
-            "staging"
-        );
-        assert_eq!(TrayVersion::get_channel("unknown", "Anarlog Dev"), "dev");
     }
 }

@@ -779,9 +779,7 @@ describe("TimelineView", () => {
     vi.setSystemTime(new Date("2024-01-15T12:30:01.000Z"));
     mocks.currentTimeMs = Date.now();
     fireEvent.focus(window);
-    rerender(
-      <TimelineView topChromeInset showIgnoredEvents={false} />,
-    );
+    rerender(<TimelineView topChromeInset showIgnoredEvents={false} />);
 
     expect(
       container.querySelector("[data-sidebar-upcoming-meeting-status]"),

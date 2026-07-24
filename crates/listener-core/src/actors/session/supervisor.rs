@@ -743,10 +743,10 @@ mod tests {
     }
 
     #[test]
-    fn hyprnote_proxy_soniox_listener_failure_enters_batch_fallback() {
+    fn fmtr_proxy_soniox_listener_failure_enters_batch_fallback() {
         let mut ctx = test_ctx();
-        ctx.params.base_url = "https://api.hyprnote.com/stt?provider=soniox".to_string();
-        ctx.params.model = "cloud".to_string();
+        ctx.params.base_url = "http://localhost:8787/stt?provider=soniox".to_string();
+        ctx.params.model = "nova-3".to_string();
         let state = test_state(ctx);
 
         assert!(!should_stop_on_listener_failure(&state));

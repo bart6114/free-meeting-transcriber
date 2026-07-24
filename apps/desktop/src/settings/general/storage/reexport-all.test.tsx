@@ -1,5 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -56,7 +62,9 @@ describe("ReExportAllFilesRow", () => {
     mocks.exportVaultNow.mockResolvedValue({ status: "ok", data: null });
     renderRow();
 
-    fireEvent.click(screen.getByRole("button", { name: /re-export all files/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /re-export all files/i }),
+    );
 
     await waitFor(() => expect(mocks.exportVaultNow).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledTimes(1));
@@ -70,7 +78,9 @@ describe("ReExportAllFilesRow", () => {
     });
     renderRow();
 
-    fireEvent.click(screen.getByRole("button", { name: /re-export all files/i }));
+    fireEvent.click(
+      screen.getByRole("button", { name: /re-export all files/i }),
+    );
 
     await waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledWith("vault base unavailable"),

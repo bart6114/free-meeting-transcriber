@@ -8,7 +8,7 @@
 - Write for Free Meeting Transcriber users, developers, and agents using the
   CLI or MCP server.
 - Configuration lives in `docs.json`; content pages are MDX.
-- The public agent skill is maintained in `../skills/anarlog/`.
+- The public agent skill is maintained in `../skills/fmtr/`.
 
 ## Sources of truth
 

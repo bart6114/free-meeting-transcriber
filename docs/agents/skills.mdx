@@ -1,35 +1,28 @@
 ---
-title: "Anarlog skill"
-description: "Teach a compatible agent when and how to use Anarlog's MCP and CLI surfaces."
+title: "Free Meeting Transcriber skill"
+description: "Teach a compatible agent when and how to use Free Meeting Transcriber's MCP and CLI surfaces."
 ---
 
-The public Anarlog skill gives agents one transport-agnostic workflow:
+The public Free Meeting Transcriber skill gives agents one transport-agnostic workflow:
 
-1. Prefer connected Anarlog MCP tools.
-2. Fall back to `anarlog --json` when MCP is unavailable.
+1. Prefer connected Free Meeting Transcriber MCP tools.
+2. Fall back to `fmtr --json` when MCP is unavailable.
 3. Resolve meeting IDs from search results.
 4. Fetch meeting detail before transcript text.
 5. Keep transcript reads bounded and never access SQLite directly.
 
-## Canonical sources
+## Canonical source
 
-- Public skill: `https://docs.anarlog.so/skill.md`
-- Repository package: [`skills/anarlog`](https://github.com/fastrepl/anarlog/tree/main/skills/anarlog)
+- Repository package: [`skills/fmtr`](https://github.com/bart6114/free-meeting-transcriber/tree/main/skills/fmtr)
 
 The repository package includes concise references for setup, CLI commands, MCP tools, and errors.
 
 ## Install in an agent
 
-Install from the public documentation with the open skills CLI:
-
-```bash
-npx skills add https://docs.anarlog.so
-```
-
-For a filesystem-based agent, copy the complete `skills/anarlog` directory into that agent's skills directory. Keep the directory name `anarlog` so relative reference links continue to work.
+For a filesystem-based agent, copy the complete `skills/fmtr` directory into that agent's skills directory. Keep the directory name `fmtr` so relative reference links continue to work.
 
 <Note>
   Agent skill locations and installer commands vary by client. Follow your agent's skill installation instructions rather than copying only `SKILL.md`.
 </Note>
 
-The contributor skills under `.agents/skills` are internal repository workflows. They are not part of the public Anarlog skill.
+The contributor skills under `.agents/skills` are internal repository workflows. They are not part of the public Free Meeting Transcriber skill.

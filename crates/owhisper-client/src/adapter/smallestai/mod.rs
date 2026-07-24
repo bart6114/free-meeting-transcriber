@@ -161,9 +161,9 @@ mod tests {
     #[test]
     fn test_build_ws_url_from_base_proxy() {
         let (url, params) = SmallestAIAdapter::build_ws_url_from_base(
-            "https://api.hyprnote.com/stt?provider=smallestai",
+            "http://localhost:8787/stt?provider=smallestai",
         );
-        assert_eq!(url.as_str(), "wss://api.hyprnote.com/stt/listen");
+        assert_eq!(url.as_str(), "ws://localhost:8787/stt/listen");
         assert_eq!(
             params,
             vec![("provider".to_string(), "smallestai".to_string())]

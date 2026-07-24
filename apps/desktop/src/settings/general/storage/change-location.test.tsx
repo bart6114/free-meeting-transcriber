@@ -125,9 +125,7 @@ describe("ChangeLocationRow", () => {
       ),
     ).toBeTruthy();
 
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: /^change$/i }),
-    );
+    fireEvent.click(within(dialog).getByRole("button", { name: /^change$/i }));
 
     await waitFor(() =>
       expect(mocks.copyVault).toHaveBeenCalledWith(
@@ -155,9 +153,7 @@ describe("ChangeLocationRow", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /change/i }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: /^change$/i }),
-    );
+    fireEvent.click(within(dialog).getByRole("button", { name: /^change$/i }));
 
     await waitFor(() =>
       expect(
@@ -187,8 +183,6 @@ describe("ChangeLocationRow", () => {
     fireEvent.click(quickPick);
 
     const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByText(/Documents\/MyVault/),
-    ).toBeTruthy();
+    expect(within(dialog).getByText(/Documents\/MyVault/)).toBeTruthy();
   });
 });

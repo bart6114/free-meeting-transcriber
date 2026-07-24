@@ -16,8 +16,7 @@ impl ShareOpenRequest {
         if !matches!(
             parsed.scheme(),
             "freemeetingtranscriber" | "freemeetingtranscriber-staging"
-        )
-            || parsed.host_str() != Some("share")
+        ) || parsed.host_str() != Some("share")
             || parsed.path() != "/open"
             || !parsed.username().is_empty()
             || parsed.password().is_some()
@@ -128,8 +127,6 @@ mod tests {
     fn rejects_noncanonical_or_ambiguous_routes() {
         let invalid = [
             format!("hypr://share/open?mode=account&share_id={SHARE_ID}"),
-            format!("char://share/open?mode=account&share_id={SHARE_ID}"),
-            format!("hyprnote://share/open?mode=account&share_id={SHARE_ID}"),
             format!("freemeetingtranscriber://share/open/?mode=account&share_id={SHARE_ID}"),
             format!(
                 "freemeetingtranscriber://share/open?mode=account&share_id={SHARE_ID}#fragment"

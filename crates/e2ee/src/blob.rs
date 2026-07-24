@@ -14,7 +14,7 @@ use super::WorkspaceKey;
 pub const ATTACHMENT_BLOB_CHUNK_SIZE: usize = 4 * 1024 * 1024;
 pub const ATTACHMENT_BLOB_MAX_PLAINTEXT_BYTES: u64 = 512 * 1024 * 1024;
 
-const MAGIC: &[u8; 8] = b"ANABLB01";
+const MAGIC: &[u8; 8] = b"FMTBLB01";
 const VERSION: u8 = 1;
 const HEADER_SCHEMA_VERSION: u8 = 1;
 const AEAD_TAG_BYTES: u64 = 16;
@@ -24,15 +24,14 @@ const FIXED_PREFIX_BYTES: usize = MAGIC.len() + 1 + HEADER_NONCE_BYTES + 4;
 const MAX_WORKSPACE_ID_BYTES: usize = 256;
 const MAX_ATTACHMENT_ID_BYTES: usize = 1024;
 const CANONICAL_UUID_BYTES: usize = 36;
-const BLOB_KEY_SALT: &[u8] = b"anarlog-e2ee-attachment-blob-key-v1";
-const BLOB_KEY_INFO_DOMAIN: &[u8] = b"anarlog-e2ee-attachment-blob-object-v1";
-const HEADER_KEY_INFO: &[u8] = b"anarlog-e2ee-attachment-blob-header-key-v1";
-const CHUNK_KEY_INFO: &[u8] = b"anarlog-e2ee-attachment-blob-chunk-key-v1";
-const HEADER_AAD_DOMAIN: &[u8] = b"anarlog-e2ee-attachment-blob-header-aad-v1";
-const CHUNK_AAD_DOMAIN: &[u8] = b"anarlog-e2ee-attachment-blob-chunk-aad-v1";
-const ATTACHMENT_BACKUP_REF_DOMAIN: &[u8] = b"anarlog-e2ee-attachment-backup-ref-v1";
-const ATTACHMENT_BACKUP_VERSION_REF_DOMAIN: &[u8] =
-    b"anarlog-e2ee-attachment-backup-version-ref-v1";
+const BLOB_KEY_SALT: &[u8] = b"fmtr-e2ee-attachment-blob-key-v1";
+const BLOB_KEY_INFO_DOMAIN: &[u8] = b"fmtr-e2ee-attachment-blob-object-v1";
+const HEADER_KEY_INFO: &[u8] = b"fmtr-e2ee-attachment-blob-header-key-v1";
+const CHUNK_KEY_INFO: &[u8] = b"fmtr-e2ee-attachment-blob-chunk-key-v1";
+const HEADER_AAD_DOMAIN: &[u8] = b"fmtr-e2ee-attachment-blob-header-aad-v1";
+const CHUNK_AAD_DOMAIN: &[u8] = b"fmtr-e2ee-attachment-blob-chunk-aad-v1";
+const ATTACHMENT_BACKUP_REF_DOMAIN: &[u8] = b"fmtr-e2ee-attachment-backup-ref-v1";
+const ATTACHMENT_BACKUP_VERSION_REF_DOMAIN: &[u8] = b"fmtr-e2ee-attachment-backup-version-ref-v1";
 
 #[derive(Debug, thiserror::Error)]
 pub enum AttachmentBlobError {
@@ -871,13 +870,10 @@ mod tests {
     const OBJECT_ID: &str = "019f6b9d-5ca3-7e61-8414-2be0ad5d9712";
 
     fn key(seed: u8) -> WorkspaceKey {
-        RecoveryKey::parse(&format!(
-            "anarlog-e2ee-v1:{}",
-            base64_url_no_pad(&[seed; 32])
-        ))
-        .unwrap()
-        .workspace_key("workspace-a")
-        .unwrap()
+        RecoveryKey::parse(&format!("fmtr-e2ee-v1:{}", base64_url_no_pad(&[seed; 32])))
+            .unwrap()
+            .workspace_key("workspace-a")
+            .unwrap()
     }
 
     fn context() -> AttachmentBlobContext {

@@ -280,7 +280,7 @@ describe("useStartListening", () => {
     leftSidebarExpanded.value = true;
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "am-test",
         baseUrl: "http://localhost:8080",
         apiKey: "",
@@ -764,7 +764,7 @@ describe("useStartListening", () => {
   test("forces batch transcription for batch-only local models with realtime stored", async () => {
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-qwen3-small",
         baseUrl: "http://localhost:8080",
         apiKey: "",
@@ -785,7 +785,7 @@ describe("useStartListening", () => {
   test("uses live transcription for realtime local models", async () => {
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-parakeet-streaming",
         baseUrl: "http://localhost:8080",
         apiKey: "",
@@ -813,7 +813,7 @@ describe("useStartListening", () => {
     );
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-parakeet-streaming",
         baseUrl: "http://localhost:8080",
         apiKey: "",
@@ -842,7 +842,7 @@ describe("useStartListening", () => {
     );
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-parakeet-streaming",
         baseUrl: "http://localhost:8080",
         apiKey: "",

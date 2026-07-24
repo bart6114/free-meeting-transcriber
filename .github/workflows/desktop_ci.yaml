@@ -180,7 +180,7 @@ jobs:
       - if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: anarlog-windows-x64-nsis-${{ github.sha }}
+          name: fmtr-windows-x64-nsis-${{ github.sha }}
           path: |
             apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
             apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sha256

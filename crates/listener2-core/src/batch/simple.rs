@@ -4,8 +4,8 @@ use std::time::Instant;
 
 use owhisper_client::{
     AdapterKind, AquaVoiceAdapter, ArgmaxAdapter, AssemblyAIAdapter, BatchSttAdapter,
-    CartesiaAdapter, DeepgramAdapter, ElevenLabsAdapter, FireworksAdapter, GladiaAdapter,
-    HyprnoteAdapter, MistralAdapter, OpenAIAdapter, PyannoteAdapter, SonioxAdapter,
+    CartesiaAdapter, DeepgramAdapter, ElevenLabsAdapter, FireworksAdapter, FmtrAdapter,
+    GladiaAdapter, MistralAdapter, OpenAIAdapter, PyannoteAdapter, SonioxAdapter,
 };
 use owhisper_interface::batch_stream::BatchStreamEvent;
 use tracing::Instrument;
@@ -59,7 +59,7 @@ pub(super) async fn run_direct_batch_for_adapter_kind(
         ElevenLabs => ElevenLabsAdapter,
         Pyannote => PyannoteAdapter,
         Mistral => MistralAdapter,
-        Hyprnote => HyprnoteAdapter,
+        Fmtr => FmtrAdapter,
         AquaVoice => AquaVoiceAdapter,
     }, unsupported: [DashScope])
 }
@@ -86,7 +86,7 @@ async fn run_direct_batch<A: BatchSttAdapter>(
                 let message = format_user_friendly_error(&raw_error);
                 tracing::error!(
                     error = %raw_error,
-                    hyprnote.error.user_message = %message,
+                    fmtr.error.user_message = %message,
                     "batch transcription failed"
                 );
                 return Err(crate::BatchFailure::DirectRequestFailed {
@@ -146,10 +146,10 @@ pub(super) async fn run_soniqo_batch(
         let started_at = Instant::now();
 
         tracing::info!(
-            hyprnote.stt.provider.name = "soniqo",
-            hyprnote.stt.model = %model,
-            hyprnote.stt.language = %language_label,
-            hyprnote.stt.language_hint = %language_hint_label,
+            fmtr.stt.provider.name = "soniqo",
+            fmtr.stt.model = %model,
+            fmtr.stt.language = %language_label,
+            fmtr.stt.language_hint = %language_hint_label,
             file.extension = %file_extension,
             "soniqo_batch_start"
         );
@@ -165,8 +165,8 @@ pub(super) async fn run_soniqo_batch(
         .await
         .map_err(|e| {
             tracing::error!(
-                hyprnote.stt.provider.name = "soniqo",
-                hyprnote.stt.model = %model,
+                fmtr.stt.provider.name = "soniqo",
+                fmtr.stt.model = %model,
                 error = %e,
                 "soniqo_batch_task_join_failed"
             );
@@ -178,10 +178,10 @@ pub(super) async fn run_soniqo_batch(
         .map_err(|e| {
             let message = format_user_friendly_error(&e);
             tracing::error!(
-                hyprnote.stt.provider.name = "soniqo",
-                hyprnote.stt.model = %model,
+                fmtr.stt.provider.name = "soniqo",
+                fmtr.stt.model = %model,
                 error = %e,
-                hyprnote.error.user_message = %message,
+                fmtr.error.user_message = %message,
                 "soniqo_batch_failed"
             );
             crate::BatchFailure::DirectRequestFailed {
@@ -191,8 +191,8 @@ pub(super) async fn run_soniqo_batch(
         })?;
 
         tracing::info!(
-            hyprnote.stt.provider.name = "soniqo",
-            hyprnote.stt.model = %model,
+            fmtr.stt.provider.name = "soniqo",
+            fmtr.stt.model = %model,
             elapsed_ms = started_at.elapsed().as_millis() as u64,
             transcript.channel_count = transcribed.len(),
             "soniqo_batch_completed"
@@ -224,9 +224,9 @@ fn transcribe_soniqo_file(
         .map(|duration| duration.as_millis().min(u128::from(u64::MAX)) as u64);
 
     tracing::info!(
-        hyprnote.stt.provider.name = "soniqo",
-        hyprnote.stt.model = %model,
-        hyprnote.stt.language = %language.unwrap_or("auto"),
+        fmtr.stt.provider.name = "soniqo",
+        fmtr.stt.model = %model,
+        fmtr.stt.language = %language.unwrap_or("auto"),
         audio.channel_count = channel_count,
         audio.sample_rate_hz = sample_rate,
         audio.duration_ms = duration_ms.unwrap_or_default(),
@@ -239,8 +239,8 @@ fn transcribe_soniqo_file(
             progress.emit(SONIQO_PROGRESS_PLANNED);
         }
         tracing::info!(
-            hyprnote.stt.provider.name = "soniqo",
-            hyprnote.stt.model = %model,
+            fmtr.stt.provider.name = "soniqo",
+            fmtr.stt.model = %model,
             "soniqo_single_channel_native_inference_start"
         );
         return hypr_transcribe_soniqo::transcribe_file(model, file_path, language)
@@ -257,8 +257,8 @@ fn transcribe_soniqo_file(
     let samples =
         hypr_audio_utils::resample_audio(source, TARGET_SAMPLE_RATE).map_err(|e| e.to_string())?;
     tracing::info!(
-        hyprnote.stt.provider.name = "soniqo",
-        hyprnote.stt.model = %model,
+        fmtr.stt.provider.name = "soniqo",
+        fmtr.stt.model = %model,
         elapsed_ms = resample_started_at.elapsed().as_millis() as u64,
         audio.source_sample_rate_hz = sample_rate,
         audio.target_sample_rate_hz = TARGET_SAMPLE_RATE,
@@ -269,8 +269,8 @@ fn transcribe_soniqo_file(
     let channel_samples =
         collapse_identical_channels(split_resampled_channels(&samples, channel_count));
     tracing::info!(
-        hyprnote.stt.provider.name = "soniqo",
-        hyprnote.stt.model = %model,
+        fmtr.stt.provider.name = "soniqo",
+        fmtr.stt.model = %model,
         audio.source_channel_count = channel_count,
         audio.transcribed_channel_count = channel_samples.len(),
         "soniqo_channels_prepared"
@@ -366,7 +366,7 @@ where
             Err(error) => {
                 failed_channels += 1;
                 tracing::warn!(
-                    hyprnote.stt.provider.name = "soniqo",
+                    fmtr.stt.provider.name = "soniqo",
                     error = %error,
                     "soniqo_channel_transcription_failed"
                 );
@@ -395,8 +395,8 @@ fn soniqo_channel_plan(
     let duration_seconds = channel_duration_sec(samples);
     let chunks = soniqo_channel_chunks(model, samples)?;
     tracing::info!(
-        hyprnote.stt.provider.name = "soniqo",
-        hyprnote.stt.model = %model,
+        fmtr.stt.provider.name = "soniqo",
+        fmtr.stt.model = %model,
         channel.index = channel_index,
         channel.duration_seconds = duration_seconds,
         channel.sample_count = samples.len(),
@@ -428,8 +428,8 @@ fn transcribe_soniqo_channel_chunks(
             (chunk.sample_end - chunk.sample_start) * 1000 / TARGET_SAMPLE_RATE as usize;
         let chunk_started_at = Instant::now();
         tracing::info!(
-            hyprnote.stt.provider.name = "soniqo",
-            hyprnote.stt.model = %model,
+            fmtr.stt.provider.name = "soniqo",
+            fmtr.stt.model = %model,
             channel.index = channel_index,
             chunk.index = chunk_index,
             chunk.sample_start = chunk.sample_start,
@@ -447,8 +447,8 @@ fn transcribe_soniqo_channel_chunks(
             Err(e) => {
                 failed_chunks += 1;
                 tracing::warn!(
-                    hyprnote.stt.provider.name = "soniqo",
-                    hyprnote.stt.model = %model,
+                    fmtr.stt.provider.name = "soniqo",
+                    fmtr.stt.model = %model,
                     channel.index = channel_index,
                     chunk.index = chunk_index,
                     elapsed_ms = chunk_started_at.elapsed().as_millis() as u64,
@@ -462,8 +462,8 @@ fn transcribe_soniqo_channel_chunks(
         on_chunk_completed();
 
         tracing::info!(
-            hyprnote.stt.provider.name = "soniqo",
-            hyprnote.stt.model = %model,
+            fmtr.stt.provider.name = "soniqo",
+            fmtr.stt.model = %model,
             channel.index = channel_index,
             chunk.index = chunk_index,
             elapsed_ms = chunk_started_at.elapsed().as_millis() as u64,
@@ -491,8 +491,8 @@ fn transcribe_soniqo_channel_chunks(
 
     if failed_chunks > 0 {
         tracing::warn!(
-            hyprnote.stt.provider.name = "soniqo",
-            hyprnote.stt.model = %model,
+            fmtr.stt.provider.name = "soniqo",
+            fmtr.stt.model = %model,
             channel.index = channel_index,
             chunk.success_count = successful_chunks,
             chunk.failed_count = failed_chunks,

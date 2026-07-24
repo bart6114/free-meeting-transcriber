@@ -138,7 +138,9 @@ fn is_audio_path(relative_path: &str) -> bool {
 }
 
 fn is_attachments_path(relative_path: &str) -> bool {
-    relative_path.split('/').any(|segment| segment == "attachments")
+    relative_path
+        .split('/')
+        .any(|segment| segment == "attachments")
 }
 
 /// Everything the watcher should never hand to `import_paths`, checked
@@ -162,7 +164,9 @@ fn is_ignored_relative_path(relative_path: &str) -> bool {
 fn select_import_candidates(vault_base: &Path, changed: &HashSet<String>) -> Vec<PathBuf> {
     let mut candidates = changed
         .iter()
-        .filter(|relative_path| !relative_path.is_empty() && !is_ignored_relative_path(relative_path))
+        .filter(|relative_path| {
+            !relative_path.is_empty() && !is_ignored_relative_path(relative_path)
+        })
         .map(|relative_path| vault_base.join(relative_path))
         .collect::<Vec<_>>();
     candidates.sort();
@@ -245,7 +249,9 @@ mod tests {
     #[test]
     fn ignores_trash_paths() {
         assert!(is_ignored_relative_path(".trash"));
-        assert!(is_ignored_relative_path(".trash/2026-07-23/sessions/abc/_meta.json"));
+        assert!(is_ignored_relative_path(
+            ".trash/2026-07-23/sessions/abc/_meta.json"
+        ));
         assert!(!is_ignored_relative_path("sessions/abc/_meta.json"));
     }
 
@@ -275,7 +281,10 @@ mod tests {
     fn ignores_audio_files_case_insensitively() {
         for extension in ["aac", "m4a", "mp3", "wav", "webm", "ogg", "WAV", "M4A"] {
             let path = format!("sessions/abc/audio.{extension}");
-            assert!(is_ignored_relative_path(&path), "expected {path} to be ignored");
+            assert!(
+                is_ignored_relative_path(&path),
+                "expected {path} to be ignored"
+            );
         }
         assert!(!is_ignored_relative_path("sessions/abc/_meta.json"));
     }

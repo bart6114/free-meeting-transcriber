@@ -1,9 +1,9 @@
 ---
 title: "Agent overview"
-description: "Give an agent useful Anarlog context without exposing storage internals or unbounded transcripts."
+description: "Give an agent useful Free Meeting Transcriber context without exposing storage internals or unbounded transcripts."
 ---
 
-Anarlog offers two local, read-only agent transports. They share the same meeting model.
+Free Meeting Transcriber offers two local, read-only agent transports. They share the same meeting model.
 
 | Transport | Choose it when | Output |
 | --- | --- | --- |
@@ -22,9 +22,9 @@ Prefer MCP when it is connected because tools carry their input schemas and resu
 
 ## Safety boundary
 
-Agents should use the CLI or MCP server, not SQLite. Those interfaces apply Anarlog's rules for canonical notes, generated summaries, excluded participants, recurring meetings, and transcript text.
+Agents should use the CLI or MCP server, not SQLite. Those interfaces apply Free Meeting Transcriber's rules for canonical notes, generated summaries, excluded participants, recurring meetings, and transcript text.
 
-All current Anarlog data operations are read-only. An agent cannot update a note, action item, or meeting through these interfaces. CLI export may create a separate file; replacing an existing file requires `--force`.
+All current Free Meeting Transcriber data operations are read-only. An agent cannot update a note, action item, or meeting through these interfaces. CLI export may create a separate file; replacing an existing file requires `--force`.
 
 <CardGroup cols={2}>
   <Card title="CLI for agents" icon="terminal" href="/agents/cli">

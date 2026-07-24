@@ -2,7 +2,11 @@ import { useEffect, useRef } from "react";
 
 import type { Tab } from "~/store/zustand/tabs";
 
-const CUSTOM_SIDEBAR_TYPES: Tab["type"][] = ["settings", "contacts", "templates"];
+const CUSTOM_SIDEBAR_TYPES: Tab["type"][] = [
+  "settings",
+  "contacts",
+  "templates",
+];
 
 const LEFT_SURFACE_CUSTOM_SIDEBAR_TYPES: Tab["type"][] = [
   "settings",

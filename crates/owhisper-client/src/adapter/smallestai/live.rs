@@ -65,7 +65,7 @@ impl RealtimeSttAdapter for SmallestAIAdapter {
             Err(error) => {
                 tracing::warn!(
                     error = ?error,
-                    hyprnote.payload.size_bytes = raw.len() as u64,
+                    fmtr.payload.size_bytes = raw.len() as u64,
                     "smallestai_json_parse_failed"
                 );
                 return vec![];

@@ -81,18 +81,20 @@ pub(crate) async fn write_json_batch<R: tauri::Runtime>(
 
     let base_path_for_writes = base_path.clone();
     spawn_blocking!({
-        items.into_par_iter().try_for_each(|(json, path, tmp_path)| {
-            let content = crate::json::serialize(json)
-                .map_err(|e| format!("failed to serialize json for {}: {e}", path.display()))?;
-            crate::export::write_file_atomic(
-                &base_path_for_writes,
-                &path,
-                &tmp_path,
-                content.as_bytes(),
-            )
-            .map(|_| ())
-            .map_err(|e| format!("failed to write {}: {e}", path.display()))
-        })
+        items
+            .into_par_iter()
+            .try_for_each(|(json, path, tmp_path)| {
+                let content = crate::json::serialize(json)
+                    .map_err(|e| format!("failed to serialize json for {}: {e}", path.display()))?;
+                crate::export::write_file_atomic(
+                    &base_path_for_writes,
+                    &path,
+                    &tmp_path,
+                    content.as_bytes(),
+                )
+                .map(|_| ())
+                .map_err(|e| format!("failed to write {}: {e}", path.display()))
+            })
     })
 }
 
@@ -555,5 +557,4 @@ mod tests {
             "m4a"
         );
     }
-
 }

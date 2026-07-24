@@ -543,57 +543,6 @@ pub fn calculate_file_checksum(path: impl AsRef<Path>) -> Result<u32, Error> {
 mod tests {
     use super::*;
 
-    #[test]
-    #[ignore]
-    fn test_calculate_file_size_and_checksum() {
-        let base = "/Users/yujonglee/dev/hyprnote/.cache";
-
-        fn walk_dir(dir: &std::path::Path) -> std::io::Result<()> {
-            for entry in std::fs::read_dir(dir)? {
-                let entry = entry?;
-                let path = entry.path();
-
-                if path.is_file() {
-                    let metadata = std::fs::metadata(&path)?;
-                    let size = metadata.len();
-
-                    match calculate_file_checksum(&path) {
-                        Ok(checksum) => {
-                            println!(
-                                "{} | Size: {} bytes | Checksum: {}",
-                                path.display(),
-                                size,
-                                checksum
-                            );
-                        }
-                        Err(e) => {
-                            println!(
-                                "{} | Size: {} bytes | Checksum: Error - {}",
-                                path.display(),
-                                size,
-                                e
-                            );
-                        }
-                    }
-                } else if path.is_dir() {
-                    if let Err(e) = walk_dir(&path) {
-                        eprintln!("Error walking directory {}: {}", path.display(), e);
-                    }
-                }
-            }
-            Ok(())
-        }
-
-        let base_path = std::path::Path::new(base);
-        if base_path.exists() {
-            if let Err(e) = walk_dir(base_path) {
-                eprintln!("Error walking base directory: {}", e);
-            }
-        } else {
-            println!("Base directory does not exist: {}", base);
-        }
-    }
-
     #[tokio::test]
     async fn test_request_with_range() {
         use wiremock::matchers::{header, method, path};

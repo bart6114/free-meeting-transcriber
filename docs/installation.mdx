@@ -1,11 +1,11 @@
 ---
 title: "Installation"
-description: "Install the current Anarlog CLI and point it at local meeting data."
+description: "Install the current Free Meeting Transcriber CLI and point it at local meeting data."
 ---
 
 ## Current availability
 
-The CLI includes the `anarlog mcp` server in the same executable.
+The CLI includes the `fmtr mcp` server in the same executable.
 
 <Warning>
   Homebrew, standalone release binaries, and Windows package-manager distribution are forthcoming. Do not rely on those channels yet.
@@ -13,9 +13,9 @@ The CLI includes the `anarlog mcp` server in the same executable.
 
 ## Install from the desktop app
 
-On macOS, open **Settings → Developers** and select **Install**. Anarlog installs the bundled command at `~/.local/bin/anarlog` without sending data anywhere.
+On macOS, open **Settings → Developers** and select **Install**. Free Meeting Transcriber installs the bundled command at `~/.local/bin/fmtr` without sending data anywhere.
 
-If your shell cannot find `anarlog`, add `~/.local/bin` to `PATH`:
+If your shell cannot find `fmtr`, add `~/.local/bin` to `PATH`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -26,29 +26,29 @@ export PATH="$HOME/.local/bin:$PATH"
 To build the CLI yourself instead:
 
 ```bash
-git clone https://github.com/fastrepl/anarlog.git
-cd anarlog
+git clone https://github.com/bart6114/free-meeting-transcriber.git
+cd free-meeting-transcriber
 cargo install --locked --path apps/cli
-anarlog --version
+fmtr --version
 ```
 
-`cargo` installs the executable into its configured binary directory, normally `~/.cargo/bin`. Add that directory to `PATH` if your shell cannot find `anarlog`.
+`cargo` installs the executable into its configured binary directory, normally `~/.cargo/bin`. Add that directory to `PATH` if your shell cannot find `fmtr`.
 
 ## Connect to local data
 
-By default, the CLI looks for `anarlog/app.db` in your operating system's application-data directory. It also recognizes legacy Anarlog locations.
+By default, the CLI looks for `free-meeting-transcriber/app.db` in your operating system's application-data directory.
 
 Open the desktop app once before using the CLI. For a custom database location, pass a global option or environment variable:
 
 ```bash
-anarlog --db-path /path/to/app.db --json meetings list
-ANARLOG_DB_PATH=/path/to/app.db anarlog --json meetings list
+fmtr --db-path /path/to/app.db --json meetings list
+FMTR_DB_PATH=/path/to/app.db fmtr --json meetings list
 ```
 
-If you have an Anarlog data directory containing `app.db`, use:
+If you have a Free Meeting Transcriber data directory containing `app.db`, use:
 
 ```bash
-anarlog --base /path/to/anarlog-data --json meetings list
+fmtr --base /path/to/fmtr-data --json meetings list
 ```
 
 The CLI opens the database in read-only query mode. It does not create a database or run migrations.

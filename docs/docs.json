@@ -1,18 +1,13 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Anarlog",
+  "name": "Free Meeting Transcriber",
   "colors": {
     "primary": "#74540F",
     "light": "#946F25",
     "dark": "#5D430D"
   },
   "favicon": "/favicon.svg",
-  "seo": {
-    "metatags": {
-      "canonical": "https://docs.anarlog.so"
-    }
-  },
   "navigation": {
     "pages": [
       {
@@ -20,7 +15,7 @@
         "pages": ["index", "quickstart"]
       },
       {
-        "group": "Using Anarlog",
+        "group": "Using Free Meeting Transcriber",
         "pages": [
           "meetings",
           "automatic-capture",
@@ -65,13 +60,8 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Anarlog",
-          "href": "https://anarlog.so",
-          "icon": "house"
-        },
-        {
           "anchor": "GitHub",
-          "href": "https://github.com/fastrepl/anarlog",
+          "href": "https://github.com/bart6114/free-meeting-transcriber",
           "icon": "github"
         }
       ]
@@ -80,19 +70,6 @@
   "logo": {
     "light": "/logo/light.svg",
     "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hello@anarlog.so"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Download Anarlog",
-      "href": "https://anarlog.so/download"
-    }
   },
   "contextual": {
     "options": [
@@ -108,7 +85,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/fastrepl/anarlog"
+      "github": "https://github.com/bart6114/free-meeting-transcriber"
     }
   }
 }
