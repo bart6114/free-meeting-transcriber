@@ -10,7 +10,7 @@ import {
 
 describe("getDefaultSttModel", () => {
   test("never invents a model — STT is on-device only, model comes from local discovery", () => {
-    expect(getDefaultSttModel("hyprnote")).toBeUndefined();
+    expect(getDefaultSttModel("fmtr")).toBeUndefined();
     expect(getDefaultSttModel(undefined)).toBeUndefined();
   });
 });
@@ -86,22 +86,22 @@ describe("getDefaultSttSelection", () => {
   test("keeps the active configured provider and repairs its missing model", () => {
     expect(
       getDefaultSttSelection(
-        ["hyprnote"],
+        ["fmtr"],
         {
-          hyprnote: {
+          fmtr: {
             configured: true,
             models: [{ id: "soniqo-parakeet-batch" }],
           },
         },
-        "hyprnote",
+        "fmtr",
       ),
-    ).toEqual({ provider: "hyprnote", model: "soniqo-parakeet-batch" });
+    ).toEqual({ provider: "fmtr", model: "soniqo-parakeet-batch" });
   });
 
   test("skips configured providers that have no available model", () => {
     expect(
-      getDefaultSttSelection(["hyprnote", "other"], {
-        hyprnote: {
+      getDefaultSttSelection(["fmtr", "other"], {
+        fmtr: {
           configured: true,
           models: [{ id: "soniqo-omnilingual", isDownloaded: false }],
         },
@@ -115,8 +115,8 @@ describe("getDefaultSttSelection", () => {
 
   test("returns no selection when nothing is available", () => {
     expect(
-      getDefaultSttSelection(["hyprnote"], {
-        hyprnote: {
+      getDefaultSttSelection(["fmtr"], {
+        fmtr: {
           configured: true,
           models: [{ id: "soniqo-omnilingual", isDownloaded: false }],
         },

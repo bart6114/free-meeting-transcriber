@@ -5,7 +5,7 @@ import { commands as localSttCommands } from "@hypr/plugin-local-stt";
 
 import { type ProviderId } from "~/settings/ai/stt/shared";
 import { useConfigValues } from "~/shared/config";
-import { isHyprnoteLocalSttModel } from "~/stt/capabilities";
+import { isFmtrLocalSttModel } from "~/stt/capabilities";
 
 // STT is on-device only: the connection is always a local server the
 // `local-stt` plugin spins up for the selected model. There is no cloud or
@@ -19,7 +19,7 @@ export const useSTTConnection = () => {
     current_stt_model: string | undefined;
   };
 
-  const localModel = isHyprnoteLocalSttModel(
+  const localModel = isFmtrLocalSttModel(
     current_stt_provider,
     current_stt_model,
   )
@@ -28,7 +28,7 @@ export const useSTTConnection = () => {
   const isLocalModel = !!localModel;
 
   const local = useQuery({
-    enabled: current_stt_provider === "hyprnote",
+    enabled: current_stt_provider === "fmtr",
     queryKey: ["stt-connection", current_stt_provider, localModel],
     refetchInterval: 1000,
     queryFn: async () => {

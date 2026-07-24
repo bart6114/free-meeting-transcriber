@@ -760,7 +760,7 @@ mod tests {
         let input = CreateReminderInput::new("Ship API")
             .in_list("list-a")
             .with_notes("note")
-            .with_url("https://char.com")
+            .with_url("https://example.com")
             .with_priority(ReminderPriority::High)
             .with_alarms(vec![])
             .with_recurrence_rules(vec![])
@@ -770,7 +770,7 @@ mod tests {
         assert_eq!(input.title, "Ship API");
         assert_eq!(input.list_id.as_deref(), Some("list-a"));
         assert_eq!(input.notes.as_deref(), Some("note"));
-        assert_eq!(input.url.as_deref(), Some("https://char.com"));
+        assert_eq!(input.url.as_deref(), Some("https://example.com"));
         assert_eq!(input.priority, Some(ReminderPriority::High));
         assert_eq!(input.alarms, Some(Vec::new()));
         assert_eq!(input.recurrence_rules, Some(Vec::new()));

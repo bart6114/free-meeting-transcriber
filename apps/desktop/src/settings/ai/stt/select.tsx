@@ -68,7 +68,7 @@ import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import { SettingsAlertToast } from "~/shared/ui/settings-alert";
 import {
   isConfiguredSttModel,
-  isHyprnoteLocalSttModel,
+  isFmtrLocalSttModel,
   isLiveTranscriptionSupported,
   isRealtimeLocalModel,
   isSupportedLanguagesBatch,
@@ -394,7 +394,7 @@ function useTranscriptionLanguageWarning() {
     ? current_stt_model
     : undefined;
   const isConfigured = !!(current_stt_provider && selectedSttModel);
-  const isOnDeviceModel = isHyprnoteLocalSttModel(
+  const isOnDeviceModel = isFmtrLocalSttModel(
     current_stt_provider,
     selectedSttModel,
   );
@@ -493,7 +493,7 @@ function getModelCategoryLabel(category?: ModelCategory) {
   return null;
 }
 
-// STT has a single, always-eligible provider ("hyprnote", on-device only):
+// STT has a single, always-eligible provider ("fmtr", on-device only):
 // there is no per-provider config/eligibility to compute anymore, just the
 // locally discovered Soniqo models.
 function useConfiguredMapping(): {
@@ -544,7 +544,7 @@ function useConfiguredMapping(): {
     : [];
 
   return {
-    providers: { hyprnote: { configured: true, models } } as Record<
+    providers: { fmtr: { configured: true, models } } as Record<
       ProviderId,
       { configured: boolean; models: ModelEntry[] }
     >,

@@ -32,16 +32,35 @@ describe("configurePaidSettings", () => {
     await configurePaidSettings();
 
     expect(mocks.setSettingValues).toHaveBeenCalledWith({
-      current_stt_provider: "hyprnote",
+      current_stt_provider: "fmtr",
       current_stt_model: "soniqo-parakeet-batch",
       current_llm_provider: "openrouter",
+    });
+  });
+
+  it("falls back to the on-device default when the stored STT provider id is unknown", async () => {
+    mocks.getStoredSettingValues.mockResolvedValue({
+      values: {
+        current_stt_provider: "stale-provider-id",
+        current_stt_model: "soniqo-parakeet-batch",
+        current_llm_provider: "ollama",
+        current_llm_model: "llama3.2",
+      },
+      hasValues: new Set(),
+    });
+
+    await configurePaidSettings();
+
+    expect(mocks.setSettingValues).toHaveBeenCalledWith({
+      current_stt_provider: "fmtr",
+      current_stt_model: "soniqo-parakeet-batch",
     });
   });
 
   it("repairs a selected provider whose required API key is missing", async () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {
-        current_stt_provider: "hyprnote",
+        current_stt_provider: "fmtr",
         current_stt_model: "soniqo-parakeet-batch",
         current_llm_provider: "anthropic",
         current_llm_model: "claude-opus-4-5-20251101",
@@ -71,7 +90,7 @@ describe("configurePaidSettings", () => {
     await configurePaidSettings();
 
     expect(mocks.setSettingValues).toHaveBeenCalledWith({
-      current_stt_provider: "hyprnote",
+      current_stt_provider: "fmtr",
       current_stt_model: "soniqo-parakeet-batch",
       current_llm_provider: "openrouter",
     });
@@ -80,7 +99,7 @@ describe("configurePaidSettings", () => {
   it("preserves a configured bring-your-own provider", async () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {
-        current_stt_provider: "hyprnote",
+        current_stt_provider: "fmtr",
         current_stt_model: "soniqo-parakeet-batch",
         current_llm_provider: "anthropic",
         current_llm_model: "claude-opus-4-5-20251101",
@@ -101,7 +120,7 @@ describe("configurePaidSettings", () => {
   it("preserves local providers that do not require credentials", async () => {
     mocks.getStoredSettingValues.mockResolvedValue({
       values: {
-        current_stt_provider: "hyprnote",
+        current_stt_provider: "fmtr",
         current_stt_model: "soniqo-parakeet-batch",
         current_llm_provider: "ollama",
         current_llm_model: "llama3.2",

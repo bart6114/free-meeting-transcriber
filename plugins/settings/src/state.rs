@@ -113,7 +113,7 @@ mod tests {
         std::fs::create_dir_all(&global_base).unwrap();
         std::fs::write(
             hypr_storage::vault::compute_settings_path(&global_base),
-            r#"{"ai":{"current_llm_provider":"hyprnote"}}"#,
+            r#"{"ai":{"current_llm_provider":"openai"}}"#,
         )
         .unwrap();
 
@@ -124,7 +124,7 @@ mod tests {
                 .load_with_legacy_fallback(&global_base)
                 .await
                 .unwrap(),
-            json!({"ai": {"current_llm_provider": "hyprnote"}}),
+            json!({"ai": {"current_llm_provider": "openai"}}),
         );
     }
 

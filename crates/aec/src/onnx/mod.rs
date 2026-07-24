@@ -370,8 +370,8 @@ mod tests {
         pub const DOUBLETALK_MIC: &[u8] =
             include_bytes!("../../data/inputs/doubletalk_mic_sample.wav");
 
-        pub const HYPRNOTE_LPB: &[u8] = include_bytes!("../../data/inputs/hyprnote_lpb.wav");
-        pub const HYPRNOTE_MIC: &[u8] = include_bytes!("../../data/inputs/hyprnote_mic.wav");
+        pub const DEMO_LPB: &[u8] = include_bytes!("../../data/inputs/demo_lpb.wav");
+        pub const DEMO_MIC: &[u8] = include_bytes!("../../data/inputs/demo_mic.wav");
 
         pub const THEO_LPB: &[u8] = include_bytes!("../../data/inputs/theo_lpb.wav");
         pub const THEO_MIC: &[u8] = include_bytes!("../../data/inputs/theo_mic.wav");
@@ -500,12 +500,7 @@ mod tests {
         "doubletalk"
     );
 
-    aec_test!(
-        test_aec_hyprnote,
-        data::HYPRNOTE_LPB,
-        data::HYPRNOTE_MIC,
-        "hyprnote"
-    );
+    aec_test!(test_aec_demo, data::DEMO_LPB, data::DEMO_MIC, "demo");
 
     aec_test!(test_aec_theo, data::THEO_LPB, data::THEO_MIC, "theo");
 }

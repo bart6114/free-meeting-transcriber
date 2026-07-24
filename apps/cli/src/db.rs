@@ -45,27 +45,7 @@ fn resolve_default_path_for_command(data_dir: &Path, command_name: Option<&OsStr
         return data_dir.join(identifier).join("app.db");
     }
 
-    let current = data_dir.join("free-meeting-transcriber").join("app.db");
-    if current.is_file() {
-        return current;
-    }
-
-    let legacy_anarlog = data_dir.join("anarlog").join("app.db");
-    if legacy_anarlog.is_file() {
-        return legacy_anarlog;
-    }
-
-    let legacy = data_dir.join("hyprnote").join("app.db");
-    if legacy.is_file() {
-        return legacy;
-    }
-
-    let identifier = data_dir.join("com.hyprnote.stable").join("app.db");
-    if identifier.is_file() {
-        return identifier;
-    }
-
-    current
+    data_dir.join("free-meeting-transcriber").join("app.db")
 }
 
 #[cfg(test)]
@@ -73,33 +53,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_path_prefers_current_then_anarlog_then_hyprnote_then_identifier() {
+    fn default_path_targets_current_location() {
         let dir = tempfile::tempdir().unwrap();
         let current = dir.path().join("free-meeting-transcriber/app.db");
-        let anarlog = dir.path().join("anarlog/app.db");
-        let legacy = dir.path().join("hyprnote/app.db");
-        let identifier = dir.path().join("com.hyprnote.stable/app.db");
-
-        std::fs::create_dir_all(identifier.parent().unwrap()).unwrap();
-        std::fs::write(&identifier, "").unwrap();
-        assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
-            identifier
-        );
-
-        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
-        std::fs::write(&legacy, "").unwrap();
-        assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
-            legacy
-        );
-
-        std::fs::create_dir_all(anarlog.parent().unwrap()).unwrap();
-        std::fs::write(&anarlog, "").unwrap();
-        assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
-            anarlog
-        );
 
         std::fs::create_dir_all(current.parent().unwrap()).unwrap();
         std::fs::write(&current, "").unwrap();

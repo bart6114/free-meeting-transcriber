@@ -127,8 +127,6 @@ mod tests {
     fn rejects_noncanonical_or_ambiguous_routes() {
         let invalid = [
             format!("hypr://share/open?mode=account&share_id={SHARE_ID}"),
-            format!("char://share/open?mode=account&share_id={SHARE_ID}"),
-            format!("hyprnote://share/open?mode=account&share_id={SHARE_ID}"),
             format!("freemeetingtranscriber://share/open/?mode=account&share_id={SHARE_ID}"),
             format!(
                 "freemeetingtranscriber://share/open?mode=account&share_id={SHARE_ID}#fragment"

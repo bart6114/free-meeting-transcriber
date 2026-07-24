@@ -96,7 +96,7 @@ impl RealtimeSttAdapter for SonioxAdapter {
             Err(e) => {
                 tracing::warn!(
                     error = ?e,
-                    hyprnote.payload.size_bytes = raw.len() as u64,
+                    fmtr.payload.size_bytes = raw.len() as u64,
                     "soniox_json_parse_failed"
                 );
                 return vec![];
@@ -410,7 +410,7 @@ mod tests {
         owhisper_interface::ListenParams {
             model: Some("stt-v3".to_string()),
             languages: vec![hypr_language::ISO639::En.into()],
-            keywords: vec!["Hyprnote".to_string(), "transcription".to_string()],
+            keywords: vec!["Waveform".to_string(), "transcription".to_string()],
             ..Default::default()
         }
     );

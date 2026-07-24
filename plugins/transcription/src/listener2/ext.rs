@@ -607,8 +607,8 @@ mod tests {
     #[test]
     fn batch_idle_timeout_skips_direct_cloud_batch() {
         let params = transcription_params(
-            core::BatchProvider::Hyprnote,
-            "https://api.char.com/stt",
+            core::BatchProvider::Deepgram,
+            "https://api.deepgram.com",
             None,
         );
 
@@ -618,7 +618,7 @@ mod tests {
     #[test]
     fn batch_idle_timeout_skips_cloud_am_batch() {
         let params =
-            transcription_params(core::BatchProvider::Am, "https://api.char.com/stt", None);
+            transcription_params(core::BatchProvider::Am, "https://api.deepgram.com", None);
 
         assert_eq!(batch_idle_timeout(&params), None);
     }

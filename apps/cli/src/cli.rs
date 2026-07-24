@@ -14,7 +14,7 @@ pub struct Args {
     #[arg(
         long,
         global = true,
-        env = "ANARLOG_BASE",
+        env = "FMTR_BASE",
         hide_env_values = true,
         value_name = "DIR"
     )]
@@ -23,7 +23,7 @@ pub struct Args {
     #[arg(
         long,
         global = true,
-        env = "ANARLOG_DB_PATH",
+        env = "FMTR_DB_PATH",
         hide_env_values = true,
         value_name = "FILE"
     )]
@@ -211,8 +211,8 @@ mod tests {
     fn public_docs_and_skill_cover_the_command_contract() {
         let docs = include_str!("../../../docs/reference/cli.mdx");
         let skill = concat!(
-            include_str!("../../../skills/anarlog/references/cli.md"),
-            include_str!("../../../skills/anarlog/references/setup.md"),
+            include_str!("../../../skills/fmtr/references/cli.md"),
+            include_str!("../../../skills/fmtr/references/setup.md"),
         );
         let command = Args::command();
         let mut paths = Vec::new();
@@ -220,7 +220,7 @@ mod tests {
 
         for path in paths {
             assert!(docs.contains(&path), "CLI docs are missing `{path}`");
-            assert!(skill.contains(&path), "Anarlog skill is missing `{path}`");
+            assert!(skill.contains(&path), "fmtr skill is missing `{path}`");
         }
         assert_options_are_documented(&command, docs);
     }

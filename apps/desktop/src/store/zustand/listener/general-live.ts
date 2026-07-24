@@ -354,7 +354,7 @@ export const startLiveSession = <T extends LiveStore>(
           beforeListeningStarted: {
             args: {
               resource_dir: sessionPath,
-              app_hyprnote: bundleId,
+              app_fmtr: bundleId,
               app_meeting,
             },
           },
@@ -576,7 +576,7 @@ export const stopLiveSession = <T extends GeneralState>(
               afterListeningStopped: {
                 args: {
                   resource_dir: sessionPath,
-                  app_hyprnote: bundleId,
+                  app_fmtr: bundleId,
                   app_meeting: null,
                 },
               },

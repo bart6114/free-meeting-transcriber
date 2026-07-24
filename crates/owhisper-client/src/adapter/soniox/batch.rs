@@ -33,17 +33,17 @@ impl SonioxAdapter {
             ))
         })?;
 
-        tracing::info!(hyprnote.file.path = %file_path.display(), "uploading_file_to_soniox");
+        tracing::info!(fmtr.file.path = %file_path.display(), "uploading_file_to_soniox");
         let file_id = soniox::upload_file(&client, &file_name, file_bytes, api_key)
             .await
             .map_err(soniox_err)?;
 
-        tracing::info!(hyprnote.file.id = %file_id, "soniox_file_uploaded");
+        tracing::info!(fmtr.file.id = %file_id, "soniox_file_uploaded");
         let result = Self::transcribe_and_fetch(&client, api_key, params, &file_id).await;
 
         if let Err(e) = soniox::delete_file(&client, &file_id, api_key).await {
             tracing::warn!(
-                hyprnote.file.id = %file_id,
+                fmtr.file.id = %file_id,
                 error = %e,
                 "failed_to_delete_soniox_file"
             );
@@ -83,7 +83,7 @@ impl SonioxAdapter {
             .await
             .map_err(soniox_err)?;
         tracing::info!(
-            hyprnote.stt.job.id = %transcription_id,
+            fmtr.stt.job.id = %transcription_id,
             "soniox_transcription_created"
         );
 
@@ -91,7 +91,7 @@ impl SonioxAdapter {
             .await
             .map_err(soniox_err)?;
         tracing::info!(
-            hyprnote.stt.job.id = %transcription_id,
+            fmtr.stt.job.id = %transcription_id,
             "soniox_transcription_completed"
         );
 

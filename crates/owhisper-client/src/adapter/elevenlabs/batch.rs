@@ -90,7 +90,7 @@ impl ElevenLabsAdapter {
 
         let url = Self::batch_api_url(api_base);
         tracing::info!(
-            hyprnote.file.path = %file_path.display(),
+            fmtr.file.path = %file_path.display(),
             url.full = %url,
             "uploading_file_to_elevenlabs"
         );

@@ -1,21 +1,20 @@
 ---
 name: qa-critical-ux
-description: QA-test the critical desktop user experience before a release — calendar connect + notifications, note creation, recording, and automated summaries across on-device, API-key, and Pro providers. Use before cutting a stable release, after changes to STT/enhance/calendar/billing flows, or when asked to "QA the app".
+description: QA-test the critical desktop user experience before a release — calendar connect + notifications, note creation, recording, and automated summaries across on-device and API-key providers. Use before cutting a stable release, after changes to STT/enhance/calendar flows, or when asked to "QA the app".
 ---
 
 # QA: Critical User Experience
 
 Gate releases on this checklist. Every item must pass (or be explicitly
-waived by the user) before running the release-new-version skill.
+waived by the user) before cutting a release.
 
 ## Setup
 
 1. Launch the app: `pnpm -F @hypr/desktop tauri:dev` (first build takes
    minutes; reuse a running instance when possible).
-2. Sign in with a test account that has calendar access. For provider
-   matrix runs you need: a Pro (or trialing) account, an API key for at
-   least one cloud provider (e.g. OpenAI), and a downloaded local STT +
-   LLM model pair.
+2. Use a test setup with calendar access. For provider matrix runs you
+   need: an API key for at least one remote provider (e.g. OpenAI) and a
+   downloaded local STT + LLM model pair.
 3. Note the app version and the provider config under test in the report.
 
 ## Checklist
@@ -60,14 +59,12 @@ waived by the user) before running the release-new-version skill.
 | --- | --- |
 | On-device | Settings → AI: select local STT model and local LLM; sign-out state is also worth one pass |
 | API keys | Settings → AI: configure a custom provider with an API key for both STT (if supported) and LLM |
-| Pro plan | Settings → AI: select Anarlog cloud (`hyprnote` provider) with a Pro/trialing account |
 
 - PASS when: steps 2–4 behave identically in outcome under each config
   (transcript + automated summary), with provider-appropriate quality.
-- Watch for: feature-gate prompts appearing for entitled users, silent
-  summary failures (check the AI task state), and stalled live
-  transcription (watchdog should batch-repair from the recording after
-  stop).
+- Watch for: silent summary failures (check the AI task state) and
+  stalled live transcription (watchdog should batch-repair from the
+  recording after stop).
 
 ## Automation notes
 

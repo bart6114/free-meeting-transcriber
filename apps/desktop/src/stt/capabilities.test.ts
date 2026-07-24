@@ -76,9 +76,9 @@ describe("isSupportedLocalSttModel", () => {
 
 describe("isConfiguredSttModel", () => {
   test("requires an on-device model id for the on-device provider — no cloud model exists anymore", () => {
-    expect(isConfiguredSttModel("hyprnote", "cloud")).toBe(false);
-    expect(isConfiguredSttModel("hyprnote", "soniqo-qwen3-small")).toBe(true);
-    expect(isConfiguredSttModel("hyprnote", "removed-local-model")).toBe(false);
+    expect(isConfiguredSttModel("fmtr", "cloud")).toBe(false);
+    expect(isConfiguredSttModel("fmtr", "soniqo-qwen3-small")).toBe(true);
+    expect(isConfiguredSttModel("fmtr", "removed-local-model")).toBe(false);
   });
 
   test("treats any other provider string as configured (defensive default for unknown/legacy providers)", () => {
@@ -157,18 +157,18 @@ describe("getLiveTranscriptionConfig", () => {
   });
 
   test("passes the provider through untouched — STT is on-device only, no Deepgram-compatibility mapping left", async () => {
-    await isSupportedLanguagesLive("hyprnote", "am-parakeet-v3", ["en"]);
+    await isSupportedLanguagesLive("fmtr", "am-parakeet-v3", ["en"]);
 
     expect(isSupportedLanguagesLiveMock.mock.calls[0]).toEqual([
-      "hyprnote",
+      "fmtr",
       "am-parakeet-v3",
       ["en"],
     ]);
 
-    await isSupportedLanguagesBatch("hyprnote", "am-parakeet-v3", ["en"]);
+    await isSupportedLanguagesBatch("fmtr", "am-parakeet-v3", ["en"]);
 
     expect(isSupportedLanguagesBatchMock.mock.calls[0]).toEqual([
-      "hyprnote",
+      "fmtr",
       "am-parakeet-v3",
       ["en"],
     ]);

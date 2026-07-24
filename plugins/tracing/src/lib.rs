@@ -14,7 +14,7 @@ use tracing_subscriber::{
     EnvFilter, fmt, prelude::__tracing_subscriber_SubscriberExt, util::SubscriberInitExt,
 };
 
-use utils::{cleanup_legacy_logs, make_file_writer_if_enabled};
+use utils::make_file_writer_if_enabled;
 
 const PLUGIN_NAME: &str = "tracing";
 
@@ -62,8 +62,6 @@ impl Builder {
             .js_init_script(JS_INIT_SCRIPT)
             .setup(move |app, _api| {
                 specta_builder.mount_events(app);
-
-                cleanup_legacy_logs(app);
 
                 if skip_subscriber_init {
                     return Ok(());

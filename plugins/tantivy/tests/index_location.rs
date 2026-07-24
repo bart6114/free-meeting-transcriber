@@ -22,7 +22,7 @@ async fn register_collection_uses_global_base_not_vault_base() {
         // Force a custom vault location distinct from app-data, the same
         // knob `resolve_startup_vault_base()` honors on real startup, so a
         // regression back to vault_base() is actually observable.
-        std::env::set_var("CHAR_VAULT_BASE", vault_dir.path());
+        std::env::set_var("FMTR_VAULT_BASE", vault_dir.path());
     }
 
     // tauri_plugin_tantivy::init() is pinned to tauri::Wry (not generic over

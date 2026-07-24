@@ -19,38 +19,16 @@ const SELF_BUNDLE_IDS: &[&str] = &[
     "org.freemeetingtranscriber.dev",
     "org.freemeetingtranscriber.stable",
     "org.freemeetingtranscriber.staging",
-    "com.hyprnote.dev",
-    "com.hyprnote.stable",
-    "com.hyprnote.staging",
-    "com.hyprnote.nightly",
 ];
 
 const SELF_APP_NAMES: &[&str] = &[
     "free meeting transcriber",
     "free meeting transcriber staging",
-    "anarlog",
-    "anarlog staging",
-    "anarlog nightly",
-    "hyprnote",
-    "hyprnote staging",
-    "hyprnote nightly",
-    "char",
-    "char staging",
-    "char nightly",
 ];
 
 const SELF_APP_PATH_SEGMENTS: &[&str] = &[
     "/free meeting transcriber.app/",
     "/free meeting transcriber staging.app/",
-    "/anarlog.app/",
-    "/anarlog staging.app/",
-    "/anarlog nightly.app/",
-    "/hyprnote.app/",
-    "/hyprnote staging.app/",
-    "/hyprnote nightly.app/",
-    "/char.app/",
-    "/char staging.app/",
-    "/char nightly.app/",
 ];
 
 fn is_self_app(app: &InstalledApp) -> bool {
@@ -107,8 +85,6 @@ mod tests {
             "org.freemeetingtranscriber.stable",
             "Free Meeting Transcriber"
         )));
-        assert!(is_self_app(&app("com.hyprnote.stable", "Anarlog")));
-        assert!(is_self_app(&app("com.hyprnote.Hyprnote", "Hyprnote")));
     }
 
     #[test]
@@ -118,23 +94,12 @@ mod tests {
             "pid:45",
             "Free Meeting Transcriber Staging"
         )));
-        assert!(is_self_app(&app("pid:42", "Anarlog")));
-        assert!(is_self_app(&app("pid:43", "Char Nightly")));
-        assert!(is_self_app(&app("pid:44", "Hyprnote Staging")));
     }
 
     #[test]
     fn test_is_self_app_matches_path_fallbacks() {
         assert!(is_self_app(&app(
             "/Applications/Free Meeting Transcriber.app/Contents/MacOS/free-meeting-transcriber",
-            "Unknown",
-        )));
-        assert!(is_self_app(&app(
-            "/Applications/Anarlog.app/Contents/MacOS/anarlog",
-            "Unknown",
-        )));
-        assert!(is_self_app(&app(
-            "/Applications/Hyprnote Nightly.app/Contents/MacOS/Hyprnote Nightly",
             "Unknown",
         )));
     }

@@ -1093,7 +1093,7 @@ fn sqlite_value(row: &SqliteRow, index: usize) -> E2eeReplicaResult<Value> {
         "REAL" => Ok(json!(row.try_get::<f64, _>(index)?)),
         "TEXT" => Ok(json!(row.try_get::<String, _>(index)?)),
         "BLOB" => Ok(json!({
-            "$anarlog_blob": URL_SAFE_NO_PAD.encode(row.try_get::<Vec<u8>, _>(index)?)
+            "$fmtr_blob": URL_SAFE_NO_PAD.encode(row.try_get::<Vec<u8>, _>(index)?)
         })),
         _ => Err(E2eeReplicaError::UnsupportedValue),
     }
@@ -1119,9 +1119,9 @@ fn push_json_bind(query: &mut QueryBuilder<Sqlite>, value: &Value) -> E2eeReplic
         Value::String(value) => {
             query.push_bind(value);
         }
-        Value::Object(value) if value.len() == 1 && value.contains_key("$anarlog_blob") => {
+        Value::Object(value) if value.len() == 1 && value.contains_key("$fmtr_blob") => {
             let bytes = value
-                .get("$anarlog_blob")
+                .get("$fmtr_blob")
                 .and_then(Value::as_str)
                 .ok_or(E2eeReplicaError::UnsupportedValue)
                 .and_then(|value| {
@@ -1151,8 +1151,7 @@ mod tests {
 
     fn keys(workspace_id: &str) -> HashMap<String, WorkspaceKey> {
         let recovery =
-            RecoveryKey::parse("anarlog-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc")
-                .unwrap();
+            RecoveryKey::parse("fmtr-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc").unwrap();
         HashMap::from([(
             workspace_id.to_string(),
             recovery.workspace_key(workspace_id).unwrap(),
@@ -1447,7 +1446,7 @@ mod tests {
         let mut wrong_keys = workspace_keys;
         wrong_keys.insert(
             "workspace-b".to_string(),
-            RecoveryKey::parse("anarlog-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc")
+            RecoveryKey::parse("fmtr-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc")
                 .unwrap()
                 .workspace_key("workspace-b")
                 .unwrap(),

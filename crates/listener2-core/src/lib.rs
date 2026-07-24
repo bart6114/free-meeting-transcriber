@@ -36,7 +36,7 @@ pub fn is_supported_languages_live(
         return Ok(model.supports_live_on_current_platform() && model.supports_languages(languages));
     }
 
-    if provider == "hyprnote"
+    if provider == "fmtr"
         && let Some(model) = model
         && model != "cloud"
     {
@@ -75,7 +75,7 @@ pub fn is_supported_languages_batch(
         return Ok(model.supports_languages(languages));
     }
 
-    if provider == "hyprnote" {
+    if provider == "fmtr" {
         if let Some(model) =
             model.and_then(|model| model.parse::<hypr_transcribe_soniqo::SoniqoModel>().ok())
         {
@@ -142,11 +142,11 @@ mod tests {
     }
 
     #[test]
-    fn hyprnote_soniqo_batch_rejects_unsupported_parakeet_languages() {
+    fn fmtr_soniqo_batch_rejects_unsupported_parakeet_languages() {
         let languages = vec!["ko".parse().unwrap()];
 
         assert_eq!(
-            is_supported_languages_batch("hyprnote", Some("soniqo-parakeet-batch"), &languages)
+            is_supported_languages_batch("fmtr", Some("soniqo-parakeet-batch"), &languages)
                 .unwrap(),
             false
         );
@@ -162,39 +162,39 @@ mod tests {
     }
 
     #[test]
-    fn hyprnote_non_soniqo_batch_keeps_existing_language_support() {
+    fn fmtr_non_soniqo_batch_keeps_existing_language_support() {
         let languages = vec!["fr".parse().unwrap()];
 
-        assert!(is_supported_languages_batch("hyprnote", Some("cloud"), &languages).unwrap());
+        assert!(is_supported_languages_batch("fmtr", Some("cloud"), &languages).unwrap());
     }
 
     #[test]
-    fn hyprnote_soniqo_live_rejects_unsupported_parakeet_languages() {
+    fn fmtr_soniqo_live_rejects_unsupported_parakeet_languages() {
         let languages = vec!["ko".parse().unwrap()];
 
         assert_eq!(
-            is_supported_languages_live("hyprnote", Some("soniqo-parakeet-streaming"), &languages)
+            is_supported_languages_live("fmtr", Some("soniqo-parakeet-streaming"), &languages)
                 .unwrap(),
             false
         );
     }
 
     #[test]
-    fn hyprnote_soniqo_live_respects_platform_support() {
+    fn fmtr_soniqo_live_respects_platform_support() {
         let languages = vec!["fr".parse().unwrap()];
         let expected = cfg!(all(target_os = "macos", target_arch = "aarch64"));
 
         assert_eq!(
-            is_supported_languages_live("hyprnote", Some("soniqo-parakeet-streaming"), &languages)
+            is_supported_languages_live("fmtr", Some("soniqo-parakeet-streaming"), &languages)
                 .unwrap(),
             expected
         );
     }
 
     #[test]
-    fn hyprnote_cloud_live_keeps_existing_language_support() {
+    fn fmtr_cloud_live_keeps_existing_language_support() {
         let languages = vec!["ko".parse().unwrap()];
 
-        assert!(is_supported_languages_live("hyprnote", Some("cloud"), &languages).unwrap());
+        assert!(is_supported_languages_live("fmtr", Some("cloud"), &languages).unwrap());
     }
 }

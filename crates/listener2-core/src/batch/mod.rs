@@ -30,7 +30,7 @@ pub enum BatchProvider {
     Pyannote,
     DashScope,
     Mistral,
-    Hyprnote,
+    Fmtr,
     Am,
     Soniqo,
     AquaVoice,
@@ -50,7 +50,7 @@ impl BatchProvider {
             Self::ElevenLabs => Some(AdapterKind::ElevenLabs),
             Self::Pyannote => Some(AdapterKind::Pyannote),
             Self::Mistral => Some(AdapterKind::Mistral),
-            Self::Hyprnote => Some(AdapterKind::Hyprnote),
+            Self::Fmtr => Some(AdapterKind::Fmtr),
             Self::AquaVoice => Some(AdapterKind::AquaVoice),
             Self::Cartesia => Some(AdapterKind::Cartesia),
             Self::Am | Self::WhisperLocal | Self::Soniqo | Self::DashScope => None,
@@ -182,7 +182,7 @@ async fn run_batch_inner(
             let message = format_user_friendly_error(&raw_error);
             tracing::error!(
                 error = %raw_error,
-                hyprnote.error.user_message = %message,
+                fmtr.error.user_message = %message,
                 "failed_to_read_audio_metadata"
             );
             return Err(crate::BatchFailure::AudioMetadataReadFailed { message }.into());
@@ -266,7 +266,7 @@ pub(super) fn batch_provider_label(provider: BatchProvider) -> String {
 }
 
 pub(super) fn session_span(session_id: &str) -> tracing::Span {
-    tracing::info_span!("session", hyprnote.session.id = %session_id)
+    tracing::info_span!("session", fmtr.session.id = %session_id)
 }
 
 pub(super) fn format_user_friendly_error(error: &str) -> String {
@@ -411,15 +411,15 @@ mod tests {
     }
 
     #[test]
-    fn cloud_hyprnote_batch_is_not_progressive() {
-        let params = batch_params(BatchProvider::Hyprnote, "https://api.char.com/stt");
+    fn fmtr_batch_is_not_progressive() {
+        let params = batch_params(BatchProvider::Fmtr, "http://localhost:8787/stt");
 
         assert!(!expects_progressive_batch(&params));
     }
 
     #[test]
-    fn cloud_am_batch_is_not_progressive() {
-        let params = batch_params(BatchProvider::Am, "https://api.char.com/stt");
+    fn remote_am_batch_is_not_progressive() {
+        let params = batch_params(BatchProvider::Am, "https://example.com/stt");
 
         assert!(!expects_progressive_batch(&params));
     }

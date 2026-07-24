@@ -539,7 +539,7 @@ mod tests {
         .await
         .unwrap();
         let recovery_key = hypr_e2ee::RecoveryKey::parse(
-            "anarlog-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+            "fmtr-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
         )
         .unwrap();
         let key = recovery_key.workspace_key("user-a").unwrap();

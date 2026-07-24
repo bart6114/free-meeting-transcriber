@@ -94,7 +94,7 @@ impl RealtimeSttAdapter for AssemblyAIAdapter {
             Err(e) => {
                 tracing::warn!(
                     error = ?e,
-                    hyprnote.payload.size_bytes = raw.len() as u64,
+                    fmtr.payload.size_bytes = raw.len() as u64,
                     "assemblyai_json_parse_failed"
                 );
                 return vec![];
@@ -104,8 +104,8 @@ impl RealtimeSttAdapter for AssemblyAIAdapter {
         match msg {
             AssemblyAIMessage::Begin { id, expires_at } => {
                 tracing::debug!(
-                    hyprnote.stt.provider_session.id = %id,
-                    hyprnote.stt.provider_session.expires_at = %expires_at,
+                    fmtr.stt.provider_session.id = %id,
+                    fmtr.stt.provider_session.expires_at = %expires_at,
                     "assemblyai_session_began"
                 );
                 vec![]
@@ -116,8 +116,8 @@ impl RealtimeSttAdapter for AssemblyAIAdapter {
                 session_duration_seconds,
             } => {
                 tracing::debug!(
-                    hyprnote.audio.duration_s = audio_duration_seconds,
-                    hyprnote.stt.provider_session.duration_s = session_duration_seconds,
+                    fmtr.audio.duration_s = audio_duration_seconds,
+                    fmtr.stt.provider_session.duration_s = session_duration_seconds,
                     "assemblyai_session_terminated"
                 );
                 vec![StreamResponse::TerminalResponse {
@@ -137,7 +137,7 @@ impl RealtimeSttAdapter for AssemblyAIAdapter {
             }
             AssemblyAIMessage::Unknown => {
                 tracing::debug!(
-                    hyprnote.payload.size_bytes = raw.len() as u64,
+                    fmtr.payload.size_bytes = raw.len() as u64,
                     "assemblyai_unknown_message"
                 );
                 vec![]
@@ -584,7 +584,7 @@ mod tests {
         owhisper_interface::ListenParams {
             model: Some("u3-rt-pro".to_string()),
             languages: vec![hypr_language::ISO639::En.into()],
-            keywords: vec!["Hyprnote".to_string(), "transcription".to_string()],
+            keywords: vec!["Waveform".to_string(), "transcription".to_string()],
             ..Default::default()
         }
     );

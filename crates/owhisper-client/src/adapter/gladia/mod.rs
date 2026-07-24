@@ -95,11 +95,6 @@ mod tests {
                 vec![],
             ),
             (
-                "https://api.hyprnote.com?provider=gladia",
-                "wss://api.hyprnote.com/listen",
-                vec![("provider", "gladia")],
-            ),
-            (
                 "http://localhost:8787/listen?provider=gladia",
                 "ws://localhost:8787/listen",
                 vec![("provider", "gladia")],

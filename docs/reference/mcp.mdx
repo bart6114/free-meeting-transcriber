@@ -1,9 +1,9 @@
 ---
 title: "MCP reference"
-description: "Tools, resources, limits, and transport details exposed by Anarlog MCP."
+description: "Tools, resources, limits, and transport details exposed by Free Meeting Transcriber MCP."
 ---
 
-Run the server with `anarlog mcp`. It uses the MCP `2024-11-05` protocol over stdio. Every tool is read-only, non-destructive, idempotent, and local-only.
+Run the server with `fmtr mcp`. It uses the MCP `2024-11-05` protocol over stdio. Every tool is read-only, non-destructive, idempotent, and local-only.
 
 ## Tools
 
@@ -24,7 +24,7 @@ Accepts required string `meeting_id`. Returns meeting metadata, the canonical no
 
 | Parameter | Type | Default | Notes |
 | --- | --- | --- | --- |
-| `meeting_id` | string | required | A returned Anarlog meeting ID. |
+| `meeting_id` | string | required | A returned Free Meeting Transcriber meeting ID. |
 | `offset` | integer | `0` | Word offset. |
 | `limit` | integer | `200` | Clamped to `1..500`. |
 
@@ -38,8 +38,8 @@ Accepts required string `meeting_id` plus optional integer `limit` and `offset`.
 
 | URI | MIME type | Content |
 | --- | --- | --- |
-| `anarlog://meetings/{meeting_id}` | `text/markdown` | Meeting detail without transcript text. |
-| `anarlog://meetings/{meeting_id}/transcript{?offset,limit}` | `text/plain` | A bounded transcript page. |
-| `anarlog://series/{series_id}` | `text/markdown` | Up to 100 meetings in a recurring series. |
+| `fmtr://meetings/{meeting_id}` | `text/markdown` | Meeting detail without transcript text. |
+| `fmtr://meetings/{meeting_id}/transcript{?offset,limit}` | `text/plain` | A bounded transcript page. |
+| `fmtr://series/{series_id}` | `text/markdown` | Up to 100 meetings in a recurring series. |
 
 Resource listing returns recent meeting resources in pages of 20. Its cursor is a numeric result offset.

@@ -377,7 +377,7 @@ mod test {
     {
         let (dir, runtime) = setup_runtime_with_cloudsync(true).await;
         let recovery_key = hypr_e2ee::RecoveryKey::parse(
-            "anarlog-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
+            "fmtr-e2ee-v1:BwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwcHBwc",
         )
         .unwrap();
         runtime
