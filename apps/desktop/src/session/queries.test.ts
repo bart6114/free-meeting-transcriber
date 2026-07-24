@@ -144,7 +144,7 @@ describe("session SQLite operations", () => {
     mocks.execute.mockResolvedValueOnce([
       { id: "session-1", title: "Planning" },
     ]);
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1, 1]);
+    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1]);
 
     const deleted = await softDeleteSession("session-1");
 
@@ -157,7 +157,7 @@ describe("session SQLite operations", () => {
       sql: string;
       params: unknown[];
     }>;
-    expect(statements).toHaveLength(7);
+    expect(statements).toHaveLength(6);
     expect(
       statements.every((statement) =>
         statement.sql.includes("deleted_at IS NULL"),
@@ -174,7 +174,7 @@ describe("session SQLite operations", () => {
     mocks.execute.mockResolvedValueOnce([
       { id: "session-1", title: "Planning" },
     ]);
-    mocks.executeTransaction.mockResolvedValueOnce([0, 0, 0, 0, 0, 0, 0]);
+    mocks.executeTransaction.mockResolvedValueOnce([0, 0, 0, 0, 0, 0]);
 
     await expect(softDeleteSession("session-1")).resolves.toBeNull();
   });
@@ -225,7 +225,7 @@ describe("session SQLite operations", () => {
   });
 
   it("restores only rows carrying the deletion's exact tombstone", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1, 1]);
+    mocks.executeTransaction.mockResolvedValueOnce([1, 1, 1, 1, 1, 1]);
     await restoreDeletedSession({
       session: { id: "session-1", title: "Planning" },
       tombstone: "2026-07-10T12:00:00.000Z",
@@ -236,7 +236,7 @@ describe("session SQLite operations", () => {
       sql: string;
       params: unknown[];
     }>;
-    expect(statements).toHaveLength(7);
+    expect(statements).toHaveLength(6);
     expect(
       statements.every((statement) => statement.sql.includes("deleted_at = ?")),
     ).toBe(true);
@@ -259,7 +259,6 @@ describe("session SQLite operations", () => {
       "transcripts",
       "session_tags",
       "action_items",
-      "session_attachments",
       "entity_mentions",
     ]) {
       expect(sql).toContain(table);

@@ -533,7 +533,6 @@ export function buildSessionTombstoneStatements(
     "transcripts",
     "session_tags",
     "action_items",
-    "session_attachments",
   ];
 
   const statements = directTables.map((table) => ({
