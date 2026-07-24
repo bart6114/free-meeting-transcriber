@@ -268,7 +268,13 @@ impl SessionStore {
         Ok(())
     }
 
-    async fn read_transcript_json(&self, session_id: &str) -> Result<TranscriptJson, StoreError> {
+    /// Reusable by rebuild.rs: missing file -> empty transcript list (not an error, matching
+    /// the "no transcript yet" state); malformed JSON -> Err so callers can distinguish
+    /// "nothing here" from "something here that failed to parse".
+    pub(crate) async fn read_transcript_json(
+        &self,
+        session_id: &str,
+    ) -> Result<TranscriptJson, StoreError> {
         let vault_base = self.vault_base.clone();
         let relative = paths::transcript_path(session_id);
 

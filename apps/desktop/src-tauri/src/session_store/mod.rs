@@ -6,10 +6,13 @@ use std::sync::Arc;
 pub mod content;
 pub mod journal;
 pub mod paths;
+pub mod rebuild;
 pub mod transcript;
 
 #[allow(unused_imports)] // re-export consumed by Task 9 (Tauri commands)
 pub use content::SessionMeta;
+#[allow(unused_imports)] // re-export consumed by Task 10/11 (Tauri commands / watcher)
+pub use rebuild::RebuildReport;
 #[allow(unused_imports)] // re-export consumed by Task 9 (Tauri commands)
 pub use transcript::TranscriptDelta;
 

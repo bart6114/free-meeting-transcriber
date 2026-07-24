@@ -1,7 +1,11 @@
 use std::path::PathBuf;
 
+pub fn sessions_root() -> PathBuf {
+    PathBuf::from("sessions")
+}
+
 pub fn session_dir(id: &str) -> PathBuf {
-    PathBuf::from("sessions").join(id)
+    sessions_root().join(id)
 }
 
 pub fn meta_path(id: &str) -> PathBuf {
@@ -30,6 +34,7 @@ mod tests {
 
     #[test]
     fn paths_are_relative_and_correct() {
+        assert_eq!(sessions_root(), PathBuf::from("sessions"));
         assert_eq!(session_dir("s1"), PathBuf::from("sessions/s1"));
         assert_eq!(meta_path("s1"), PathBuf::from("sessions/s1/_meta.json"));
         assert_eq!(note_path("s1"), PathBuf::from("sessions/s1/_memo.md"));
