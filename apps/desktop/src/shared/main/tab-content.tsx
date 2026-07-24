@@ -1,7 +1,6 @@
 import { TabContentChangelog } from "~/changelog";
 import { TabContentContact } from "~/contacts";
 import { TabContentHuman } from "~/contacts/humans";
-import { TabContentEdit } from "~/edit";
 import { TabContentOnboarding } from "~/onboarding";
 import { TabContentNote } from "~/session";
 import { TabContentSettings } from "~/settings";
@@ -30,9 +29,6 @@ export function MainTabContent({ tab }: { tab: Tab }) {
   }
   if (tab.type === "onboarding") {
     return <TabContentOnboarding tab={tab} />;
-  }
-  if (tab.type === "edit") {
-    return <TabContentEdit tab={tab} />;
   }
   if (tab.type === "task") {
     return <TabContentTask tab={tab} />;

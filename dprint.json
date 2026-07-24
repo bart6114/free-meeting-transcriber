@@ -14,6 +14,7 @@
     ]
   },
   "excludes": [
+    ".claude",
     ".venv",
     ".drizzle",
     "**/*-lock.yaml",
@@ -36,16 +37,6 @@
   "exec": {
     "cwd": "${configDir}",
     "commands": [
-      {
-        "command": "gofmt",
-        "exts": [
-          "go"
-        ],
-        "cacheKeyFiles": [
-          "go.mod",
-          "go.sum"
-        ]
-      },
       {
         "command": "rustfmt --edition 2024",
         "exts": [
@@ -74,12 +65,6 @@
         "cacheKeyFiles": [
           ".oxfmtrc.json",
           "package.json"
-        ]
-      },
-      {
-        "command": "node apps/web/scripts/format-mdx.js",
-        "exts": [
-          "mdx"
         ]
       }
     ]

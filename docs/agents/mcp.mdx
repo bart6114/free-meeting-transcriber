@@ -1,9 +1,9 @@
 ---
 title: "MCP for agents"
-description: "Connect an MCP client to local Anarlog meeting context over stdio."
+description: "Connect an MCP client to local Free Meeting Transcriber meeting context over stdio."
 ---
 
-The MCP server runs inside the `anarlog` executable and communicates over standard input and output. It does not open a port or send meeting data to a hosted service.
+The MCP server runs inside the `fmtr` executable and communicates over standard input and output. It does not open a port or send meeting data to a hosted service.
 
 ## Configure a client
 
@@ -12,23 +12,23 @@ Use this generic MCP configuration:
 ```json
 {
   "mcpServers": {
-    "anarlog": {
-      "command": "anarlog",
+    "fmtr": {
+      "command": "fmtr",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-If `anarlog` is not on the client's `PATH`, use the executable's absolute path as `command`. Restart the client after changing its configuration.
+If `fmtr` is not on the client's `PATH`, use the executable's absolute path as `command`. Restart the client after changing its configuration.
 
 For a custom database path:
 
 ```json
 {
   "mcpServers": {
-    "anarlog": {
-      "command": "anarlog",
+    "fmtr": {
+      "command": "fmtr",
       "args": ["--db-path", "/path/to/app.db", "mcp"]
     }
   }

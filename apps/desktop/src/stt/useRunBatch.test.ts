@@ -113,17 +113,15 @@ vi.mock("~/stt/queries", () => ({
 
 describe("getBatchProvider", () => {
   test("maps local soniqo models to the soniqo batch provider", () => {
-    expect(getBatchProvider("hyprnote", "soniqo-parakeet-batch")).toBe(
-      "soniqo",
-    );
+    expect(getBatchProvider("fmtr", "soniqo-parakeet-batch")).toBe("soniqo");
   });
 
   test("maps local Argmax models to the am batch provider", () => {
-    expect(getBatchProvider("hyprnote", "am-parakeet-v3")).toBe("am");
+    expect(getBatchProvider("fmtr", "am-parakeet-v3")).toBe("am");
   });
 
-  test("falls back to the hyprnote batch provider for other local models", () => {
-    expect(getBatchProvider("hyprnote", "QuantizedSmallEn")).toBe("hyprnote");
+  test("falls back to the fmtr batch provider for other local models", () => {
+    expect(getBatchProvider("fmtr", "QuantizedSmallEn")).toBe("fmtr");
   });
 
   test("returns null for any non-on-device provider — STT is on-device only", () => {
@@ -137,7 +135,7 @@ describe("canRunBatchTranscription", () => {
     expect(canRunBatchTranscription(null)).toBe(true);
     expect(
       canRunBatchTranscription({
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-parakeet-streaming",
       }),
     ).toBe(true);
@@ -164,10 +162,10 @@ describe("useRunBatch", () => {
     });
     useSessionParticipantsMock.mockReturnValue([]);
     // STT is on-device only: useSTTConnection() only ever returns a
-    // "hyprnote" + local-model connection (or null) — never a hosted one.
+    // "fmtr" + local-model connection (or null) — never a hosted one.
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-parakeet-batch",
         baseUrl: "soniqo://local",
         apiKey: "",
@@ -261,7 +259,7 @@ describe("useRunBatch", () => {
   test("passes selected transcription languages to batch transcription", async () => {
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-parakeet-batch",
         baseUrl: "soniqo://local",
         apiKey: "",
@@ -291,7 +289,7 @@ describe("useRunBatch", () => {
   test("falls back to local Soniqo batch when the selected on-device model is not batch-capable", async () => {
     useSTTConnectionMock.mockReturnValue({
       conn: {
-        provider: "hyprnote",
+        provider: "fmtr",
         model: "soniqo-parakeet-streaming",
         baseUrl: "soniqo://local",
         apiKey: "",

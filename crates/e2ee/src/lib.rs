@@ -19,12 +19,12 @@ use serde_json::Value;
 use sha2::{Digest, Sha256};
 use zeroize::{Zeroize, ZeroizeOnDrop, Zeroizing};
 
-const RECOVERY_KEY_PREFIX: &str = "anarlog-e2ee-v1:";
-const RECOVERY_KEY_ID_DOMAIN: &[u8] = b"anarlog-e2ee-recovery-key-id-v1";
-const WORKSPACE_KEY_SALT: &[u8] = b"anarlog-e2ee-workspace-key-v1";
-const FIELD_ID_DOMAIN: &[u8] = b"anarlog-e2ee-field-id-v1";
-const VALUE_TAG_DOMAIN: &[u8] = b"anarlog-e2ee-value-tag-v1";
-const PAYLOAD_AAD_DOMAIN: &[u8] = b"anarlog-e2ee-payload-v1";
+const RECOVERY_KEY_PREFIX: &str = "fmtr-e2ee-v1:";
+const RECOVERY_KEY_ID_DOMAIN: &[u8] = b"fmtr-e2ee-recovery-key-id-v1";
+const WORKSPACE_KEY_SALT: &[u8] = b"fmtr-e2ee-workspace-key-v1";
+const FIELD_ID_DOMAIN: &[u8] = b"fmtr-e2ee-field-id-v1";
+const VALUE_TAG_DOMAIN: &[u8] = b"fmtr-e2ee-value-tag-v1";
+const PAYLOAD_AAD_DOMAIN: &[u8] = b"fmtr-e2ee-payload-v1";
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -116,7 +116,7 @@ impl Clone for WorkspaceKey {
 
 impl WorkspaceKey {
     fn new(bytes: [u8; 32]) -> Self {
-        let digest = Sha256::digest([b"anarlog-e2ee-key-id-v1".as_slice(), &bytes].concat());
+        let digest = Sha256::digest([b"fmtr-e2ee-key-id-v1".as_slice(), &bytes].concat());
         let key_id = URL_SAFE_NO_PAD.encode(&digest[..16]);
         Self {
             bytes: Zeroizing::new(bytes),

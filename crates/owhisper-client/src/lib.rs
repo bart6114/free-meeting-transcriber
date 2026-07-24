@@ -22,11 +22,11 @@ pub use adapter::deepgram::DeepgramModel;
 pub use adapter::{
     AdapterKind, AquaVoiceAdapter, ArgmaxAdapter, AssemblyAIAdapter, BatchSttAdapter,
     CallbackResult, CallbackSttAdapter, CartesiaAdapter, DashScopeAdapter, DeepgramAdapter,
-    ElevenLabsAdapter, FireworksAdapter, GladiaAdapter, HyprnoteAdapter, LanguageQuality,
+    ElevenLabsAdapter, FireworksAdapter, FmtrAdapter, GladiaAdapter, LanguageQuality,
     LanguageSupport, MistralAdapter, OpenAIAdapter, PyannoteAdapter, RealtimeSttAdapter,
     SmallestAIAdapter, SonioxAdapter, WhisperCppAdapter, append_provider_param,
-    documented_language_codes_batch, documented_language_codes_live, is_hyprnote_proxy,
-    is_local_host, normalize_languages,
+    documented_language_codes_batch, documented_language_codes_live, is_fmtr_proxy, is_local_host,
+    normalize_languages,
 };
 pub use adapter::{StreamingBatchEvent, StreamingBatchStream};
 

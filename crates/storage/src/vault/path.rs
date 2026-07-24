@@ -8,7 +8,7 @@ pub const SETTINGS_FILENAME: &str = "settings.json";
 pub fn compute_settings_path(base: &Path) -> PathBuf {
     base.join(SETTINGS_FILENAME)
 }
-const VAULT_BASE_ENV_VAR: &str = "CHAR_VAULT_BASE";
+const VAULT_BASE_ENV_VAR: &str = "FMTR_VAULT_BASE";
 
 fn expand_path(path: &str, default_base: Option<&Path>) -> PathBuf {
     let home_dir = || dirs::home_dir().map(|p| p.to_string_lossy().into_owned());

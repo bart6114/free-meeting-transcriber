@@ -2,10 +2,6 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  chat: {
-    mode: "FloatingClosed",
-    sendEvent: vi.fn(),
-  },
   close: vi.fn(),
   leftsidebar: {
     expanded: true,
@@ -31,7 +27,6 @@ vi.mock("./data", () => ({
 
 vi.mock("~/contexts/shell", () => ({
   useShell: () => ({
-    chat: mocks.chat,
     leftsidebar: mocks.leftsidebar,
   }),
 }));
@@ -53,8 +48,6 @@ import type { Tab } from "~/store/zustand/tabs";
 
 describe("TabContentChangelog", () => {
   beforeEach(() => {
-    mocks.chat.mode = "FloatingClosed";
-    mocks.chat.sendEvent.mockClear();
     mocks.close.mockClear();
     mocks.leftsidebar.expanded = true;
   });

@@ -24,13 +24,13 @@ import {
 } from "./utils";
 
 import { useIgnoredEvents } from "~/calendar/ignored-events";
-import { writeSessionContextDragData } from "~/chat/context/session-drag";
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
 import { useIsSessionEnhancing } from "~/session/hooks/useEnhancedNotes";
 import { getOrCreateSessionForEventId } from "~/session/queries";
 import { getSessionEvent } from "~/session/utils";
 import { openStandaloneNoteWindow } from "~/session/window";
 import type { MenuItemDef } from "~/shared/hooks/useNativeContextMenu";
+import { writeSessionContextDragData } from "~/shared/session-drag";
 import { InteractiveButton } from "~/shared/ui/interactive-button";
 import { useSessionTitle } from "~/store/zustand/live-title";
 import { useTabs } from "~/store/zustand/tabs";

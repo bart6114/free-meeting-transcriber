@@ -7,10 +7,10 @@ description: "Fix the most common recording, transcription, summary, and calenda
 
 Open **Settings → Permissions** and confirm:
 
-- **Microphone** is allowed so Anarlog can hear you.
-- **System Audio** is allowed so Anarlog can hear the other people on the call.
+- **Microphone** is allowed so Free Meeting Transcriber can hear you.
+- **System Audio** is allowed so Free Meeting Transcriber can hear the other people on the call.
 
-If a permission is denied, use **Open** to change it in macOS Settings, then restart Anarlog.
+If a permission is denied, use **Open** to change it in macOS Settings, then restart Free Meeting Transcriber.
 
 ## The transcript is not live
 
@@ -20,7 +20,7 @@ If transcription fails, confirm the provider is configured, the model supports y
 
 ## No summary appears
 
-A summary needs an Intelligence model. Open **Settings → Intelligence**, then select Anarlog Cloud or configure another provider.
+A summary needs an Intelligence model. Open **Settings → Intelligence**, then select a local model or configure a provider with your own API key.
 
 For LM Studio and Ollama, confirm the local server is running. See [Transcription and AI](/ai-setup).
 
@@ -32,7 +32,7 @@ For Apple Calendar, also check **Settings → Permissions → Calendar**.
 
 ## A recording disappeared
 
-Open **Settings → App → Storage** and check **Audio file retention**. Anarlog can delete audio immediately or after a selected period while keeping the note and transcript.
+Open **Settings → App → Storage** and check **Audio file retention**. Free Meeting Transcriber can delete audio immediately or after a selected period while keeping the note and transcript.
 
 See [Data, privacy, and retention](/data-and-privacy#choose-how-long-audio-is-kept) for every retention option.
 
@@ -44,6 +44,6 @@ For audio, confirm that a Transcription model is selected and that a local provi
 
 ## Get more help
 
-Email [hello@anarlog.so](mailto:hello@anarlog.so), [join Discord](https://anarlog.so/discord), or [open a GitHub issue](https://github.com/fastrepl/anarlog/issues).
+[Open a GitHub issue](https://github.com/bart6114/free-meeting-transcriber/issues).
 
 For CLI and MCP errors, use the [error reference](/reference/errors).

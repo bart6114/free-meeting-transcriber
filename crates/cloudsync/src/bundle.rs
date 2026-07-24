@@ -134,7 +134,7 @@ pub fn bundled_extension_path() -> Result<PathBuf, Error> {
 
         let base_dir = dirs::cache_dir()
             .ok_or(Error::MissingCacheDir)?
-            .join("char")
+            .join("fmtr")
             .join("cloudsync")
             .join(CLOUDSYNC_VERSION)
             .join(CLOUDSYNC_TARGET);

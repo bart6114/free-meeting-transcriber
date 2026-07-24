@@ -2,11 +2,6 @@ import { create } from "zustand";
 
 import { type BasicActions, type BasicState, createBasicSlice } from "./basic";
 import {
-  type ChatModeActions,
-  type ChatModeState,
-  createChatModeSlice,
-} from "./chat-mode";
-import {
   createLifecycleSlice,
   type LifecycleActions,
   lifecycleMiddleware,
@@ -39,7 +34,6 @@ import { createStateUpdaterSlice, type StateBasicActions } from "./state";
 
 import { wrapSliceWithLogging } from "~/store/zustand/shared";
 
-export type { ChatEvent, ChatMode } from "./chat-mode";
 export type {
   DailySummaryState,
   SettingsState,
@@ -61,15 +55,13 @@ type State = BasicState &
   NavigationState &
   LifecycleState &
   RestoreState &
-  RecentlyOpenedState &
-  ChatModeState;
+  RecentlyOpenedState;
 type Actions = BasicActions &
   StateBasicActions &
   NavigationActions &
   LifecycleActions &
   RestoreActions &
-  RecentlyOpenedActions &
-  ChatModeActions;
+  RecentlyOpenedActions;
 type Store = State & Actions;
 
 type TabsStoreSingleton = ReturnType<typeof createTabsStore>;
@@ -100,10 +92,6 @@ const createTabsStore = () =>
               ...wrapSliceWithLogging(
                 "recentlyOpened",
                 createRecentlyOpenedSlice(set, get),
-              ),
-              ...wrapSliceWithLogging(
-                "chatMode",
-                createChatModeSlice(set, get),
               ),
             })),
           ),

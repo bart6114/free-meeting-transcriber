@@ -25,8 +25,4 @@ describe("displayLlmModelId", () => {
       "Gemini 3.5 Flash",
     );
   });
-
-  test("keeps managed cloud label product-facing", () => {
-    expect(displayLlmModelId("hyprnote", "Auto")).toBe("Pro (Cloud)");
-  });
 });

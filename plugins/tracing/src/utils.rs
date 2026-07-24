@@ -2,31 +2,7 @@ use std::path::PathBuf;
 use std::{fs, io};
 
 use file_rotate::{ContentLimit, FileRotate, compression::Compression, suffix::AppendCount};
-use tauri::Manager;
 use tracing_appender::non_blocking::WorkerGuard;
-
-pub(crate) fn cleanup_legacy_logs<M: Manager<tauri::Wry>>(app: &M) {
-    let Ok(data_dir) = app.path().data_dir() else {
-        return;
-    };
-
-    let bundle_id: &str = app.config().identifier.as_ref();
-    let app_folder = if cfg!(debug_assertions) || bundle_id == "org.freemeetingtranscriber.staging"
-    {
-        bundle_id
-    } else {
-        "hyprnote"
-    };
-
-    let old_logs_dir = data_dir.join(app_folder);
-    if !old_logs_dir.exists() {
-        return;
-    }
-
-    for name in ["log", "log.1", "log.2", "log.3", "log.4", "log.5"] {
-        let _ = fs::remove_file(old_logs_dir.join(name));
-    }
-}
 
 pub fn cleanup_old_daily_logs(logs_dir: &PathBuf) -> io::Result<()> {
     if !logs_dir.exists() {

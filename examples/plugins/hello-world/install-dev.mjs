@@ -6,10 +6,10 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const appId = process.env.CHAR_APP_ID || "com.hyprnote.dev";
+const appId = process.env.FMTR_APP_ID || "org.freemeetingtranscriber.dev";
 const pluginRoot = resolve(__dirname);
 const targetRoot =
-  process.env.CHAR_PLUGIN_DIR ||
+  process.env.FMTR_PLUGIN_DIR ||
   (() => {
     switch (process.platform) {
       case "darwin":

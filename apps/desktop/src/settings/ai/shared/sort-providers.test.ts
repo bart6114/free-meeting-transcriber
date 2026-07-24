@@ -8,11 +8,11 @@ describe("sortProviders", () => {
       { id: "custom", displayName: "Custom" },
       { id: "fireworks", displayName: "Fireworks", disabled: true },
       { id: "openai", displayName: "OpenAI" },
-      { id: "hyprnote", displayName: "On-device" },
+      { id: "fmtr", displayName: "On-device" },
     ]);
 
     expect(sorted.map((provider) => provider.id)).toEqual([
-      "hyprnote",
+      "fmtr",
       "openai",
       "fireworks",
       "custom",

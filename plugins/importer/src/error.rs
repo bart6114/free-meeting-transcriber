@@ -12,9 +12,6 @@ pub enum Error {
     #[error("json error: {0}")]
     Json(#[from] serde_json::Error),
 
-    #[error("db parser error: {0}")]
-    DbParser(#[from] legacy_db_parser::Error),
-
     #[error("import source not found: {0:?}")]
     SourceNotFound(ImportSourceKind),
 

@@ -6,9 +6,8 @@ notes you own on disk — no cloud backend, no account, and no telemetry. Bring
 your own LLM (OpenAI, Anthropic, Gemini, OpenRouter, Ollama, LM Studio, or
 anything OpenAI-compatible) to summarize and chat about your meetings.
 
-This is a private hard fork of [fastrepl/anarlog](https://github.com/fastrepl/anarlog)
-(MIT-licensed). All hosted/cloud-sync, accounts, and billing functionality
-has been removed — everything here runs locally on your own machine.
+There is no hosted/cloud-sync, account, or billing functionality — everything
+runs locally on your own machine.
 
 ## How to use it
 
@@ -39,16 +38,15 @@ a Rust CLI (`apps/cli/`), built on SQLite (schema/migrations in
 ```sh
 pnpm install
 pnpm -F @hypr/desktop tauri:dev   # run the desktop app
-cargo build -p anarlog-cli         # build the fmtr CLI
+cargo build -p fmtr-cli            # build the fmtr CLI
 ```
 
 See [AGENTS.md](./AGENTS.md) for the fuller dev-guidance (formatting,
 typechecking, code-style conventions).
 
-## Provenance
+## License
 
-Forked from [fastrepl/anarlog](https://github.com/fastrepl/anarlog), MIT
-licensed. See [LICENSE](./LICENSE) for the full license and copyright
+MIT licensed. See [LICENSE](./LICENSE) for the full license and copyright
 history.
 
 ---

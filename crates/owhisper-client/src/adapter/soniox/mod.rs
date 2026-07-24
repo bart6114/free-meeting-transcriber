@@ -164,16 +164,6 @@ mod tests {
                 vec![],
             ),
             (
-                "https://api.hyprnote.com?provider=soniox",
-                "wss://api.hyprnote.com/listen",
-                vec![("provider", "soniox")],
-            ),
-            (
-                "https://api.hyprnote.com/listen?provider=soniox",
-                "wss://api.hyprnote.com/listen",
-                vec![("provider", "soniox")],
-            ),
-            (
                 "http://localhost:8787/listen?provider=soniox",
                 "ws://localhost:8787/listen",
                 vec![("provider", "soniox")],

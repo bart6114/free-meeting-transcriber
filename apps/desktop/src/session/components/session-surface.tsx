@@ -3,14 +3,12 @@ import { StandardContentWrapper } from "~/shared/main";
 export function SessionSurface({
   header,
   children,
-  floatingButton,
 }: {
   header?: React.ReactNode;
   children: React.ReactNode;
-  floatingButton?: React.ReactNode;
 }) {
   return (
-    <StandardContentWrapper floatingButton={floatingButton}>
+    <StandardContentWrapper>
       <div data-session-surface className="flex h-full flex-col">
         {header ? (
           <div data-tauri-drag-region className="px-1">

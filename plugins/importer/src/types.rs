@@ -9,7 +9,6 @@ pub use hypr_importer_core::ir::{
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, specta::Type, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
 pub enum TransformKind {
-    HyprnoteV0,
     Granola,
     AsIs,
 }
@@ -18,8 +17,6 @@ pub enum TransformKind {
 #[serde(rename_all = "snake_case")]
 pub enum ImportSourceKind {
     Granola,
-    HyprnoteV0Stable,
-    HyprnoteV0Nightly,
     AsIs,
 }
 
@@ -41,30 +38,6 @@ impl ImportSource {
         }
     }
 
-    pub fn hyprnote_stable() -> Option<Self> {
-        let path = dirs::data_dir()?
-            .join("com.hyprnote.stable")
-            .join("db.sqlite");
-        Some(Self {
-            kind: Some(ImportSourceKind::HyprnoteV0Stable),
-            transform: TransformKind::HyprnoteV0,
-            path,
-            name: "Hyprnote v0 - Stable".to_string(),
-        })
-    }
-
-    pub fn hyprnote_nightly() -> Option<Self> {
-        let path = dirs::data_dir()?
-            .join("com.hyprnote.nightly")
-            .join("db.sqlite");
-        Some(Self {
-            kind: Some(ImportSourceKind::HyprnoteV0Nightly),
-            transform: TransformKind::HyprnoteV0,
-            path,
-            name: "Hyprnote v0 - Nightly".to_string(),
-        })
-    }
-
     pub fn granola() -> Option<Self> {
         let path = hypr_granola::default_supabase_path();
         Some(Self {
@@ -80,22 +53,8 @@ impl ImportSource {
     }
 
     pub fn info(&self) -> ImportSourceInfo {
-        let (display_path, reveal_path) = match self.kind {
-            Some(ImportSourceKind::HyprnoteV0Stable)
-            | Some(ImportSourceKind::HyprnoteV0Nightly) => {
-                let parent = self.path.parent().unwrap_or(&self.path);
-                let display = parent
-                    .file_name()
-                    .map(|n| n.to_string_lossy().to_string())
-                    .unwrap_or_else(|| self.path.to_string_lossy().to_string());
-                let reveal = parent.to_string_lossy().to_string();
-                (display, reveal)
-            }
-            _ => {
-                let path_str = self.path.to_string_lossy().to_string();
-                (path_str.clone(), path_str)
-            }
-        };
+        let path_str = self.path.to_string_lossy().to_string();
+        let (display_path, reveal_path) = (path_str.clone(), path_str);
 
         ImportSourceInfo {
             kind: self.kind.clone(),
@@ -110,8 +69,6 @@ impl ImportSource {
 impl From<ImportSourceKind> for ImportSource {
     fn from(kind: ImportSourceKind) -> Self {
         match kind {
-            ImportSourceKind::HyprnoteV0Stable => Self::hyprnote_stable().unwrap(),
-            ImportSourceKind::HyprnoteV0Nightly => Self::hyprnote_nightly().unwrap(),
             ImportSourceKind::Granola => Self::granola().unwrap(),
             ImportSourceKind::AsIs => Self {
                 kind: Some(ImportSourceKind::AsIs),

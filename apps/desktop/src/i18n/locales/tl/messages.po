@@ -159,19 +159,6 @@ msgstr ""
 msgid "Apply to all"
 msgstr ""
 
-#: src/chat/components/input/index.tsx
-msgid "Ask & search about anything, or be creative!"
-msgstr ""
-
-#: src/shared/chat-cta.tsx
-msgid "Ask AI anything"
-msgstr ""
-
-#: src/chat/components/input/index.tsx
-#: src/shared/chat-cta.tsx
-msgid "Ask anything"
-msgstr ""
-
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr ""
@@ -250,10 +237,6 @@ msgstr ""
 msgid "Changing..."
 msgstr ""
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "Chat history"
-msgstr ""
-
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Choose a file format and what to include."
 msgstr ""
@@ -292,10 +275,6 @@ msgstr ""
 
 #: src/changelog/index.tsx
 msgid "Close changelog"
-msgstr ""
-
-#: src/chat/components/toolbar-controls.tsx
-msgid "Close chat"
 msgstr ""
 
 #: src/task/resource-view.tsx
@@ -342,10 +321,6 @@ msgstr ""
 
 #: src/templates/auto-form.tsx
 msgid "Context always provided"
-msgstr ""
-
-#: src/chat/components/message/normal.tsx
-msgid "Copy message"
 msgstr ""
 
 #: src/templates/details.tsx
@@ -540,10 +515,6 @@ msgstr ""
 msgid "Flags"
 msgstr ""
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "Float chat"
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Food & Drink"
 msgstr ""
@@ -607,10 +578,6 @@ msgstr ""
 
 #: src/onboarding/shared.tsx
 msgid "Go to previous section"
-msgstr ""
-
-#: src/chat/components/body/index.tsx
-msgid "Go to recent"
 msgstr ""
 
 #: src/settings/ai/stt/select.tsx
@@ -712,10 +679,6 @@ msgstr "Wika para sa mga buod, pakikipag-chat, at mga tugon na binuo ng AI"
 
 #: src/settings/ai/llm/select.tsx
 msgid "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
-msgstr ""
-
-#: src/chat/components/message/error.tsx
-msgid "Learn how to fix this"
 msgstr ""
 
 #: src/settings/general/theme.tsx
@@ -834,10 +797,6 @@ msgstr ""
 msgid "Name"
 msgstr ""
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "New chat"
-msgstr ""
-
 #: src/main/empty.tsx
 msgid "New Note"
 msgstr ""
@@ -915,10 +874,6 @@ msgstr ""
 msgid "No people in this organization"
 msgstr ""
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "No recent chats"
-msgstr ""
-
 #: src/contacts/details.tsx
 msgid "No related notes found"
 msgstr ""
@@ -982,10 +937,6 @@ msgstr ""
 #: src/session/components/outer-header/overflow/index.tsx
 #: src/sidebar/timeline/item.tsx
 msgid "Open in New Window"
-msgstr ""
-
-#: src/chat/components/toolbar-controls.tsx
-msgid "Open in right panel"
 msgstr ""
 
 #: src/task/resource-view.tsx
@@ -1076,10 +1027,6 @@ msgstr ""
 msgid "Record"
 msgstr ""
 
-#: src/chat/components/message/normal.tsx
-msgid "Regenerate message"
-msgstr ""
-
 #: src/contacts/details.tsx
 msgid "Related Notes"
 msgstr ""
@@ -1154,7 +1101,6 @@ msgstr ""
 msgid "Resume listening"
 msgstr ""
 
-#: src/chat/components/message/error.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 msgid "Retry"
 msgstr ""
@@ -1270,10 +1216,6 @@ msgstr ""
 
 #: src/contacts/organization-details.tsx
 msgid "Send email"
-msgstr ""
-
-#: src/chat/components/input/index.tsx
-msgid "Send message"
 msgstr ""
 
 #: src/templates/auto-form.tsx
@@ -1396,10 +1338,6 @@ msgstr ""
 msgid "Stop listening"
 msgstr ""
 
-#: src/chat/components/input/index.tsx
-msgid "Stop response"
-msgstr ""
-
 #: src/session/components/outer-header/index.tsx
 msgid "Stop transcription"
 msgstr ""
@@ -1464,10 +1402,6 @@ msgstr ""
 #: src/settings/general/spoken-languages.tsx
 msgid "The main language is always included for transcription"
 msgstr "Ang pangunahing wika ay palaging kasama para sa transkripsyon"
-
-#: src/chat/components/message/loading.tsx
-msgid "Thinking..."
-msgstr ""
 
 #: src/settings/general/storage/change-location.tsx
 msgid "This folder already contains files. Copied vault files will be mixed in with them."
@@ -1574,10 +1508,6 @@ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "While listening, use Accessibility access to copy visible chat from supported meeting apps and browser meetings into the active note."
-msgstr ""
-
-#: src/task/tab-content.tsx
-msgid "Work on this task"
 msgstr ""
 
 #: src/settings/todo/permission.tsx

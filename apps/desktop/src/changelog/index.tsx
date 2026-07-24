@@ -9,7 +9,6 @@ import { cn } from "@hypr/utils";
 import { useChangelogContent } from "./data";
 
 import { useShell } from "~/contexts/shell";
-import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import { StandardContentWrapper } from "~/shared/main";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
 
@@ -21,16 +20,10 @@ export function TabContentChangelog({
   tab: Extract<Tab, { type: "changelog" }>;
 }) {
   const { current } = tab.state;
-  const { chat, leftsidebar } = useShell();
+  const { leftsidebar } = useShell();
   const close = useTabs((state) => state.close);
   const showSidebarTimelineHeaderGutter = !leftsidebar.expanded;
   const showExpandedSidebarTimelineHeader = leftsidebar.expanded;
-
-  useMountEffect(() => {
-    if (chat.mode !== "FloatingClosed") {
-      chat.sendEvent({ type: "CLOSE" });
-    }
-  });
 
   const { content, loading } = useChangelogContent(current);
 

@@ -255,8 +255,7 @@ mod tests {
             ..Default::default()
         };
 
-        let url =
-            adapter.build_ws_url("https://api.hyprnote.com/stt?provider=deepgram", &params, 1);
+        let url = adapter.build_ws_url("http://localhost:8787/stt?provider=deepgram", &params, 1);
 
         assert!(url.as_str().contains("provider=deepgram"));
     }
@@ -299,7 +298,7 @@ mod tests {
         owhisper_interface::ListenParams {
             model: Some("nova-3".to_string()),
             languages: vec![ISO639::En.into()],
-            keywords: vec!["Hyprnote".to_string(), "transcription".to_string()],
+            keywords: vec!["Waveform".to_string(), "transcription".to_string()],
             ..Default::default()
         }
     );

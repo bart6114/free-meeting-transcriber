@@ -65,7 +65,7 @@ impl RealtimeSttAdapter for FireworksAdapter {
             Err(e) => {
                 tracing::warn!(
                     error = ?e,
-                    hyprnote.payload.size_bytes = raw.len() as u64,
+                    fmtr.payload.size_bytes = raw.len() as u64,
                     "fireworks_json_parse_failed"
                 );
                 return vec![];

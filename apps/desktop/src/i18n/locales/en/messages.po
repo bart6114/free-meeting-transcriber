@@ -159,19 +159,6 @@ msgstr "Appearance"
 msgid "Apply to all"
 msgstr "Apply to all"
 
-#: src/chat/components/input/index.tsx
-msgid "Ask & search about anything, or be creative!"
-msgstr "Ask & search about anything, or be creative!"
-
-#: src/shared/chat-cta.tsx
-msgid "Ask AI anything"
-msgstr "Ask AI anything"
-
-#: src/chat/components/input/index.tsx
-#: src/shared/chat-cta.tsx
-msgid "Ask anything"
-msgstr "Ask anything"
-
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr "Assignees:"
@@ -250,10 +237,6 @@ msgstr "Change storage location?"
 msgid "Changing..."
 msgstr "Changing..."
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "Chat history"
-msgstr "Chat history"
-
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Choose a file format and what to include."
 msgstr "Choose a file format and what to include."
@@ -293,10 +276,6 @@ msgstr "Close"
 #: src/changelog/index.tsx
 msgid "Close changelog"
 msgstr "Close changelog"
-
-#: src/chat/components/toolbar-controls.tsx
-msgid "Close chat"
-msgstr "Close chat"
 
 #: src/task/resource-view.tsx
 msgid "Closed"
@@ -343,10 +322,6 @@ msgstr "Context"
 #: src/templates/auto-form.tsx
 msgid "Context always provided"
 msgstr "Context always provided"
-
-#: src/chat/components/message/normal.tsx
-msgid "Copy message"
-msgstr "Copy message"
 
 #: src/templates/details.tsx
 msgid "Create template"
@@ -540,10 +515,6 @@ msgstr "Find a note..."
 msgid "Flags"
 msgstr "Flags"
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "Float chat"
-msgstr "Float chat"
-
 #: src/templates/template-icon-picker.tsx
 msgid "Food & Drink"
 msgstr "Food & Drink"
@@ -608,10 +579,6 @@ msgstr "Go to next section"
 #: src/onboarding/shared.tsx
 msgid "Go to previous section"
 msgstr "Go to previous section"
-
-#: src/chat/components/body/index.tsx
-msgid "Go to recent"
-msgstr "Go to recent"
 
 #: src/settings/ai/stt/select.tsx
 msgid "Got it"
@@ -713,10 +680,6 @@ msgstr "Language for summaries, chats, and AI-generated responses"
 #: src/settings/ai/llm/select.tsx
 msgid "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
 msgstr "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
-
-#: src/chat/components/message/error.tsx
-msgid "Learn how to fix this"
-msgstr "Learn how to fix this"
 
 #: src/settings/general/theme.tsx
 msgid "Light"
@@ -834,10 +797,6 @@ msgstr "Move up"
 msgid "Name"
 msgstr "Name"
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "New chat"
-msgstr "New chat"
-
 #: src/main/empty.tsx
 msgid "New Note"
 msgstr "New Note"
@@ -915,10 +874,6 @@ msgstr "No people"
 msgid "No people in this organization"
 msgstr "No people in this organization"
 
-#: src/chat/components/toolbar-controls.tsx
-msgid "No recent chats"
-msgstr "No recent chats"
-
 #: src/contacts/details.tsx
 msgid "No related notes found"
 msgstr "No related notes found"
@@ -983,10 +938,6 @@ msgstr "Open Free Meeting Transcriber"
 #: src/sidebar/timeline/item.tsx
 msgid "Open in New Window"
 msgstr "Open in New Window"
-
-#: src/chat/components/toolbar-controls.tsx
-msgid "Open in right panel"
-msgstr "Open in right panel"
 
 #: src/task/resource-view.tsx
 msgid "Open on GitHub"
@@ -1076,10 +1027,6 @@ msgstr "Recent"
 msgid "Record"
 msgstr "Record"
 
-#: src/chat/components/message/normal.tsx
-msgid "Regenerate message"
-msgstr "Regenerate message"
-
 #: src/contacts/details.tsx
 msgid "Related Notes"
 msgstr "Related Notes"
@@ -1154,7 +1101,6 @@ msgstr "Resume"
 msgid "Resume listening"
 msgstr "Resume listening"
 
-#: src/chat/components/message/error.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 msgid "Retry"
 msgstr "Retry"
@@ -1271,10 +1217,6 @@ msgstr "Send anonymous usage analytics to help improve Free Meeting Transcriber.
 #: src/contacts/organization-details.tsx
 msgid "Send email"
 msgstr "Send email"
-
-#: src/chat/components/input/index.tsx
-msgid "Send message"
-msgstr "Send message"
 
 #: src/templates/auto-form.tsx
 msgid "Session details"
@@ -1396,10 +1338,6 @@ msgstr "Stop"
 msgid "Stop listening"
 msgstr "Stop listening"
 
-#: src/chat/components/input/index.tsx
-msgid "Stop response"
-msgstr "Stop response"
-
 #: src/session/components/outer-header/index.tsx
 msgid "Stop transcription"
 msgstr "Stop transcription"
@@ -1464,10 +1402,6 @@ msgstr "The app will restart after onboarding to apply your storage changes"
 #: src/settings/general/spoken-languages.tsx
 msgid "The main language is always included for transcription"
 msgstr "The main language is always included for transcription"
-
-#: src/chat/components/message/loading.tsx
-msgid "Thinking..."
-msgstr "Thinking..."
 
 #: src/settings/general/storage/change-location.tsx
 msgid "This folder already contains files. Copied vault files will be mixed in with them."
@@ -1575,10 +1509,6 @@ msgstr "Where your notes and recordings are stored"
 #: src/settings/general/app-settings.tsx
 msgid "While listening, use Accessibility access to copy visible chat from supported meeting apps and browser meetings into the active note."
 msgstr "While listening, use Accessibility access to copy visible chat from supported meeting apps and browser meetings into the active note."
-
-#: src/task/tab-content.tsx
-msgid "Work on this task"
-msgstr "Work on this task"
 
 #: src/settings/todo/permission.tsx
 msgid "You can"

@@ -6,7 +6,7 @@ use ractor::{ActorProcessingErr, ActorRef};
 
 use owhisper_client::{
     AdapterKind, ArgmaxAdapter, AssemblyAIAdapter, CartesiaAdapter, DashScopeAdapter,
-    DeepgramAdapter, ElevenLabsAdapter, FireworksAdapter, GladiaAdapter, HyprnoteAdapter,
+    DeepgramAdapter, ElevenLabsAdapter, FireworksAdapter, FmtrAdapter, GladiaAdapter,
     MistralAdapter, RealtimeSttAdapter, SonioxAdapter, hypr_ws_client,
 };
 use owhisper_interface::stream::Extra;
@@ -101,7 +101,7 @@ pub(super) async fn spawn_rx_task(
         ElevenLabs => ElevenLabsAdapter,
         DashScope => DashScopeAdapter,
         Mistral => MistralAdapter,
-        Hyprnote => HyprnoteAdapter,
+        Fmtr => FmtrAdapter,
     }, batch_only: [OpenAI, AquaVoice, Pyannote])?;
 
     Ok((result.0, result.1, result.2, adapter_kind.to_string()))
@@ -149,7 +149,7 @@ async fn spawn_soniqo_rx_task(
             Ok(result) => result,
             Err(error) => {
                 tracing::error!(
-                    hyprnote.session.id = %args.session_id,
+                    fmtr.session.id = %args.session_id,
                     error.message = ?error,
                     "soniqo_live_start_failed(dual)"
                 );
@@ -190,7 +190,7 @@ async fn spawn_soniqo_rx_task(
                 Ok(result) => result,
                 Err(error) => {
                     tracing::error!(
-                        hyprnote.session.id = %args.session_id,
+                        fmtr.session.id = %args.session_id,
                         error.message = ?error,
                         "soniqo_live_start_failed(single)"
                     );
@@ -323,7 +323,7 @@ async fn spawn_rx_task_single_with_adapter<A: RealtimeSttAdapter>(
     let (listen_stream, handle) = match client.from_realtime_audio(outbound).await {
         Err(e) => {
             tracing::error!(
-                hyprnote.session.id = %args.session_id,
+                fmtr.session.id = %args.session_id,
                 error.message = ?e,
                 "listen_ws_connect_failed(single)"
             );
@@ -383,7 +383,7 @@ async fn spawn_rx_task_dual_with_adapter<A: RealtimeSttAdapter>(
     let (listen_stream, handle) = match client.from_realtime_audio(outbound).await {
         Err(e) => {
             tracing::error!(
-                hyprnote.session.id = %args.session_id,
+                fmtr.session.id = %args.session_id,
                 error.message = ?e,
                 "listen_ws_connect_failed(dual)"
             );

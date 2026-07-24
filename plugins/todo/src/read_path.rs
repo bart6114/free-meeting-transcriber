@@ -102,26 +102,26 @@ mod tests {
 
     #[test]
     fn parses_github_repo_tickets() {
-        let parsed = ReadPath::parse("github/conn-1/repos/openai/char").unwrap();
+        let parsed = ReadPath::parse("github/conn-1/repos/acme/widgets").unwrap();
         assert!(matches!(
             parsed,
             ReadPath::GithubTickets {
                 connection_id: "conn-1",
-                owner: "openai",
-                repo: "char"
+                owner: "acme",
+                repo: "widgets"
             }
         ));
     }
 
     #[test]
     fn parses_explicit_github_tickets_path() {
-        let parsed = ReadPath::parse("github/conn-1/repos/openai/char/tickets").unwrap();
+        let parsed = ReadPath::parse("github/conn-1/repos/acme/widgets/tickets").unwrap();
         assert!(matches!(
             parsed,
             ReadPath::GithubTickets {
                 connection_id: "conn-1",
-                owner: "openai",
-                repo: "char"
+                owner: "acme",
+                repo: "widgets"
             }
         ));
     }
@@ -145,6 +145,6 @@ mod tests {
     #[test]
     fn rejects_unknown_paths() {
         assert!(ReadPath::parse("linear").is_err());
-        assert!(ReadPath::parse("github/conn-1/repos/openai/char/pulls").is_err());
+        assert!(ReadPath::parse("github/conn-1/repos/acme/widgets/pulls").is_err());
     }
 }

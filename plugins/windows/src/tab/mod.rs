@@ -58,10 +58,5 @@ common_derives! {
         },
         #[serde(rename = "onboarding")]
         Onboarding,
-        #[serde(rename = "edit")]
-        Edit {
-            #[serde(rename = "requestId")]
-            request_id: String,
-        },
     }
 }

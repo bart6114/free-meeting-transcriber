@@ -1,5 +1,6 @@
 import { PROVIDERS } from "~/settings/ai/llm/shared";
 import { getProviderSelectionBlockers } from "~/settings/ai/shared/eligibility";
+import { PROVIDERS as STT_PROVIDERS } from "~/settings/ai/stt/shared";
 import { getStoredAiProvider } from "~/settings/providers";
 import { getStoredSettingValues, setSettingValues } from "~/settings/queries";
 import type { SettingValues } from "~/settings/schema";
@@ -8,10 +9,15 @@ export async function configurePaidSettings(): Promise<void> {
   const { values } = await getStoredSettingValues();
   const updates: SettingValues = {};
 
-  if (!values.current_stt_provider) {
+  const sttProvider = values.current_stt_provider;
+  const isKnownSttProvider =
+    !!sttProvider &&
+    STT_PROVIDERS.some((provider) => provider.id === sttProvider);
+  if (!isKnownSttProvider) {
     // STT is on-device only: default to the local Soniqo batch model rather
-    // than any hosted/cloud model.
-    updates.current_stt_provider = "hyprnote";
+    // than any hosted/cloud model. A stored provider id that is no longer in
+    // the providers list is treated as unset and falls through to the default.
+    updates.current_stt_provider = "fmtr";
     updates.current_stt_model = "soniqo-parakeet-batch";
   }
 

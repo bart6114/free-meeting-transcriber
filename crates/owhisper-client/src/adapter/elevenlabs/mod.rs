@@ -100,11 +100,6 @@ mod tests {
                 vec![],
             ),
             (
-                "https://api.hyprnote.com?provider=elevenlabs",
-                "wss://api.hyprnote.com/listen",
-                vec![("provider", "elevenlabs")],
-            ),
-            (
                 "http://localhost:8787/listen?provider=elevenlabs",
                 "ws://localhost:8787/listen",
                 vec![("provider", "elevenlabs")],

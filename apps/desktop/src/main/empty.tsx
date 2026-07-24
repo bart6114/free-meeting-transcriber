@@ -4,7 +4,6 @@ import { useCallback } from "react";
 import { Kbd } from "@hypr/ui/components/ui/kbd";
 import { cn } from "@hypr/utils";
 
-import { FloatingChatCTA } from "~/shared/chat-cta";
 import { StandardContentWrapper } from "~/shared/main";
 import { useNewNote, useNewNoteAndListen } from "~/shared/useNewNote";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
@@ -15,7 +14,7 @@ export function TabContentEmpty({
   tab: Extract<Tab, { type: "empty" }>;
 }) {
   return (
-    <StandardContentWrapper floatingButton={<FloatingChatCTA />}>
+    <StandardContentWrapper>
       <EmptyView />
     </StandardContentWrapper>
   );

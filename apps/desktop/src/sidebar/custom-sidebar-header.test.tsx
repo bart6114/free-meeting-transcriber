@@ -2,21 +2,10 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  chatMode: "FloatingClosed",
   currentTab: { type: "settings" } as { type: string } | null,
   openCurrent: vi.fn(),
   select: vi.fn(),
-  sendEvent: vi.fn(),
   tabs: [] as { type: string }[],
-}));
-
-vi.mock("~/contexts/shell", () => ({
-  useShell: () => ({
-    chat: {
-      mode: mocks.chatMode,
-      sendEvent: mocks.sendEvent,
-    },
-  }),
 }));
 
 vi.mock("~/store/zustand/tabs", () => ({
@@ -37,11 +26,9 @@ describe("CustomSidebarHeader", () => {
   });
 
   beforeEach(() => {
-    mocks.chatMode = "FloatingClosed";
     mocks.currentTab = { type: "settings" };
     mocks.openCurrent.mockClear();
     mocks.select.mockClear();
-    mocks.sendEvent.mockClear();
     mocks.tabs = [];
   });
 
@@ -62,28 +49,6 @@ describe("CustomSidebarHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "Go home" }));
 
     expect(mocks.select).toHaveBeenCalledWith(homeTab);
-    expect(mocks.openCurrent).not.toHaveBeenCalled();
-  });
-
-  it("closes floating chat before opening home", () => {
-    mocks.chatMode = "FloatingOpen";
-
-    render(<CustomSidebarHeader title="Contacts" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Go home" }));
-
-    expect(mocks.sendEvent).toHaveBeenCalledWith({ type: "CLOSE" });
-    expect(mocks.openCurrent).not.toHaveBeenCalled();
-  });
-
-  it("closes right panel chat before opening home", () => {
-    mocks.chatMode = "RightPanelOpen";
-
-    render(<CustomSidebarHeader title="Contacts" />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Go home" }));
-
-    expect(mocks.sendEvent).toHaveBeenCalledWith({ type: "CLOSE" });
     expect(mocks.openCurrent).not.toHaveBeenCalled();
   });
 

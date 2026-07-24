@@ -53,35 +53,4 @@ mod test {
         let content = std::fs::read_to_string(OUTPUT_FILE).unwrap();
         std::fs::write(OUTPUT_FILE, format!("// @ts-nocheck\n{content}")).unwrap();
     }
-
-    fn create_app<R: tauri::Runtime>(builder: tauri::Builder<R>) -> tauri::App<R> {
-        let mut ctx = tauri::test::mock_context(tauri::test::noop_assets());
-        ctx.config_mut().identifier = "org.freemeetingtranscriber.dev".to_string();
-        ctx.config_mut().version = Some("0.0.1".to_string());
-
-        builder.plugin(init()).build(ctx).unwrap()
-    }
-
-    #[ignore]
-    #[tokio::test]
-    async fn test_run_import_dry() {
-        let app = create_app(tauri::test::mock_builder());
-        let importer = app.importer();
-
-        println!(
-            "{:?}",
-            importer
-                .run_import_dry(ImportSourceKind::HyprnoteV0Stable)
-                .await
-                .unwrap()
-        );
-
-        println!(
-            "{:?}",
-            importer
-                .run_import_dry(ImportSourceKind::HyprnoteV0Nightly)
-                .await
-                .unwrap()
-        );
-    }
 }

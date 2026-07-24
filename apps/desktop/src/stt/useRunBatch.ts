@@ -53,19 +53,19 @@ const LOCAL_SONIQO_BATCH_TARGET = {
   label: "Soniqo batch transcription",
 } satisfies BatchTarget;
 
-// The only STT provider left is on-device "hyprnote", so this just maps its
+// The only STT provider left is on-device "fmtr", so this just maps its
 // local model id prefix to the Rust-side batch provider identifier.
 export function getBatchProvider(
   provider: string,
   model: string,
 ): TranscriptionParams["provider"] | null {
-  if (provider !== "hyprnote") {
+  if (provider !== "fmtr") {
     return null;
   }
 
   if (model.startsWith("soniqo-")) return "soniqo";
   if (model.startsWith("am-")) return "am";
-  return "hyprnote";
+  return "fmtr";
 }
 
 export function canRunBatchTranscription(

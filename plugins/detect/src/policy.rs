@@ -18,7 +18,7 @@ pub enum SkipReason {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AppCategory {
-    Hyprnote,
+    SelfApp,
     Dictation,
     IDE,
     ScreenRecording,
@@ -29,14 +29,10 @@ pub enum AppCategory {
 impl AppCategory {
     pub fn bundle_ids(&self) -> &'static [&'static str] {
         match self {
-            Self::Hyprnote => &[
+            Self::SelfApp => &[
                 "org.freemeetingtranscriber.dev",
                 "org.freemeetingtranscriber.stable",
                 "org.freemeetingtranscriber.staging",
-                "com.hyprnote.dev",
-                "com.hyprnote.stable",
-                "com.hyprnote.nightly",
-                "com.hyprnote.staging",
             ],
             Self::Dictation => &[
                 "com.electron.wispr-flow",
@@ -87,7 +83,7 @@ impl AppCategory {
 
     pub fn all() -> &'static [AppCategory] {
         &[
-            Self::Hyprnote,
+            Self::SelfApp,
             Self::Dictation,
             Self::IDE,
             Self::ScreenRecording,
@@ -224,11 +220,7 @@ mod tests {
     fn test_app_category_find() {
         assert_eq!(
             AppCategory::find_category("org.freemeetingtranscriber.dev"),
-            Some(AppCategory::Hyprnote)
-        );
-        assert_eq!(
-            AppCategory::find_category("com.hyprnote.dev"),
-            Some(AppCategory::Hyprnote)
+            Some(AppCategory::SelfApp)
         );
         assert_eq!(AppCategory::find_category("com.zoom.us"), None);
     }
@@ -268,7 +260,7 @@ mod tests {
     #[test]
     fn test_app_category_all_returns_every_variant() {
         let all = AppCategory::all();
-        assert!(all.contains(&AppCategory::Hyprnote));
+        assert!(all.contains(&AppCategory::SelfApp));
         assert!(all.contains(&AppCategory::Dictation));
         assert!(all.contains(&AppCategory::IDE));
         assert!(all.contains(&AppCategory::ScreenRecording));
@@ -324,7 +316,6 @@ mod tests {
     fn test_should_not_track_categorized_app() {
         let policy = MicNotificationPolicy::default();
         assert!(!policy.should_track_app("org.freemeetingtranscriber.dev"));
-        assert!(!policy.should_track_app("com.hyprnote.dev"));
         assert!(!policy.should_track_app("com.electron.aqua-voice"));
         assert!(!policy.should_track_app("com.microsoft.VSCode"));
     }

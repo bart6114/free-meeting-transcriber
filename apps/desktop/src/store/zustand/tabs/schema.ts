@@ -112,7 +112,6 @@ export type Tab =
     })
   | (BaseTab & { type: "settings"; state: SettingsState })
   | (BaseTab & { type: "onboarding" })
-  | (BaseTab & { type: "edit"; requestId: string })
   | (BaseTab & {
       type: "task";
       id: string;
@@ -182,8 +181,6 @@ export const getDefaultState = (tab: TabInput): Tab => {
     }
     case "onboarding":
       return { ...base, type: "onboarding" };
-    case "edit":
-      return { ...base, type: "edit", requestId: tab.requestId };
     default:
       const _exhaustive: never = tab;
       return _exhaustive;
@@ -210,8 +207,6 @@ export const uniqueIdfromTab = (tab: Tab): string => {
       return `settings`;
     case "onboarding":
       return `onboarding`;
-    case "edit":
-      return `edit-${tab.requestId}`;
     case "task":
       return `task-${tab.id}`;
     case "daily_summary":

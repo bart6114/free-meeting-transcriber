@@ -39,11 +39,7 @@ pub(crate) fn prepare_binaries() -> Result<()> {
 
     println!("prepare-binaries: binaries/char-chrome-native-host-{triple}{ext}");
 
-    cmd!(
-        sh,
-        "{cargo} build --release --target {triple} -p anarlog-cli"
-    )
-    .run()?;
+    cmd!(sh, "{cargo} build --release --target {triple} -p fmtr-cli").run()?;
 
     fs::create_dir_all(&embedded_cli_dir).context("create resources/cli/")?;
 

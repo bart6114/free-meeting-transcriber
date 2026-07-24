@@ -1960,7 +1960,9 @@ mod tests {
         assert!(!is_externally_soft_hidden(""));
         assert!(!is_externally_soft_hidden("not json"));
         assert!(!is_externally_soft_hidden("{}"));
-        assert!(!is_externally_soft_hidden(r#"{"external_soft_hide":false}"#));
+        assert!(!is_externally_soft_hidden(
+            r#"{"external_soft_hide":false}"#
+        ));
     }
 
     fn session_batch() -> LegacyImportBatch {

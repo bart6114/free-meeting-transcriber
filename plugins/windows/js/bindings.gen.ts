@@ -206,7 +206,7 @@ windowDestroyed: "plugin:windows:window-destroyed"
 /** user-defined types **/
 
 export type Anchor = "TopRight" | "TopLeft" | "BottomRight" | "BottomLeft" | "Center"
-export type AppWindow = { type: "main" } | { type: "composer" } | { type: "note"; value: string }
+export type AppWindow = { type: "main" } | { type: "note"; value: string }
 export type ChangelogState = { previous: string | null; current: string }
 export type ContactsSelection = { type: "person"; id: string } | { type: "organization"; id: string }
 export type ContactsState = { selected: ContactsSelection | null }
@@ -227,7 +227,7 @@ export type Navigate = { path: string; search: Partial<{ [key in string]: JsonVa
 export type OpenTab = { tab: TabInput }
 export type SessionsState = { view: EditorView | null; autoStart: boolean | null }
 export type SettingsState = { tab: string | null }
-export type TabInput = { type: "sessions"; id: string; state?: SessionsState | null } | { type: "contacts"; state?: ContactsState | null } | { type: "templates"; state?: TemplatesState | null } | { type: "extensions"; state?: ExtensionsState | null } | { type: "humans"; id: string } | { type: "organizations"; id: string } | { type: "folders"; id: string | null } | { type: "empty" } | { type: "extension"; extensionId: string; state?: Partial<{ [key in string]: JsonValue }> | null } | { type: "changelog"; state: ChangelogState } | { type: "settings"; state?: SettingsState | null } | { type: "onboarding" } | { type: "edit"; requestId: string }
+export type TabInput = { type: "sessions"; id: string; state?: SessionsState | null } | { type: "contacts"; state?: ContactsState | null } | { type: "templates"; state?: TemplatesState | null } | { type: "extensions"; state?: ExtensionsState | null } | { type: "humans"; id: string } | { type: "organizations"; id: string } | { type: "folders"; id: string | null } | { type: "empty" } | { type: "extension"; extensionId: string; state?: Partial<{ [key in string]: JsonValue }> | null } | { type: "changelog"; state: ChangelogState } | { type: "settings"; state?: SettingsState | null } | { type: "onboarding" }
 export type TemplatesState = { showHomepage: boolean | null; isWebMode: boolean | null; selectedMineId: string | null; selectedWebIndex: number | null }
 export type VisibilityEvent = { window: AppWindow; visible: boolean }
 export type WindowDestroyed = { window: AppWindow }

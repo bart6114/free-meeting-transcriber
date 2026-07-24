@@ -172,7 +172,7 @@ impl ServerHandler for FmtrMcpServer {
                 } else {
                     meeting.title
                 };
-                RawResource::new(format!("anarlog://meetings/{}", meeting.id), name)
+                RawResource::new(format!("fmtr://meetings/{}", meeting.id), name)
                     .with_description("Free Meeting Transcriber meeting context")
                     .with_mime_type("text/markdown")
                     .no_annotation()
@@ -195,21 +195,21 @@ impl ServerHandler for FmtrMcpServer {
 
         Ok(ListResourceTemplatesResult::with_all_items(vec![
             RawResourceTemplate::new(
-                "anarlog://meetings/{meeting_id}",
+                "fmtr://meetings/{meeting_id}",
                 "Free Meeting Transcriber meeting",
             )
             .with_description("Meeting metadata, note, summaries, people, and action items")
             .with_mime_type("text/markdown")
             .no_annotation(),
             RawResourceTemplate::new(
-                "anarlog://meetings/{meeting_id}/transcript{?offset,limit}",
+                "fmtr://meetings/{meeting_id}/transcript{?offset,limit}",
                 "Free Meeting Transcriber meeting transcript",
             )
             .with_description("A bounded page of meeting transcript text")
             .with_mime_type("text/plain")
             .no_annotation(),
             RawResourceTemplate::new(
-                "anarlog://series/{series_id}",
+                "fmtr://series/{series_id}",
                 "Free Meeting Transcriber meeting series",
             )
             .with_description("Recurring meeting history")
@@ -276,7 +276,7 @@ impl ServerHandler for FmtrMcpServer {
                         } else {
                             &meeting.started_at
                         };
-                        format!("- {date} — [{title}](anarlog://meetings/{})", meeting.id)
+                        format!("- {date} — [{title}](fmtr://meetings/{})", meeting.id)
                     })
                     .collect::<Vec<_>>()
                     .join("\n");
@@ -303,9 +303,9 @@ pub async fn serve(db: Arc<hypr_db_core::Db>) -> crate::Result<()> {
 fn parse_resource_uri(uri: &str) -> std::result::Result<ResourceRequest, McpError> {
     let url =
         url::Url::parse(uri).map_err(|_| McpError::invalid_params("invalid resource URI", None))?;
-    if url.scheme() != "anarlog" {
+    if url.scheme() != "fmtr" {
         return Err(McpError::invalid_params(
-            "resource URI must use the anarlog scheme",
+            "resource URI must use the fmtr scheme",
             None,
         ));
     }
@@ -383,14 +383,13 @@ mod tests {
     #[test]
     fn parses_supported_resource_uris_and_bounds_transcript_limit() {
         assert_eq!(
-            parse_resource_uri("anarlog://meetings/meeting-1").unwrap(),
+            parse_resource_uri("fmtr://meetings/meeting-1").unwrap(),
             ResourceRequest::Meeting {
                 meeting_id: "meeting-1".to_string()
             }
         );
         assert_eq!(
-            parse_resource_uri("anarlog://meetings/meeting-1/transcript?offset=4&limit=900")
-                .unwrap(),
+            parse_resource_uri("fmtr://meetings/meeting-1/transcript?offset=4&limit=900").unwrap(),
             ResourceRequest::Transcript {
                 meeting_id: "meeting-1".to_string(),
                 offset: 4,
@@ -485,7 +484,7 @@ mod tests {
             ]
         );
         let mcp_docs = include_str!("../../../docs/reference/mcp.mdx");
-        let mcp_skill = include_str!("../../../skills/anarlog/references/mcp.md");
+        let mcp_skill = include_str!("../../../skills/fmtr/references/mcp.md");
         for tool_name in &tool_names {
             assert!(
                 mcp_docs.contains(tool_name),
@@ -493,7 +492,7 @@ mod tests {
             );
             assert!(
                 mcp_skill.contains(tool_name),
-                "Anarlog skill is missing `{tool_name}`"
+                "fmtr skill is missing `{tool_name}`"
             );
         }
         for tool in tools {
@@ -531,28 +530,28 @@ mod tests {
             [
                 (
                     "Free Meeting Transcriber meeting".to_string(),
-                    "anarlog://meetings/{meeting_id}".to_string(),
+                    "fmtr://meetings/{meeting_id}".to_string(),
                     None,
                 ),
                 (
                     "Free Meeting Transcriber meeting transcript".to_string(),
-                    "anarlog://meetings/{meeting_id}/transcript{?offset,limit}".to_string(),
+                    "fmtr://meetings/{meeting_id}/transcript{?offset,limit}".to_string(),
                     None,
                 ),
                 (
                     "Free Meeting Transcriber meeting series".to_string(),
-                    "anarlog://series/{series_id}".to_string(),
+                    "fmtr://series/{series_id}".to_string(),
                     None,
                 ),
             ]
         );
         for (_, uri, _) in &template_contract {
             assert!(mcp_docs.contains(uri), "MCP docs are missing `{uri}`");
-            assert!(mcp_skill.contains(uri), "Anarlog skill is missing `{uri}`");
+            assert!(mcp_skill.contains(uri), "fmtr skill is missing `{uri}`");
         }
         assert_eq!(resources.len(), 1);
         assert_eq!(resources[0].raw.name, "Planning");
-        assert_eq!(resources[0].raw.uri, "anarlog://meetings/meeting-1");
+        assert_eq!(resources[0].raw.uri, "fmtr://meetings/meeting-1");
         assert!(resources[0].annotations.is_none());
 
         client.cancel().await.unwrap();

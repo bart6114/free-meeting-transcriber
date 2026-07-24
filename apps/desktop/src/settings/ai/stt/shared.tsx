@@ -69,7 +69,7 @@ export function formatModelSize(sizeBytes?: number | null) {
 export const _PROVIDERS = [
   {
     disabled: false,
-    id: "hyprnote",
+    id: "fmtr",
     displayName: "On-device",
     badge: "Recommended",
     icon: <AppProviderIcon />,

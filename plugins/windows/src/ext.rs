@@ -194,16 +194,6 @@ impl AppWindow {
     }
 
     pub fn hide(&self, app: &AppHandle<tauri::Wry>) -> Result<(), crate::Error> {
-        if matches!(self, Self::Composer) {
-            crate::window::composer::hide(app)?;
-            let _ = events::VisibilityEvent {
-                window: self.clone(),
-                visible: false,
-            }
-            .emit(app);
-            return Ok(());
-        }
-
         if let Some(window) = self.get(app) {
             window.hide()?;
             let _ = events::VisibilityEvent {
@@ -259,14 +249,6 @@ impl AppWindow {
         &self,
         app: &AppHandle<tauri::Wry>,
     ) -> Result<Option<WebviewWindow>, crate::Error> {
-        if matches!(self, Self::Composer) {
-            return if self.get(app).is_some() {
-                crate::window::composer::show(app).map(Some)
-            } else {
-                Ok(None)
-            };
-        }
-
         if let Some(window) = self.get(app) {
             window.show()?;
             window.set_focus()?;
@@ -300,18 +282,6 @@ impl AppWindow {
     {
         self.prepare_show(app);
 
-        if matches!(self, Self::Composer) {
-            let window = crate::window::composer::show(app)?;
-
-            let _ = events::VisibilityEvent {
-                window: self.clone(),
-                visible: true,
-            }
-            .emit(app);
-
-            return Ok(window);
-        }
-
         let window = if let Some(window) = self.try_show_existing(app)? {
             window
         } else {
@@ -338,18 +308,6 @@ impl AppWindow {
         Self: WindowImpl,
     {
         self.prepare_show(app);
-
-        if matches!(self, Self::Composer) {
-            let window = crate::window::composer::show(app)?;
-
-            let _ = events::VisibilityEvent {
-                window: self.clone(),
-                visible: true,
-            }
-            .emit(app);
-
-            return Ok(window);
-        }
 
         let window = if let Some(window) = self.try_show_existing(app)? {
             window

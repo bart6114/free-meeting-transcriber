@@ -60,10 +60,10 @@ const deserializePinnedTabs = (data: string): PinnedTab[] => {
         case "changelog":
         case "settings":
         case "onboarding":
-        case "edit":
           return [tab as PinnedTab];
         case "empty":
         case "daily":
+        case "edit":
         case "extension":
         case "extensions":
         default:

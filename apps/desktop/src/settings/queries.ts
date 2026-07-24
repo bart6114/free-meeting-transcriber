@@ -21,10 +21,7 @@ import {
   type SettingValue,
   type SettingValues,
 } from "~/settings/schema";
-import {
-  isConfiguredSttModel,
-  isHyprnoteLocalSttModel,
-} from "~/stt/capabilities";
+import { isConfiguredSttModel, isFmtrLocalSttModel } from "~/stt/capabilities";
 import {
   getDefaultSttModel,
   normalizeStoredSttModel,
@@ -448,11 +445,7 @@ async function syncLocalSttServer(): Promise<void> {
   const provider = values.current_stt_provider;
   let model = values.current_stt_model;
 
-  if (
-    provider === "hyprnote" &&
-    model &&
-    !isConfiguredSttModel(provider, model)
-  ) {
+  if (provider === "fmtr" && model && !isConfiguredSttModel(provider, model)) {
     model = "";
     await executeTransaction([
       {
@@ -468,7 +461,7 @@ async function syncLocalSttServer(): Promise<void> {
     ]);
   }
 
-  if (isHyprnoteLocalSttModel(provider, model)) {
+  if (isFmtrLocalSttModel(provider, model)) {
     await localSttCommands.startServer(model);
   } else {
     await localSttCommands.stopServer(null);
