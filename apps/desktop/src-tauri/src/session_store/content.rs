@@ -115,7 +115,7 @@ impl SessionStore {
 
             // Same attempt-then-match rationale as read_meta above.
             match std::fs::read_to_string(&path) {
-                Ok(content) => Ok(Some(content)),
+                Ok(content) => Ok(Some(super::strip_leading_frontmatter(content))),
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
                 Err(e) => Err(StoreError::Io(format!("failed to read note file: {}", e))),
             }
@@ -471,6 +471,45 @@ mod tests {
     async fn read_note_returns_none_for_absent_file() {
         let (store, _vault) = test_store().await;
         assert_eq!(store.read_note("nonexistent").await.unwrap(), None);
+    }
+
+    /// `write_note` never writes frontmatter, but a file can gain a wrapper from outside it
+    /// (an external edit, the legacy importer, or -- until Task 13 -- the old `vault_export`
+    /// mirror, which always wraps a `session_documents` row on export). `read_note` must strip
+    /// a well-formed leading block rather than index it verbatim: otherwise `rebuild_index`,
+    /// which Task 10 now runs on every startup and window focus, feeds the wrapper back into
+    /// `session_documents.body`, and the next export wraps *that* in another layer -- one more
+    /// nested frontmatter block per boot/focus, forever.
+    #[tokio::test]
+    async fn read_note_strips_a_leading_frontmatter_block() {
+        let (store, vault) = test_store().await;
+        let dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_memo.md"),
+            "---\nid: s1:note\nposition: 0\nsession_id: s1\n---\n\nreal content",
+        )
+        .unwrap();
+
+        assert_eq!(
+            store.read_note("s1").await.unwrap().unwrap(),
+            "real content"
+        );
+    }
+
+    /// The mirror image of the test above: content that merely *starts* with `---` but isn't
+    /// a well-formed, closed frontmatter block (here, a legitimate note whose first line is a
+    /// markdown horizontal rule) must never be mangled -- `read_note` only strips a block it
+    /// can unambiguously parse.
+    #[tokio::test]
+    async fn read_note_leaves_unparseable_leading_dashes_untouched() {
+        let (store, vault) = test_store().await;
+        let dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        let content = "---\n\nActual note that opens with a horizontal rule.";
+        std::fs::write(dir.join("_memo.md"), content).unwrap();
+
+        assert_eq!(store.read_note("s1").await.unwrap().unwrap(), content);
     }
 
     #[tokio::test]

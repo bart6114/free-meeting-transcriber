@@ -59,6 +59,57 @@ fn create_audio_provider(_bundle_id: &str) -> std::sync::Arc<dyn hypr_audio_actu
     std::sync::Arc::new(hypr_audio_actual::ActualAudio)
 }
 
+const FOCUS_RESCAN_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+static FOCUS_RESCAN_LAST: std::sync::Mutex<Option<std::time::Instant>> =
+    std::sync::Mutex::new(None);
+
+/// Wraps `tauri_plugin_windows::on_window_event` with a throttled session-index rescan:
+/// regaining window focus is a good proxy for "a vault file may have changed outside the
+/// app" (Finder rename, Obsidian, a synced editor, another device), so treat it like the
+/// watcher's `refresh_session` but for the whole vault, at most once per
+/// `FOCUS_RESCAN_MIN_INTERVAL`. The rescan itself never blocks the window event handler --
+/// it's fired into the background via `tokio::spawn`.
+fn on_window_event(window: &tauri::Window<tauri::Wry>, event: &tauri::WindowEvent) {
+    tauri_plugin_windows::on_window_event(window, event);
+
+    if !matches!(event, tauri::WindowEvent::Focused(true)) {
+        return;
+    }
+
+    let now = std::time::Instant::now();
+    {
+        let mut last = FOCUS_RESCAN_LAST.lock().unwrap();
+        if last.is_some_and(|prev| now.duration_since(prev) < FOCUS_RESCAN_MIN_INTERVAL) {
+            return;
+        }
+        *last = Some(now);
+    }
+
+    let Some(store) = window
+        .app_handle()
+        .try_state::<std::sync::Arc<session_store::SessionStore>>()
+    else {
+        return;
+    };
+    let store = store.inner().clone();
+
+    tokio::spawn(async move {
+        match store.rebuild_index().await {
+            Ok(report) if !report.errors.is_empty() || !report.ghost_sessions.is_empty() => {
+                tracing::warn!(
+                    error_count = report.errors.len(),
+                    errors = ?report.errors,
+                    ghost_session_count = report.ghost_sessions.len(),
+                    ghost_sessions = ?report.ghost_sessions,
+                    "focus rescan found issues"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => tracing::error!(%error, "focus rescan failed"),
+        }
+    });
+}
+
 #[tokio::main]
 pub async fn main() {
     tauri::async_runtime::set(tokio::runtime::Handle::current());
@@ -179,7 +230,7 @@ pub async fn main() {
 
     let app_result = builder
         .invoke_handler(specta_builder.invoke_handler())
-        .on_window_event(tauri_plugin_windows::on_window_event)
+        .on_window_event(on_window_event)
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
@@ -236,7 +287,31 @@ pub async fn main() {
                             base.as_std_path().to_path_buf(),
                             db.pool().clone(),
                         ));
-                        app_handle.manage(store);
+                        app_handle.manage(store.clone());
+
+                        // Replaces the old `sync_from_vault` reconcile (formerly run
+                        // synchronously inside `tauri_plugin_db::init`'s own `setup()`):
+                        // files are the source of truth, so every startup rebuilds the
+                        // sessions/session_documents/transcripts index from what's on disk
+                        // before the UI proceeds. `block_on` mirrors how the old call
+                        // blocked setup on the reconcile finishing.
+                        match hypr_tauri_utils::block_on(store.rebuild_index()) {
+                            Ok(report) => {
+                                tracing::info!(
+                                    sessions = report.sessions,
+                                    notes = report.notes,
+                                    transcripts = report.transcripts,
+                                    error_count = report.errors.len(),
+                                    errors = ?report.errors,
+                                    ghost_session_count = report.ghost_sessions.len(),
+                                    ghost_sessions = ?report.ghost_sessions,
+                                    "startup session index rebuild complete"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("startup session index rebuild failed: {}", e);
+                            }
+                        }
                     }
                     Err(e) => {
                         tracing::error!("failed to resolve vault_base for session_store: {}", e);
@@ -256,22 +331,18 @@ pub async fn main() {
             }
 
             search_index::spawn(app_handle.clone(), db.clone());
-            // Spawned after `search_index`; both start here in the app-level
-            // `setup()` closure, which Tauri runs only after every plugin's
-            // own `setup()` — including `tauri_plugin_db::init`, whose
-            // `setup()` runs `sync_from_vault` synchronously
-            // (`import::import_legacy_data` via `hypr_tauri_utils::block_on`).
-            // So the vault-to-DB reconcile is always complete before this
-            // DB-to-vault mirror starts draining — reconcile first, mirror
-            // second. See `vault_export.rs`'s module doc for the full
-            // loop-prevention analysis.
+            // Spawned after `search_index`, both after the session-store block above:
+            // that block's `hypr_tauri_utils::block_on(store.rebuild_index())` has
+            // already finished by this point in the same `setup()` closure, so the
+            // files-to-index rebuild is always complete before this DB-to-vault mirror
+            // starts draining — reconcile first, mirror second. See `vault_export.rs`'s
+            // module doc for the full loop-prevention analysis.
             vault_export::spawn(app_handle.clone(), db.clone());
             // Spawned last, after both the startup reconcile (above, via the
-            // db plugin's own `setup()`) and the export worker: an external
-            // edit's import only needs to account for vault state from here
-            // on, since everything the vault held (or the export worker had
-            // queued) at launch is already reconciled. See
-            // `vault_watch.rs`'s module doc for the full ordering + loop
+            // session-store block) and the export worker: an external edit's import
+            // only needs to account for vault state from here on, since everything the
+            // vault held (or the export worker had queued) at launch is already
+            // reconciled. See `vault_watch.rs`'s module doc for the full ordering + loop
             // prevention rationale.
             vault_watch::spawn(app_handle, db.clone());
 

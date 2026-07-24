@@ -119,6 +119,33 @@ fn sha256(bytes: &[u8]) -> String {
         })
 }
 
+/// `write_note`/`write_document` never write a frontmatter block -- `_memo.md` and every
+/// other `sessions/<id>/<kind>.md` file are meant to hold raw markdown only. A file can still
+/// gain a leading frontmatter block from outside those writers: an external edit, the legacy
+/// importer, or -- until Task 13 retires it -- the old `vault_export` DB-to-vault mirror,
+/// which always wraps a `session_documents` row's body in one on export.
+///
+/// Stripping that wrapper here (rather than indexing it verbatim) is what keeps
+/// `rebuild_index`/`refresh_session` idempotent under repeated automatic runs: Task 10 calls
+/// them on every startup and window focus, so without this, re-indexing an already-wrapped
+/// file would feed its *whole* content -- frontmatter and all -- back into
+/// `session_documents.body`; the next export would wrap *that* in another layer, and the file
+/// would grow one nested frontmatter block per boot/focus, forever.
+///
+/// A file with no frontmatter (the overwhelmingly common case) round-trips through this
+/// unchanged -- `ParsedDocument::from_str` returns the original string verbatim when it
+/// doesn't start with a `---` delimiter. A file that starts with `---` but doesn't parse as a
+/// well-formed frontmatter block (no closing delimiter, or invalid YAML -- which includes a
+/// legitimate note that just happens to open with a horizontal rule) is left completely
+/// untouched: this only ever strips a block it can unambiguously parse, never guesses.
+fn strip_leading_frontmatter(content: String) -> String {
+    use std::str::FromStr;
+    match hypr_fs_sync_core::frontmatter::ParsedDocument::from_str(&content) {
+        Ok(parsed) => parsed.content,
+        Err(_) => content,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

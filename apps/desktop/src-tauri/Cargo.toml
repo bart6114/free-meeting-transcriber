@@ -89,6 +89,7 @@ hypr-fs-sync-core = { workspace = true }
 hypr-host = { workspace = true }
 hypr-storage = { workspace = true }
 hypr-supervisor = { workspace = true }
+hypr-tauri-utils = { workspace = true }
 hypr-tiptap = { workspace = true }
 
 sha2 = { workspace = true }

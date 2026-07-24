@@ -300,6 +300,11 @@ pub async fn import_paths(
     })
 }
 
+// The db plugin's `setup()` no longer calls this at startup (Task 10 replaced
+// it with the desktop crate's `SessionStore::rebuild_index`) — kept, along
+// with the rest of this module, until Task 13 deletes the vault-to-DB
+// reconcile machinery entirely.
+#[allow(dead_code)]
 pub async fn import_legacy_data<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     pool: &SqlitePool,

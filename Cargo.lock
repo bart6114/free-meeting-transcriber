@@ -4261,6 +4261,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "tauri-plugin-windows",
  "tauri-specta",
+ "tauri-utils 0.1.0",
  "tempfile",
  "tiptap",
  "tokio",

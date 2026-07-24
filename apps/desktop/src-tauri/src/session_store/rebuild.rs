@@ -243,6 +243,7 @@ impl SessionStore {
                         continue;
                     }
                     let content = std::fs::read_to_string(&path)
+                        .map(super::strip_leading_frontmatter)
                         .map_err(|e| StoreError::Io(format!("failed to read {stem}.md: {e}")));
                     out.push((stem.to_string(), content));
                 }
@@ -297,13 +298,24 @@ impl SessionStore {
         // Deliberately does not touch `updated_at` on conflict -- rebuild is a read-side
         // reconciliation, not a write, so replaying it against unchanged files must not
         // manufacture a new "last modified" time (rebuild_is_idempotent depends on this).
+        //
+        // The `WHERE` guard on the `DO UPDATE` makes this a true no-op (no row touched, no
+        // `AFTER UPDATE` trigger fired) when nothing actually changed -- load-bearing now that
+        // Task 10 calls `rebuild_index` automatically on every startup and window focus:
+        // without it, every one of those passes fires `sessions`' `vault_export_dirty` trigger
+        // for every session unconditionally, which repeatedly re-queues the *old*, still-active
+        // `vault_export` DB-to-vault mirror (retired in Task 13) even when the file on disk
+        // hasn't changed since the index already reflects it.
         sqlx::query(
             "INSERT INTO sessions (id, title, started_at, ended_at, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
              ON CONFLICT(id) DO UPDATE SET
                title = excluded.title,
                started_at = excluded.started_at,
-               ended_at = excluded.ended_at",
+               ended_at = excluded.ended_at
+             WHERE title IS NOT excluded.title
+                OR started_at IS NOT excluded.started_at
+                OR ended_at IS NOT excluded.ended_at",
         )
         .bind(&meta.id)
         .bind(&meta.title)
@@ -321,11 +333,15 @@ impl SessionStore {
         kind: &str,
         body: &str,
     ) -> Result<(), StoreError> {
+        // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
+        // re-firing `session_documents`' `vault_export_dirty` trigger on every automatic
+        // rebuild/refresh pass (Task 10).
         sqlx::query(
             "INSERT INTO session_documents (id, session_id, kind, body_format, body, updated_at)
              VALUES (?, ?, ?, 'md', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
              ON CONFLICT(id) DO UPDATE SET
-               body = excluded.body",
+               body = excluded.body
+             WHERE body IS NOT excluded.body",
         )
         .bind(format!("{id}:{kind}"))
         .bind(id)
@@ -348,6 +364,9 @@ impl SessionStore {
         let hints_json = serde_json::to_string(&t.speaker_hints)
             .map_err(|e| StoreError::Serialize(e.to_string()))?;
 
+        // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
+        // re-firing `transcripts`' `vault_export_dirty` trigger on every automatic
+        // rebuild/refresh pass (Task 10).
         sqlx::query(
             "INSERT INTO transcripts (id, session_id, started_at_ms, memo, words_json, speaker_hints_json, updated_at)
              VALUES (?, ?, ?, '', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -355,7 +374,11 @@ impl SessionStore {
                session_id = excluded.session_id,
                started_at_ms = excluded.started_at_ms,
                words_json = excluded.words_json,
-               speaker_hints_json = excluded.speaker_hints_json",
+               speaker_hints_json = excluded.speaker_hints_json
+             WHERE session_id IS NOT excluded.session_id
+                OR started_at_ms IS NOT excluded.started_at_ms
+                OR words_json IS NOT excluded.words_json
+                OR speaker_hints_json IS NOT excluded.speaker_hints_json",
         )
         .bind(&t.id)
         .bind(id)
@@ -549,6 +572,68 @@ mod tests {
         dump.extend(transcripts.into_iter().map(|row| format!("{row:?}")));
 
         dump
+    }
+
+    /// Task 10 calls `rebuild_index` automatically on every startup and window focus, so a
+    /// no-op rebuild must not requeue the (still-active, Task-13-retired) `vault_export`
+    /// worker -- otherwise every session gets a needless (and, in the presence of the export
+    /// format mismatch that Task 13 is meant to retire, actively corrupting) DB-to-vault mirror
+    /// pass on every single boot, forever, even when nothing on disk changed.
+    #[tokio::test]
+    async fn rebuild_of_unchanged_files_does_not_requeue_vault_export() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store.write_note("s1", "# hi").await.unwrap();
+        store.rebuild_index().await.unwrap();
+
+        sqlx::query("DELETE FROM vault_export_dirty")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(dirty, 0);
+    }
+
+    /// Reproduces the failure mode a real boot smoke turned up: a `_memo.md` that already
+    /// carries a frontmatter wrapper (as an external edit, the legacy importer, or the old
+    /// `vault_export` mirror would leave behind) must not have that wrapper compound with each
+    /// automatic rebuild pass. Without `strip_leading_frontmatter` in the read path, each of
+    /// these calls would index the *previous* pass's own wrapper verbatim, growing the indexed
+    /// body by one nested frontmatter block every time -- exactly what Task 10's automatic
+    /// startup/focus rescans would otherwise do to it on every boot.
+    #[tokio::test]
+    async fn rebuild_of_an_already_wrapped_note_file_does_not_grow_the_indexed_body() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        let dir = vault.path().join("sessions/s1");
+        std::fs::write(
+            dir.join("_memo.md"),
+            "---\nid: s1:note\nposition: 0\nsession_id: s1\n---\n\nreal content",
+        )
+        .unwrap();
+
+        store.rebuild_index().await.unwrap();
+        let first: String =
+            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:note'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(first, "real content");
+
+        store.rebuild_index().await.unwrap();
+        store.rebuild_index().await.unwrap();
+        let after_three_passes: String =
+            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:note'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(after_three_passes, "real content");
     }
 
     #[tokio::test]
