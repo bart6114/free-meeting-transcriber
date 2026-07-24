@@ -158,16 +158,16 @@ msgid "Automatically detect when a meeting starts based on microphone activity."
 msgstr "Automatically detect when a meeting starts based on microphone activity."
 
 #: src/settings/general/app-settings.tsx
-msgid "Automatically open the meeting link when scheduled listening starts."
-msgstr "Automatically open the meeting link when scheduled listening starts."
+#~ msgid "Automatically open the meeting link when scheduled listening starts."
+#~ msgstr "Automatically open the meeting link when scheduled listening starts."
 
 #: src/settings/general/app-settings.tsx
 msgid "Automatically post a disclosure after listening starts when the active meeting chat supports safe posting. Posting failure does not stop listening. A disclosure does not confirm participant consent."
 msgstr "Automatically post a disclosure after listening starts when the active meeting chat supports safe posting. Posting failure does not stop listening. A disclosure does not confirm participant consent."
 
 #: src/settings/general/app-settings.tsx
-msgid "Automatically start listening when an event-backed note reaches its scheduled start time."
-msgstr "Automatically start listening when an event-backed note reaches its scheduled start time."
+#~ msgid "Automatically start listening when an event-backed note reaches its scheduled start time."
+#~ msgstr "Automatically start listening when an event-backed note reaches its scheduled start time."
 
 #: src/settings/general/app-settings.tsx
 msgid "Automatically stop listening when the meeting app releases the microphone."
@@ -322,12 +322,12 @@ msgid "Delete"
 msgstr "Delete"
 
 #: src/sidebar/timeline/item.tsx
-msgid "Delete All Recurring Events"
-msgstr "Delete All Recurring Events"
+#~ msgid "Delete All Recurring Events"
+#~ msgstr "Delete All Recurring Events"
 
 #: src/sidebar/timeline/item.tsx
-msgid "Delete Event"
-msgstr "Delete Event"
+#~ msgid "Delete Event"
+#~ msgstr "Delete Event"
 
 #: src/settings/ai/stt/select.tsx
 msgid "Delete model"
@@ -346,8 +346,8 @@ msgid "Delete Selected ({sessionCount})"
 msgstr "Delete Selected ({sessionCount})"
 
 #: src/sidebar/timeline/item.tsx
-msgid "Delete This Event"
-msgstr "Delete This Event"
+#~ msgid "Delete This Event"
+#~ msgstr "Delete This Event"
 
 #: src/session/components/outer-header/overflow/delete.tsx
 msgid "Deleting..."
@@ -548,8 +548,8 @@ msgid "Help Free Meeting Transcriber read meeting activity"
 msgstr "Help Free Meeting Transcriber read meeting activity"
 
 #: src/sidebar/timeline/index.tsx
-msgid "Hide Deleted Events"
-msgstr "Hide Deleted Events"
+#~ msgid "Hide Deleted Events"
+#~ msgstr "Hide Deleted Events"
 
 #: src/settings/general/app-settings.tsx
 msgid "How long recorded meeting audio is kept on this device."
@@ -589,20 +589,20 @@ msgid "Intelligence"
 msgstr "Intelligence"
 
 #: src/session/components/outer-header/index.tsx
-msgid "Join & record"
-msgstr "Join & record"
+#~ msgid "Join & record"
+#~ msgstr "Join & record"
 
 #: src/session/components/outer-header/index.tsx
-msgid "Join meeting and record"
-msgstr "Join meeting and record"
+#~ msgid "Join meeting and record"
+#~ msgstr "Join meeting and record"
 
 #: src/onboarding/final.tsx
 msgid "Join our community and stay updated:"
 msgstr "Join our community and stay updated:"
 
 #: src/settings/general/app-settings.tsx
-msgid "Join scheduled meetings"
-msgstr "Join scheduled meetings"
+#~ msgid "Join scheduled meetings"
+#~ msgstr "Join scheduled meetings"
 
 #: src/settings/general/app-settings.tsx
 msgid "Keep Free Meeting Transcriber available from the menu bar."
@@ -1097,20 +1097,20 @@ msgid "Share usage data"
 msgstr "Share usage data"
 
 #: src/sidebar/timeline/item.tsx
-msgid "Show All Recurring Events"
-msgstr "Show All Recurring Events"
+#~ msgid "Show All Recurring Events"
+#~ msgstr "Show All Recurring Events"
 
 #: src/settings/general/app-settings.tsx
 msgid "Show app in Dock"
 msgstr "Show app in Dock"
 
 #: src/sidebar/timeline/index.tsx
-msgid "Show Deleted Events"
-msgstr "Show Deleted Events"
+#~ msgid "Show Deleted Events"
+#~ msgstr "Show Deleted Events"
 
 #: src/sidebar/timeline/item.tsx
-msgid "Show Event"
-msgstr "Show Event"
+#~ msgid "Show Event"
+#~ msgstr "Show Event"
 
 #: src/settings/general/app-settings.tsx
 msgid "Show floating bar"
@@ -1130,8 +1130,8 @@ msgid "Show the compact floating control while listening."
 msgstr "Show the compact floating control while listening."
 
 #: src/sidebar/timeline/item.tsx
-msgid "Show This Event"
-msgstr "Show This Event"
+#~ msgid "Show This Event"
+#~ msgstr "Show This Event"
 
 #: src/settings/general/app-settings.tsx
 msgid "Show tray icon"
@@ -1158,8 +1158,8 @@ msgid "Start Recording"
 msgstr "Start Recording"
 
 #: src/settings/general/app-settings.tsx
-msgid "Start when meeting begins"
-msgstr "Start when meeting begins"
+#~ msgid "Start when meeting begins"
+#~ msgstr "Start when meeting begins"
 
 #: src/onboarding/index.tsx
 msgid "Start with permissions"
