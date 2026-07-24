@@ -76,6 +76,18 @@ fn on_window_event(window: &tauri::Window<tauri::Wry>, event: &tauri::WindowEven
         return;
     }
 
+    // Checked before the throttle: a focus event that can't actually rescan (store not yet
+    // managed -- e.g. a very early focus during startup, or `vault_base` failed to resolve)
+    // must not burn the throttle window, or it'd suppress the *next*, genuinely actionable
+    // focus event for up to `FOCUS_RESCAN_MIN_INTERVAL` for no reason.
+    let Some(store) = window
+        .app_handle()
+        .try_state::<std::sync::Arc<session_store::SessionStore>>()
+    else {
+        return;
+    };
+    let store = store.inner().clone();
+
     let now = std::time::Instant::now();
     {
         let mut last = FOCUS_RESCAN_LAST.lock().unwrap();
@@ -84,14 +96,6 @@ fn on_window_event(window: &tauri::Window<tauri::Wry>, event: &tauri::WindowEven
         }
         *last = Some(now);
     }
-
-    let Some(store) = window
-        .app_handle()
-        .try_state::<std::sync::Arc<session_store::SessionStore>>()
-    else {
-        return;
-    };
-    let store = store.inner().clone();
 
     tokio::spawn(async move {
         match store.rebuild_index().await {

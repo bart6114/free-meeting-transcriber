@@ -600,6 +600,47 @@ mod tests {
         assert_eq!(dirty, 0);
     }
 
+    /// The mirror image of the no-op test above: the `WHERE` guard must never suppress a
+    /// *genuine* change, only a spurious re-fire. Simulates an external edit with a raw
+    /// `std::fs::write` (bypassing `write_meta` entirely, the way another device or a
+    /// hand-edit would) so the guard's `DO UPDATE` branch -- not just its no-op branch -- gets
+    /// exercised, and asserts both halves of "the reconcile actually reconciled": the index
+    /// value changed, and `vault_export` got queued to mirror that change back out.
+    #[tokio::test]
+    async fn rebuild_of_a_genuinely_changed_file_updates_the_index_and_requeues_vault_export() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store.rebuild_index().await.unwrap();
+
+        sqlx::query("DELETE FROM vault_export_dirty")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        let meta_path = vault.path().join("sessions/s1/_meta.json");
+        let edited = serde_json::to_vec_pretty(&meta("s1", "Two")).unwrap();
+        std::fs::write(&meta_path, edited).unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id = 's1'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(title, "Two");
+
+        let dirty: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM vault_export_dirty WHERE entity_type = 'session' AND entity_id = 's1'",
+        )
+        .fetch_one(store.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            dirty, 1,
+            "a genuine change must still requeue vault_export, not just no-ops getting skipped"
+        );
+    }
+
     /// Reproduces the failure mode a real boot smoke turned up: a `_memo.md` that already
     /// carries a frontmatter wrapper (as an external edit, the legacy importer, or the old
     /// `vault_export` mirror would leave behind) must not have that wrapper compound with each

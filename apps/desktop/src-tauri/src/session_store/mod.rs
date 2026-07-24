@@ -123,32 +123,85 @@ fn sha256(bytes: &[u8]) -> String {
 /// other `sessions/<id>/<kind>.md` file are meant to hold raw markdown only. A file can still
 /// gain a leading frontmatter block from outside those writers: an external edit, the legacy
 /// importer, or -- until Task 13 retires it -- the old `vault_export` DB-to-vault mirror,
-/// which always wraps a `session_documents` row's body in one on export.
+/// which always wraps a `session_documents` row's body in one on export, and which (before
+/// this function existed) could nest a wrapper on top of an already-wrapped file, boot/focus
+/// after boot/focus.
 ///
-/// Stripping that wrapper here (rather than indexing it verbatim) is what keeps
-/// `rebuild_index`/`refresh_session` idempotent under repeated automatic runs: Task 10 calls
-/// them on every startup and window focus, so without this, re-indexing an already-wrapped
-/// file would feed its *whole* content -- frontmatter and all -- back into
-/// `session_documents.body`; the next export would wrap *that* in another layer, and the file
-/// would grow one nested frontmatter block per boot/focus, forever.
+/// Strips repeatedly, one layer per loop iteration, so a file carrying two or more nested
+/// exporter wrappers (the shape that specific bug left behind) converges to the true inner
+/// content in a single call rather than only losing its outermost layer and leaving stale
+/// wrapper content indexed forever.
 ///
-/// A file with no frontmatter (the overwhelmingly common case) round-trips through this
+/// Each layer is only stripped if it's *recognizable as the exporter's own wrapping* -- its
+/// frontmatter has an `id` and/or `position` key, the keys `vault_export`'s
+/// `render_session_document` always writes (see `crates/fs-sync-core/src/export.rs`). A block
+/// that parses as well-formed frontmatter but has neither key is treated as genuine user
+/// content (some other note/document convention, not this app's own wrapper) and the function
+/// stops and returns everything from that point on, untouched. This is what makes it safe
+/// against eating real user text that happens to open with a valid-looking `---` block: only
+/// an unambiguous, exporter-shaped wrapper is ever removed, never guessed at by shape alone.
+///
+/// A file with no frontmatter at all (the overwhelmingly common case) round-trips through this
 /// unchanged -- `ParsedDocument::from_str` returns the original string verbatim when it
 /// doesn't start with a `---` delimiter. A file that starts with `---` but doesn't parse as a
 /// well-formed frontmatter block (no closing delimiter, or invalid YAML -- which includes a
-/// legitimate note that just happens to open with a horizontal rule) is left completely
-/// untouched: this only ever strips a block it can unambiguously parse, never guesses.
+/// legitimate note that just happens to open with a horizontal rule) is likewise left
+/// completely untouched.
 fn strip_leading_frontmatter(content: String) -> String {
     use std::str::FromStr;
-    match hypr_fs_sync_core::frontmatter::ParsedDocument::from_str(&content) {
-        Ok(parsed) => parsed.content,
-        Err(_) => content,
+
+    let mut current = content;
+    loop {
+        let parsed = match hypr_fs_sync_core::frontmatter::ParsedDocument::from_str(&current) {
+            Ok(parsed) => parsed,
+            Err(_) => return current,
+        };
+        if !is_exporter_wrapper(&parsed.frontmatter) {
+            return current;
+        }
+        current = parsed.content;
     }
+}
+
+/// The specific, narrow signal that a parsed leading frontmatter block is `vault_export`'s own
+/// wrapping rather than arbitrary user/third-party frontmatter: `render_session_document`
+/// always writes an `id` key, and always writes a `position` key (see
+/// `crates/fs-sync-core/src/export.rs`'s `render_session_document`). Either one present is
+/// enough to treat the block as this app's own wrapper.
+fn is_exporter_wrapper(frontmatter: &HashMap<String, serde_json::Value>) -> bool {
+    frontmatter.contains_key("id") || frontmatter.contains_key("position")
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Reproduces the boot-1 corruption artifact exactly: two nested `vault_export` wrappers
+    /// (each with `id`/`position` keys) around real content. A single call must unwrap both
+    /// layers, not just the outer one, converging to the true inner content.
+    #[test]
+    fn strip_leading_frontmatter_unwraps_nested_exporter_layers() {
+        let input = "---\nid: s1:note\nposition: 0\nsession_id: s1\n---\n\n\
+                     ---\nid: s1\nposition: 0\nsession_id: s1\n---\n\nreal content";
+        assert_eq!(strip_leading_frontmatter(input.to_string()), "real content");
+    }
+
+    /// A block that parses as well-formed frontmatter but carries neither `id` nor `position`
+    /// is not the exporter's wrapper -- it's genuine user/third-party content that merely
+    /// opens with a valid-looking `---` block, and must be left completely untouched.
+    #[test]
+    fn strip_leading_frontmatter_leaves_non_exporter_frontmatter_untouched() {
+        let input = "---\ntitle: My Doc\nauthor: me\n---\n\nActual user content.";
+        assert_eq!(strip_leading_frontmatter(input.to_string()), input);
+    }
+
+    /// A file that is *only* an exporter wrapper (empty body) strips to the empty string, not
+    /// to some leftover fragment of the wrapper.
+    #[test]
+    fn strip_leading_frontmatter_of_an_empty_exporter_wrapper_returns_empty_string() {
+        let input = "---\nid: s1:note\nposition: 0\nsession_id: s1\n---\n\n";
+        assert_eq!(strip_leading_frontmatter(input.to_string()), "");
+    }
 
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
