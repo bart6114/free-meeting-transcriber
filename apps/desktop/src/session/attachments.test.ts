@@ -39,7 +39,6 @@ describe("attachment catalog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.executeTransaction.mockResolvedValue([0, 1, 1]);
-    mocks.execute.mockResolvedValue([{ is_deleted: 1 }]);
     mocks.audioDelete.mockResolvedValue({ status: "ok", data: true });
     mocks.audioMetadata.mockResolvedValue({
       status: "ok",
@@ -89,91 +88,53 @@ describe("attachment catalog", () => {
     expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("keeps canonical metadata when retention deletes only local audio bytes", async () => {
+  // markSessionAudioAvailability/tombstoneSessionAudioMetadata are a
+  // graceful no-op pending Task 9 (Session store scaffold) —
+  // attachment_local_state/session_attachments were dropped in Task 4. The
+  // on-disk file deletion they accompany keeps working unchanged. See the
+  // comments above their definitions in attachments.ts.
+  it("deletes local audio bytes without touching the database", async () => {
     await expect(
       deleteLocalSessionAudio("session-1", () => true),
     ).resolves.toBe(true);
     expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
-    const localState = mocks.executeTransaction.mock.calls[0]![0][0];
-    expect(localState.sql).toContain("attachment_local_state");
-    expect(localState.params).toEqual([
-      "session-audio:session-1",
-      "session-1",
-      "absent",
-    ]);
-    expect(localState.sql).not.toContain("UPDATE session_attachments");
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("tombstones logical audio before deleting local bytes", async () => {
-    mocks.executeTransaction.mockResolvedValue([1]);
-
+  it("deletes the recording without touching the database", async () => {
     await expect(deleteSessionAudio("session-1", () => true)).resolves.toBe(
       true,
     );
-
-    expect(mocks.executeTransaction.mock.calls[0]![0][0].params).toEqual([
-      "session-audio:session-1",
-      "session-1",
-    ]);
-    expect(mocks.executeTransaction.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.audioDelete.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.audioDelete.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.executeTransaction.mock.invocationCallOrder[1]!,
-    );
-  });
-
-  it("does not delete bytes when the logical tombstone fails", async () => {
-    mocks.executeTransaction.mockRejectedValueOnce(
-      new Error("database locked"),
-    );
-
-    await expect(deleteSessionAudio("session-1", () => true)).rejects.toThrow(
-      "database locked",
-    );
-    expect(mocks.audioDelete).not.toHaveBeenCalled();
+    expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("completes logical deletion when local audio is already absent", async () => {
-    mocks.executeTransaction.mockResolvedValue([1]);
     mocks.audioDelete.mockResolvedValue({ status: "ok", data: false });
 
     await expect(deleteSessionAudio("session-1", () => true)).resolves.toBe(
       true,
     );
-    expect(mocks.executeTransaction).toHaveBeenCalledTimes(2);
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("records local absence when retention finds no local audio", async () => {
+  it("resolves false when retention finds no local audio to delete", async () => {
     mocks.audioDelete.mockResolvedValue({ status: "ok", data: false });
 
     await expect(
       deleteLocalSessionAudio("session-1", () => true),
     ).resolves.toBe(false);
-    expect(mocks.executeTransaction.mock.calls[0]![0][0].params).toEqual([
-      "session-audio:session-1",
-      "session-1",
-      "absent",
-    ]);
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("revalidates a logical tombstone before retrying file cleanup", async () => {
-    await expect(
-      cleanupDeletedSessionAudio("session-1", () => true),
-    ).resolves.toBe(true);
-    expect(mocks.execute).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /deleted_at IS NOT NULL[\s\S]*attachment_local_state[\s\S]*availability = 'absent'/,
-      ),
-      ["session-audio:session-1", "session-1"],
-    );
-    expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
-
-    vi.clearAllMocks();
-    mocks.execute.mockResolvedValue([{ is_deleted: 0 }]);
+  // cleanupDeletedSessionAudio is likewise a graceful no-op — there is no
+  // longer a way to detect a logically-deleted-but-locally-present
+  // attachment to retry cleanup on. See the comment above its definition.
+  it("resolves without deleting anything (backing table dropped)", async () => {
     await expect(
       cleanupDeletedSessionAudio("session-1", () => true),
     ).resolves.toBe(false);
+    expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.audioDelete).not.toHaveBeenCalled();
   });
 

@@ -2,7 +2,6 @@ import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 
 import { enqueueSessionAudioOperation } from "./audio-operations";
 
-import { executeTransaction, liveQueryClient } from "~/db";
 import { enqueueDatabaseWrite } from "~/db/write-queue";
 
 // Graceful no-op: `session_attachments`/`attachment_local_state` were
@@ -40,42 +39,17 @@ export async function deleteSessionAudio(
   return deleteSessionAudioWithMode(inputSessionId, true, canDelete);
 }
 
+// Graceful no-op: `session_attachments`/`attachment_local_state` were
+// dropped in Task 4 (cloudsync/e2ee/workspaces/sharing removal), so there is
+// no longer a way to detect a logically-deleted-but-locally-present
+// attachment to retry cleanup on. Its only caller
+// (`cleanupLogicallyDeletedAudio` in audio-retention.ts) is already a
+// no-op pending Task 9 (Session store scaffold).
 export async function cleanupDeletedSessionAudio(
-  inputSessionId: string,
-  canDelete: () => boolean,
+  _inputSessionId: string,
+  _canDelete: () => boolean,
 ): Promise<boolean> {
-  const sessionId = requireText(inputSessionId, "session ID", 512);
-  return enqueueSessionAudioOperation(sessionId, () =>
-    enqueueDatabaseWrite(`session:${sessionId}`, async () => {
-      if (!canDelete()) {
-        return false;
-      }
-
-      const rows = await liveQueryClient.execute<{ is_deleted: number }>(
-        `
-          SELECT EXISTS(
-            SELECT 1
-            FROM session_attachments
-            WHERE id = ?
-              AND session_id = ?
-              AND deleted_at IS NOT NULL
-              AND NOT EXISTS (
-                SELECT 1
-                FROM attachment_local_state AS local
-                WHERE local.attachment_id = session_attachments.id
-                  AND local.availability = 'absent'
-              )
-          ) AS is_deleted
-        `,
-        [`session-audio:${sessionId}`, sessionId],
-      );
-      if (rows[0]?.is_deleted !== 1) {
-        return false;
-      }
-
-      return deleteSessionAudioFile(sessionId);
-    }),
-  );
+  return false;
 }
 
 async function deleteSessionAudioWithMode(
@@ -107,46 +81,23 @@ async function deleteSessionAudioFile(sessionId: string): Promise<boolean> {
   return result.data;
 }
 
+// Graceful no-op: `attachment_local_state` was dropped in Task 4
+// (cloudsync/e2ee/workspaces/sharing removal). Local-availability
+// bookkeeping gets rewired to `sessions/<id>/audio/` on disk in Task 9
+// (Session store scaffold) of the filesystem-first-sessions plan. The
+// on-disk file deletion this accompanies (`deleteSessionAudioFile`) is
+// unaffected — only this DB-side bookkeeping is skipped.
 async function markSessionAudioAvailability(
-  sessionId: string,
-  availability: "present" | "absent",
-): Promise<void> {
-  await executeTransaction([
-    {
-      sql: `
-        INSERT INTO attachment_local_state (
-          attachment_id,
-          session_id,
-          relative_path,
-          availability,
-          updated_at
-        ) VALUES (?, ?, '', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-        ON CONFLICT(attachment_id) DO UPDATE SET
-          session_id = excluded.session_id,
-          availability = excluded.availability,
-          updated_at = excluded.updated_at
-      `,
-      params: [`session-audio:${sessionId}`, sessionId, availability],
-    },
-  ]);
-}
+  _sessionId: string,
+  _availability: "present" | "absent",
+): Promise<void> {}
 
-async function tombstoneSessionAudioMetadata(sessionId: string): Promise<void> {
-  await executeTransaction([
-    {
-      sql: `
-        UPDATE session_attachments
-        SET
-          updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
-          deleted_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-        WHERE id = ?
-          AND session_id = ?
-          AND deleted_at IS NULL
-      `,
-      params: [`session-audio:${sessionId}`, sessionId],
-    },
-  ]);
-}
+// See markSessionAudioAvailability above — `session_attachments` was
+// likewise dropped in Task 4; the on-disk file deletion this accompanies is
+// unaffected.
+async function tombstoneSessionAudioMetadata(
+  _sessionId: string,
+): Promise<void> {}
 
 export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
