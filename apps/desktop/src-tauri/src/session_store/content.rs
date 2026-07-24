@@ -157,6 +157,7 @@ impl SessionStore {
         let vault_base = self.vault_base.clone();
         let id_str = id.to_string();
 
+        // Move folder to trash first (file operation)
         tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
             let session_path = vault_base.join(paths::session_dir(&id_str));
             hypr_fs_sync_core::export::move_to_trash(&vault_base, &session_path)
@@ -166,26 +167,36 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
 
+        // Delete from database in a single transaction
         let pool = self.pool();
         let id = id.to_string();
 
+        let mut tx = pool
+            .begin()
+            .await
+            .map_err(|e| StoreError::Db(format!("failed to start transaction: {}", e)))?;
+
         sqlx::query("DELETE FROM sessions WHERE id = ?")
             .bind(&id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         sqlx::query("DELETE FROM session_documents WHERE session_id = ?")
             .bind(&id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| StoreError::Db(e.to_string()))?;
 
         sqlx::query("DELETE FROM transcripts WHERE session_id = ?")
             .bind(&id)
-            .execute(pool)
+            .execute(&mut *tx)
             .await
             .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        tx.commit()
+            .await
+            .map_err(|e| StoreError::Db(format!("failed to commit transaction: {}", e)))?;
 
         Ok(())
     }
@@ -286,6 +297,15 @@ mod tests {
             .await
             .unwrap();
 
+        // Seed a transcript row
+        sqlx::query("INSERT INTO transcripts (id, session_id, words_json) VALUES (?, ?, ?)")
+            .bind("t1")
+            .bind("s1")
+            .bind("[]")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
         assert!(vault.path().join("sessions/s1").is_dir());
         store.delete_session("s1").await.unwrap();
 
@@ -303,6 +323,40 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(doc_count, 0);
+
+        let transcript_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(transcript_count, 0);
+
+        // Verify trashed content exists under .trash/
+        let trash_root = vault.path().join(".trash");
+        assert!(trash_root.exists(), "trash directory should exist");
+        // Look for the moved session folder: .trash/<date>/sessions/s1/_meta.json
+        let mut found_meta = false;
+        for date_entry in std::fs::read_dir(&trash_root).unwrap() {
+            let date_entry = date_entry.unwrap();
+            let date_path = date_entry.path();
+            if date_path.is_dir() {
+                let sessions_path = date_path.join("sessions");
+                if sessions_path.exists() {
+                    let s1_path = sessions_path.join("s1");
+                    if s1_path.exists() {
+                        let meta_path = s1_path.join("_meta.json");
+                        if meta_path.exists() {
+                            found_meta = true;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(
+            found_meta,
+            "trashed session's _meta.json should exist under .trash/<date>/sessions/s1/"
+        );
     }
 
     #[tokio::test]
@@ -315,5 +369,54 @@ mod tests {
     async fn read_note_returns_none_for_absent_file() {
         let (store, _vault) = test_store().await;
         assert_eq!(store.read_note("nonexistent").await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn write_note_file_first_survives_index_failure() {
+        let (store, vault) = test_store().await;
+        // Drop session_documents table to force index failure
+        sqlx::query("DROP TABLE session_documents")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        // Call write_note; should return Err(StoreError::Db)
+        let result = store.write_note("s1", "# Test note").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), StoreError::Db(_)));
+
+        // But the file should exist on disk with correct content
+        let file_path = vault.path().join("sessions/s1/_memo.md");
+        assert!(
+            file_path.exists(),
+            "file should exist despite index failure"
+        );
+        let content = std::fs::read_to_string(&file_path).unwrap();
+        assert_eq!(content, "# Test note");
+    }
+
+    #[tokio::test]
+    async fn delete_session_on_nonexistent_session_succeeds() {
+        let (store, _vault) = test_store().await;
+        // delete_session on a session that doesn't exist should succeed
+        // (trash no-ops since path doesn't exist, deletes affect 0 rows)
+        let result = store.delete_session("nonexistent").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn read_meta_detects_corrupted_file() {
+        let (store, vault) = test_store().await;
+        // Write a valid meta first
+        store.write_meta(&meta("s1", "Original")).await.unwrap();
+
+        // Corrupt the file on disk
+        let meta_path = vault.path().join("sessions/s1/_meta.json");
+        std::fs::write(&meta_path, b"{ invalid json").unwrap();
+
+        // read_meta should return Err(StoreError::Serialize)
+        let result = store.read_meta("s1").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), StoreError::Serialize(_)));
     }
 }
