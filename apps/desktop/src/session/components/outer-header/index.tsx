@@ -17,7 +17,6 @@ import { OverflowButton } from "./overflow";
 import { useAudioPlayer } from "~/audio-player";
 import { useNow } from "~/calendar/hooks";
 import { useShell } from "~/contexts/shell";
-import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
 import { useEventCountdown } from "~/session/hooks/useEventCountdown";
 import {
   getRemoteMeeting,
@@ -217,12 +216,7 @@ function HeaderMeetingActionPill({
       return {
         label: t`Join & record`,
         title: t`Join meeting and record`,
-        icon:
-          event?.tracking_id === WELCOME_NOTE_TRACKING_ID ? (
-            <img src="/assets/app-icon.png" alt="" className="size-4" />
-          ) : remote ? (
-            getMeetingDisplay(remote.type).icon
-          ) : undefined,
+        icon: remote ? getMeetingDisplay(remote.type).icon : undefined,
         onClick: () => {
           void openerCommands.openUrl(meetingLink, null);
           start();

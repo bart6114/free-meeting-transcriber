@@ -420,11 +420,11 @@ describe("OuterHeader", () => {
     expect(mocks.startListening).toHaveBeenCalledTimes(1);
   });
 
-  it("shows the app logo for the welcome note meeting", () => {
+  it("shows a plain record button for the welcome note", () => {
     mocks.sessionEvents = {
       "session-1": {
         tracking_id: "fmtr-onboarding-demo-v1",
-        meeting_link: "https://github.com/bart6114/free-meeting-transcriber",
+        meeting_link: "",
       },
     };
 
@@ -435,11 +435,8 @@ describe("OuterHeader", () => {
       />,
     );
 
-    const joinButton = screen.getByRole("button", { name: "Join & record" });
-    const logo = joinButton.querySelector("img");
-
-    expect(logo?.getAttribute("src")).toBe("/assets/app-icon.png");
-    expect(logo?.getAttribute("alt")).toBe("");
+    expect(screen.getByRole("button", { name: "Record" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Join & record" })).toBeNull();
   });
 
   it("shows the meeting countdown to the left of the header action", () => {

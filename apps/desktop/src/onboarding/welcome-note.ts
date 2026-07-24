@@ -2,10 +2,7 @@ import { md2json } from "@hypr/editor/markdown";
 import type { SessionEvent } from "@hypr/store";
 
 import { liveQueryClient } from "~/db";
-import {
-  WELCOME_NOTE_DEMO_URL,
-  WELCOME_NOTE_TRACKING_ID,
-} from "~/onboarding/welcome-note.constants";
+import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
 import { createSession } from "~/session/queries";
 import { DEFAULT_USER_ID } from "~/shared/utils";
 
@@ -17,10 +14,10 @@ const WELCOME_NOTE = `Welcome to Free Meeting Transcriber 👋
 This note is a quick way to see how Free Meeting Transcriber works.
 
 
-Click **Join & record** in the top-right corner. It will open a private, prerecorded demo meeting, so you don't have to worry about your camera or microphone. Free Meeting Transcriber will listen, transcribe the conversation, and turn it into notes just like a real meeting.
+Click **Record** in the top-right corner and say a few sentences out loud — or let any audio play on your speakers. Free Meeting Transcriber will listen, transcribe the conversation on your machine, and turn it into notes just like a real meeting.
 
 
-When the video ends, come back here to review the transcript and notes.`;
+When you stop recording, come back here to review the transcript and notes.`;
 
 let pendingWelcomeSession: Promise<string> | null = null;
 
@@ -73,9 +70,8 @@ async function findOrCreateWelcomeSession(): Promise<string> {
     ended_at: "",
     is_all_day: false,
     has_recurrence_rules: false,
-    meeting_link: WELCOME_NOTE_DEMO_URL,
-    description:
-      "A private, prerecorded introduction to Free Meeting Transcriber.",
+    meeting_link: "",
+    description: "A quick introduction to Free Meeting Transcriber.",
   };
 
   return createSession("Welcome to Free Meeting Transcriber", DEFAULT_USER_ID, {

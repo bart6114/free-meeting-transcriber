@@ -39,7 +39,7 @@ it("reuses an existing onboarding welcome note", async () => {
   ]);
 });
 
-it("creates a prerecorded demo note with normal meeting metadata", async () => {
+it("creates a welcome note without a meeting link", async () => {
   mocks.execute.mockResolvedValueOnce([]);
   mocks.createSession.mockResolvedValueOnce("welcome-session");
 
@@ -48,12 +48,12 @@ it("creates a prerecorded demo note with normal meeting metadata", async () => {
   const [title, , initial] = mocks.createSession.mock.calls[0];
   const event = JSON.parse(initial.event_json);
   expect(title).toBe("Welcome to Free Meeting Transcriber");
-  expect(event.meeting_link).toBe(
-    "https://github.com/bart6114/free-meeting-transcriber",
-  );
+  expect(event.meeting_link).toBe("");
   expect(event.tracking_id).toBe("fmtr-onboarding-demo-v1");
-  expect(initial.raw_md).toContain("prerecorded demo meeting");
-  expect(initial.raw_md).toContain("Join & record");
+  expect(initial.raw_md).toContain(
+    "transcribe the conversation on your machine",
+  );
+  expect(initial.raw_md).toContain("Record");
 
   const note = JSON.parse(initial.raw_md);
   expect(note.content).toHaveLength(7);
