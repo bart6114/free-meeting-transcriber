@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 
 import {
   hasSessionContextDragData,
-  readSessionContextDragData,
   readSessionMentionDragData,
   writeSessionContextDragData,
 } from "./session-drag";
@@ -24,8 +23,8 @@ class FakeDataTransfer {
   }
 }
 
-describe("session drag context", () => {
-  it("writes and reads manual session context refs", () => {
+describe("session drag", () => {
+  it("writes and reads session mention drag data", () => {
     const dataTransfer = new FakeDataTransfer() as unknown as DataTransfer;
 
     writeSessionContextDragData(dataTransfer, "session-1", "Meeting notes");
@@ -36,12 +35,6 @@ describe("session drag context", () => {
     expect(readSessionMentionDragData(dataTransfer)).toEqual({
       id: "session-1",
       label: "Meeting notes",
-    });
-    expect(readSessionContextDragData(dataTransfer)).toEqual({
-      kind: "session",
-      key: "session:manual:session-1",
-      source: "manual",
-      sessionId: "session-1",
     });
   });
 
@@ -64,7 +57,7 @@ describe("session drag context", () => {
 
     dataTransfer.setData("application/x-fmtr-session-context", "{");
 
-    expect(readSessionContextDragData(dataTransfer)).toBeNull();
+    expect(readSessionMentionDragData(dataTransfer)).toBeNull();
   });
 
   it("ignores non-session drops", () => {
@@ -73,6 +66,6 @@ describe("session drag context", () => {
     dataTransfer.setData("text/plain", "Meeting notes");
 
     expect(hasSessionContextDragData(dataTransfer)).toBe(false);
-    expect(readSessionContextDragData(dataTransfer)).toBeNull();
+    expect(readSessionMentionDragData(dataTransfer)).toBeNull();
   });
 });

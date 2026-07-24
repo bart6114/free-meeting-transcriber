@@ -2,12 +2,7 @@ import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useLanguageModel, useLLMConnection } from "~/ai/hooks";
-import { useSessionTab } from "~/chat/components/use-session-tab";
-import { buildChatTools } from "~/chat/tools";
-import { searchContacts } from "~/contacts/queries";
-import { useRegisterTools } from "~/contexts/tool";
 import { takePendingWelcomeSession } from "~/onboarding/welcome-note";
-import { useSearchEngine } from "~/search/contexts/engine";
 import { initEnhancerService } from "~/services/enhancer";
 import { useConfigValue } from "~/shared/config";
 import { useDesktopTabLifecycle } from "~/shared/desktop-tab-lifecycle";
@@ -39,36 +34,9 @@ export function ClassicMainServices() {
   return (
     <>
       <MainListenerControlBridge />
-      <ToolRegistration />
       <EnhancerInit />
     </>
   );
-}
-
-function ToolRegistration() {
-  const { search } = useSearchEngine();
-
-  const getContactSearchResults = searchContacts;
-
-  const { getSessionId, getEnhancedNoteId } = useSessionTab();
-  const openEditTab = useCallback((requestId: string) => {
-    useTabs.getState().openNew({ type: "edit", requestId });
-  }, []);
-
-  useRegisterTools(
-    "chat-general",
-    () =>
-      buildChatTools({
-        search,
-        getContactSearchResults,
-        getSessionId,
-        getEnhancedNoteId,
-        openEditTab,
-      }),
-    [search, getContactSearchResults, getSessionId, getEnhancedNoteId, openEditTab],
-  );
-
-  return null;
 }
 
 function EnhancerInit() {

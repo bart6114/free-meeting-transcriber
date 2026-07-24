@@ -4,7 +4,6 @@ import { type ReactNode, useCallback } from "react";
 
 import { cn } from "@hypr/utils";
 
-import { useShell } from "~/contexts/shell";
 import { useTabs } from "~/store/zustand/tabs";
 
 export function CustomSidebarHeader({
@@ -15,18 +14,12 @@ export function CustomSidebarHeader({
   children?: ReactNode;
 }) {
   const { t } = useLingui();
-  const { chat } = useShell();
   const currentTab = useTabs((state) => state.currentTab);
   const tabs = useTabs((state) => state.tabs);
   const select = useTabs((state) => state.select);
   const openCurrent = useTabs((state) => state.openCurrent);
 
   const handleBack = useCallback(() => {
-    if (chat.mode !== "FloatingClosed") {
-      chat.sendEvent({ type: "CLOSE" });
-      return;
-    }
-
     if (currentTab?.type === "onboarding" || currentTab?.type === "empty") {
       return;
     }
@@ -38,7 +31,7 @@ export function CustomSidebarHeader({
     }
 
     openCurrent({ type: "empty" });
-  }, [chat, currentTab, openCurrent, select, tabs]);
+  }, [currentTab, openCurrent, select, tabs]);
 
   return (
     <div

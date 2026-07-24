@@ -5,7 +5,6 @@
   "type": "module",
   "exports": {
     "./app-link": "./src/app-link/index.ts",
-    "./chat": "./src/chat/index.tsx",
     "./comments": "./src/comments/index.ts",
     "./daily": "./src/daily/index.ts",
     "./markdown": "./src/markdown.ts",

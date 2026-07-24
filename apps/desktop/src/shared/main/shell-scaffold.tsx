@@ -23,20 +23,20 @@ export function MainShellScaffold({
         "bg-background flex h-full gap-1 overflow-hidden",
         !hasTopMainSurfaceChrome && "pl-1",
         hasTopMainSurfaceChrome && [
-          "[&_[data-chat-floating-anchor]]:rounded-t-xl",
-          "[&_[data-chat-floating-anchor]]:rounded-b-none",
-          "[&_[data-chat-floating-anchor]]:border-x-0",
+          "[&_[data-main-surface]]:rounded-t-xl",
+          "[&_[data-main-surface]]:rounded-b-none",
+          "[&_[data-main-surface]]:border-x-0",
           resolvedMainSurfaceChrome === "top"
-            ? "[&_[data-chat-floating-anchor]]:border-t"
-            : "[&_[data-chat-floating-anchor]]:!border-t-0",
-          "[&_[data-chat-floating-anchor]]:border-b-0",
+            ? "[&_[data-main-surface]]:border-t"
+            : "[&_[data-main-surface]]:!border-t-0",
+          "[&_[data-main-surface]]:border-b-0",
         ],
         resolvedMainSurfaceChrome === "left" && [
-          "[&_[data-chat-floating-anchor]]:rounded-l-xl",
-          "[&_[data-chat-floating-anchor]]:rounded-r-none",
-          "[&_[data-chat-floating-anchor]]:border-y-0",
-          "[&_[data-chat-floating-anchor]]:border-r-0",
-          "[&_[data-chat-floating-anchor]]:border-l",
+          "[&_[data-main-surface]]:rounded-l-xl",
+          "[&_[data-main-surface]]:rounded-r-none",
+          "[&_[data-main-surface]]:border-y-0",
+          "[&_[data-main-surface]]:border-r-0",
+          "[&_[data-main-surface]]:border-l",
         ],
       ])}
       data-testid="main-app-shell"

@@ -11,32 +11,28 @@ describe("MainShellScaffold", () => {
   it("keeps the top border for regular top chrome", () => {
     render(
       <MainShellScaffold mainSurfaceChrome="top">
-        <div data-chat-floating-anchor data-testid="main-surface" />
+        <div data-main-surface data-testid="main-surface" />
       </MainShellScaffold>,
     );
 
     const shell = screen.getByTestId("main-app-shell");
 
-    expect(shell.className).toContain(
-      "[&_[data-chat-floating-anchor]]:border-t",
-    );
+    expect(shell.className).toContain("[&_[data-main-surface]]:border-t");
     expect(shell.className).not.toContain(
-      "[&_[data-chat-floating-anchor]]:!border-t-0",
+      "[&_[data-main-surface]]:!border-t-0",
     );
   });
 
   it("removes the top border for borderless top chrome", () => {
     render(
       <MainShellScaffold mainSurfaceChrome="top-borderless">
-        <div data-chat-floating-anchor data-testid="main-surface" />
+        <div data-main-surface data-testid="main-surface" />
       </MainShellScaffold>,
     );
 
     const shell = screen.getByTestId("main-app-shell");
 
-    expect(shell.className).toContain(
-      "[&_[data-chat-floating-anchor]]:!border-t-0",
-    );
+    expect(shell.className).toContain("[&_[data-main-surface]]:!border-t-0");
     expect(shell.className).not.toContain("pl-1");
   });
 });

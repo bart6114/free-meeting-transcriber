@@ -19,8 +19,6 @@ static NOTE_WINDOW_POSITIONING_LOCK: std::sync::Mutex<()> = std::sync::Mutex::ne
 pub enum AppWindow {
     #[serde(rename = "main")]
     Main,
-    #[serde(rename = "composer")]
-    Composer,
     #[serde(rename = "note")]
     Note(String),
 }
@@ -29,7 +27,6 @@ impl std::fmt::Display for AppWindow {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Main => write!(f, "main"),
-            Self::Composer => write!(f, "composer"),
             Self::Note(id) => write!(f, "note-{id}"),
         }
     }
@@ -39,10 +36,8 @@ impl std::str::FromStr for AppWindow {
     type Err = strum::ParseError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "main" => return Ok(Self::Main),
-            "composer" => return Ok(Self::Composer),
-            _ => {}
+        if s == "main" {
+            return Ok(Self::Main);
         }
 
         if let Some(id) = s.strip_prefix("note-").filter(|id| !id.is_empty()) {
@@ -122,7 +117,6 @@ impl WindowImpl for AppWindow {
     fn title(&self) -> String {
         match self {
             Self::Main => "Free Meeting Transcriber".into(),
-            Self::Composer => "Composer".into(),
             Self::Note(_) => "Note".into(),
         }
     }
@@ -142,19 +136,6 @@ impl WindowImpl for AppWindow {
                     .min_inner_size(500.0, 500.0);
                 let window = builder.build()?;
                 window.set_size(LogicalSize::new(910.0, 600.0))?;
-                window
-            }
-            Self::Composer => {
-                let builder = self
-                    .window_builder(app, "/app/composer")
-                    .maximizable(false)
-                    .minimizable(false)
-                    .resizable(false);
-                let window = builder.build()?;
-                window.set_size(LogicalSize::new(
-                    crate::window::composer::WIDTH,
-                    crate::window::composer::HEIGHT,
-                ))?;
                 window
             }
             Self::Note(id) => {

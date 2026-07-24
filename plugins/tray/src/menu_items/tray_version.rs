@@ -10,14 +10,16 @@ pub struct TrayVersion;
 impl TrayVersion {
     fn get_channel(identifier: &str, app_name: &str) -> &'static str {
         match identifier {
-            "org.freemeetingtranscriber.stable" | "com.hyprnote.stable" | "com.hyprnote.Hyprnote" => {
-                "stable"
-            }
+            "org.freemeetingtranscriber.stable"
+            | "com.hyprnote.stable"
+            | "com.hyprnote.Hyprnote" => "stable",
             "org.freemeetingtranscriber.staging" | "com.hyprnote.staging" => "staging",
             "org.freemeetingtranscriber.dev" | "com.hyprnote.dev" => "dev",
             _ => match app_name {
                 "Free Meeting Transcriber" | "Anarlog" | "Char" | "Hyprnote" => "stable",
-                "Free Meeting Transcriber Staging" | "Anarlog Staging" | "Char Staging"
+                "Free Meeting Transcriber Staging"
+                | "Anarlog Staging"
+                | "Char Staging"
                 | "Hyprnote Staging" => "staging",
                 _ => "dev",
             },
@@ -49,7 +51,10 @@ mod tests {
     #[test]
     fn gets_channel_from_identifier() {
         assert_eq!(
-            TrayVersion::get_channel("org.freemeetingtranscriber.stable", "Free Meeting Transcriber"),
+            TrayVersion::get_channel(
+                "org.freemeetingtranscriber.stable",
+                "Free Meeting Transcriber"
+            ),
             "stable"
         );
         assert_eq!(

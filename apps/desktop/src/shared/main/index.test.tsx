@@ -61,18 +61,5 @@ describe("StandardContentWrapper", () => {
     expect(screen.getByTestId("panel").dataset.defaultSize).toBe("100");
     expect(screen.getByTestId("panel").dataset.minSize).toBe("35");
     expect(screen.getByTestId("main-area")).toBeTruthy();
-    expect(
-      document.querySelector("[data-chat-floating-anchor]")?.className,
-    ).toContain("rounded-xl");
-  });
-
-  it("renders the floating button inside the main surface", () => {
-    render(
-      <StandardContentWrapper floatingButton={<button>Record</button>}>
-        <div data-testid="main-area" />
-      </StandardContentWrapper>,
-    );
-
-    expect(screen.getByRole("button", { name: "Record" })).toBeTruthy();
   });
 });

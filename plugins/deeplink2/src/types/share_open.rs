@@ -16,8 +16,7 @@ impl ShareOpenRequest {
         if !matches!(
             parsed.scheme(),
             "freemeetingtranscriber" | "freemeetingtranscriber-staging"
-        )
-            || parsed.host_str() != Some("share")
+        ) || parsed.host_str() != Some("share")
             || parsed.path() != "/open"
             || !parsed.username().is_empty()
             || parsed.password().is_some()

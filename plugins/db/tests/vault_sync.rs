@@ -52,12 +52,11 @@ async fn sync_from_vault_is_idempotent_and_reimports_only_changed_files() {
             .await
             .unwrap();
     assert_eq!(session_title, "Planning");
-    let document_body: String = sqlx::query_scalar(
-        "SELECT body FROM session_documents WHERE session_id = 'session-1'",
-    )
-    .fetch_one(db.pool())
-    .await
-    .unwrap();
+    let document_body: String =
+        sqlx::query_scalar("SELECT body FROM session_documents WHERE session_id = 'session-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
     assert_eq!(document_body, "Original memo body");
 
     let second = sync_from_vault(db.pool(), vault.path()).await.unwrap();
@@ -76,12 +75,11 @@ async fn sync_from_vault_is_idempotent_and_reimports_only_changed_files() {
     assert_eq!(third.imported_count, 1, "only the edited document");
     assert_eq!(third.conflict_count, 0);
 
-    let document_body: String = sqlx::query_scalar(
-        "SELECT body FROM session_documents WHERE session_id = 'session-1'",
-    )
-    .fetch_one(db.pool())
-    .await
-    .unwrap();
+    let document_body: String =
+        sqlx::query_scalar("SELECT body FROM session_documents WHERE session_id = 'session-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
     assert_eq!(document_body, "Updated memo body");
 }
 
@@ -149,13 +147,15 @@ async fn sync_from_vault_exports_conflict_backup_when_db_row_is_newer_than_file(
     assert_eq!(second.reconciled_count, 1);
     assert_eq!(second.conflict_count, 0, "the conflict was force-resolved");
 
-    let document_body: String = sqlx::query_scalar(
-        "SELECT body FROM session_documents WHERE session_id = 'session-1'",
-    )
-    .fetch_one(db.pool())
-    .await
-    .unwrap();
-    assert_eq!(document_body, "File edit wins", "the vault file wins content");
+    let document_body: String =
+        sqlx::query_scalar("SELECT body FROM session_documents WHERE session_id = 'session-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
+    assert_eq!(
+        document_body, "File edit wins",
+        "the vault file wins content"
+    );
 
     let backups = std::fs::read_dir(&session_dir)
         .unwrap()
@@ -224,20 +224,18 @@ async fn sync_from_vault_never_reimports_its_own_conflict_backups() {
     assert_eq!(third.conflict_count, 0);
     assert_eq!(third.reconciled_count, 0);
 
-    let document_count: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM session_documents WHERE session_id = 'session-1'",
-    )
-    .fetch_one(db.pool())
-    .await
-    .unwrap();
+    let document_count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM session_documents WHERE session_id = 'session-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
     assert_eq!(document_count, 1, "no orphaned duplicate document row");
 
-    let document_body: String = sqlx::query_scalar(
-        "SELECT body FROM session_documents WHERE session_id = 'session-1'",
-    )
-    .fetch_one(db.pool())
-    .await
-    .unwrap();
+    let document_body: String =
+        sqlx::query_scalar("SELECT body FROM session_documents WHERE session_id = 'session-1'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
     assert_eq!(
         document_body, "File edit wins",
         "the canonical row must keep the file-won content, not silently revert to the backup"
@@ -274,7 +272,10 @@ async fn sync_from_vault_never_deletes_rows_for_missing_files() {
         .fetch_one(db.pool())
         .await
         .unwrap();
-    assert_eq!(session_count, 1, "the row survives the file's disappearance");
+    assert_eq!(
+        session_count, 1,
+        "the row survives the file's disappearance"
+    );
 }
 
 /// When the DB copy being backed up is app-authored tiptap prosemirror JSON

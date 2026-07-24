@@ -36,9 +36,13 @@ pub struct SyncReport {
 /// re-imported with the vault file winning any content conflict. A fresh or
 /// empty database (no prior run rows) imports everything — this is the
 /// "delete app.db and relaunch" rebuild path.
-pub async fn sync_from_vault(pool: &SqlitePool, vault_base: &std::path::Path) -> crate::Result<SyncReport> {
+pub async fn sync_from_vault(
+    pool: &SqlitePool,
+    vault_base: &std::path::Path,
+) -> crate::Result<SyncReport> {
     let run_id = legacy_vault::import_legacy_vault(pool, vault_base, false).await?;
-    let reconciled_count = legacy_vault::reconcile_vault_conflicts(pool, vault_base, &run_id).await?;
+    let reconciled_count =
+        legacy_vault::reconcile_vault_conflicts(pool, vault_base, &run_id).await?;
 
     let (discovered_count, imported_count, matched_count, skipped_count, conflict_count): (
         i64,
@@ -214,8 +218,10 @@ pub async fn import_paths(
                         .await?;
 
                         if let Some(existing_metadata_json) = existing_metadata_json {
-                            let flagged_metadata_json =
-                                hypr_db_app::set_external_soft_hide_flag(&existing_metadata_json, true);
+                            let flagged_metadata_json = hypr_db_app::set_external_soft_hide_flag(
+                                &existing_metadata_json,
+                                true,
+                            );
 
                             let result = sqlx::query(
                                 "UPDATE sessions
@@ -264,7 +270,8 @@ pub async fn import_paths(
     }
 
     hypr_db_app::finish_legacy_import_run(pool, &run_id).await?;
-    let reconciled_count = legacy_vault::reconcile_vault_conflicts(pool, vault_base, &run_id).await?;
+    let reconciled_count =
+        legacy_vault::reconcile_vault_conflicts(pool, vault_base, &run_id).await?;
 
     let (discovered_count, imported_count, matched_count, skipped_count, conflict_count): (
         i64,
@@ -936,15 +943,16 @@ mod tests {
         )
         .unwrap();
 
-        let report = import_paths(db.pool(), vault.path(), &[memo_path]).await.unwrap();
+        let report = import_paths(db.pool(), vault.path(), &[memo_path])
+            .await
+            .unwrap();
         assert_eq!(report.reconciled_count, 1);
 
-        let (body_format, body): (String, String) = sqlx::query_as(
-            "SELECT body_format, body FROM session_documents WHERE id = 'note-1'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
+        let (body_format, body): (String, String) =
+            sqlx::query_as("SELECT body_format, body FROM session_documents WHERE id = 'note-1'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
         assert_eq!(body_format, "markdown");
         assert_eq!(body, "Updated body from external editor");
     }
@@ -965,14 +973,15 @@ mod tests {
         )
         .unwrap();
 
-        let report = import_paths(db.pool(), vault.path(), &[meta_path]).await.unwrap();
+        let report = import_paths(db.pool(), vault.path(), &[meta_path])
+            .await
+            .unwrap();
         assert_eq!(report.imported_count, 1);
 
-        let title: String =
-            sqlx::query_scalar("SELECT title FROM sessions WHERE id = 'session-2'")
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
+        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id = 'session-2'")
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
         assert_eq!(title, "Brand new session");
     }
 
@@ -1015,7 +1024,9 @@ mod tests {
                 .await
                 .unwrap();
 
-        let second = import_paths(db.pool(), vault.path(), &[memo_path]).await.unwrap();
+        let second = import_paths(db.pool(), vault.path(), &[memo_path])
+            .await
+            .unwrap();
 
         // The hash short-circuit records the item as `unchanged` (copying
         // forward the prior run's discovered/matched counters, mirroring
@@ -1108,7 +1119,9 @@ mod tests {
         // — simulate that race directly rather than depending on timing.
         std::fs::remove_file(&meta_path).unwrap();
 
-        let report = import_paths(db.pool(), vault.path(), &[meta_path]).await.unwrap();
+        let report = import_paths(db.pool(), vault.path(), &[meta_path])
+            .await
+            .unwrap();
         assert_eq!(report.deleted_count, 1);
 
         let deleted_at: Option<String> =
@@ -1157,17 +1170,20 @@ mod tests {
         .unwrap();
         std::fs::remove_file(&memo_path).unwrap();
 
-        let report = import_paths(db.pool(), vault.path(), &[memo_path]).await.unwrap();
+        let report = import_paths(db.pool(), vault.path(), &[memo_path])
+            .await
+            .unwrap();
         assert_eq!(report.deleted_count, 0);
 
-        let (session_deleted_at, document_deleted_at): (Option<String>, Option<String>) = sqlx::query_as(
-            "SELECT
+        let (session_deleted_at, document_deleted_at): (Option<String>, Option<String>) =
+            sqlx::query_as(
+                "SELECT
                (SELECT deleted_at FROM sessions WHERE id = 'session-6'),
                (SELECT deleted_at FROM session_documents WHERE id = 'note-6')",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
+            )
+            .fetch_one(db.pool())
+            .await
+            .unwrap();
         assert!(session_deleted_at.is_none());
         assert!(document_deleted_at.is_none());
     }
@@ -1237,7 +1253,9 @@ mod tests {
         // dominant real-world case: nothing about the file's content
         // actually changed, only its transient absence.
         std::fs::write(&meta_path, meta_content).unwrap();
-        let revival_report = import_paths(db.pool(), vault.path(), &[meta_path]).await.unwrap();
+        let revival_report = import_paths(db.pool(), vault.path(), &[meta_path])
+            .await
+            .unwrap();
 
         let (title, deleted_at_after_revival, metadata_json_after_revival): (
             String,

@@ -346,8 +346,9 @@ pub fn session_document_filename(doc: &SessionDocument, is_first_of_kind: bool) 
 /// here too).
 pub fn render_session_document(doc: &SessionDocument) -> crate::Result<ParsedDocument> {
     let content = if doc.body_format == "prosemirror_json" {
-        let parsed: Value = serde_json::from_str(&doc.body)
-            .map_err(|error| crate::Error::Markdown(format!("invalid prosemirror body: {error}")))?;
+        let parsed: Value = serde_json::from_str(&doc.body).map_err(|error| {
+            crate::Error::Markdown(format!("invalid prosemirror body: {error}"))
+        })?;
         hypr_tiptap::tiptap_json_to_md(&parsed).map_err(crate::Error::Markdown)?
     } else {
         doc.body.clone()
@@ -400,8 +401,7 @@ pub fn render_transcripts(rows: &[Transcript]) -> Value {
             started_at: row.started_at_ms as f64,
             ended_at: row.ended_at_ms.map(|value| value as f64),
             memo_md: row.memo.clone(),
-            words: serde_json::from_str::<Vec<TranscriptWord>>(&row.words_json)
-                .unwrap_or_default(),
+            words: serde_json::from_str::<Vec<TranscriptWord>>(&row.words_json).unwrap_or_default(),
             speaker_hints: serde_json::from_str::<Vec<TranscriptSpeakerHint>>(
                 &row.speaker_hints_json,
             )
@@ -539,7 +539,10 @@ pub fn render_events(rows: &[CalendarEvent]) -> Value {
         rows.iter()
             .map(|row| {
                 let mut entry = Map::new();
-                entry.insert("tracking_id_event".to_string(), json!(row.tracking_id_event));
+                entry.insert(
+                    "tracking_id_event".to_string(),
+                    json!(row.tracking_id_event),
+                );
                 entry.insert("calendar_id".to_string(), json!(row.calendar_id));
                 entry.insert("title".to_string(), json!(row.title));
                 entry.insert("started_at".to_string(), json!(row.started_at));
@@ -731,7 +734,10 @@ mod tests {
         let wrote = write_via_tmp(temp.path(), &path, b"same").unwrap();
 
         assert!(!wrote);
-        assert_eq!(std::fs::metadata(&path).unwrap().modified().unwrap(), before);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            before
+        );
     }
 
     #[test]
@@ -761,7 +767,11 @@ mod tests {
         let vault = temp.path();
         std::fs::create_dir_all(vault.join("sessions/abc")).unwrap();
         let path = vault.join("sessions/abc/_memo.md");
-        std::fs::write(&path, "---\nid: doc-1\ncustom_legacy_key: keep-me\n---\n\nOld body").unwrap();
+        std::fs::write(
+            &path,
+            "---\nid: doc-1\ncustom_legacy_key: keep-me\n---\n\nOld body",
+        )
+        .unwrap();
 
         let wrote = write_via_tmp(vault, &path, b"---\nid: doc-1\n---\n\nNew body").unwrap();
 
@@ -811,14 +821,25 @@ mod tests {
 
         let wrote = write_via_tmp(vault, &path, rendered.as_bytes()).unwrap();
 
-        assert!(wrote, "the render doesn't reproduce legacy_crm_id, so bytes differ");
-        assert!(!std::fs::read_to_string(&path).unwrap().contains("legacy_crm_id"));
+        assert!(
+            wrote,
+            "the render doesn't reproduce legacy_crm_id, so bytes differ"
+        );
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("legacy_crm_id")
+        );
         let trashed = vault
             .join(".trash")
             .join(chrono::Utc::now().format("%Y-%m-%d").to_string())
             .join("humans/human-1.md");
         assert!(trashed.is_file());
-        assert!(std::fs::read_to_string(&trashed).unwrap().contains("legacy_crm_id: crm-9182"));
+        assert!(
+            std::fs::read_to_string(&trashed)
+                .unwrap()
+                .contains("legacy_crm_id: crm-9182")
+        );
     }
 
     #[test]
@@ -987,8 +1008,7 @@ mod tests {
             started_at_ms: 1000,
             ended_at_ms: Some(2000),
             memo: "memo".into(),
-            words_json: r#"[{"id":"w1","text":"hi","start_ms":0,"end_ms":100,"channel":0}]"#
-                .into(),
+            words_json: r#"[{"id":"w1","text":"hi","start_ms":0,"end_ms":100,"channel":0}]"#.into(),
             speaker_hints_json: "[]".into(),
         }]);
 

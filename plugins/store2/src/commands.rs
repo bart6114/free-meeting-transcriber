@@ -28,30 +28,7 @@ fn validate_secret_coordinate(caller: SecretCaller, scope: &str, key: &str) -> R
 }
 
 fn secure_store_service(identifier: &str) -> String {
-    let identifier = match identifier {
-        // The keychain service name has stayed `com.anarlog.*` across the
-        // Hyprnote -> Anarlog -> Free Meeting Transcriber identifier
-        // changes so upgraders keep finding their secrets without adding
-        // another legacy-lookup hop each rebrand.
-        "org.freemeetingtranscriber.dev" | "com.hyprnote.dev" => "com.anarlog.dev",
-        "org.freemeetingtranscriber.staging" | "com.hyprnote.staging" => "com.anarlog.staging",
-        "org.freemeetingtranscriber.stable" | "com.hyprnote.stable" | "com.hyprnote.Hyprnote" => {
-            "com.anarlog.stable"
-        }
-        identifier => identifier,
-    };
-
     format!("{identifier}.{SECURE_STORE_SUFFIX}")
-}
-
-fn secure_store_account(identifier: &str, scope: &str, key: &str) -> String {
-    let account = format!("{scope}:{key}");
-    if identifier == "org.freemeetingtranscriber.dev" || identifier == "com.hyprnote.dev" {
-        // Rotate away from dev items whose ACLs captured unstable ad-hoc signatures.
-        format!("v2:{account}")
-    } else {
-        account
-    }
 }
 
 fn secure_store_error(error: keyring::Error) -> String {
@@ -109,36 +86,6 @@ fn repair_macos_keychain_access() -> Result<(), String> {
     Ok(())
 }
 
-fn legacy_secret_locations(identifier: &str, scope: &str, key: &str) -> Vec<(String, String)> {
-    let service = secure_store_service(identifier);
-    let account = format!("{scope}:{key}");
-    let current_account = secure_store_account(identifier, scope, key);
-    let legacy_service = format!("{identifier}.{SECURE_STORE_SUFFIX}");
-    let mut locations = Vec::new();
-
-    if account != current_account {
-        locations.push((service.clone(), account.clone()));
-    }
-    if legacy_service != service {
-        locations.push((legacy_service, account));
-    }
-
-    locations
-}
-
-fn legacy_secret_entries<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    scope: &str,
-    key: &str,
-) -> Result<Vec<keyring::Entry>, String> {
-    legacy_secret_locations(&app.config().identifier, scope, key)
-        .into_iter()
-        .map(|(service, account)| {
-            keyring::Entry::new(&service, &account).map_err(|error| error.to_string())
-        })
-        .collect()
-}
-
 fn secret_entry<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     scope: &str,
@@ -148,9 +95,8 @@ fn secret_entry<R: tauri::Runtime>(
         return Err("secure-store scope and key must not be empty".to_string());
     }
 
-    let identifier = &app.config().identifier;
-    let service = secure_store_service(identifier);
-    let account = secure_store_account(identifier, scope, key);
+    let service = secure_store_service(&app.config().identifier);
+    let account = format!("{scope}:{key}");
     keyring::Entry::new(&service, &account).map_err(|error| error.to_string())
 }
 
@@ -300,21 +246,7 @@ async fn read_secret_for<R: tauri::Runtime>(
         let entry = secret_entry(&app, &scope, &key)?;
         match entry.get_password() {
             Ok(secret) => Ok(Some(secret)),
-            Err(keyring::Error::NoEntry) => {
-                for legacy_entry in legacy_secret_entries(&app, &scope, &key)? {
-                    match legacy_entry.get_password() {
-                        Ok(secret) => {
-                            if entry.set_password(&secret).is_ok() {
-                                let _ = legacy_entry.delete_credential();
-                            }
-                            return Ok(Some(secret));
-                        }
-                        Err(keyring::Error::NoEntry | keyring::Error::PlatformFailure(_)) => {}
-                        Err(error) => return Err(secure_store_error(error)),
-                    }
-                }
-                Ok(None)
-            }
+            Err(keyring::Error::NoEntry) => Ok(None),
             Err(error) => Err(secure_store_error(error)),
         }
     })
@@ -353,9 +285,6 @@ async fn write_secret_for<R: tauri::Runtime>(
     tauri::async_runtime::spawn_blocking(move || {
         let entry = secret_entry(&app, &scope, &key)?;
         entry.set_password(&value).map_err(secure_store_error)?;
-        for legacy_entry in legacy_secret_entries(&app, &scope, &key)? {
-            let _ = legacy_entry.delete_credential();
-        }
         Ok(())
     })
     .await
@@ -380,12 +309,6 @@ async fn delete_secret_for<R: tauri::Runtime>(
 ) -> Result<(), String> {
     validate_secret_coordinate(caller, &scope, &key)?;
     tauri::async_runtime::spawn_blocking(move || {
-        for legacy_entry in legacy_secret_entries(&app, &scope, &key)? {
-            match legacy_entry.delete_credential() {
-                Ok(()) | Err(keyring::Error::NoEntry | keyring::Error::PlatformFailure(_)) => {}
-                Err(error) => return Err(secure_store_error(error)),
-            }
-        }
         let entry = secret_entry(&app, &scope, &key)?;
         match entry.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => {}
@@ -402,38 +325,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn uses_anarlog_service_names_for_legacy_bundle_identifiers() {
-        assert_eq!(
-            secure_store_service("com.hyprnote.dev"),
-            "com.anarlog.dev.secure-store"
-        );
-        assert_eq!(
-            secure_store_service("com.hyprnote.staging"),
-            "com.anarlog.staging.secure-store"
-        );
-        assert_eq!(
-            secure_store_service("com.hyprnote.stable"),
-            "com.anarlog.stable.secure-store"
-        );
-        assert_eq!(
-            secure_store_service("com.hyprnote.Hyprnote"),
-            "com.anarlog.stable.secure-store"
-        );
-    }
-
-    #[test]
-    fn uses_anarlog_service_names_for_the_current_rebranded_identifiers_too() {
+    fn uses_branded_service_names_for_current_identifiers() {
         assert_eq!(
             secure_store_service("org.freemeetingtranscriber.dev"),
-            "com.anarlog.dev.secure-store"
+            "org.freemeetingtranscriber.dev.secure-store"
         );
         assert_eq!(
             secure_store_service("org.freemeetingtranscriber.staging"),
-            "com.anarlog.staging.secure-store"
+            "org.freemeetingtranscriber.staging.secure-store"
         );
         assert_eq!(
             secure_store_service("org.freemeetingtranscriber.stable"),
-            "com.anarlog.stable.secure-store"
+            "org.freemeetingtranscriber.stable.secure-store"
         );
     }
 
@@ -443,65 +346,6 @@ mod tests {
             secure_store_service("com.example.app"),
             "com.example.app.secure-store"
         );
-    }
-
-    #[test]
-    fn versions_dev_accounts_across_signing_changes() {
-        assert_eq!(
-            secure_store_account("com.hyprnote.dev", "provider", "deepgram"),
-            "v2:provider:deepgram"
-        );
-        assert_eq!(
-            secure_store_account("com.hyprnote.stable", "provider", "deepgram"),
-            "provider:deepgram"
-        );
-        assert_eq!(
-            secure_store_account("org.freemeetingtranscriber.dev", "provider", "deepgram"),
-            "v2:provider:deepgram"
-        );
-        assert_eq!(
-            secure_store_account("org.freemeetingtranscriber.stable", "provider", "deepgram"),
-            "provider:deepgram"
-        );
-    }
-
-    #[test]
-    fn migrates_all_previous_dev_secret_locations() {
-        assert_eq!(
-            legacy_secret_locations("com.hyprnote.dev", "provider", "deepgram"),
-            vec![
-                (
-                    "com.anarlog.dev.secure-store".to_string(),
-                    "provider:deepgram".to_string(),
-                ),
-                (
-                    "com.hyprnote.dev.secure-store".to_string(),
-                    "provider:deepgram".to_string(),
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn migrates_dev_secret_locations_for_the_current_rebranded_identifier() {
-        assert_eq!(
-            legacy_secret_locations("org.freemeetingtranscriber.dev", "provider", "deepgram"),
-            vec![
-                (
-                    "com.anarlog.dev.secure-store".to_string(),
-                    "provider:deepgram".to_string(),
-                ),
-                (
-                    "org.freemeetingtranscriber.dev.secure-store".to_string(),
-                    "provider:deepgram".to_string(),
-                ),
-            ]
-        );
-    }
-
-    #[test]
-    fn skips_duplicate_legacy_secret_locations() {
-        assert!(legacy_secret_locations("com.example.app", "provider", "deepgram").is_empty());
     }
 
     #[test]

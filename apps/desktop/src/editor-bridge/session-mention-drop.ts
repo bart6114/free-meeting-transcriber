@@ -3,7 +3,7 @@ import type { SessionMentionDropConfig } from "@hypr/editor/note";
 import {
   hasSessionContextDragData,
   readSessionMentionDragData,
-} from "~/chat/context/session-drag";
+} from "~/shared/session-drag";
 
 export const sessionMentionDropConfig = {
   has: hasSessionContextDragData,

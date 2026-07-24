@@ -1,11 +1,9 @@
-import { Trans } from "@lingui/react/macro";
 import { useCallback, useRef, useState } from "react";
 
 import { cn } from "@hypr/utils";
 
 import { ResourceView } from "./resource-view";
 
-import { ChatCTA } from "~/shared/chat-cta";
 import { StandardContentWrapper } from "~/shared/main";
 import { type Tab, type TaskResource } from "~/store/zustand/tabs";
 
@@ -54,16 +52,10 @@ export function TabContentTask({ tab }: { tab: TaskTab }) {
     [],
   );
 
-  const floatingButton = (
-    <div className="absolute bottom-4 left-1/2 z-20 -translate-x-1/2">
-      <ChatCTA label={<Trans>Work on this task</Trans>} />
-    </div>
-  );
-
   const showNav = tab.resources.length > 1;
 
   return (
-    <StandardContentWrapper floatingButton={floatingButton}>
+    <StandardContentWrapper>
       <div
         ref={scrollRef}
         className="relative h-full overflow-auto"

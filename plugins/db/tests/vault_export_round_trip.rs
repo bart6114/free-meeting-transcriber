@@ -132,7 +132,12 @@ async fn session_note_transcript_and_summary_round_trip() {
     .fetch_one(source.pool())
     .await
     .unwrap();
-    write_document(vault.path(), &session_dir, &session_row_to_document(&note_row), true);
+    write_document(
+        vault.path(),
+        &session_dir,
+        &session_row_to_document(&note_row),
+        true,
+    );
 
     let summary_row = sqlx::query(
         "SELECT id, session_id, kind, template_id, title, body_format, body, sort_order
@@ -141,7 +146,12 @@ async fn session_note_transcript_and_summary_round_trip() {
     .fetch_one(source.pool())
     .await
     .unwrap();
-    write_document(vault.path(), &session_dir, &session_row_to_document(&summary_row), true);
+    write_document(
+        vault.path(),
+        &session_dir,
+        &session_row_to_document(&summary_row),
+        true,
+    );
 
     let transcript_row = sqlx::query(
         "SELECT id, owner_user_id, session_id, created_at, started_at_ms, ended_at_ms,
@@ -163,7 +173,11 @@ async fn session_note_transcript_and_summary_round_trip() {
         speaker_hints_json: transcript_row.get("speaker_hints_json"),
     };
     let transcript_value = export::render_transcripts(&[transcript]);
-    write_json(vault.path(), &session_dir.join("transcript.json"), &transcript_value);
+    write_json(
+        vault.path(),
+        &session_dir.join("transcript.json"),
+        &transcript_value,
+    );
 
     assert!(session_dir.join("_meta.json").is_file());
     assert!(session_dir.join("_memo.md").is_file());
@@ -200,12 +214,11 @@ async fn session_note_transcript_and_summary_round_trip() {
     // Prosemirror-authored note round-trips to its rendered markdown, with
     // body_format normalized to "markdown" (the vault always stores
     // markdown — see `render_session_document`'s doc comment).
-    let (reimported_body_format, reimported_body): (String, String) = sqlx::query_as(
-        "SELECT body_format, body FROM session_documents WHERE id = 'doc-note'",
-    )
-    .fetch_one(target.pool())
-    .await
-    .unwrap();
+    let (reimported_body_format, reimported_body): (String, String) =
+        sqlx::query_as("SELECT body_format, body FROM session_documents WHERE id = 'doc-note'")
+            .fetch_one(target.pool())
+            .await
+            .unwrap();
     assert_eq!(reimported_body_format, "markdown");
     let expected_markdown = hypr_tiptap::tiptap_json_to_md(&note_body_json_value).unwrap();
     assert_eq!(reimported_body.trim(), expected_markdown.trim());
@@ -382,7 +395,12 @@ fn session_row_to_document(row: &sqlx::sqlite::SqliteRow) -> DocumentRow {
     }
 }
 
-fn write_document(vault_base: &Path, session_dir: &Path, row: &DocumentRow, is_first_of_kind: bool) {
+fn write_document(
+    vault_base: &Path,
+    session_dir: &Path,
+    row: &DocumentRow,
+    is_first_of_kind: bool,
+) {
     let document = export::SessionDocument {
         id: row.id.clone(),
         session_id: row.session_id.clone(),
@@ -571,28 +589,30 @@ async fn calendars_and_events_round_trip() {
 
     let vault = vault();
     write_json(vault.path(), &vault.path().join("calendars.json"), &value);
-    write_json(vault.path(), &vault.path().join("events.json"), &events_value);
+    write_json(
+        vault.path(),
+        &vault.path().join("events.json"),
+        &events_value,
+    );
 
     let target = reimport(vault.path()).await;
 
-    let (name, enabled, provider, color): (String, bool, String, String) = sqlx::query_as(
-        "SELECT name, enabled, provider, color FROM calendars WHERE id = 'cal-1'",
-    )
-    .fetch_one(target.pool())
-    .await
-    .unwrap();
+    let (name, enabled, provider, color): (String, bool, String, String) =
+        sqlx::query_as("SELECT name, enabled, provider, color FROM calendars WHERE id = 'cal-1'")
+            .fetch_one(target.pool())
+            .await
+            .unwrap();
     assert_eq!(name, "Work");
     assert!(enabled);
     assert_eq!(provider, "google");
     assert_eq!(color, "#123456");
 
-    let (title, calendar_id, participants_json): (String, String, Option<String>) =
-        sqlx::query_as(
-            "SELECT title, calendar_id, participants_json FROM events WHERE id = 'event-1'",
-        )
-        .fetch_one(target.pool())
-        .await
-        .unwrap();
+    let (title, calendar_id, participants_json): (String, String, Option<String>) = sqlx::query_as(
+        "SELECT title, calendar_id, participants_json FROM events WHERE id = 'event-1'",
+    )
+    .fetch_one(target.pool())
+    .await
+    .unwrap();
     assert_eq!(title, "Standup");
     assert_eq!(calendar_id, "cal-1");
     assert_eq!(
@@ -618,12 +638,11 @@ async fn daily_notes_round_trip() {
     write_json(vault.path(), &vault.path().join("daily_notes.json"), &value);
 
     let target = reimport(vault.path()).await;
-    let (note_date, body_format, body): (String, String, String) = sqlx::query_as(
-        "SELECT note_date, body_format, body FROM daily_notes WHERE id = 'note-1'",
-    )
-    .fetch_one(target.pool())
-    .await
-    .unwrap();
+    let (note_date, body_format, body): (String, String, String) =
+        sqlx::query_as("SELECT note_date, body_format, body FROM daily_notes WHERE id = 'note-1'")
+            .fetch_one(target.pool())
+            .await
+            .unwrap();
     assert_eq!(note_date, "2026-07-01");
     assert_eq!(body_format, "prosemirror_json");
     assert_eq!(body, r#"{"type":"doc","content":[]}"#);
@@ -717,7 +736,11 @@ async fn chat_round_trip() {
     );
 
     let vault = vault();
-    write_json(vault.path(), &vault.path().join("chats/chat-1/messages.json"), &value);
+    write_json(
+        vault.path(),
+        &vault.path().join("chats/chat-1/messages.json"),
+        &value,
+    );
 
     let target = reimport(vault.path()).await;
     let title: String = sqlx::query_scalar("SELECT title FROM chat_groups WHERE id = 'chat-1'")
@@ -757,11 +780,12 @@ async fn settings_round_trip() {
     write_json(vault.path(), &vault.path().join("settings.json"), &value);
 
     let target = reimport(vault.path()).await;
-    let value_json: String =
-        sqlx::query_scalar("SELECT value_json FROM app_settings WHERE id = 'legacy_settings_document'")
-            .fetch_one(target.pool())
-            .await
-            .unwrap();
+    let value_json: String = sqlx::query_scalar(
+        "SELECT value_json FROM app_settings WHERE id = 'legacy_settings_document'",
+    )
+    .fetch_one(target.pool())
+    .await
+    .unwrap();
     assert_eq!(
         serde_json::from_str::<serde_json::Value>(&value_json).unwrap(),
         serde_json::json!({"theme": "dark", "locale": "en"})
@@ -794,14 +818,19 @@ async fn session_tags_round_trip_through_meta_json() {
     );
 
     let vault = vault();
-    write_json(vault.path(), &vault.path().join("sessions/session-1/_meta.json"), &value);
+    write_json(
+        vault.path(),
+        &vault.path().join("sessions/session-1/_meta.json"),
+        &value,
+    );
 
     let target = reimport(vault.path()).await;
-    let mut tag_ids: Vec<String> =
-        sqlx::query_scalar("SELECT tag_id FROM session_tags WHERE session_id = 'session-1' ORDER BY tag_id")
-            .fetch_all(target.pool())
-            .await
-            .unwrap();
+    let mut tag_ids: Vec<String> = sqlx::query_scalar(
+        "SELECT tag_id FROM session_tags WHERE session_id = 'session-1' ORDER BY tag_id",
+    )
+    .fetch_all(target.pool())
+    .await
+    .unwrap();
     tag_ids.sort();
     assert_eq!(tag_ids, vec!["follow-up".to_string(), "urgent".to_string()]);
 
@@ -812,7 +841,10 @@ async fn session_tags_round_trip_through_meta_json() {
     .await
     .unwrap();
     tag_names.sort();
-    assert_eq!(tag_names, vec!["follow-up".to_string(), "urgent".to_string()]);
+    assert_eq!(
+        tag_names,
+        vec!["follow-up".to_string(), "urgent".to_string()]
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -884,7 +916,13 @@ async fn missing_aggregate_files_import_as_empty_not_as_an_error() {
             "SELECT COUNT(*) FROM app_settings WHERE id = 'legacy_settings_document'",
         ),
     ] {
-        let count: i64 = sqlx::query_scalar(query).fetch_one(target.pool()).await.unwrap();
-        assert_eq!(count, 0, "{table} should have zero rows when its vault file is absent");
+        let count: i64 = sqlx::query_scalar(query)
+            .fetch_one(target.pool())
+            .await
+            .unwrap();
+        assert_eq!(
+            count, 0,
+            "{table} should have zero rows when its vault file is absent"
+        );
     }
 }

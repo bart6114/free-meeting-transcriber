@@ -1,5 +1,3 @@
-import type { ContextRef } from "./entities";
-
 const SESSION_CONTEXT_DRAG_TYPE = "application/x-fmtr-session-context";
 
 type SessionDragPayload = {
@@ -11,13 +9,6 @@ type SessionMentionDragData = {
   id: string;
   label: string;
 };
-
-const createSessionContextRef = (sessionId: string): ContextRef => ({
-  kind: "session",
-  key: `session:manual:${sessionId}`,
-  source: "manual",
-  sessionId,
-});
 
 export const hasSessionContextDragData = (
   dataTransfer: Pick<DataTransfer, "types"> | null | undefined,
@@ -73,13 +64,6 @@ const readSessionContextDragPayload = (
   } catch {
     return null;
   }
-};
-
-export const readSessionContextDragData = (
-  dataTransfer: Pick<DataTransfer, "getData" | "types"> | null | undefined,
-): ContextRef | null => {
-  const payload = readSessionContextDragPayload(dataTransfer);
-  return payload ? createSessionContextRef(payload.sessionId) : null;
 };
 
 export const readSessionMentionDragData = (

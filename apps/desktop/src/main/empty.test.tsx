@@ -3,32 +3,14 @@ import type React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("~/shared/main", () => ({
-  StandardContentWrapper: ({
-    children,
-    floatingButton,
-  }: {
-    children: React.ReactNode;
-    floatingButton?: React.ReactNode;
-  }) => (
-    <div>
-      {children}
-      {floatingButton}
-    </div>
+  StandardContentWrapper: ({ children }: { children: React.ReactNode }) => (
+    <div>{children}</div>
   ),
 }));
 
 vi.mock("~/shared/useNewNote", () => ({
   useNewNote: () => vi.fn(),
   useNewNoteAndListen: () => vi.fn(),
-}));
-
-vi.mock("~/contexts/shell", () => ({
-  useShell: () => ({
-    chat: {
-      mode: "FloatingClosed",
-      sendEvent: vi.fn(),
-    },
-  }),
 }));
 
 vi.mock("~/store/zustand/tabs", () => ({
@@ -45,7 +27,7 @@ describe("TabContentEmpty", () => {
     cleanup();
   });
 
-  it("shows the home actions and global chat FAB", () => {
+  it("shows the home actions", () => {
     render(
       <TabContentEmpty
         tab={{
@@ -58,9 +40,6 @@ describe("TabContentEmpty", () => {
     );
 
     expect(screen.getByRole("button", { name: /New Note/ })).toBeTruthy();
-    expect(
-      screen.getByRole("button", { name: "Ask AI anything" }),
-    ).toBeTruthy();
   });
 
   it("centers actions in a draggable empty surface while keeping actions clickable", () => {
