@@ -5,6 +5,7 @@ mod db;
 mod embedded_cli;
 mod ext;
 mod search_index;
+#[allow(dead_code)] // no production consumers until Task 9 (Tauri commands) wires it in
 mod session_store;
 mod store;
 mod supervisor;
