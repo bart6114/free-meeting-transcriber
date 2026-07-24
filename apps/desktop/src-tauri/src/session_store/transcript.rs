@@ -23,8 +23,11 @@ pub struct LiveTranscriptBuffer {
 const DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(1);
 
 impl SessionStore {
-    /// Buffers the delta and schedules a flush ~1s later. Never fails on missing folder/index row:
-    /// this only touches the in-memory buffer, so there is nothing here that can silently no-op.
+    /// Buffers the delta and schedules a flush ~1s later. Has no session/index preconditions,
+    /// so it can never silently no-op. Usually touches only the in-memory buffer; the one
+    /// exception is switching `transcript_id` while the outgoing buffer is dirty, which flushes
+    /// the old transcript first and propagates that flush's error (loudly — the caller sees Err
+    /// and the incoming delta is NOT buffered; the old transcript's buffer stays dirty for retry).
     pub async fn append_transcript(
         &self,
         session_id: &str,
