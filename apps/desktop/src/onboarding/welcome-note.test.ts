@@ -29,7 +29,7 @@ beforeEach(() => {
   });
 });
 
-it("reuses an existing onboarding welcome note", async () => {
+it("reuses an existing onboarding welcome note and clears a stale meeting link", async () => {
   mocks.execute.mockResolvedValueOnce([{ id: "welcome-session" }]);
 
   await expect(getOrCreateWelcomeSession()).resolves.toBe("welcome-session");
@@ -37,6 +37,10 @@ it("reuses an existing onboarding welcome note", async () => {
   expect(mocks.execute).toHaveBeenCalledWith(expect.any(String), [
     "fmtr-onboarding-demo-v1",
   ]);
+  expect(mocks.execute).toHaveBeenCalledWith(
+    expect.stringContaining("json_set(event_json, '$.meeting_link', '')"),
+    ["welcome-session"],
+  );
 });
 
 it("creates a welcome note without a meeting link", async () => {

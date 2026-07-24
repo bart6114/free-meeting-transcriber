@@ -17,6 +17,7 @@ import { OverflowButton } from "./overflow";
 import { useAudioPlayer } from "~/audio-player";
 import { useNow } from "~/calendar/hooks";
 import { useShell } from "~/contexts/shell";
+import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
 import { useEventCountdown } from "~/session/hooks/useEventCountdown";
 import {
   getRemoteMeeting,
@@ -148,8 +149,9 @@ function HeaderMeetingActionPill({
   const autoStartScheduledMeetings = useConfigValue(
     "auto_start_scheduled_meetings",
   );
-  const remote = getRemoteMeeting(event?.meeting_link);
-  const meetingLink = event?.meeting_link || null;
+  const isWelcomeNote = event?.tracking_id === WELCOME_NOTE_TRACKING_ID;
+  const remote = getRemoteMeeting(isWelcomeNote ? null : event?.meeting_link);
+  const meetingLink = (remote ? event?.meeting_link : null) || null;
   const endedAt = event?.ended_at ? safeParseDate(event.ended_at) : null;
   const ended = !!endedAt && endedAt.getTime() <= now.getTime();
   const hasTranscript = useHasTranscript(sessionId);
@@ -257,7 +259,7 @@ function HeaderMeetingActionPill({
           {countdown.label}
         </div>
       ) : null}
-      <div className="border-border bg-card text-foreground flex h-7 max-w-56 shrink-0 items-center overflow-hidden rounded-full border">
+      <div className="border-border bg-card text-foreground flex h-7 max-w-56 shrink-0 items-center overflow-hidden rounded-md border">
         <button
           type="button"
           data-tauri-drag-region="false"

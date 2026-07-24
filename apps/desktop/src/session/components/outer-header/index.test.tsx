@@ -420,11 +420,11 @@ describe("OuterHeader", () => {
     expect(mocks.startListening).toHaveBeenCalledTimes(1);
   });
 
-  it("shows a plain record button for the welcome note", () => {
+  it("shows a plain record button for the welcome note even with a stale meeting link", () => {
     mocks.sessionEvents = {
       "session-1": {
         tracking_id: "fmtr-onboarding-demo-v1",
-        meeting_link: "",
+        meeting_link: "https://github.com/bart6114/free-meeting-transcriber",
       },
     };
 

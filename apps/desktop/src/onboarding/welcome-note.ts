@@ -59,7 +59,18 @@ async function findOrCreateWelcomeSession(): Promise<string> {
     `,
     [WELCOME_NOTE_TRACKING_ID],
   );
-  if (rows[0]) return rows[0].id;
+  if (rows[0]) {
+    await liveQueryClient.execute(
+      `
+        UPDATE sessions
+        SET event_json = json_set(event_json, '$.meeting_link', '')
+        WHERE id = ?
+          AND json_extract(event_json, '$.meeting_link') != ''
+      `,
+      [rows[0].id],
+    );
+    return rows[0].id;
+  }
 
   const now = new Date().toISOString();
   const event: SessionEvent = {
