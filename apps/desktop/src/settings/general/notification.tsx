@@ -348,9 +348,7 @@ export function NotificationSettingsView() {
           <div className="border-muted min-w-0 flex-1 border-t" />
         </div>
 
-        <form.Subscribe
-          selector={(state) => state.values.notification_detect}
-        >
+        <form.Subscribe selector={(state) => state.values.notification_detect}>
           {(anyNotificationEnabled) => (
             <form.Field name="respect_dnd">
               {(field) => (

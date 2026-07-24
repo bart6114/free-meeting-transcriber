@@ -127,11 +127,14 @@ const resolveLLMConnection = (params: {
   // gate anything here (every remaining provider only ever declares
   // `requires_config`) — these are placeholders to satisfy the shared
   // eligibility context shape.
-  const blockers = getProviderSelectionBlockers(providerDefinition.requirements, {
-    isAuthenticated: false,
-    isPaid: true,
-    config: { base_url: baseUrl, api_key: apiKey },
-  });
+  const blockers = getProviderSelectionBlockers(
+    providerDefinition.requirements,
+    {
+      isAuthenticated: false,
+      isPaid: true,
+      config: { base_url: baseUrl, api_key: apiKey },
+    },
+  );
 
   if (blockers.length > 0) {
     const blocker = blockers[0];

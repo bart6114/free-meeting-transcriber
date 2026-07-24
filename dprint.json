@@ -14,6 +14,7 @@
     ]
   },
   "excludes": [
+    ".claude",
     ".venv",
     ".drizzle",
     "**/*-lock.yaml",
@@ -74,12 +75,6 @@
         "cacheKeyFiles": [
           ".oxfmtrc.json",
           "package.json"
-        ]
-      },
-      {
-        "command": "node apps/web/scripts/format-mdx.js",
-        "exts": [
-          "mdx"
         ]
       }
     ]

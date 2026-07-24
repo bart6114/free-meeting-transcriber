@@ -41,9 +41,11 @@ export function ReExportAllFilesRow() {
         onClick={() => exportMutation.mutate()}
         disabled={exportMutation.isPending}
       >
-        {exportMutation.isPending
-          ? <Trans>Exporting...</Trans>
-          : <Trans>Re-export all files</Trans>}
+        {exportMutation.isPending ? (
+          <Trans>Exporting...</Trans>
+        ) : (
+          <Trans>Re-export all files</Trans>
+        )}
       </Button>
     </div>
   );

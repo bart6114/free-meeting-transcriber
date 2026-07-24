@@ -703,7 +703,8 @@ async fn export_session<R: tauri::Runtime>(
         updated_at: row.get("updated_at"),
     });
 
-    let meta_value = export::render_session_meta(&session, &participants, &tags, key_facts.as_ref());
+    let meta_value =
+        export::render_session_meta(&session, &participants, &tags, key_facts.as_ref());
     let meta_content = hypr_fs_sync_core::json::serialize(meta_value)
         .map_err(|error| format!("failed to serialize _meta.json for {session_id}: {error}"))?;
     write_tracked(
@@ -843,7 +844,13 @@ async fn render_and_write_document<R: tauri::Runtime>(
             document.id
         )
     })?;
-    write_tracked(app, vault_base, &session_dir.join(filename), content.as_bytes()).await
+    write_tracked(
+        app,
+        vault_base,
+        &session_dir.join(filename),
+        content.as_bytes(),
+    )
+    .await
 }
 
 async fn export_session_transcript<R: tauri::Runtime>(
@@ -886,8 +893,9 @@ async fn export_session_transcript<R: tauri::Runtime>(
         .collect::<Vec<_>>();
 
     let value = export::render_transcripts(&transcripts);
-    let content = hypr_fs_sync_core::json::serialize(value)
-        .map_err(|error| format!("failed to serialize transcript.json for {session_id}: {error}"))?;
+    let content = hypr_fs_sync_core::json::serialize(value).map_err(|error| {
+        format!("failed to serialize transcript.json for {session_id}: {error}")
+    })?;
     write_tracked(app, vault_base, &transcript_path, content.as_bytes()).await?;
     Ok(())
 }
@@ -1032,7 +1040,13 @@ async fn export_chat_group<R: tauri::Runtime>(
     let value = export::render_chat(&group, &messages);
     let content = hypr_fs_sync_core::json::serialize(value)
         .map_err(|error| format!("failed to serialize messages.json for chat {id}: {error}"))?;
-    write_tracked(app, vault_base, &chat_dir.join("messages.json"), content.as_bytes()).await?;
+    write_tracked(
+        app,
+        vault_base,
+        &chat_dir.join("messages.json"),
+        content.as_bytes(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -1226,10 +1240,11 @@ async fn export_settings_file<R: tauri::Runtime>(
     vault_base: &Path,
 ) -> WorkerResult<()> {
     let path = vault_base.join("settings.json");
-    let value_json: Option<String> =
-        sqlx::query_scalar("SELECT value_json FROM app_settings WHERE id = 'legacy_settings_document'")
-            .fetch_optional(pool)
-            .await?;
+    let value_json: Option<String> = sqlx::query_scalar(
+        "SELECT value_json FROM app_settings WHERE id = 'legacy_settings_document'",
+    )
+    .fetch_optional(pool)
+    .await?;
 
     let Some(value_json) = value_json else {
         trash_if_exists(app, vault_base, &path).await?;
@@ -1252,7 +1267,9 @@ async fn export_settings_file<R: tauri::Runtime>(
 #[specta::specta]
 pub async fn export_vault_now<R: tauri::Runtime>(app: AppHandle<R>) -> Result<(), String> {
     let db = app.state::<Arc<hypr_db_core::Db>>();
-    enqueue_all_entities(db.pool()).await.map_err(|e| e.to_string())
+    enqueue_all_entities(db.pool())
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[cfg(test)]
@@ -1363,12 +1380,11 @@ mod tests {
         // unconditionally re-renders every live row on every pass) will
         // re-export it with nothing missing, with no separate "re-export
         // after revival" mechanism needed.
-        let document_deleted_at: Option<String> = sqlx::query_scalar(
-            "SELECT deleted_at FROM session_documents WHERE id = 'note-blip'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
+        let document_deleted_at: Option<String> =
+            sqlx::query_scalar("SELECT deleted_at FROM session_documents WHERE id = 'note-blip'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
         assert!(document_deleted_at.is_none());
         assert!(
             memo_path.exists(),
@@ -1585,12 +1601,11 @@ mod tests {
         .await
         .unwrap();
 
-        let remaining: Vec<String> = sqlx::query_scalar(
-            "SELECT entity_id FROM vault_export_dirty ORDER BY entity_id",
-        )
-        .fetch_all(db.pool())
-        .await
-        .unwrap();
+        let remaining: Vec<String> =
+            sqlx::query_scalar("SELECT entity_id FROM vault_export_dirty ORDER BY entity_id")
+                .fetch_all(db.pool())
+                .await
+                .unwrap();
 
         assert_eq!(
             remaining,
@@ -1628,11 +1643,16 @@ mod tests {
             .fetch_one(db.pool())
             .await
             .unwrap();
-        assert!(queued_before > 0, "enqueue_all_entities should have queued something");
+        assert!(
+            queued_before > 0,
+            "enqueue_all_entities should have queued something"
+        );
 
-        drain_with(db.pool(), &mut RetryBackoff::new(), |_entity| async { Ok(()) })
-            .await
-            .unwrap();
+        drain_with(db.pool(), &mut RetryBackoff::new(), |_entity| async {
+            Ok(())
+        })
+        .await
+        .unwrap();
 
         let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
             .fetch_one(db.pool())
@@ -1671,12 +1691,11 @@ mod tests {
         .await
         .unwrap();
 
-        let remaining: Vec<(String, String)> = sqlx::query_as(
-            "SELECT entity_type, entity_id FROM vault_export_dirty",
-        )
-        .fetch_all(db.pool())
-        .await
-        .unwrap();
+        let remaining: Vec<(String, String)> =
+            sqlx::query_as("SELECT entity_type, entity_id FROM vault_export_dirty")
+                .fetch_all(db.pool())
+                .await
+                .unwrap();
 
         assert_eq!(
             remaining,
@@ -1808,10 +1827,12 @@ mod tests {
     #[tokio::test]
     async fn tags_trigger_propagates_to_every_session_that_references_the_tag() {
         let db = test_db().await;
-        sqlx::query("INSERT INTO sessions (id, title) VALUES ('session-1', 'A'), ('session-2', 'B')")
-            .execute(db.pool())
-            .await
-            .unwrap();
+        sqlx::query(
+            "INSERT INTO sessions (id, title) VALUES ('session-1', 'A'), ('session-2', 'B')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
         sqlx::query("DELETE FROM vault_export_dirty")
             .execute(db.pool())
             .await
