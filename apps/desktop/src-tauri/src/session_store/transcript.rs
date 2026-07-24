@@ -30,9 +30,36 @@ impl SessionStore {
         session_id: &str,
         delta: TranscriptDelta,
     ) -> Result<(), StoreError> {
+        if delta.new_words.is_empty() && delta.replaced_ids.is_empty() && delta.new_hints.is_empty()
+        {
+            // Nothing to buffer, nothing to (re)dirty, nothing to schedule.
+            return Ok(());
+        }
+
+        // A session moving on to a new transcript_id (new recording segment) must not carry
+        // the previous transcript's words into the new one's file entry. If the outgoing
+        // buffer still has unflushed changes, persist them first -- clearing an unflushed
+        // buffer would silently drop words that never made it to disk.
+        let needs_flush_before_switch = {
+            let live = self.live.lock().await;
+            live.get(session_id).is_some_and(|buffer| {
+                buffer.dirty
+                    && !buffer.transcript_id.is_empty()
+                    && buffer.transcript_id != delta.transcript_id
+            })
+        };
+        if needs_flush_before_switch {
+            self.flush_transcript(session_id).await?;
+        }
+
         let needs_spawn = {
             let mut live = self.live.lock().await;
             let buffer = live.entry(session_id.to_string()).or_default();
+
+            if !buffer.transcript_id.is_empty() && buffer.transcript_id != delta.transcript_id {
+                buffer.words.clear();
+                buffer.hints.clear();
+            }
 
             if !delta.replaced_ids.is_empty() {
                 buffer.words.retain(|word| {
@@ -58,13 +85,26 @@ impl SessionStore {
             let store = self.clone();
             let session_id = session_id.to_string();
             tokio::spawn(async move {
-                tokio::time::sleep(DEBOUNCE).await;
-                let still_dirty = {
-                    let live = store.live.lock().await;
-                    live.get(&session_id).is_some_and(|buffer| buffer.dirty)
-                };
-                if still_dirty {
-                    let _ = store.flush_transcript(&session_id).await;
+                loop {
+                    tokio::time::sleep(DEBOUNCE).await;
+                    let still_dirty = {
+                        let live = store.live.lock().await;
+                        live.get(&session_id).is_some_and(|buffer| buffer.dirty)
+                    };
+                    if !still_dirty {
+                        return;
+                    }
+                    if let Err(err) = store.flush_transcript(&session_id).await {
+                        tracing::error!(
+                            session_id = %session_id,
+                            error = %err,
+                            "debounced transcript flush failed; will retry while buffer stays dirty"
+                        );
+                        // flush_transcript re-dirties the buffer on Err, so the next
+                        // iteration's `still_dirty` check will pick this session back up.
+                        continue;
+                    }
+                    return;
                 }
             });
         }
@@ -84,6 +124,8 @@ impl SessionStore {
             // will see a clean buffer, flip it dirty again, and schedule its own flusher --
             // so nothing gets lost even though this in-flight flush won't see that append.
             buffer.dirty = false;
+            // Cloning the full word/hint list on every flush is O(n) in transcript length;
+            // fine at meeting scale (thousands of words, not millions).
             (
                 buffer.transcript_id.clone(),
                 buffer.started_at_ms,
@@ -93,8 +135,21 @@ impl SessionStore {
         };
 
         let (transcript_id, started_at_ms, words, hints) = snapshot;
-        self.persist_transcript(session_id, &transcript_id, started_at_ms, words, hints)
-            .await
+        let result = self
+            .persist_transcript(session_id, &transcript_id, started_at_ms, words, hints)
+            .await;
+
+        if result.is_err() {
+            // Persist failed: the words only exist in memory. Re-dirty so flush_all() and
+            // the debounce retry loop pick this session back up -- a failed flush must never
+            // look "clean" (that's the exact silent-loss shape this store exists to prevent).
+            let mut live = self.live.lock().await;
+            if let Some(buffer) = live.get_mut(session_id) {
+                buffer.dirty = true;
+            }
+        }
+
+        result
     }
 
     /// App-exit hook: flush every dirty buffer. A failure on one session must not skip the
@@ -200,7 +255,7 @@ impl SessionStore {
         )
         .bind(transcript_id)
         .bind(session_id)
-        .bind(started_at_ms as i64)
+        .bind(started_at_ms.round() as i64)
         .bind(&words_json)
         .bind(&hints_json)
         .execute(self.pool())
@@ -396,6 +451,16 @@ mod tests {
         assert!(ids.contains(&"t2"));
         let t1 = transcripts.iter().find(|t| t["id"] == "t1").unwrap();
         assert_eq!(t1["words"].as_array().unwrap().len(), 1);
+        // Regression: switching transcript_id must reset the live buffer, not carry t1's
+        // words into t2's entry.
+        let t2 = transcripts.iter().find(|t| t["id"] == "t2").unwrap();
+        let t2_texts: Vec<&str> = t2["words"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(t2_texts, vec!["second"]);
     }
 
     #[tokio::test]
@@ -536,5 +601,80 @@ mod tests {
                 .join("sessions/never-touched/transcript.json")
                 .is_file()
         );
+    }
+
+    /// REGRESSION for Critical 1 (reviewer-traced): a failed index write must not be
+    /// swallowed, and the buffer must stay dirty so flush_all() can recover the session
+    /// instead of silently treating it as flushed.
+    #[tokio::test]
+    async fn flush_transcript_index_failure_leaves_file_intact_and_buffer_dirty_for_retry() {
+        let (store, vault) = test_store().await;
+        store
+            .append_transcript("s1", delta_with_words(&["hello"]))
+            .await
+            .unwrap();
+
+        sqlx::query("DROP TABLE transcripts")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        let result = store.flush_transcript("s1").await;
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), StoreError::Db(_)));
+
+        // File write happens before the index upsert, so it must have landed even though
+        // the index write failed -- the file is truth.
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 1);
+
+        // The failed flush must re-dirty the buffer, not leave it looking clean.
+        {
+            let live = store.live.lock().await;
+            assert!(
+                live.get("s1").unwrap().dirty,
+                "buffer must be re-dirtied after a failed flush"
+            );
+        }
+
+        // Recreate the table (mirrors the canonical migration's transcripts DDL) and
+        // confirm flush_all() recovers the session that previously failed.
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS transcripts (
+              id                    TEXT PRIMARY KEY NOT NULL,
+              workspace_id          TEXT NOT NULL DEFAULT '',
+              owner_user_id         TEXT NOT NULL DEFAULT '',
+              session_id            TEXT NOT NULL DEFAULT '',
+              source                TEXT NOT NULL DEFAULT '',
+              provider              TEXT NOT NULL DEFAULT '',
+              model                 TEXT NOT NULL DEFAULT '',
+              language              TEXT NOT NULL DEFAULT '',
+              started_at_ms         INTEGER NOT NULL DEFAULT 0,
+              ended_at_ms           INTEGER,
+              audio_attachment_id   TEXT NOT NULL DEFAULT '',
+              memo                   TEXT NOT NULL DEFAULT '',
+              words_json            TEXT NOT NULL DEFAULT '[]',
+              speaker_hints_json    TEXT NOT NULL DEFAULT '[]',
+              metadata_json         TEXT NOT NULL DEFAULT '{}',
+              created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+              updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+              deleted_at            TEXT
+            ) STRICT",
+        )
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+        store.flush_all().await.unwrap();
+
+        let row_count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(row_count, 1);
     }
 }
