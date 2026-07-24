@@ -67,7 +67,10 @@ const BATCH_SIZE: i64 = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 const DEBOUNCE_WINDOW: Duration = Duration::from_millis(500);
 
-type WorkerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+/// `pub(crate)`: `session_store::migrate`'s one-time final export sweep
+/// (Task 12) reuses `drain_queue` directly, whose signature names this
+/// alias.
+pub(crate) type WorkerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Copied from `plugins/fs-sync/src/commands.rs`: runs a blocking body on
 /// tokio's dedicated blocking thread pool instead of the shared async
@@ -101,8 +104,11 @@ struct DirtyEntity {
 /// `RetryBackoff` created once in `run()`, threaded through every
 /// `drain_queue`/`drain_with` call) — an in-memory heuristic that resets on
 /// app restart is an intentional simplification, not an oversight.
+/// `pub(crate)`: `session_store::migrate`'s one-time final export sweep
+/// (Task 12) constructs its own `RetryBackoff` to drive `drain_queue`
+/// directly, rather than spawning this module's `run()` worker task.
 #[derive(Debug, Default)]
-struct RetryBackoff {
+pub(crate) struct RetryBackoff {
     state: std::collections::HashMap<(String, String), BackoffEntry>,
 }
 
@@ -124,7 +130,7 @@ fn backoff_delay(consecutive_failures: u32) -> Duration {
 }
 
 impl RetryBackoff {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -299,8 +305,9 @@ async fn ensure_first_run_full_export<R: tauri::Runtime>(
 /// Enqueues every vault-exportable entity, like search_index's
 /// `enqueue_all_entities` — used both for the first-run export above and
 /// the `export_vault_now` command (Settings -> Storage -> "Re-export all
-/// files").
-async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+/// files"). `pub(crate)`: also reused as-is by `session_store::migrate`'s
+/// one-time final export sweep (Task 12).
+pub(crate) async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
     sqlx::query(
@@ -443,7 +450,11 @@ where
     }
 }
 
-async fn drain_queue<R: tauri::Runtime>(
+/// `pub(crate)`: `session_store::migrate`'s one-time final export sweep
+/// (Task 12) drives this directly, once, instead of spawning `run()`'s
+/// long-lived worker task — same drain logic, no duplicated queue-draining
+/// code.
+pub(crate) async fn drain_queue<R: tauri::Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
     backoff: &mut RetryBackoff,

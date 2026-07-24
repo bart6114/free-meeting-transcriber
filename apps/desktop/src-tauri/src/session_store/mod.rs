@@ -7,6 +7,7 @@ pub mod audio;
 pub mod commands;
 pub mod content;
 pub mod journal;
+pub mod migrate;
 pub mod paths;
 pub mod rebuild;
 pub mod transcript;

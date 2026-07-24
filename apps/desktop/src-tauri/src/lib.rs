@@ -287,6 +287,37 @@ pub async fn main() {
                 use tauri_plugin_settings::SettingsPluginExt;
                 match app_handle.settings().vault_base() {
                     Ok(base) => {
+                        // Task 12: drains the *old* DB-to-vault export
+                        // machinery one final time, repairing any
+                        // `transcripts.words_json` row the historical
+                        // int/float round-trip bug left unexported, before
+                        // this run's `rebuild_index` indexes whatever's on
+                        // disk. Gated by a marker file so it only ever runs
+                        // once per vault; `block_on` for the same reason
+                        // `rebuild_index` below is blocked on -- the UI must
+                        // not proceed until the vault reflects every row the
+                        // DB still has that files don't yet.
+                        match hypr_tauri_utils::block_on(session_store::migrate::run_once(
+                            &app_handle,
+                            db.pool(),
+                            base.as_std_path(),
+                        )) {
+                            Ok(report) => {
+                                tracing::info!(
+                                    skipped_marker_present = report.skipped_marker_present,
+                                    repaired_words_json = report.repaired_words_json,
+                                    unparseable_words_json_count = report.unparseable_words_json.len(),
+                                    drain_passes = report.drain_passes,
+                                    export_error_count = report.export_errors.len(),
+                                    export_errors = ?report.export_errors,
+                                    "one-time final export sweep complete"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("one-time final export sweep failed: {}", e);
+                            }
+                        }
+
                         let store = std::sync::Arc::new(session_store::SessionStore::new(
                             base.as_std_path().to_path_buf(),
                             db.pool().clone(),
