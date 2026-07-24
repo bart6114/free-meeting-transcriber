@@ -10,10 +10,9 @@ impl WriteJournal {
         Self(Mutex::new(HashMap::new()))
     }
 
-    pub fn record(&self, relative: &str, bytes: &[u8]) {
-        let hash = sha256(bytes);
+    pub fn record(&self, relative: &str, hash: &str) {
         if let Ok(mut journal) = self.0.lock() {
-            journal.insert(relative.to_string(), hash);
+            journal.insert(relative.to_string(), hash.to_string());
         }
     }
 
@@ -49,8 +48,9 @@ mod tests {
     fn journal_records_and_validates_hashes() {
         let journal = WriteJournal::new();
         let data = b"test content";
+        let hash = sha256(data);
 
-        journal.record("test.txt", data);
+        journal.record("test.txt", &hash);
         assert!(journal.0.lock().unwrap().contains_key("test.txt"));
         assert_eq!(journal.0.lock().unwrap().len(), 1);
     }
@@ -59,7 +59,9 @@ mod tests {
     fn matches_current_file_returns_false_for_missing_file() {
         let journal = WriteJournal::new();
         let vault = tempfile::tempdir().unwrap();
-        journal.record("missing.txt", b"data");
+        let data = b"data";
+        let hash = sha256(data);
+        journal.record("missing.txt", &hash);
 
         assert!(!journal.matches_current_file(vault.path(), "missing.txt"));
     }
@@ -71,7 +73,8 @@ mod tests {
         let file_path = vault.path().join("test.txt");
 
         let data = b"hello world";
-        journal.record("test.txt", data);
+        let hash = sha256(data);
+        journal.record("test.txt", &hash);
         std::fs::write(&file_path, data).unwrap();
 
         assert!(journal.matches_current_file(vault.path(), "test.txt"));
@@ -83,7 +86,8 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         let file_path = vault.path().join("test.txt");
 
-        journal.record("test.txt", b"hello world");
+        let hash = sha256(b"hello world");
+        journal.record("test.txt", &hash);
         std::fs::write(&file_path, b"goodbye world").unwrap();
 
         assert!(!journal.matches_current_file(vault.path(), "test.txt"));
