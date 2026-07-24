@@ -5,6 +5,7 @@ pub mod content;
 pub mod journal;
 pub mod paths;
 
+#[allow(unused_imports)] // re-export consumed by Task 9 (Tauri commands)
 pub use content::SessionMeta;
 
 #[derive(Debug)]
