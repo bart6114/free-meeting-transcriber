@@ -1,13 +1,15 @@
 use sqlx::SqlitePool;
 use std::path::PathBuf;
 
+pub mod content;
 pub mod journal;
 pub mod paths;
+
+pub use content::SessionMeta;
 
 #[derive(Debug)]
 pub struct SessionStore {
     vault_base: PathBuf,
-    #[allow(dead_code)] // consumed by Task 6 (index upserts)
     pool: SqlitePool,
     journal: journal::WriteJournal,
     write_lock: tokio::sync::Mutex<()>, // single store-wide lock; can become per-path if contention matters
@@ -17,7 +19,6 @@ pub struct SessionStore {
 pub enum StoreError {
     Io(String),
     Db(String),
-    #[allow(dead_code)] // constructed by Task 6/7 (meta/transcript serialization)
     Serialize(String),
 }
 
@@ -47,6 +48,10 @@ impl SessionStore {
             journal: journal::WriteJournal::new(),
             write_lock: tokio::sync::Mutex::new(()),
         }
+    }
+
+    pub fn pool(&self) -> &SqlitePool {
+        &self.pool
     }
 
     pub async fn write_file(&self, relative: PathBuf, bytes: Vec<u8>) -> Result<(), StoreError> {
