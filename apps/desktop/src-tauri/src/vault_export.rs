@@ -34,7 +34,7 @@
 //! # Startup ordering
 //!
 //! `sync_from_vault` (Task 12's reconcile) runs inside
-//! `tauri_plugin_db::init_with_cloudsync`'s plugin `setup()` hook, which — by
+//! `tauri_plugin_db::init`'s plugin `setup()` hook, which — by
 //! Tauri's plugin lifecycle — completes before the *app*-level
 //! `tauri::Builder::setup()` closure in `lib.rs` runs. `vault_export::spawn`
 //! (like `search_index::spawn`) is called from that app-level closure, so
@@ -67,7 +67,10 @@ const BATCH_SIZE: i64 = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 const DEBOUNCE_WINDOW: Duration = Duration::from_millis(500);
 
-type WorkerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
+/// `pub(crate)`: `session_store::migrate`'s one-time final export sweep
+/// (Task 12) reuses `drain_queue` directly, whose signature names this
+/// alias.
+pub(crate) type WorkerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 /// Copied from `plugins/fs-sync/src/commands.rs`: runs a blocking body on
 /// tokio's dedicated blocking thread pool instead of the shared async
@@ -101,8 +104,11 @@ struct DirtyEntity {
 /// `RetryBackoff` created once in `run()`, threaded through every
 /// `drain_queue`/`drain_with` call) — an in-memory heuristic that resets on
 /// app restart is an intentional simplification, not an oversight.
+/// `pub(crate)`: `session_store::migrate`'s one-time final export sweep
+/// (Task 12) constructs its own `RetryBackoff` to drive `drain_queue`
+/// directly, rather than spawning this module's `run()` worker task.
 #[derive(Debug, Default)]
-struct RetryBackoff {
+pub(crate) struct RetryBackoff {
     state: std::collections::HashMap<(String, String), BackoffEntry>,
 }
 
@@ -124,7 +130,7 @@ fn backoff_delay(consecutive_failures: u32) -> Duration {
 }
 
 impl RetryBackoff {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -299,33 +305,14 @@ async fn ensure_first_run_full_export<R: tauri::Runtime>(
 /// Enqueues every vault-exportable entity, like search_index's
 /// `enqueue_all_entities` — used both for the first-run export above and
 /// the `export_vault_now` command (Settings -> Storage -> "Re-export all
-/// files").
-async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
+/// files"). `pub(crate)`: also reused as-is by `session_store::migrate`'s
+/// one-time final export sweep (Task 12).
+pub(crate) async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     let mut tx = pool.begin().await?;
 
     sqlx::query(
         "INSERT INTO vault_export_dirty (entity_type, entity_id)
          SELECT 'session', id FROM sessions WHERE deleted_at IS NULL
-         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-           generation = vault_export_dirty.generation + 1,
-           queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "INSERT INTO vault_export_dirty (entity_type, entity_id)
-         SELECT 'human', id FROM humans WHERE deleted_at IS NULL
-         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-           generation = vault_export_dirty.generation + 1,
-           queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    sqlx::query(
-        "INSERT INTO vault_export_dirty (entity_type, entity_id)
-         SELECT 'organization', id FROM organizations WHERE deleted_at IS NULL
          ON CONFLICT(entity_type, entity_id) DO UPDATE SET
            generation = vault_export_dirty.generation + 1,
            queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
@@ -343,13 +330,7 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     .execute(&mut *tx)
     .await?;
 
-    for entity_type in [
-        "calendars_file",
-        "events_file",
-        "daily_notes_file",
-        "tasks_file",
-        "settings_file",
-    ] {
+    for entity_type in ["daily_notes_file", "tasks_file", "settings_file"] {
         sqlx::query(
             "INSERT INTO vault_export_dirty (entity_type, entity_id) VALUES (?, 'all')
              ON CONFLICT(entity_type, entity_id) DO UPDATE SET
@@ -469,7 +450,11 @@ where
     }
 }
 
-async fn drain_queue<R: tauri::Runtime>(
+/// `pub(crate)`: `session_store::migrate`'s one-time final export sweep
+/// (Task 12) drives this directly, once, instead of spawning `run()`'s
+/// long-lived worker task — same drain logic, no duplicated queue-draining
+/// code.
+pub(crate) async fn drain_queue<R: tauri::Runtime>(
     app: &AppHandle<R>,
     pool: &SqlitePool,
     backoff: &mut RetryBackoff,
@@ -516,11 +501,7 @@ async fn export_entity<R: tauri::Runtime>(
 ) -> WorkerResult<()> {
     match entity.entity_type.as_str() {
         "session" => export_session(app, pool, vault_base, &entity.entity_id).await,
-        "human" => export_human(app, pool, vault_base, &entity.entity_id).await,
-        "organization" => export_organization(app, pool, vault_base, &entity.entity_id).await,
         "chat_group" => export_chat_group(app, pool, vault_base, &entity.entity_id).await,
-        "calendars_file" => export_calendars_file(app, pool, vault_base).await,
-        "events_file" => export_events_file(app, pool, vault_base).await,
         "daily_notes_file" => export_daily_notes_file(app, pool, vault_base).await,
         "tasks_file" => export_tasks_file(app, pool, vault_base).await,
         "settings_file" => export_settings_file(app, pool, vault_base).await,
@@ -601,11 +582,34 @@ async fn export_session<R: tauri::Runtime>(
     .await?;
 
     let Some(row) = session_row else {
-        // The row is genuinely absent from the table, not just
-        // soft-deleted — nothing in production hard-deletes a session
-        // today, but this is the safest fallback for a state this function
-        // otherwise can't interpret (matches the pre-existing behavior).
-        trash_if_exists(app, vault_base, &session_dir).await?;
+        // REGRESSION (found via Task 11's manual incident-scenario
+        // verification): this used to unconditionally trash the folder
+        // here, on the assumption that "nothing in production hard-deletes
+        // a session" -- that assumption died with Task 8's
+        // `session_store::rebuild::refresh_session`/`rebuild_index`, which
+        // now hard-`DELETE`s a session's index row (via
+        // `delete_session_index_tx`) any time its `_meta.json` goes
+        // missing, including the exact transient/external case
+        // `should_trash_soft_deleted_session`'s doc above already
+        // identifies as needing protection -- an `rm _meta.json` (or a sync
+        // client's delete-then-recreate) reaches this branch through the
+        // *same* `vault_export_dirty` trigger fire that used to require the
+        // soft-hide marker to opt out of, but a hard-deleted row can never
+        // carry that marker, so it fell straight through to trashing
+        // `_memo.md` etc. -- reproducing the very incident this rewrite
+        // fixes, just one hop downstream in this still-active (Task 13)
+        // legacy mirror instead of in `vault_watch.rs` itself.
+        //
+        // `SessionStore::delete_session` -- the one legitimate,
+        // user-initiated deletion path in the current architecture -- does
+        // its own `move_to_trash` directly, before it ever deletes the
+        // index rows (see `session_store/content.rs`), so by the time this
+        // function's dirty-queue entry drains, the folder found by
+        // `find_session_dir` above is already gone and this branch is a
+        // no-op for that path either way. So: never trash here. Files are
+        // this app's filesystem-first source of truth; an absent index row
+        // is not, by itself, evidence that a user asked for the vault files
+        // to go away.
         return Ok(());
     };
 
@@ -651,26 +655,10 @@ async fn export_session<R: tauri::Runtime>(
         event_json: row.get("event_json"),
     };
 
-    let participants = sqlx::query(
-        "SELECT id, owner_user_id, human_id, source, display_name, email, role
-         FROM session_participants
-         WHERE session_id = ? AND deleted_at IS NULL
-         ORDER BY created_at, id",
-    )
-    .bind(session_id)
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .map(|row| export::SessionParticipant {
-        id: row.get("id"),
-        owner_user_id: row.get("owner_user_id"),
-        human_id: row.get("human_id"),
-        source: row.get("source"),
-        display_name: row.get("display_name"),
-        email: row.get("email"),
-        role: row.get("role"),
-    })
-    .collect::<Vec<_>>();
+    // `session_participants` is dropped (Task 3); the renderer still accepts a
+    // participants list (it dies with the rest of this worker in Task 13), so
+    // pass an empty one rather than querying a table that no longer exists.
+    let participants: Vec<export::SessionParticipant> = Vec::new();
 
     let tags: Vec<String> = sqlx::query_scalar(
         "SELECT tags.name
@@ -901,88 +889,6 @@ async fn export_session_transcript<R: tauri::Runtime>(
 }
 
 // ---------------------------------------------------------------------------
-// humans/<id>.md, organizations/<id>.md
-// ---------------------------------------------------------------------------
-
-async fn export_human<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-    id: &str,
-) -> WorkerResult<()> {
-    let path = vault_base.join("humans").join(format!("{id}.md"));
-    let row = sqlx::query(
-        "SELECT owner_user_id, organization_id, name, email, phone, job_title,
-                linkedin_username, memo, pinned, pin_order, created_at
-         FROM humans WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-
-    let Some(row) = row else {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    };
-
-    let human = export::Human {
-        owner_user_id: row.get("owner_user_id"),
-        organization_id: row.get("organization_id"),
-        name: row.get("name"),
-        email: row.get("email"),
-        phone: row.get("phone"),
-        job_title: row.get("job_title"),
-        linkedin_username: row.get("linkedin_username"),
-        memo: row.get("memo"),
-        pinned: row.get("pinned"),
-        pin_order: row.get("pin_order"),
-        created_at: row.get("created_at"),
-    };
-
-    let content = export::render_human(&human)
-        .render()
-        .map_err(|error| format!("failed to render human {id}: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
-
-async fn export_organization<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-    id: &str,
-) -> WorkerResult<()> {
-    let path = vault_base.join("organizations").join(format!("{id}.md"));
-    let row = sqlx::query(
-        "SELECT owner_user_id, name, memo, pinned, pin_order, created_at
-         FROM organizations WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
-
-    let Some(row) = row else {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    };
-
-    let organization = export::Organization {
-        owner_user_id: row.get("owner_user_id"),
-        name: row.get("name"),
-        memo: row.get("memo"),
-        pinned: row.get("pinned"),
-        pin_order: row.get("pin_order"),
-        created_at: row.get("created_at"),
-    };
-
-    let content = export::render_organization(&organization)
-        .render()
-        .map_err(|error| format!("failed to render organization {id}: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
-
-// ---------------------------------------------------------------------------
 // chats/<group>/messages.json
 // ---------------------------------------------------------------------------
 
@@ -1051,95 +957,8 @@ async fn export_chat_group<R: tauri::Runtime>(
 }
 
 // ---------------------------------------------------------------------------
-// calendars.json / events.json / daily_notes.json / tasks.json / settings.json
+// daily_notes.json / tasks.json / settings.json
 // ---------------------------------------------------------------------------
-
-async fn export_calendars_file<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-) -> WorkerResult<()> {
-    let path = vault_base.join("calendars.json");
-    let rows = sqlx::query(
-        "SELECT id, tracking_id_calendar, name, enabled, provider, source, color, connection_id
-         FROM calendars WHERE deleted_at IS NULL ORDER BY id",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    }
-
-    let calendars = rows
-        .into_iter()
-        .map(|row| export::Calendar {
-            id: row.get("id"),
-            tracking_id_calendar: row.get("tracking_id_calendar"),
-            name: row.get("name"),
-            enabled: row.get("enabled"),
-            provider: row.get("provider"),
-            source: row.get("source"),
-            color: row.get("color"),
-            connection_id: row.get("connection_id"),
-        })
-        .collect::<Vec<_>>();
-
-    let value = export::render_calendars(&calendars);
-    let content = hypr_fs_sync_core::json::serialize(value)
-        .map_err(|error| format!("failed to serialize calendars.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
-
-async fn export_events_file<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-) -> WorkerResult<()> {
-    let path = vault_base.join("events.json");
-    let rows = sqlx::query(
-        "SELECT id, tracking_id_event, calendar_id, title, started_at, ended_at, location,
-                meeting_link, description, note, recurrence_series_id, has_recurrence_rules,
-                is_all_day, provider, participants_json
-         FROM events WHERE deleted_at IS NULL ORDER BY id",
-    )
-    .fetch_all(pool)
-    .await?;
-
-    if rows.is_empty() {
-        trash_if_exists(app, vault_base, &path).await?;
-        return Ok(());
-    }
-
-    let events = rows
-        .into_iter()
-        .map(|row| export::CalendarEvent {
-            id: row.get("id"),
-            tracking_id_event: row.get("tracking_id_event"),
-            calendar_id: row.get("calendar_id"),
-            title: row.get("title"),
-            started_at: row.get("started_at"),
-            ended_at: row.get("ended_at"),
-            location: row.get("location"),
-            meeting_link: row.get("meeting_link"),
-            description: row.get("description"),
-            note: row.get("note"),
-            recurrence_series_id: row.get("recurrence_series_id"),
-            has_recurrence_rules: row.get("has_recurrence_rules"),
-            is_all_day: row.get("is_all_day"),
-            provider: row.get("provider"),
-            participants_json: row.get("participants_json"),
-        })
-        .collect::<Vec<_>>();
-
-    let value = export::render_events(&events);
-    let content = hypr_fs_sync_core::json::serialize(value)
-        .map_err(|error| format!("failed to serialize events.json: {error}"))?;
-    write_tracked(app, vault_base, &path, content.as_bytes()).await?;
-    Ok(())
-}
 
 async fn export_daily_notes_file<R: tauri::Runtime>(
     app: &AppHandle<R>,
@@ -1202,8 +1021,8 @@ async fn export_tasks_file<R: tauri::Runtime>(
 /// which is exactly how a controller physical drill caught a live
 /// `no such column: owner_user_id` error this SQL used to have.
 /// `action_items` has no `owner_user_id` column (it's `created_by` — this
-/// table doesn't follow the `owner_user_id`/`workspace_id` convention most
-/// other tables do; verified against the live schema in
+/// table doesn't follow the `owner_user_id` convention most other tables do;
+/// verified against the live schema in
 /// `crates/db-app/migrations/20260710223922_canonical_data_model.sql`, not
 /// just the `LegacyActionItem`/`export::ActionItem` field name).
 async fn fetch_action_items(pool: &SqlitePool) -> Result<Vec<export::ActionItem>, sqlx::Error> {
@@ -1415,6 +1234,82 @@ mod tests {
         );
     }
 
+    /// REGRESSION (found via Task 11's manual incident-scenario verification -- see the
+    /// `Some(row) = session_row` branch's doc in `export_session` above): pins the actual
+    /// chain of causation that branch now has to defend against.
+    /// `session_store::SessionStore::refresh_session` (Task 8, the real production path an
+    /// external `_meta.json` removal drives -- via the rewritten `vault_watch.rs`, the
+    /// startup/focus `rebuild_index` rescans, or the `session_rebuild_index` command) does a
+    /// genuine hard `DELETE FROM sessions`, and that `DELETE` really does fire this crate's
+    /// own `vault_export_sessions_delete` trigger, queuing a `('session', id)` entry -- the
+    /// exact entry whose drain used to reach `export_session`'s old unconditional-trash
+    /// fallback for a row it can no longer find. `export_session` itself still can't be
+    /// exercised here (no live `AppHandle` in a unit test, see
+    /// `should_trash_soft_deleted_session`'s doc), but this proves the DB-state precondition
+    /// is real and reachable through the actual filesystem-first session store, not
+    /// hypothetical -- and confirms the fix's own reasoning: `refresh_session` never touches
+    /// files, whether or not this crate's export worker later mishandles the DB side.
+    #[tokio::test]
+    async fn hard_deleting_a_session_index_row_still_queues_a_vault_export_dirty_entry() {
+        let db = test_db().await;
+        let vault = tempfile::tempdir().unwrap();
+        let store =
+            crate::session_store::SessionStore::new(vault.path().to_path_buf(), db.pool().clone());
+
+        store
+            .write_meta(&crate::session_store::SessionMeta {
+                id: "session-hard-delete".to_string(),
+                title: "Test".to_string(),
+                started_at: None,
+                ended_at: None,
+                created_at: "2026-07-24T00:00:00Z".to_string(),
+                tags: vec![],
+            })
+            .await
+            .unwrap();
+        store
+            .write_note("session-hard-delete", "keep me")
+            .await
+            .unwrap();
+
+        sqlx::query("DELETE FROM vault_export_dirty")
+            .execute(db.pool())
+            .await
+            .unwrap();
+
+        std::fs::remove_file(vault.path().join("sessions/session-hard-delete/_meta.json")).unwrap();
+        store.refresh_session("session-hard-delete").await.unwrap();
+
+        let row_exists: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id = 'session-hard-delete'")
+                .fetch_one(db.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            row_exists, 0,
+            "refresh_session must hard-delete the row, not soft-delete it"
+        );
+
+        let queued: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM vault_export_dirty WHERE entity_type = 'session' AND entity_id = 'session-hard-delete'",
+        )
+        .fetch_one(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            queued, 1,
+            "the hard delete must still reach export_session's now-fixed row-absent branch"
+        );
+
+        assert!(
+            vault
+                .path()
+                .join("sessions/session-hard-delete/_memo.md")
+                .is_file(),
+            "sanity: refresh_session itself never touches files"
+        );
+    }
+
     #[test]
     fn backoff_delay_grows_exponentially_and_caps_at_sixty_seconds() {
         assert_eq!(backoff_delay(1), Duration::from_secs(5));
@@ -1481,11 +1376,10 @@ mod tests {
             .execute(db.pool())
             .await
             .unwrap();
-        // `test_db()`'s `prepare_schema` bootstraps a `cloudsync_workspace_binding`
-        // row in `app_settings`, which the `settings_file` trigger also
-        // enqueues — irrelevant here, so drop it and keep only the one
-        // entity this test cares about (same pattern as
-        // `tags_trigger_propagates_to_every_session_that_references_the_tag`).
+        // `test_db()`'s `prepare_schema` can enqueue unrelated dirty rows
+        // (e.g. default template seeding) — irrelevant here, so drop
+        // everything but the one entity this test cares about (same pattern
+        // as `tags_trigger_propagates_to_every_session_that_references_the_tag`).
         sqlx::query(
             "DELETE FROM vault_export_dirty WHERE NOT (entity_type = 'session' AND entity_id = 'bad-1')",
         )
@@ -1629,10 +1523,6 @@ mod tests {
             .execute(db.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO humans (id, name) VALUES ('h1', 'Ada')")
-            .execute(db.pool())
-            .await
-            .unwrap();
         sqlx::query("DELETE FROM vault_export_dirty")
             .execute(db.pool())
             .await
@@ -1711,14 +1601,6 @@ mod tests {
             .execute(db.pool())
             .await
             .unwrap();
-        sqlx::query("INSERT INTO humans (id, name) VALUES ('human-1', 'Ada')")
-            .execute(db.pool())
-            .await
-            .unwrap();
-        sqlx::query("INSERT INTO organizations (id, name) VALUES ('org-1', 'Acme')")
-            .execute(db.pool())
-            .await
-            .unwrap();
         sqlx::query("INSERT INTO chat_groups (id, title) VALUES ('chat-1', 'Chat')")
             .execute(db.pool())
             .await
@@ -1751,12 +1633,8 @@ mod tests {
         assert_eq!(
             rows,
             vec![
-                ("calendars_file".to_string(), "all".to_string()),
                 ("chat_group".to_string(), "chat-1".to_string()),
                 ("daily_notes_file".to_string(), "all".to_string()),
-                ("events_file".to_string(), "all".to_string()),
-                ("human".to_string(), "human-1".to_string()),
-                ("organization".to_string(), "org-1".to_string()),
                 ("session".to_string(), "session-1".to_string()),
                 ("settings_file".to_string(), "all".to_string()),
                 ("tasks_file".to_string(), "all".to_string()),

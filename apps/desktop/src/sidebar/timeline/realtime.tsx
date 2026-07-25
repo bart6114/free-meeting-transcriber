@@ -2,7 +2,7 @@ import { forwardRef, useEffect, useMemo, useState } from "react";
 
 import { TZDate, format, safeParseDate } from "@hypr/utils";
 
-import type { TimelineEventsTable, TimelineSessionsTable } from "./utils";
+import type { TimelineSessionsTable } from "./utils";
 
 import { getSessionEvent } from "~/session/utils";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
@@ -116,10 +116,7 @@ function getCurrentTimeTickDelay(
   );
 }
 
-export function useSmartCurrentTime(
-  eventsTable: TimelineEventsTable,
-  sessionsTable: TimelineSessionsTable,
-) {
+export function useSmartCurrentTime(sessionsTable: TimelineSessionsTable) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -130,20 +127,6 @@ export function useSmartCurrentTime(
       setNow(currentTime);
 
       const importantTimes: number[] = [];
-
-      if (eventsTable) {
-        Object.values(eventsTable).forEach((event) => {
-          const startTime = safeParseDate(event.started_at);
-          const endTime = safeParseDate(event.ended_at);
-
-          if (startTime && startTime.getTime() > currentTime) {
-            importantTimes.push(startTime.getTime());
-          }
-          if (endTime && endTime.getTime() > currentTime) {
-            importantTimes.push(endTime.getTime());
-          }
-        });
-      }
 
       if (sessionsTable) {
         Object.values(sessionsTable).forEach((session) => {
@@ -175,7 +158,7 @@ export function useSmartCurrentTime(
         clearTimeout(timeoutId);
       }
     };
-  }, [eventsTable, sessionsTable]);
+  }, [sessionsTable]);
 
   return now;
 }

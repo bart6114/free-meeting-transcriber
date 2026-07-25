@@ -12,7 +12,7 @@ const labelState = vi.hoisted(() => ({
 }));
 
 vi.mock("./speaker-assign", () => ({
-  SpeakerAssignPopover: ({ label }: { label: string }) => (
+  SpeakerRenameControl: ({ label }: { label: string }) => (
     <button type="button">{label}</button>
   ),
 }));

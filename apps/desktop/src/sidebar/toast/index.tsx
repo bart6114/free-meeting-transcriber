@@ -21,9 +21,6 @@ import { isConfiguredSttModel } from "~/stt/capabilities";
 import { useListener } from "~/stt/contexts";
 
 export function ToastNotifications() {
-  // Cloud sync was removed with accounts/billing (Task 4) — there is never
-  // an initial sync in progress to surface as a toast.
-  const cloudsyncInitialSyncToastId: string | null = null;
   const { dismissToast, isDismissed } = useDismissedToasts();
   const shouldShowToast = useShouldShowToast();
   const {
@@ -106,7 +103,6 @@ export function ToastNotifications() {
         isAiTranscriptionTabActive,
         isAiIntelligenceTabActive,
         isBatchTranscribingInActiveTranscriptTab,
-        cloudsyncInitialSyncToastId,
         hasActiveDownload,
         downloadingModel,
         activeDownloads,
@@ -121,7 +117,6 @@ export function ToastNotifications() {
       isAiTranscriptionTabActive,
       isAiIntelligenceTabActive,
       isBatchTranscribingInActiveTranscriptTab,
-      cloudsyncInitialSyncToastId,
       hasActiveDownload,
       downloadingModel,
       activeDownloads,

@@ -30,14 +30,6 @@ async getMeetingTranscript(input: GetMeetingTranscriptInput) : Promise<Result<Tr
     else return { status: "error", error: e  as any };
 }
 },
-async getRecurringMeetingHistory(input: GetRecurringMeetingHistoryInput) : Promise<Result<MeetingPage, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|get_recurring_meeting_history", { input }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async execute(sql: string, params: JsonValue[]) : Promise<Result<JsonValue[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:db|execute", { sql, params }) };
@@ -70,38 +62,6 @@ async getLegacyImportReport() : Promise<Result<LegacyImportReport, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async getE2eeIdentityStatus(accountUserId: string) : Promise<Result<E2eeIdentityStatus, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|get_e2ee_identity_status", { accountUserId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async inspectE2eeRecoveryKey(recoveryKey: string) : Promise<Result<E2eeRecoveryKeyIdentity, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|inspect_e2ee_recovery_key", { recoveryKey }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async createE2eeIdentity(accountUserId: string) : Promise<Result<string, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|create_e2ee_identity", { accountUserId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async importE2eeIdentity(accountUserId: string, recoveryKey: string) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|import_e2ee_identity", { accountUserId, recoveryKey }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async subscribe(sql: string, params: JsonValue[], onEvent: TAURI_CHANNEL<QueryEvent>) : Promise<Result<SubscriptionRegistration, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:db|subscribe", { sql, params, onEvent }) };
@@ -113,70 +73,6 @@ async subscribe(sql: string, params: JsonValue[], onEvent: TAURI_CHANNEL<QueryEv
 async unsubscribe(subscriptionId: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:db|unsubscribe", { subscriptionId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async configureCloudsync(configJson: string) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|configure_cloudsync", { configJson }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async bindCloudsyncAccount(accountUserId: string) : Promise<Result<boolean, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|bind_cloudsync_account", { accountUserId }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async configureCloudsyncToken(databaseId: string, token: string, workspaceId: string, workspaceProjection: CloudsyncWorkspaceProjection | null, e2eeWitness: CloudsyncE2eeWitness) : Promise<Result<CloudsyncTokenConfigurationResult, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|configure_cloudsync_token", { databaseId, token, workspaceId, workspaceProjection, e2eeWitness }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async startCloudsync() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|start_cloudsync") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async stopCloudsync() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|stop_cloudsync") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async suspendCloudsync() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|suspend_cloudsync") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async getCloudsyncStatus() : Promise<Result<JsonValue, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|get_cloudsync_status") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async syncCloudsyncNow() : Promise<Result<JsonValue, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|sync_cloudsync_now") };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -195,30 +91,22 @@ async syncCloudsyncNow() : Promise<Result<JsonValue, string>> {
 /** user-defined types **/
 
 export type ActionItem = { id: string; assignee_human_id: string; status: string; text: string; due_at: string; completed_at: string | null }
-export type CloudsyncE2eeWitness = { endpoint: string; accessToken: string }
-export type CloudsyncTokenConfigurationResult = "configured" | "account_mismatch"
-export type CloudsyncWorkspaceProjection = { accountUserId: string; personalWorkspaceId: string; workspaces: CloudsyncWorkspaceProjectionEntry[] }
-export type CloudsyncWorkspaceProjectionEntry = { id: string; ownerUserId: string; kind: string; name: string; membershipId: string; role: string; membershipCreatedAt: string; membershipUpdatedAt: string; createdAt: string; updatedAt: string }
 export type DependencyAnalysis = { kind: "reactive"; data: { targets: DependencyTarget[] } } | { kind: "non_reactive"; data: { reason: string } }
 export type DependencyTarget = { kind: "table"; data: string } | { kind: "virtual_table"; data: string }
 export type Document = { id: string; kind: string; template_id: string; title: string; markdown: string; sort_order: number; created_at: string; updated_at: string }
-export type E2eeIdentityStatus = { configured: boolean; keyId: string | null }
-export type E2eeRecoveryKeyIdentity = { keyId: string }
 export type ExecuteProxyResult = { rows: JsonValue[] }
 export type GetMeetingInput = { meeting_id: string }
 export type GetMeetingTranscriptInput = { meeting_id: string; offset: number | null; limit: number | null }
-export type GetRecurringMeetingHistoryInput = { meeting_id: string; limit: number | null; offset: number | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 export type LegacyImportItemReport = { sourcePath: string; sourceKind: string; sourceSha256: string; status: string; discoveredCount: number; importedCount: number; matchedCount: number; skippedCount: number; conflictCount: number; error: string }
 export type LegacyImportReport = { state: StorageMigrationState; latestRun: LegacyImportRun | null; items: LegacyImportItemReport[]; targets: LegacyImportTargetReport[] }
 export type LegacyImportRun = { id: string; importerVersion: number; sourceRoot: string; dryRun: boolean; status: string; discoveredCount: number; importedCount: number; matchedCount: number; skippedCount: number; conflictCount: number; errorCount: number; startedAt: string; completedAt: string | null; error: string }
 export type LegacyImportTargetReport = { sourcePath: string; tableName: string; targetId: string; status: string; error: string }
-export type ListMeetingsInput = { query: string | null; series_id: string | null; limit: number | null; offset: number | null }
-export type Meeting = { id: string; title: string; kind: string; status: string; created_at: string; updated_at: string; started_at: string; ended_at: string; timezone: string; language: string; series_id: string; note: Document | null; summaries: Document[]; participants: Participant[]; action_items: ActionItem[] }
-export type MeetingListItem = { id: string; title: string; kind: string; status: string; created_at: string; updated_at: string; started_at: string; ended_at: string; series_id: string }
+export type ListMeetingsInput = { query: string | null; limit: number | null; offset: number | null }
+export type Meeting = { id: string; title: string; kind: string; status: string; created_at: string; updated_at: string; started_at: string; ended_at: string; timezone: string; language: string; note: Document | null; summaries: Document[]; action_items: ActionItem[] }
+export type MeetingListItem = { id: string; title: string; kind: string; status: string; created_at: string; updated_at: string; started_at: string; ended_at: string }
 export type MeetingPage = { meetings: MeetingListItem[]; pagination: Pagination }
 export type Pagination = { offset: number; limit: number; returned: number; total: number | null; next_offset: number | null }
-export type Participant = { human_id: string; display_name: string; email: string; role: string; job_title: string; organization_id: string; organization_name: string }
 export type QueryEvent = { event: "result"; data: JsonValue[] } | { event: "error"; data: string }
 export type StorageMigrationState = { phase: string; latestRunId: string; parityVerified: boolean; cutoverAt: string | null; rollbackUntil: string | null; lastError: string; updatedAt: string }
 export type SubscriptionRegistration = { id: string; analysis: DependencyAnalysis }

@@ -35,13 +35,8 @@ import {
 
 function mockCleanupRows(
   sessions: Array<{ id: string; created_at: string; has_words: number }>,
-  logicallyDeleted: Array<{ session_id: string }> = [],
 ) {
-  mocks.execute.mockImplementation((sql: string) =>
-    Promise.resolve(
-      sql.includes("FROM session_attachments") ? logicallyDeleted : sessions,
-    ),
-  );
+  mocks.execute.mockResolvedValue(sessions);
 }
 
 describe("audio retention", () => {
@@ -168,9 +163,12 @@ describe("audio retention", () => {
     expect(mocks.deleteLocalSessionAudio).not.toHaveBeenCalled();
   });
 
-  test("only scans logical deletions when retention is forever", async () => {
+  // Logically-deleted-audio retry (session_attachments/attachment_local_state)
+  // is a graceful no-op pending Task 9 (Session store scaffold) — see
+  // cleanupLogicallyDeletedAudio in audio-retention.ts.
+  test("does not query or delete anything when retention is forever", async () => {
     await expect(cleanupExpiredAudio("forever")).resolves.toEqual([]);
-    expect(mocks.execute).toHaveBeenCalledTimes(1);
+    expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.deleteLocalSessionAudio).not.toHaveBeenCalled();
   });
 
@@ -209,37 +207,5 @@ describe("audio retention", () => {
     await expect(
       cleanupExpiredAudio("oneDay", Date.parse("2026-05-13T00:00:00.000Z")),
     ).resolves.toEqual([]);
-  });
-
-  test("retries local cleanup for logically deleted audio", async () => {
-    mockCleanupRows([], [{ session_id: "deleted-session" }]);
-
-    await expect(cleanupExpiredAudio("forever")).resolves.toEqual([
-      "deleted-session",
-    ]);
-    expect(mocks.cleanupDeletedSessionAudio).toHaveBeenCalledWith(
-      "deleted-session",
-      expect.any(Function),
-    );
-    expect(mocks.execute.mock.calls[0]![0]).toContain(
-      "COALESCE(local.availability, 'present') != 'absent'",
-    );
-  });
-
-  test("does not clean a remote tombstone while the session is recording", async () => {
-    mockCleanupRows([], [{ session_id: "active-session" }]);
-    mocks.getSessionMode.mockReturnValue("active");
-
-    await expect(cleanupExpiredAudio("forever")).resolves.toEqual([]);
-    expect(mocks.cleanupDeletedSessionAudio).not.toHaveBeenCalled();
-  });
-
-  test("does not clean audio while capture startup is loading", async () => {
-    mockCleanupRows([], [{ session_id: "starting-session" }]);
-    mocks.live.sessionId = "starting-session";
-    mocks.live.loading = true;
-
-    await expect(cleanupExpiredAudio("forever")).resolves.toEqual([]);
-    expect(mocks.cleanupDeletedSessionAudio).not.toHaveBeenCalled();
   });
 });

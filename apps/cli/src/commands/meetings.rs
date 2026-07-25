@@ -1,16 +1,14 @@
 use crate::cli::{DocumentKind, ExportFormat, MeetingCommand};
 use crate::{Result, output};
 use hypr_agent_access::{
-    Document, GetMeetingInput, GetMeetingTranscriptInput, GetRecurringMeetingHistoryInput,
-    ListMeetingsInput, MeetingListItem, get_meeting, get_meeting_export, get_meeting_transcript,
-    get_recurring_meeting_history, list_meetings,
+    Document, GetMeetingInput, GetMeetingTranscriptInput, ListMeetingsInput, MeetingListItem,
+    get_meeting, get_meeting_export, get_meeting_transcript, list_meetings,
 };
 
 pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> Result<()> {
     match command {
         MeetingCommand::List {
             query,
-            series_id,
             limit,
             offset,
         } => {
@@ -18,7 +16,6 @@ pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> 
                 db.pool(),
                 ListMeetingsInput {
                     query,
-                    series_id,
                     limit: Some(limit),
                     offset: Some(offset),
                 },
@@ -104,24 +101,6 @@ pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> 
                 output::json("meetings.transcript", &content, Some(&page.pagination))?
             } else {
                 page.text
-            };
-            output::emit(&rendered);
-            Ok(())
-        }
-        MeetingCommand::History { id, limit, offset } => {
-            let page = get_recurring_meeting_history(
-                db.pool(),
-                GetRecurringMeetingHistoryInput {
-                    meeting_id: id,
-                    limit: Some(limit),
-                    offset: Some(offset),
-                },
-            )
-            .await?;
-            let rendered = if json {
-                output::json("meetings.history", &page.meetings, Some(&page.pagination))?
-            } else {
-                render_list(&page.meetings)
             };
             output::emit(&rendered);
             Ok(())
@@ -230,7 +209,6 @@ mod tests {
             updated_at: "2026-07-13T09:00:00Z".to_string(),
             started_at: String::new(),
             ended_at: String::new(),
-            series_id: String::new(),
         }]);
         assert!(rendered.contains("meeting-1"));
         assert!(rendered.contains('…'));

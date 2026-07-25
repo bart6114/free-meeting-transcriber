@@ -22,6 +22,22 @@ pub struct WatcherState {
     pub(crate) own_writes: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
+impl WatcherState {
+    /// Constructs the same (unstarted) state `init()`'s `setup()` hook would
+    /// `.manage()`, for tests that need `app.notify()` to resolve without a
+    /// real webview. `init()` itself is pinned to `tauri::Wry`, so it can't
+    /// be attached via `.plugin()` to a `tauri::test::mock_builder()` app
+    /// (`MockRuntime`) — the same constraint `tauri-plugin-tantivy`'s test
+    /// documents for its own `IndexState`. Callers `.manage()` this directly
+    /// instead of going through the plugin's setup at all.
+    pub fn empty() -> Self {
+        Self {
+            debouncer: Mutex::new(None),
+            own_writes: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+}
+
 fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new()
         .plugin_name(PLUGIN_NAME)

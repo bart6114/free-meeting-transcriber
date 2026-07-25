@@ -2,9 +2,6 @@ import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  humanIds: [] as string[],
-  humans: [{ human_id: "human-1", name: "Alice" }],
-  participantHumanIds: ["human-1"],
   transcript: {
     id: "transcript-1",
     ownerUserId: "user-1",
@@ -25,13 +22,8 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("~/stt/queries", () => ({
-  useSessionParticipantHumanIds: () => mocks.participantHumanIds,
   useSessionTranscripts: () => [mocks.transcript],
   useTranscript: () => mocks.transcript,
-  useTranscriptHumans: (humanIds: string[]) => {
-    mocks.humanIds = humanIds;
-    return mocks.humans;
-  },
 }));
 
 import {
@@ -40,9 +32,7 @@ import {
 } from "./render-request-hooks";
 
 describe("SQLite transcript render data", () => {
-  beforeEach(() => {
-    mocks.humanIds = [];
-  });
+  beforeEach(() => {});
 
   it("builds a renderer request from one canonical transcript", () => {
     const { result } = renderHook(() =>
@@ -62,12 +52,11 @@ describe("SQLite transcript render data", () => {
     expect(result.current.request).toEqual(
       expect.objectContaining({
         self_human_id: "user-1",
-        participant_human_ids: ["human-1"],
-        humans: [{ human_id: "human-1", name: "Alice" }],
+        participant_human_ids: [],
+        humans: [],
       }),
     );
     expect(result.current.request?.transcripts[0]?.words[0]?.id).toBe("word-1");
-    expect(mocks.humanIds).toEqual(["human-1", "user-1"]);
   });
 
   it("uses the same canonical rows for session-wide export rendering", () => {

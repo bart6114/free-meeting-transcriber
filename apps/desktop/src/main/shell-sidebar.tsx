@@ -11,13 +11,9 @@ import { useTabs } from "~/store/zustand/tabs";
 export function ClassicMainSidebar({
   forceMount = false,
   timelineHeader,
-  showIgnoredTimelineEvents,
-  onShowIgnoredTimelineEventsChange,
 }: {
   forceMount?: boolean;
   timelineHeader?: ReactNode;
-  showIgnoredTimelineEvents?: boolean;
-  onShowIgnoredTimelineEventsChange?: (showIgnored: boolean) => void;
 } = {}) {
   const { leftsidebar } = useShell();
   const currentTab = useTabs((state) => state.currentTab);
@@ -31,11 +27,5 @@ export function ClassicMainSidebar({
     return null;
   }
 
-  return (
-    <LeftSidebar
-      timelineHeader={timelineHeader}
-      showIgnoredTimelineEvents={showIgnoredTimelineEvents}
-      onShowIgnoredTimelineEventsChange={onShowIgnoredTimelineEventsChange}
-    />
-  );
+  return <LeftSidebar timelineHeader={timelineHeader} />;
 }

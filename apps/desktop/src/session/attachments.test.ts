@@ -3,8 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   audioDelete: vi.fn(),
   audioMetadata: vi.fn(),
+  sessionStoreAudio: vi.fn(),
+  sessionListAudio: vi.fn(),
+  sessionDeleteAudio: vi.fn(),
   execute: vi.fn(),
-  executeTransaction: vi.fn().mockResolvedValue([0, 0, 1, 1, 0]),
+  executeTransaction: vi.fn().mockResolvedValue([0, 1, 1]),
   enqueueDatabaseWrite: vi.fn(
     async (_key: string, write: () => Promise<number[]>) => write(),
   ),
@@ -14,6 +17,14 @@ vi.mock("@hypr/plugin-fs-sync", () => ({
   commands: {
     audioDelete: mocks.audioDelete,
     audioMetadata: mocks.audioMetadata,
+  },
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionStoreAudio: mocks.sessionStoreAudio,
+    sessionListAudio: mocks.sessionListAudio,
+    sessionDeleteAudio: mocks.sessionDeleteAudio,
   },
 }));
 
@@ -32,15 +43,13 @@ import {
   cleanupDeletedSessionAudio,
   deleteLocalSessionAudio,
   deleteSessionAudio,
-  setAttachmentCloudSyncEnabled,
   sha256Hex,
 } from "./attachments";
 
 describe("attachment catalog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.executeTransaction.mockResolvedValue([0, 0, 1, 1, 0]);
-    mocks.execute.mockResolvedValue([{ is_deleted: 1 }]);
+    mocks.executeTransaction.mockResolvedValue([0, 1, 1]);
     mocks.audioDelete.mockResolvedValue({ status: "ok", data: true });
     mocks.audioMetadata.mockResolvedValue({
       status: "ok",
@@ -51,135 +60,32 @@ describe("attachment catalog", () => {
         sha256: "d".repeat(64),
       },
     });
-  });
-
-  it("inherits workspace ownership and stores only a relative local path", async () => {
-    await catalogLocalNoteAttachment({
-      sessionId: "session-1",
-      attachmentId: "diagram 1.png",
-      filename: "diagram.png",
-      contentType: "image/png",
-      sizeBytes: 42,
-      sha256: "a".repeat(64),
+    mocks.sessionStoreAudio.mockResolvedValue({
+      status: "ok",
+      data: "sessions/session-1/audio/recording.wav",
     });
-
-    expect(mocks.enqueueDatabaseWrite).toHaveBeenCalledWith(
-      "session:session-1",
-      expect.any(Function),
-    );
-    const statements = mocks.executeTransaction.mock.calls[0]![0];
-    expect(statements).toHaveLength(5);
-    expect(statements[2].sql).toContain("session.workspace_id");
-    expect(statements[2].sql).toContain("session.deleted_at IS NULL");
-    expect(statements[2].sql).not.toContain("/vault/");
-    expect(statements[1].sql).toMatch(
-      /WHEN session_attachments\.sha256 = \?\s+AND session_attachments\.size_bytes = \? THEN storage_kind/,
-    );
-    expect(statements[0].sql).toContain(
-      "attachment.sha256 <> ? OR attachment.size_bytes <> ?",
-    );
-    expect(statements[0].params.slice(-2)).toEqual(["a".repeat(64), 42]);
-    expect(statements[2].params).toEqual([
-      expect.stringMatching(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
-      ),
-      "diagram.png",
-      "attachments/diagram 1.png",
-      "image/png",
-      42,
-      "a".repeat(64),
-      "diagram 1.png",
-      "session-1",
-      "attachments/diagram 1.png",
-    ]);
-    expect(statements[3].sql).toContain("attachment_local_state");
-    expect(statements[3].sql).toContain("'present'");
-    expect(statements[3].sql).toContain("ON CONFLICT(attachment_id)");
-    expect(statements[3].params).toEqual([
-      "session-1",
-      "attachments/diagram 1.png",
-    ]);
-    expect(statements[3].expectedRowsAffected).toBe(1);
+    mocks.sessionListAudio.mockResolvedValue({ status: "ok", data: [] });
+    mocks.sessionDeleteAudio.mockResolvedValue({ status: "ok", data: null });
   });
 
-  it("updates an existing physical attachment without creating a duplicate", async () => {
-    mocks.executeTransaction.mockResolvedValue([0, 1, 0, 1, 0]);
-
+  // catalogLocalNoteAttachment is a graceful no-op pending a file-canonical
+  // home for note attachments (deferred past Task 9) — session_attachments/
+  // attachment_local_state were dropped in Task 4. See the comment above its
+  // definition in attachments.ts.
+  it("resolves without touching the database", async () => {
     await expect(
       catalogLocalNoteAttachment({
         sessionId: "session-1",
-        attachmentId: "diagram.png",
+        attachmentId: "diagram 1.png",
         filename: "diagram.png",
         contentType: "image/png",
         sizeBytes: 42,
-        sha256: "b".repeat(64),
+        sha256: "a".repeat(64),
       }),
     ).resolves.toBeUndefined();
 
-    expect(mocks.executeTransaction.mock.calls[0]![0][1].params).toEqual([
-      "diagram.png",
-      "image/png",
-      42,
-      "b".repeat(64),
-      42,
-      "b".repeat(64),
-      42,
-      "b".repeat(64),
-      "diagram.png",
-      "session-1",
-      "attachments/diagram.png",
-    ]);
-  });
-
-  it("fails cataloging when local presence cannot be recorded", async () => {
-    mocks.executeTransaction.mockResolvedValue([0, 0, 1, 0, 0]);
-
-    await expect(
-      catalogLocalNoteAttachment({
-        sessionId: "session-1",
-        attachmentId: "diagram.png",
-        filename: "diagram.png",
-        contentType: "image/png",
-        sizeBytes: 42,
-        sha256: "b".repeat(64),
-      }),
-    ).rejects.toThrow("attachment session is unavailable");
-  });
-
-  it("rejects missing or deleted sessions and unsafe attachment IDs", async () => {
-    mocks.executeTransaction.mockResolvedValue([0, 0, 0, 0, 0]);
-    await expect(
-      catalogLocalNoteAttachment({
-        sessionId: "missing-session",
-        attachmentId: "diagram.png",
-        filename: "diagram.png",
-        contentType: "image/png",
-        sizeBytes: 42,
-        sha256: "c".repeat(64),
-      }),
-    ).rejects.toThrow("session is unavailable");
-
-    await expect(
-      catalogLocalNoteAttachment({
-        sessionId: "session-1",
-        attachmentId: "../diagram.png",
-        filename: "diagram.png",
-        contentType: "image/png",
-        sizeBytes: 42,
-        sha256: "c".repeat(64),
-      }),
-    ).rejects.toThrow("attachment ID");
-
-    await expect(
-      catalogLocalNoteAttachment({
-        sessionId: "session-1",
-        attachmentId: "diagram.png",
-        filename: "/vault/private/diagram.png",
-        contentType: "image/png",
-        sizeBytes: 42,
-        sha256: "c".repeat(64),
-      }),
-    ).rejects.toThrow("attachment filename");
+    expect(mocks.enqueueDatabaseWrite).not.toHaveBeenCalled();
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("computes a stable lowercase SHA-256 checksum", async () => {
@@ -190,176 +96,85 @@ describe("attachment catalog", () => {
     );
   });
 
-  it("persists private-cloud intent and enqueues upload or download atomically", async () => {
-    mocks.executeTransaction.mockResolvedValue([1, 0, 1, 0]);
+  it("moves a finished recording into the session's audio folder via the store", async () => {
+    await expect(
+      catalogLocalSessionAudio("session-1", "/tmp/recording.wav"),
+    ).resolves.toBeUndefined();
 
-    await setAttachmentCloudSyncEnabled("session-1", "attachment-1", true);
-
-    const statements = mocks.executeTransaction.mock.calls[0]![0];
-    expect(statements[0].sql).toContain("SET cloud_sync_enabled = ?");
-    expect(statements[0].params[0]).toBe(1);
-    expect(statements[2].sql).toContain("'upload'");
-    expect(statements[3].sql).toContain("'download'");
-  });
-
-  it("preserves cloud-only bytes locally before queuing a cloud delete", async () => {
-    mocks.executeTransaction.mockResolvedValue([1, 0, 1, 0]);
-
-    await setAttachmentCloudSyncEnabled("session-1", "attachment-1", false);
-
-    const statements = mocks.executeTransaction.mock.calls[0]![0];
-    expect(statements[0].sql).not.toContain("cloud_object_key = ''");
-    expect(statements[2].sql).toContain("'download'");
-    expect(statements[2].sql).toContain(
-      "COALESCE(local.availability, 'absent') <> 'present'",
-    );
-    expect(statements[2].sql).toContain("attachment.cloud_object_key");
-    expect(statements[3].sql).toContain("'delete'");
-    expect(statements[3].sql).toContain("local.availability = 'present'");
-  });
-
-  it("catalogs primary audio with a stable logical identity and root-relative path", async () => {
-    await catalogLocalSessionAudio("session-1");
-
-    expect(mocks.audioMetadata).toHaveBeenCalledWith("session-1");
-    const statements = mocks.executeTransaction.mock.calls[0]![0];
-    expect(statements).toHaveLength(5);
-    expect(statements[1].sql).toMatch(
-      /WHEN session_attachments\.sha256 = \?\s+AND session_attachments\.size_bytes = \?/,
-    );
-    expect(statements[1].sql).toContain("source_type = 'session_audio'");
-    expect(statements[2].sql).toContain("session.workspace_id");
-    expect(statements[2].params).toEqual([
-      "session-audio:session-1",
-      "audio.mp3",
-      "audio.mp3",
-      "audio/mpeg",
-      84,
-      "d".repeat(64),
+    expect(mocks.sessionStoreAudio).toHaveBeenCalledWith(
       "session-1",
-      "session-audio:session-1",
-    ]);
-    expect(statements[3].sql).toContain("attachment_local_state");
-    expect(statements[3].sql).toContain("'present'");
-    expect(statements[3].expectedRowsAffected).toBe(1);
+      "/tmp/recording.wav",
+    );
   });
 
-  it("updates the same audio row when the finalized format changes", async () => {
-    mocks.executeTransaction.mockResolvedValue([0, 1, 0, 1, 0]);
-    mocks.audioMetadata.mockResolvedValue({
-      status: "ok",
-      data: {
-        filename: "audio.wav",
-        contentType: "audio/wav",
-        sizeBytes: 128,
-        sha256: "e".repeat(64),
-      },
+  it("surfaces a store failure instead of swallowing it", async () => {
+    mocks.sessionStoreAudio.mockResolvedValue({
+      status: "error",
+      error: "disk full",
     });
 
-    await catalogLocalSessionAudio("session-1");
-
-    const update = mocks.executeTransaction.mock.calls[0]![0][1];
-    expect(update.params).toEqual([
-      "audio.wav",
-      "audio.wav",
-      "audio/wav",
-      128,
-      "e".repeat(64),
-      128,
-      "e".repeat(64),
-      128,
-      "e".repeat(64),
-      "session-audio:session-1",
-      "session-1",
-      "session-1",
-    ]);
+    await expect(
+      catalogLocalSessionAudio("session-1", "/tmp/recording.wav"),
+    ).rejects.toThrow("disk full");
   });
 
-  it("keeps canonical metadata when retention deletes only local audio bytes", async () => {
+  // markSessionAudioAvailability/tombstoneSessionAudioMetadata are a
+  // graceful no-op — attachment_local_state/session_attachments were
+  // dropped in Task 4. The on-disk file deletion they accompany (both the
+  // legacy flat layout and the store-owned audio/ folder) keeps working
+  // unchanged. See the comments above their definitions in attachments.ts.
+  it("deletes local audio bytes from both the flat and store-owned locations", async () => {
+    mocks.sessionListAudio.mockResolvedValue({
+      status: "ok",
+      data: ["recording.wav"],
+    });
+
     await expect(
       deleteLocalSessionAudio("session-1", () => true),
     ).resolves.toBe(true);
     expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
-    const localState = mocks.executeTransaction.mock.calls[0]![0][0];
-    expect(localState.sql).toContain("attachment_local_state");
-    expect(localState.params).toEqual([
-      "session-audio:session-1",
+    expect(mocks.sessionListAudio).toHaveBeenCalledWith("session-1");
+    expect(mocks.sessionDeleteAudio).toHaveBeenCalledWith(
       "session-1",
-      "absent",
-    ]);
-    expect(localState.sql).not.toContain("UPDATE session_attachments");
+      "recording.wav",
+    );
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("tombstones logical audio before deleting local bytes", async () => {
-    mocks.executeTransaction.mockResolvedValue([1]);
-
+  it("deletes the recording without touching the database", async () => {
     await expect(deleteSessionAudio("session-1", () => true)).resolves.toBe(
       true,
     );
-
-    expect(mocks.executeTransaction.mock.calls[0]![0][0].params).toEqual([
-      "session-audio:session-1",
-      "session-1",
-    ]);
-    expect(mocks.executeTransaction.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.audioDelete.mock.invocationCallOrder[0]!,
-    );
-    expect(mocks.audioDelete.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.executeTransaction.mock.invocationCallOrder[1]!,
-    );
-  });
-
-  it("does not delete bytes when the logical tombstone fails", async () => {
-    mocks.executeTransaction.mockRejectedValueOnce(
-      new Error("database locked"),
-    );
-
-    await expect(deleteSessionAudio("session-1", () => true)).rejects.toThrow(
-      "database locked",
-    );
-    expect(mocks.audioDelete).not.toHaveBeenCalled();
+    expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("completes logical deletion when local audio is already absent", async () => {
-    mocks.executeTransaction.mockResolvedValue([1]);
     mocks.audioDelete.mockResolvedValue({ status: "ok", data: false });
 
     await expect(deleteSessionAudio("session-1", () => true)).resolves.toBe(
       true,
     );
-    expect(mocks.executeTransaction).toHaveBeenCalledTimes(2);
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("records local absence when retention finds no local audio", async () => {
+  it("resolves false when retention finds no local audio to delete", async () => {
     mocks.audioDelete.mockResolvedValue({ status: "ok", data: false });
 
     await expect(
       deleteLocalSessionAudio("session-1", () => true),
     ).resolves.toBe(false);
-    expect(mocks.executeTransaction.mock.calls[0]![0][0].params).toEqual([
-      "session-audio:session-1",
-      "session-1",
-      "absent",
-    ]);
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("revalidates a logical tombstone before retrying file cleanup", async () => {
-    await expect(
-      cleanupDeletedSessionAudio("session-1", () => true),
-    ).resolves.toBe(true);
-    expect(mocks.execute).toHaveBeenCalledWith(
-      expect.stringMatching(
-        /deleted_at IS NOT NULL[\s\S]*attachment_local_state[\s\S]*availability = 'absent'/,
-      ),
-      ["session-audio:session-1", "session-1"],
-    );
-    expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
-
-    vi.clearAllMocks();
-    mocks.execute.mockResolvedValue([{ is_deleted: 0 }]);
+  // cleanupDeletedSessionAudio is likewise a graceful no-op — there is no
+  // longer a way to detect a logically-deleted-but-locally-present
+  // attachment to retry cleanup on. See the comment above its definition.
+  it("resolves without deleting anything (backing table dropped)", async () => {
     await expect(
       cleanupDeletedSessionAudio("session-1", () => true),
     ).resolves.toBe(false);
+    expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.audioDelete).not.toHaveBeenCalled();
   });
 

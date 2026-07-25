@@ -20,11 +20,7 @@ import {
 import { id } from "~/shared/utils";
 import { listenerStore } from "~/store/zustand/listener/instance";
 
-const RETURN_ORIGIN_TAB_TYPES: Tab["type"][] = [
-  "contacts",
-  "settings",
-  "templates",
-];
+const RETURN_ORIGIN_TAB_TYPES: Tab["type"][] = ["settings", "templates"];
 
 export type BasicState = {
   tabs: Tab[];

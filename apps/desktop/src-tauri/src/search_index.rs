@@ -10,7 +10,7 @@ use tauri_plugin_tantivy::{
 };
 
 // Increment when the SQLite-to-Tantivy document shape changes so existing indexes are rebuilt.
-const PROJECTION_VERSION: i64 = 2;
+const PROJECTION_VERSION: i64 = 3;
 const BATCH_SIZE: i64 = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -159,28 +159,6 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
     )
     .execute(&mut *tx)
     .await?;
-    sqlx::query(
-        "INSERT INTO search_index_dirty (entity_type, entity_id)
-         SELECT 'human', id
-         FROM humans
-         WHERE deleted_at IS NULL
-         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-           generation = search_index_dirty.generation + 1,
-           queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-    .execute(&mut *tx)
-    .await?;
-    sqlx::query(
-        "INSERT INTO search_index_dirty (entity_type, entity_id)
-         SELECT 'organization', id
-         FROM organizations
-         WHERE deleted_at IS NULL
-         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-           generation = search_index_dirty.generation + 1,
-           queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-    .execute(&mut *tx)
-    .await?;
 
     tx.commit().await
 }
@@ -255,8 +233,6 @@ async fn acknowledge_dirty_entities(
 async fn build_index_action(pool: &SqlitePool, dirty: &DirtyEntity) -> WorkerResult<IndexAction> {
     match dirty.entity_type.as_str() {
         "session" => build_session_document(pool, &dirty.entity_id).await,
-        "human" => build_human_document(pool, &dirty.entity_id).await,
-        "organization" => build_organization_document(pool, &dirty.entity_id).await,
         entity_type => {
             tracing::warn!(entity_type, "ignoring unknown search index entity type");
             Ok(IndexAction::Skip)
@@ -354,78 +330,11 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
     }))
 }
 
-async fn build_human_document(pool: &SqlitePool, id: &str) -> WorkerResult<IndexAction> {
-    let Some(human) = sqlx::query(
-        "SELECT name, email, job_title, linkedin_username, created_at, memo
-         FROM humans
-         WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?
-    else {
-        return Ok(IndexAction::Remove(id.to_string()));
-    };
-
-    let name: String = human.get("name");
-    let email: String = human.get("email");
-    let job_title: String = human.get("job_title");
-    let linkedin_username: String = human.get("linkedin_username");
-    let created_at: String = human.get("created_at");
-    let memo: String = human.get("memo");
-
-    Ok(IndexAction::Upsert(SearchDocument {
-        id: id.to_string(),
-        doc_type: "human".to_string(),
-        language: None,
-        title: fallback_title(&name, "Unknown"),
-        content: merge_content(
-            [email, job_title, linkedin_username, memo]
-                .iter()
-                .map(String::as_str),
-        ),
-        created_at: to_epoch_ms(&Value::String(created_at)),
-        facets: Vec::new(),
-    }))
-}
-
-async fn build_organization_document(pool: &SqlitePool, id: &str) -> WorkerResult<IndexAction> {
-    let Some(organization) = sqlx::query(
-        "SELECT name, created_at
-         FROM organizations
-         WHERE id = ? AND deleted_at IS NULL",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?
-    else {
-        return Ok(IndexAction::Remove(id.to_string()));
-    };
-
-    let name: String = organization.get("name");
-    let created_at: String = organization.get("created_at");
-
-    Ok(IndexAction::Upsert(SearchDocument {
-        id: id.to_string(),
-        doc_type: "organization".to_string(),
-        language: None,
-        title: fallback_title(&name, "Unknown Organization"),
-        content: String::new(),
-        created_at: to_epoch_ms(&Value::String(created_at)),
-        facets: Vec::new(),
-    }))
-}
-
 async fn projection_consistency_snapshot(pool: &SqlitePool) -> Result<(i64, i64), sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let active_count = sqlx::query_scalar(
-        "SELECT
-           (SELECT COUNT(*) FROM sessions WHERE deleted_at IS NULL) +
-           (SELECT COUNT(*) FROM humans WHERE deleted_at IS NULL) +
-           (SELECT COUNT(*) FROM organizations WHERE deleted_at IS NULL)",
-    )
-    .fetch_one(&mut *tx)
-    .await?;
+    let active_count = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE deleted_at IS NULL")
+        .fetch_one(&mut *tx)
+        .await?;
     let pending_count = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
         .fetch_one(&mut *tx)
         .await?;

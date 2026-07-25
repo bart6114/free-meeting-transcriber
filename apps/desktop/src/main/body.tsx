@@ -96,8 +96,6 @@ export function ClassicMainBody() {
   const leftSidebarDefaultSizeTrackingRef = useRef(true);
   const pendingLeftSidebarDefaultSizeRef = useRef<number | null>(null);
   const syncDefaultLeftSidebarPanelSizeRef = useRef<() => void>(() => {});
-  const [showIgnoredTimelineEvents, setShowIgnoredTimelineEvents] =
-    useState(false);
   const [showDevtoolsPanelButton, setShowDevtoolsPanelButton] = useState(false);
   const [devtoolsPanelOpen, setDevtoolsPanelOpen] = useState(false);
   leftSidebarPanelConstraintsRef.current = leftSidebarPanelConstraints;
@@ -479,7 +477,6 @@ export function ClassicMainBody() {
           currentSessionId={currentSessionId}
           sidebarExpanded
           showDevtoolsPanelButton={showDevtoolsPanelButton}
-          showIgnoredTimelineEvents={showIgnoredTimelineEvents}
           devtoolsPanelOpen={devtoolsPanelOpen}
           onNewNote={createNewNote}
           onSearch={handleOpenNoteDialog}
@@ -516,7 +513,6 @@ export function ClassicMainBody() {
               currentSessionId={currentSessionId}
               sidebarExpanded={false}
               showDevtoolsPanelButton={showDevtoolsPanelButton}
-              showIgnoredTimelineEvents={showIgnoredTimelineEvents}
               devtoolsPanelOpen={devtoolsPanelOpen}
               onNewNote={createNewNote}
               onSearch={handleOpenNoteDialog}
@@ -604,10 +600,6 @@ export function ClassicMainBody() {
                 <ClassicMainSidebar
                   forceMount
                   timelineHeader={timelineHeader}
-                  showIgnoredTimelineEvents={showIgnoredTimelineEvents}
-                  onShowIgnoredTimelineEventsChange={
-                    setShowIgnoredTimelineEvents
-                  }
                 />
               </div>
             </ResizablePanel>
@@ -877,7 +869,6 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
     onToggleSidebar,
     sidebarExpanded,
     showDevtoolsPanelButton,
-    showIgnoredTimelineEvents,
     update,
   }: {
     currentSessionId?: string;
@@ -888,12 +879,9 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
     onToggleSidebar: () => void;
     sidebarExpanded: boolean;
     showDevtoolsPanelButton: boolean;
-    showIgnoredTimelineEvents: boolean;
     update: DesktopUpdateControl;
   }) {
-    const upcomingMeetingStatus = useSidebarUpcomingMeetingStatus({
-      showIgnored: showIgnoredTimelineEvents,
-    });
+    const upcomingMeetingStatus = useSidebarUpcomingMeetingStatus();
     const hasUpcomingMeeting = upcomingMeetingStatus
       ? !currentSessionId ||
         upcomingMeetingStatus.itemKey !== `session-${currentSessionId}`

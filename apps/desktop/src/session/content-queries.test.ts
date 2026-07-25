@@ -24,7 +24,6 @@ describe("session content SQLite snapshots", () => {
         title: "Planning",
         created_at: "2026-07-10T09:00:00.000Z",
         event_json: JSON.stringify({ title: "Weekly planning" }),
-        event_id: "event-1",
         raw_note_id: "session-1",
         raw_body: JSON.stringify({
           type: "doc",
@@ -72,13 +71,6 @@ describe("session content SQLite snapshots", () => {
             speaker_hints_json: "[]",
           },
         ]),
-        participants_json: JSON.stringify([
-          {
-            human_id: "human-1",
-            name: "Alice",
-            job_title: "Engineer",
-          },
-        ]),
       },
     ]);
 
@@ -90,7 +82,6 @@ describe("session content SQLite snapshots", () => {
       title: "Planning",
       createdAt: "2026-07-10T09:00:00.000Z",
       event: { title: "Weekly planning" },
-      eventId: "event-1",
       rawNoteId: "session-1",
       rawContentFormat: "prosemirror_json",
       enhancedNotes: [
@@ -104,9 +95,6 @@ describe("session content SQLite snapshots", () => {
           ended_at: 200,
           words: [expect.objectContaining({ id: "word-1", text: "Hello" })],
         },
-      ],
-      participants: [
-        { humanId: "human-1", name: "Alice", jobTitle: "Engineer" },
       ],
     });
     expect(snapshot?.rawMarkdown).toContain("Raw note");

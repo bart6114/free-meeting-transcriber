@@ -15,9 +15,9 @@ import {
 } from "@hypr/editor/tasks";
 import { cn, safeParseDate } from "@hypr/utils";
 
-import { toTz, useTimezone } from "~/calendar/hooks";
 import { useSession } from "~/session/queries";
 import { getSessionEvent } from "~/session/utils";
+import { toTz, useTimezone } from "~/shared/hooks/useNow";
 import { useTabs } from "~/store/zustand/tabs";
 import { useListener } from "~/stt/contexts";
 

@@ -21,6 +21,13 @@ const hoisted = vi.hoisted(() => ({
   focusWindow: vi.fn(),
   meetingChatRecords: [] as unknown[],
   noteEditorProps: [] as Record<string, unknown>[],
+  json2md: vi.fn(() => "markdown"),
+  sessionWriteNote: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
+  sonnerToastError: vi.fn(),
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({
@@ -37,6 +44,7 @@ vi.mock("@tauri-apps/api/window", () => ({
 
 vi.mock("@hypr/editor/markdown", () => ({
   parseJsonContent: (value: string) => JSON.parse(value),
+  json2md: hoisted.json2md,
 }));
 
 vi.mock("@hypr/editor/note", () => ({
@@ -52,6 +60,10 @@ vi.mock("@hypr/plugin-analytics", () => ({
   commands: {
     event: vi.fn(),
   },
+}));
+
+vi.mock("@hypr/ui/components/ui/toast", () => ({
+  sonnerToast: { error: hoisted.sonnerToastError },
 }));
 
 vi.mock("@hypr/plugin-opener2", () => ({
@@ -88,6 +100,12 @@ vi.mock("~/session/queries", () => ({
 
 vi.mock("~/session/hooks/useAttachmentResolver", () => ({
   useAttachmentResolver: () => () => null,
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionWriteNote: hoisted.sessionWriteNote,
+  },
 }));
 
 function RawEditor({
@@ -148,6 +166,11 @@ describe("RawEditor", () => {
     hoisted.fileUpload = vi.fn();
     hoisted.processAudioFile = vi.fn();
     hoisted.meetingChatRecords = [];
+    hoisted.json2md.mockReset().mockReturnValue("markdown");
+    hoisted.sessionWriteNote
+      .mockReset()
+      .mockResolvedValue({ status: "ok", data: null });
+    hoisted.sonnerToastError.mockReset();
     hoisted.showWindow.mockReset();
     hoisted.unminimizeWindow.mockReset();
     hoisted.focusWindow.mockReset();
@@ -174,6 +197,32 @@ describe("RawEditor", () => {
         },
       ],
     });
+  });
+
+  it("shows a persistent toast when saving the note fails", async () => {
+    hoisted.sessionWriteNote.mockResolvedValue({
+      status: "error",
+      error: "disk full",
+    });
+
+    render(<RawEditor sessionId="session-1" />);
+
+    const props = hoisted.noteEditorProps[hoisted.noteEditorProps.length - 1];
+    const handleChange = props?.handleChange as (input: unknown) => void;
+    handleChange({ type: "doc", content: [] });
+
+    await waitFor(() =>
+      expect(hoisted.sessionWriteNote).toHaveBeenCalledWith(
+        "session-1",
+        "markdown",
+      ),
+    );
+    await waitFor(() =>
+      expect(hoisted.sonnerToastError).toHaveBeenCalledWith(
+        expect.stringContaining("Note is NOT being saved"),
+        expect.objectContaining({ id: "note-save-failed:session-1" }),
+      ),
+    );
   });
 
   it("renders captured chat without mutating the active memo editor", () => {

@@ -3,11 +3,11 @@ source: apps/cli/src/mcp.rs
 expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": info.protocol_version, \"instructions\":\n    info.instructions, \"tools\": tools, \"resource_templates\": templates,\n}))"
 ---
 {
-  "instructions": "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, participants, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use get_recurring_meeting_history for series context. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+  "instructions": "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
   "protocol_version": "2024-11-05",
   "resource_templates": [
     {
-      "description": "Meeting metadata, note, summaries, people, and action items",
+      "description": "Meeting metadata, note, summaries, and action items",
       "mimeType": "text/markdown",
       "name": "Free Meeting Transcriber meeting",
       "uriTemplate": "fmtr://meetings/{meeting_id}"
@@ -17,12 +17,6 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
       "mimeType": "text/plain",
       "name": "Free Meeting Transcriber meeting transcript",
       "uriTemplate": "fmtr://meetings/{meeting_id}/transcript{?offset,limit}"
-    },
-    {
-      "description": "Recurring meeting history",
-      "mimeType": "text/markdown",
-      "name": "Free Meeting Transcriber meeting series",
-      "uriTemplate": "fmtr://series/{series_id}"
     }
   ],
   "tools": [
@@ -33,7 +27,7 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Get one Free Meeting Transcriber meeting with its canonical note, summaries, participants, and action items. Use get_meeting_transcript separately for transcript words.",
+      "description": "Get one Free Meeting Transcriber meeting with its canonical note, summaries, and action items. Use get_meeting_transcript separately for transcript words.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -100,49 +94,6 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "List meetings in the same recurring series as the supplied meeting, newest first, with pagination metadata.",
-      "inputSchema": {
-        "$schema": "https://json-schema.org/draft/2020-12/schema",
-        "properties": {
-          "limit": {
-            "description": "Maximum meetings; defaults to 20 and is capped at 200",
-            "format": "uint32",
-            "maximum": 200,
-            "minimum": 1,
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "meeting_id": {
-            "description": "A meeting id used to resolve its recurring series",
-            "type": "string"
-          },
-          "offset": {
-            "description": "Number of meetings to skip; defaults to 0",
-            "format": "uint32",
-            "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
-          }
-        },
-        "required": [
-          "meeting_id"
-        ],
-        "title": "GetRecurringMeetingHistoryInput",
-        "type": "object"
-      },
-      "name": "get_recurring_meeting_history"
-    },
-    {
-      "annotations": {
-        "destructiveHint": false,
-        "idempotentHint": true,
-        "openWorldHint": false,
-        "readOnlyHint": true
-      },
       "description": "List recent Free Meeting Transcriber meetings with pagination metadata. Use query to narrow by title or meeting id, then pass next_offset as offset to continue.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -168,13 +119,6 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
           },
           "query": {
             "description": "Case-insensitive title or meeting id substring",
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "series_id": {
-            "description": "Exact recurring series id",
             "type": [
               "string",
               "null"

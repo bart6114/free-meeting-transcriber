@@ -32,7 +32,7 @@ vi.mock("~/session/queries", () => ({
   }),
 }));
 
-vi.mock("~/calendar/hooks", () => ({
+vi.mock("~/shared/hooks/useNow", () => ({
   useTimezone: () => undefined,
   toTz: (date: Date) => date,
 }));

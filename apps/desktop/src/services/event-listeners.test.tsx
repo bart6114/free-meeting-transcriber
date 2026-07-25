@@ -18,8 +18,6 @@ const {
   setSettingValueMock,
   openNewMock,
   createSessionMock,
-  getOrCreateSessionForEventIdMock,
-  getCalendarEventStartedAtMock,
   setTriggerAppIdsMock,
   stopMock,
   updateCaptureConfigMock,
@@ -36,8 +34,6 @@ const {
   setSettingValueMock: vi.fn(async () => {}),
   openNewMock: vi.fn(),
   createSessionMock: vi.fn(async () => "session-new"),
-  getOrCreateSessionForEventIdMock: vi.fn(async () => "session-event"),
-  getCalendarEventStartedAtMock: vi.fn(),
   setTriggerAppIdsMock: vi.fn(),
   stopMock: vi.fn(),
   updateCaptureConfigMock: vi.fn(),
@@ -84,11 +80,6 @@ vi.mock("~/settings/queries", () => ({
 
 vi.mock("~/session/queries", () => ({
   createSession: createSessionMock,
-  getOrCreateSessionForEventId: getOrCreateSessionForEventIdMock,
-}));
-
-vi.mock("~/calendar/queries", () => ({
-  getCalendarEventStartedAt: getCalendarEventStartedAtMock,
 }));
 
 vi.mock("~/store/zustand/tabs", () => ({
@@ -116,8 +107,6 @@ describe("EventListeners notification events", () => {
     setSettingValueMock.mockReset();
     openNewMock.mockReset();
     createSessionMock.mockReset();
-    getOrCreateSessionForEventIdMock.mockReset();
-    getCalendarEventStartedAtMock.mockReset();
     setTriggerAppIdsMock.mockReset();
     stopMock.mockReset();
     updateCaptureConfigMock.mockReset();
@@ -127,8 +116,6 @@ describe("EventListeners notification events", () => {
     notificationListenMock.mockResolvedValue(() => {});
     updaterListenMock.mockResolvedValue(() => {});
     createSessionMock.mockResolvedValue("session-new");
-    getOrCreateSessionForEventIdMock.mockResolvedValue("session-event");
-    getCalendarEventStartedAtMock.mockResolvedValue(null);
     liveQuerySubscribeMock.mockImplementation(
       async (_sql, _params, handlers) => {
         handlers.onData([]);
@@ -177,7 +164,6 @@ describe("EventListeners notification events", () => {
           type: "mic_detected",
           app_names: ["Zoom"],
           app_ids: ["us.zoom.xos", "com.existing.app"],
-          event_ids: [],
         },
       },
     });
@@ -231,7 +217,6 @@ describe("EventListeners notification events", () => {
       {
         session_id: "session-1",
         owner_user_id: "human-self",
-        human_id: "human-remote",
       },
     ]);
     await vi.runOnlyPendingTimersAsync();
@@ -239,7 +224,7 @@ describe("EventListeners notification events", () => {
     expect(updateCaptureConfigMock).toHaveBeenCalledWith({
       session_id: "session-1",
       languages: ["ko"],
-      participant_human_ids: ["human-remote"],
+      participant_human_ids: [],
       self_human_id: "human-self",
     });
   });
@@ -319,7 +304,7 @@ describe("EventListeners notification events", () => {
     });
   });
 
-  test("notification_confirm with mic_detected source opens detected event and sets triggerAppIds", async () => {
+  test("notification_confirm with mic_detected source creates a session and sets triggerAppIds", async () => {
     render(<EventListeners />);
 
     await vi.waitFor(() =>
@@ -336,19 +321,17 @@ describe("EventListeners notification events", () => {
           type: "mic_detected",
           app_names: ["Zoom"],
           app_ids: ["us.zoom.xos"],
-          event_ids: ["event-1"],
         },
       },
     });
 
     await vi.waitFor(() => expect(openNewMock).toHaveBeenCalledTimes(1));
 
-    expect(getOrCreateSessionForEventIdMock).toHaveBeenCalledWith("event-1");
-    expect(createSessionMock).not.toHaveBeenCalled();
+    expect(createSessionMock).toHaveBeenCalledTimes(1);
     expect(setTriggerAppIdsMock).toHaveBeenCalledWith(["us.zoom.xos"]);
     expect(openNewMock).toHaveBeenCalledWith({
       type: "sessions",
-      id: "session-event",
+      id: "session-new",
       state: { view: null, autoStart: true },
     });
   });
@@ -371,7 +354,6 @@ describe("EventListeners notification events", () => {
           type: "mic_detected",
           app_names: ["Zoom"],
           app_ids: ["us.zoom.xos"],
-          event_ids: [],
         },
       },
     });
@@ -397,7 +379,6 @@ describe("EventListeners notification events", () => {
           type: "mic_detected",
           app_names: ["Zoom"],
           app_ids: ["us.zoom.xos"],
-          event_ids: [],
         },
       },
     });

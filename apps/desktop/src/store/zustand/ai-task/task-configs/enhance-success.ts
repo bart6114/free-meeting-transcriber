@@ -10,6 +10,7 @@ import {
   persistGeneratedTitle,
 } from "./title-success";
 
+import { executeTransaction } from "~/db";
 import {
   constrainSummaryLength,
   countNormalizedCharacters,
@@ -19,6 +20,7 @@ import { persistGeneratedEnhancedNote } from "~/session/content-mutations";
 import { loadSessionContentSnapshot } from "~/session/content-queries";
 import { ensureMarkdownFirstLineTitle } from "~/session/title-content";
 import { hasLiveSessionTitleDraft } from "~/store/zustand/live-title";
+import { commands } from "~/types/tauri.gen";
 
 const onSuccess: NonNullable<TaskConfig<"enhance">["onSuccess"]> = async ({
   text,
@@ -132,6 +134,50 @@ const onSuccess: NonNullable<TaskConfig<"enhance">["onSuccess"]> = async ({
     },
     tagNames,
   });
+
+  // `sessionWriteDocument` only has a single `summary.md` slot per session, so it only
+  // mirrors the default (non-templated) summary -- custom template_output notes have no
+  // file-canonical home yet and stay index-only, same as before this cutover.
+  if (!note.templateId) {
+    const documentWrite = await commands.sessionWriteDocument(
+      args.sessionId,
+      "summary",
+      persistableText,
+    );
+    if (documentWrite.status === "error") {
+      throw new Error(
+        `Failed to write summary to session store: ${documentWrite.error}`,
+      );
+    }
+
+    // `sessionWriteDocument` upserts its own `session_documents` row, keyed
+    // `{sessionId}:summary`, to keep the file and index in sync -- but the *real* summary
+    // row (read by `useEnhancedNoteRecords`, no id filter beyond kind) lives at `note.id`,
+    // a separate randomly-generated id from `ensureSummaryDocument`. Left alone, the store's
+    // shadow row would show up as a second, blank "Summary" tab. Hide it immediately; the
+    // file write above already landed, which is the part this cutover cares about. Guarded
+    // by an id check so a session whose real summary id happens to already equal the shadow
+    // id (shouldn't happen -- `id()` is a random UUID -- but never risk tombstoning the note
+    // actually shown to the user) is left untouched.
+    const shadowRowId = `${args.sessionId}:summary`;
+    if (note.id !== shadowRowId) {
+      await executeTransaction([
+        {
+          sql: `
+            UPDATE session_documents
+            SET deleted_at = ?, updated_at = ?
+            WHERE id = ? AND session_id = ? AND kind = 'summary' AND deleted_at IS NULL
+          `,
+          params: [
+            new Date().toISOString(),
+            new Date().toISOString(),
+            shadowRowId,
+            args.sessionId,
+          ],
+        },
+      ]);
+    }
+  }
 
   if (shouldPersistGeneratedTitle && !signal.aborted) {
     await persistGeneratedTitle({

@@ -18,7 +18,6 @@ import { ChannelProfile } from "./segment";
 import { isStoppedTranscriptionError, useRunBatch } from "./useRunBatch";
 
 import { getEnhancerService } from "~/services/enhancer";
-import { catalogLocalSessionAudio } from "~/session/attachments";
 import { enqueueSessionAudioOperation } from "~/session/audio-operations";
 import { useSession, useUpdateSession } from "~/session/queries";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
@@ -174,11 +173,10 @@ export function useUploadFile(sessionId: string) {
           if (result.status === "error") {
             throw new Error(result.error);
           }
-          try {
-            await catalogLocalSessionAudio(sessionId);
-          } catch (error) {
-            console.error("[upload] failed to catalog imported audio", error);
-          }
+          // Unlike a finished recording, an uploaded/imported file is already placed by
+          // `fsSyncCommands.audioImport*` in its final location (the legacy flat
+          // `sessions/<id>/<file>` layout that import owns) -- there's nothing left to move
+          // into the store's `audio/` folder, so `catalogLocalSessionAudio` doesn't apply here.
           return result.data;
         } finally {
           unlisten();

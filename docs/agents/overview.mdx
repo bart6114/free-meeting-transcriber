@@ -15,14 +15,13 @@ Free Meeting Transcriber offers two local, read-only agent transports. They shar
 1. List recent meetings or search by a short title fragment.
 2. Use a returned meeting ID. Never infer or invent one.
 3. Fetch the meeting detail before requesting transcript text.
-4. Fetch recurring history only when earlier meetings are relevant.
-5. Read transcript pages only until the task has enough evidence.
+4. Read transcript pages only until the task has enough evidence.
 
 Prefer MCP when it is connected because tools carry their input schemas and results directly. The CLI provides the same bounded transcript workflow when an agent only has shell access.
 
 ## Safety boundary
 
-Agents should use the CLI or MCP server, not SQLite. Those interfaces apply Free Meeting Transcriber's rules for canonical notes, generated summaries, excluded participants, recurring meetings, and transcript text.
+Agents should use the CLI or MCP server, not SQLite. Those interfaces apply Free Meeting Transcriber's rules for canonical notes, generated summaries, and transcript text.
 
 All current Free Meeting Transcriber data operations are read-only. An agent cannot update a note, action item, or meeting through these interfaces. CLI export may create a separate file; replacing an existing file requires `--force`.
 

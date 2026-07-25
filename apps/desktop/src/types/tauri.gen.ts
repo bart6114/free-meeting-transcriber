@@ -110,6 +110,110 @@ async exportVaultNow() : Promise<Result<null, string>> {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async sessionWriteMeta(meta: SessionMeta) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_write_meta", { meta }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionWriteNote(sessionId: string, markdown: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_write_note", { sessionId, markdown }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionReadNote(sessionId: string) : Promise<Result<string | null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_read_note", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionWriteDocument(sessionId: string, kind: string, markdown: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_write_document", { sessionId, kind, markdown }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionAppendTranscript(sessionId: string, delta: TranscriptDelta) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_append_transcript", { sessionId, delta }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionFlushTranscript(sessionId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_flush_transcript", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionWriteTranscript(sessionId: string, transcript: TranscriptWithData) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_write_transcript", { sessionId, transcript }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionDelete(sessionId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_delete", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionRestore(sessionId: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_restore", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionRebuildIndex() : Promise<Result<RebuildReport, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_rebuild_index") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionStoreAudio(sessionId: string, sourcePath: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_store_audio", { sessionId, sourcePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionListAudio(sessionId: string) : Promise<Result<string[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_list_audio", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionDeleteAudio(sessionId: string, filename: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_delete_audio", { sessionId, filename }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -125,6 +229,29 @@ async exportVaultNow() : Promise<Result<null, string>> {
 
 export type EmbeddedCliState = "installed" | "missing" | "conflict" | "unsupported" | "resource_missing"
 export type EmbeddedCliStatus = { supported: boolean; commandName: string; installPath: string; state: EmbeddedCliState; details: string | null }
+export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
+/**
+ * Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect rows *upserted* this
+ * pass, not the resulting table size. `errors` never aborts the scan -- an unparseable file
+ * is logged here and its existing index row is left untouched (see the hard rule in each
+ * match arm below: corruption must never look like deletion).
+ */
+export type RebuildReport = { sessions: number; 
+/**
+ * Upserted `session_documents` rows this pass -- every `<kind>.md` file including the
+ * note (`_memo.md`), not just the note.
+ */
+notes: number; transcripts: number; 
+/**
+ * Folder ids that have at least one recognized content file (a `<kind>.md` document or
+ * `transcript.json`) but no `_meta.json` -- left deliberately unindexed; files untouched.
+ */
+ghost_sessions: string[]; errors: string[] }
+export type SessionMeta = { id: string; title: string; started_at: string | null; ended_at: string | null; created_at: string; tags: string[] }
+export type TranscriptDelta = { transcript_id: string; new_words: TranscriptWord[]; replaced_ids: string[]; new_hints: TranscriptSpeakerHint[]; started_at_ms: number }
+export type TranscriptSpeakerHint = { id?: string | null; word_id: string; type: string; value?: JsonValue }
+export type TranscriptWithData = { id: string; user_id?: string; created_at?: string; session_id: string; started_at?: number; ended_at?: number | null; memo_md?: string; words?: TranscriptWord[]; speaker_hints?: TranscriptSpeakerHint[] }
+export type TranscriptWord = { id?: string | null; text: string; start_ms: number; end_ms: number; channel: number; speaker?: string | null; metadata?: Partial<{ [key in string]: JsonValue }> | null }
 
 /** tauri-specta globals **/
 

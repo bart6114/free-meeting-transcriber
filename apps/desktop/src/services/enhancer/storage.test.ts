@@ -86,8 +86,7 @@ describe("enhancer SQLite storage", () => {
     );
     const statement = mocks.executeTransaction.mock.calls[0][0][0];
     expect(statement.sql).toContain("INSERT INTO session_documents");
-    expect(statement.sql).toContain("workspace_id");
-    expect(statement.sql).toContain("?, workspace_id, id");
+    expect(statement.sql).toContain("?, id, ?, ?");
     expect(statement.params).toEqual([
       "new-note",
       "template_output",

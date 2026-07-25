@@ -28,7 +28,8 @@ describe("useOwnerUserId", () => {
 
     expect(renderHook(() => useOwnerUserId()).result.current).toBe("user-1");
     expect(mocks.sql).toContain("FROM sessions");
-    expect(mocks.sql).toContain("id = owner_user_id");
+    expect(mocks.sql).toContain("owner_user_id");
+    expect(mocks.sql).not.toContain("humans");
   });
 
   it("uses the stable local owner when no canonical row exists", () => {

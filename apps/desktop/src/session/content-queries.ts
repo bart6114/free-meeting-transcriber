@@ -9,13 +9,11 @@ type SessionContentSqlRow = {
   title: string;
   created_at: string;
   event_json: string;
-  event_id: string;
   raw_note_id: string;
   raw_body: string;
   raw_body_format: string;
   enhanced_notes_json: string;
   transcripts_json: string;
-  participants_json: string;
 };
 
 type EnhancedNoteJson = {
@@ -36,19 +34,12 @@ type TranscriptJson = {
   speaker_hints_json: string;
 };
 
-type ParticipantJson = {
-  human_id: string;
-  name: string;
-  job_title: string;
-};
-
 export type SessionContentSnapshot = {
   sessionId: string;
   ownerUserId: string;
   title: string;
   createdAt: string;
   event: unknown;
-  eventId: string | null;
   rawNoteId: string | null;
   rawContent: string;
   rawContentFormat: string;
@@ -71,11 +62,6 @@ export type SessionContentSnapshot = {
     words: WordWithId[];
     speaker_hints: SpeakerHintWithId[];
   }>;
-  participants: Array<{
-    humanId: string;
-    name: string;
-    jobTitle: string;
-  }>;
 };
 
 const SESSION_CONTENT_SQL = `
@@ -85,7 +71,6 @@ const SESSION_CONTENT_SQL = `
     session.title,
     session.created_at,
     session.event_json,
-    COALESCE(NULLIF(session.event_id, ''), NULLIF(session.external_event_id, ''), '') AS event_id,
     COALESCE(note.id, '') AS raw_note_id,
     COALESCE(note.body, '') AS raw_body,
     COALESCE(note.body_format, 'prosemirror_json') AS raw_body_format,
@@ -115,41 +100,26 @@ const SESSION_CONTENT_SQL = `
       FROM transcripts AS transcript
       WHERE transcript.session_id = session.id
         AND transcript.deleted_at IS NULL
-    ), '[]') AS transcripts_json,
-    COALESCE((
-      SELECT json_group_array(json_object(
-        'human_id', participant.human_id,
-        'name', COALESCE(NULLIF(human.name, ''), participant.display_name),
-        'job_title', COALESCE(human.job_title, '')
-      ))
-      FROM session_participants AS participant
-      LEFT JOIN humans AS human
-        ON human.id = participant.human_id
-        AND human.deleted_at IS NULL
-      WHERE participant.session_id = session.id
-        AND participant.human_id <> ''
-        AND participant.source <> 'excluded'
-        AND participant.deleted_at IS NULL
-    ), '[]') AS participants_json
+    ), '[]') AS transcripts_json
   FROM sessions AS session
   LEFT JOIN session_documents AS note
     ON note.id = COALESCE(
       (
-        SELECT canonical.id
-        FROM session_documents AS canonical
-        WHERE canonical.id = session.id
-          AND canonical.session_id = session.id
-          AND canonical.kind = 'note'
-          AND canonical.deleted_at IS NULL
+        SELECT store_note.id
+        FROM session_documents AS store_note
+        WHERE store_note.id = session.id || ':note'
+          AND store_note.session_id = session.id
+          AND store_note.kind = 'note'
+          AND store_note.deleted_at IS NULL
         LIMIT 1
       ),
       (
-        SELECT fallback.id
-        FROM session_documents AS fallback
-        WHERE fallback.session_id = session.id
-          AND fallback.kind = 'note'
-          AND fallback.deleted_at IS NULL
-        ORDER BY fallback.created_at, fallback.id
+        SELECT legacy_note.id
+        FROM session_documents AS legacy_note
+        WHERE legacy_note.id = session.id
+          AND legacy_note.session_id = session.id
+          AND legacy_note.kind = 'note'
+          AND legacy_note.deleted_at IS NULL
         LIMIT 1
       )
     )
@@ -219,37 +189,26 @@ function mapSessionContentRow(
         left.started_at - right.started_at || left.id.localeCompare(right.id),
     );
 
-  const participants = parseJsonArray<ParticipantJson>(row.participants_json)
-    .map((participant) => ({
-      humanId: participant.human_id,
-      name: participant.name,
-      jobTitle: participant.job_title,
-    }))
-    .sort(
-      (left, right) =>
-        left.name.localeCompare(right.name) ||
-        left.humanId.localeCompare(right.humanId),
-    );
-
   return {
     sessionId: row.id,
     ownerUserId: row.owner_user_id,
     title: row.title,
     createdAt: row.created_at,
     event: parseJson(row.event_json),
-    eventId: row.event_id || null,
     rawNoteId: row.raw_note_id || null,
     rawContent: row.raw_body,
     rawContentFormat: row.raw_body_format,
     rawMarkdown: bodyToMarkdown(row.raw_body, row.raw_body_format),
     enhancedNotes,
     transcripts,
-    participants,
   };
 }
 
 function bodyToMarkdown(body: string, format: string): string {
-  if (!body || format === "markdown") return body;
+  // "markdown" is the legacy-import sentinel; "md" is what the session store
+  // (session_write_note/session_write_document, Tasks 5-8/9) writes -- both are
+  // already plain markdown and need no prosemirror-JSON conversion.
+  if (!body || format === "markdown" || format === "md") return body;
   try {
     return json2md(JSON.parse(body));
   } catch {

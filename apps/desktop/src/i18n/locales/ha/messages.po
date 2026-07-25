@@ -60,14 +60,8 @@ msgstr ""
 msgid "Activity"
 msgstr ""
 
-#: src/contacts/shared.tsx
 #: src/settings/dictionary/index.tsx
 msgid "Add"
-msgstr ""
-
-#. placeholder {0}: option.name
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Add \"{0}\""
 msgstr ""
 
 #: src/session/components/note-input/enhanced/config-error.tsx
@@ -84,18 +78,6 @@ msgstr ""
 
 #: src/settings/dictionary/index.tsx
 msgid "Add names, jargon, or product terms to prefer"
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "Add notes about this contact..."
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "Add organization"
-msgstr ""
-
-#: src/contacts/new-person-form.tsx
-msgid "Add person"
 msgstr ""
 
 #: src/settings/general/spoken-languages.tsx
@@ -116,10 +98,6 @@ msgstr ""
 
 #: src/settings/ai/stt/select.tsx
 msgid "After recording"
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "AI-generated summary of all interactions and notes with this contact will appear here. This will synthesize key discussion points, action items, and relationship context across all meetings and notes."
 msgstr ""
 
 #: src/shared/open-note-dialog.tsx
@@ -155,10 +133,6 @@ msgstr ""
 msgid "Appearance"
 msgstr ""
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Apply to all"
-msgstr ""
-
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr ""
@@ -184,16 +158,16 @@ msgid "Automatically detect when a meeting starts based on microphone activity."
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-msgid "Automatically open the meeting link when scheduled listening starts."
-msgstr ""
+#~ msgid "Automatically open the meeting link when scheduled listening starts."
+#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Automatically post a disclosure after listening starts when the active meeting chat supports safe posting. Posting failure does not stop listening. A disclosure does not confirm participant consent."
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-msgid "Automatically start listening when an event-backed note reaches its scheduled start time."
-msgstr "Fara sauraro ta atomatik lokacin da bayanin kula da abin ya faru ya kai lokacin farawa da aka tsara."
+#~ msgid "Automatically start listening when an event-backed note reaches its scheduled start time."
+#~ msgstr "Fara sauraro ta atomatik lokacin da bayanin kula da abin ya faru ya kai lokacin farawa da aka tsara."
 
 #: src/settings/general/app-settings.tsx
 msgid "Automatically stop listening when the meeting app releases the microphone."
@@ -258,7 +232,6 @@ msgstr ""
 msgid "Choose template icon"
 msgstr ""
 
-#: src/contacts/shared.tsx
 #: src/templates/template-sidebar.tsx
 msgid "Clear search"
 msgstr ""
@@ -293,10 +266,6 @@ msgstr ""
 msgid "comments"
 msgstr ""
 
-#: src/contacts/details.tsx
-msgid "Company"
-msgstr ""
-
 #: src/session/components/floating/options-menu.tsx
 msgid "Configure"
 msgstr ""
@@ -306,17 +275,7 @@ msgid "Configure Providers"
 msgstr ""
 
 #: src/onboarding/folder-location.tsx
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 msgid "Confirm"
-msgstr ""
-
-#: src/sidebar/contacts.tsx
-#: src/sidebar/settings.tsx
-msgid "Contacts"
-msgstr ""
-
-#: src/sidebar/settings.tsx
-msgid "Context"
 msgstr ""
 
 #: src/templates/auto-form.tsx
@@ -363,12 +322,12 @@ msgid "Delete"
 msgstr ""
 
 #: src/sidebar/timeline/item.tsx
-msgid "Delete All Recurring Events"
-msgstr ""
+#~ msgid "Delete All Recurring Events"
+#~ msgstr ""
 
 #: src/sidebar/timeline/item.tsx
-msgid "Delete Event"
-msgstr ""
+#~ msgid "Delete Event"
+#~ msgstr ""
 
 #: src/settings/ai/stt/select.tsx
 msgid "Delete model"
@@ -387,8 +346,8 @@ msgid "Delete Selected ({sessionCount})"
 msgstr ""
 
 #: src/sidebar/timeline/item.tsx
-msgid "Delete This Event"
-msgstr ""
+#~ msgid "Delete This Event"
+#~ msgstr ""
 
 #: src/session/components/outer-header/overflow/delete.tsx
 msgid "Deleting..."
@@ -440,10 +399,6 @@ msgstr ""
 msgid "Edit the complete system prompt used when Auto generates a summary."
 msgstr ""
 
-#: src/contacts/details.tsx
-msgid "Email"
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Emojis"
 msgstr ""
@@ -451,14 +406,6 @@ msgstr ""
 #. placeholder {0}: permissionName.toLowerCase()
 #: src/onboarding/permissions.tsx
 msgid "Enable {0}"
-msgstr ""
-
-#: src/session/components/outer-header/metadata/participants/chip.tsx
-msgid "Enhance contact"
-msgstr ""
-
-#: src/session/components/outer-header/metadata/participants/chip.tsx
-msgid "Enhance contact {label}"
 msgstr ""
 
 #: src/session/components/outer-header/metadata/date.tsx
@@ -601,8 +548,8 @@ msgid "Help Free Meeting Transcriber read meeting activity"
 msgstr ""
 
 #: src/sidebar/timeline/index.tsx
-msgid "Hide Deleted Events"
-msgstr ""
+#~ msgid "Hide Deleted Events"
+#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "How long recorded meeting audio is kept on this device."
@@ -610,10 +557,6 @@ msgstr ""
 
 #: src/settings/general/notification.tsx
 msgid "How long the mic must be active before triggering"
-msgstr ""
-
-#: src/contacts/humans.tsx
-msgid "Human"
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -645,25 +588,21 @@ msgstr ""
 msgid "Intelligence"
 msgstr ""
 
-#: src/contacts/details.tsx
-msgid "Job Title"
-msgstr ""
+#: src/session/components/outer-header/index.tsx
+#~ msgid "Join & record"
+#~ msgstr ""
 
 #: src/session/components/outer-header/index.tsx
-msgid "Join & record"
-msgstr ""
-
-#: src/session/components/outer-header/index.tsx
-msgid "Join meeting and record"
-msgstr ""
+#~ msgid "Join meeting and record"
+#~ msgstr ""
 
 #: src/onboarding/final.tsx
 msgid "Join our community and stay updated:"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-msgid "Join scheduled meetings"
-msgstr ""
+#~ msgid "Join scheduled meetings"
+#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Keep Free Meeting Transcriber available from the menu bar."
@@ -683,10 +622,6 @@ msgstr ""
 
 #: src/settings/general/theme.tsx
 msgid "Light"
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "LinkedIn"
 msgstr ""
 
 #: src/settings/ai/stt/select.tsx
@@ -738,14 +673,6 @@ msgstr ""
 msgid "Meetings"
 msgstr "Taro"
 
-#: src/contacts/organization-details.tsx
-msgid "member"
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-msgid "members"
-msgstr ""
-
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Memo"
 msgstr ""
@@ -792,17 +719,8 @@ msgstr ""
 msgid "Move up"
 msgstr ""
 
-#: src/contacts/details.tsx
-#: src/contacts/organization-details.tsx
-msgid "Name"
-msgstr ""
-
 #: src/main/empty.tsx
 msgid "New Note"
-msgstr ""
-
-#: src/contacts/shared.tsx
-msgid "Newest"
 msgstr ""
 
 #: src/session/components/note-input/search/bar.tsx
@@ -850,10 +768,6 @@ msgstr ""
 msgid "No matching languages found"
 msgstr "Ba a sami yarukan da suka dace ba"
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "No matching people"
-msgstr ""
-
 #: src/settings/ai/shared/model-combobox.tsx
 msgid "No models available."
 msgstr ""
@@ -864,18 +778,6 @@ msgstr ""
 
 #: src/shared/open-note-dialog.tsx
 msgid "No notes found."
-msgstr ""
-
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "No people"
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-msgid "No people in this organization"
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "No related notes found"
 msgstr ""
 
 #: src/settings/ai/shared/model-combobox.tsx
@@ -891,10 +793,6 @@ msgstr ""
 msgid "Note breadcrumb"
 msgstr ""
 
-#: src/contacts/details.tsx
-msgid "Notes"
-msgstr ""
-
 #: src/settings/general/index.tsx
 #: src/sidebar/settings.tsx
 msgid "Notifications"
@@ -907,10 +805,6 @@ msgstr ""
 
 #: src/templates/template-icon-picker.tsx
 msgid "Objects"
-msgstr ""
-
-#: src/contacts/shared.tsx
-msgid "Oldest"
 msgstr ""
 
 #: src/settings/todo/permission.tsx
@@ -947,27 +841,13 @@ msgstr ""
 msgid "or"
 msgstr ""
 
-#: src/contacts/details.tsx
-msgid "Organization"
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-msgid "Organization name"
-msgstr ""
-
 #: src/settings/general/timezone.tsx
 msgid "Override the timezone used for the sidebar timeline"
 msgstr ""
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx
 #: src/templates/auto-form.tsx
 msgid "Participants"
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "People"
 msgstr ""
 
 #: src/settings/todo/permission.tsx
@@ -981,10 +861,6 @@ msgstr ""
 
 #: src/onboarding/index.tsx
 msgid "Permissions granted"
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "Phone"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
@@ -1025,10 +901,6 @@ msgstr ""
 
 #: src/session/components/outer-header/index.tsx
 msgid "Record"
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "Related Notes"
 msgstr ""
 
 #: src/settings/todo/provider-content.tsx
@@ -1118,10 +990,6 @@ msgstr ""
 msgid "Save date"
 msgstr ""
 
-#: src/contacts/shared.tsx
-msgid "Search contacts..."
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Search emoji..."
 msgstr ""
@@ -1142,16 +1010,8 @@ msgstr ""
 msgid "Search language..."
 msgstr "Yaren bincike..."
 
-#: src/contacts/details.tsx
-msgid "Search or add company"
-msgstr ""
-
 #: src/settings/ai/shared/model-combobox.tsx
 msgid "Search or create new"
-msgstr ""
-
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Search people"
 msgstr ""
 
 #: src/session/components/note-input/header.tsx
@@ -1181,17 +1041,9 @@ msgstr ""
 msgid "Select a model"
 msgstr ""
 
-#: src/contacts/details.tsx
-msgid "Select a person to view details"
-msgstr ""
-
 #: src/settings/ai/llm/select.tsx
 #: src/settings/ai/stt/select.tsx
 msgid "Select a provider"
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-msgid "Select an organization to view details"
 msgstr ""
 
 #: src/settings/general/theme.tsx
@@ -1212,10 +1064,6 @@ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Send anonymous usage analytics to help improve Free Meeting Transcriber."
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-msgid "Send email"
 msgstr ""
 
 #: src/templates/auto-form.tsx
@@ -1249,20 +1097,20 @@ msgid "Share usage data"
 msgstr "Raba bayanan amfani"
 
 #: src/sidebar/timeline/item.tsx
-msgid "Show All Recurring Events"
-msgstr ""
+#~ msgid "Show All Recurring Events"
+#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Show app in Dock"
 msgstr ""
 
 #: src/sidebar/timeline/index.tsx
-msgid "Show Deleted Events"
-msgstr ""
+#~ msgid "Show Deleted Events"
+#~ msgstr ""
 
 #: src/sidebar/timeline/item.tsx
-msgid "Show Event"
-msgstr ""
+#~ msgid "Show Event"
+#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Show floating bar"
@@ -1282,8 +1130,8 @@ msgid "Show the compact floating control while listening."
 msgstr "Nuna ƙaramin iko mai iyo yayin sauraro."
 
 #: src/sidebar/timeline/item.tsx
-msgid "Show This Event"
-msgstr ""
+#~ msgid "Show This Event"
+#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Show tray icon"
@@ -1297,16 +1145,8 @@ msgstr ""
 msgid "Smileys & People"
 msgstr ""
 
-#: src/contacts/details.tsx
-msgid "Software Engineer"
-msgstr ""
-
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 msgid "Something went wrong while generating the summary."
-msgstr ""
-
-#: src/contacts/shared.tsx
-msgid "Sort options"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
@@ -1318,8 +1158,8 @@ msgid "Start Recording"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-msgid "Start when meeting begins"
-msgstr "Fara lokacin da aka fara taro"
+#~ msgid "Start when meeting begins"
+#~ msgstr "Fara lokacin da aka fara taro"
 
 #: src/onboarding/index.tsx
 msgid "Start with permissions"
@@ -1359,7 +1199,6 @@ msgstr ""
 msgid "Storage Updated"
 msgstr ""
 
-#: src/contacts/details.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Summary"
 msgstr ""
@@ -1438,20 +1277,12 @@ msgstr ""
 msgid "Travel & Places"
 msgstr ""
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Unknown"
-msgstr ""
-
 #: src/session/components/outer-header/metadata/date.tsx
 msgid "Unknown date"
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx
 msgid "Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically."
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-msgid "Unnamed"
 msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
@@ -1462,10 +1293,6 @@ msgstr ""
 #: src/templates/details.tsx
 #: src/templates/sections-editor.tsx
 msgid "Untitled"
-msgstr ""
-
-#: src/contacts/details.tsx
-msgid "Untitled Note"
 msgstr ""
 
 #: src/session/components/floating/options-menu.tsx
@@ -1488,10 +1315,6 @@ msgstr ""
 
 #: src/templates/auto-form.tsx
 msgid "Variables"
-msgstr ""
-
-#: src/contacts/organization-details.tsx
-msgid "View LinkedIn profile"
 msgstr ""
 
 #: src/onboarding/index.tsx

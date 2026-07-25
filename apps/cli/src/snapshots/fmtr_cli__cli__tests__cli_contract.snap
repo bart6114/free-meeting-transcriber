@@ -65,7 +65,7 @@ expression: canonicalize_json(contract)
       ],
       "subcommands": [
         {
-          "about": "List meetings, optionally filtered by text or recurring series",
+          "about": "List meetings, optionally filtered by text",
           "name": "fmtr meetings list",
           "options": [
             {
@@ -73,12 +73,6 @@ expression: canonicalize_json(contract)
               "is_flag": false,
               "required": false,
               "value_name": "QUERY"
-            },
-            {
-              "flags": "--series-id",
-              "is_flag": false,
-              "required": false,
-              "value_name": "SERIES_ID"
             },
             {
               "default": "20",
@@ -103,10 +97,10 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings list [-q] [--series-id] [--limit] [--offset] [-h]"
+          "synopsis": "fmtr meetings list [-q] [--limit] [--offset] [-h]"
         },
         {
-          "about": "Show meeting metadata, notes, summaries, people, and action items",
+          "about": "Show meeting metadata, notes, summaries, and action items",
           "arguments": [
             {
               "name": "ID",
@@ -189,41 +183,6 @@ expression: canonicalize_json(contract)
             }
           ],
           "synopsis": "fmtr meetings transcript [--limit] [--offset] [-h] <id>"
-        },
-        {
-          "about": "List meetings from the same recurring series",
-          "arguments": [
-            {
-              "name": "ID",
-              "required": true
-            }
-          ],
-          "name": "fmtr meetings history",
-          "options": [
-            {
-              "default": "20",
-              "flags": "--limit",
-              "help": "Maximum meetings (1-200)",
-              "is_flag": false,
-              "required": false,
-              "value_name": "LIMIT"
-            },
-            {
-              "default": "0",
-              "flags": "--offset",
-              "help": "Number of meetings to skip",
-              "is_flag": false,
-              "required": false,
-              "value_name": "OFFSET"
-            },
-            {
-              "flags": "-h, --help",
-              "help": "Print help",
-              "is_flag": false,
-              "required": false
-            }
-          ],
-          "synopsis": "fmtr meetings history [--limit] [--offset] [-h] <id>"
         },
         {
           "about": "Export a meeting to Markdown or JSON",

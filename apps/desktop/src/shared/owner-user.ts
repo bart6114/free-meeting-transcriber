@@ -6,19 +6,10 @@ type OwnerUserSqlRow = {
 };
 
 const OWNER_USER_SQL = `
-  SELECT user_id
-  FROM (
-    SELECT owner_user_id AS user_id, updated_at, 0 AS source_priority
-    FROM sessions
-    WHERE owner_user_id <> '' AND deleted_at IS NULL
-
-    UNION ALL
-
-    SELECT id AS user_id, updated_at, 1 AS source_priority
-    FROM humans
-    WHERE id = owner_user_id AND id <> '' AND deleted_at IS NULL
-  )
-  ORDER BY source_priority, updated_at DESC, user_id
+  SELECT owner_user_id AS user_id
+  FROM sessions
+  WHERE owner_user_id <> '' AND deleted_at IS NULL
+  ORDER BY updated_at DESC, owner_user_id
   LIMIT 1
 `;
 

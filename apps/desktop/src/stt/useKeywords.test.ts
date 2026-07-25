@@ -161,8 +161,6 @@ describe("getSessionKeywords", () => {
           description: "Airborne Brothers follow-up",
           location: "Zoom",
         }),
-        participant_names_json: "[]",
-        event_participants_json: "[]",
       },
     ]);
 
@@ -173,39 +171,6 @@ describe("getSessionKeywords", () => {
       }),
     ).resolves.toEqual(expect.arrayContaining(["Vertex", "Launch"]));
   });
-
-  it("prioritizes mapped participants and attached event attendees", async () => {
-    execute.mockResolvedValue([
-      {
-        raw_md: "Discuss #Launch and production systems",
-        title: "Erebor sync",
-        event_json: JSON.stringify({
-          title: "OpenWorld review",
-          description: "Airborne Brothers follow-up",
-          location: "Zoom",
-        }),
-        participant_names_json: JSON.stringify(["Alice Kim"]),
-        event_participants_json: JSON.stringify([
-          { name: "Alice Kim", email: "alice@example.com" },
-          { name: "Mina Park", email: "mina@example.com" },
-          {
-            name: "John Jeong",
-            email: "john@example.com",
-            is_current_user: true,
-          },
-        ]),
-      },
-    ]);
-
-    const result = await getSessionKeywords({
-      sessionId: "session-1",
-      dictionaryTerms: ["Vertex"],
-    });
-
-    expect(result.slice(0, 3)).toEqual(["Alice Kim", "Mina Park", "Vertex"]);
-    expect(result).toEqual(expect.arrayContaining(["Launch"]));
-    expect(result).not.toContain("John Jeong");
-  });
 });
 
 describe("buildKeywords", () => {
@@ -214,8 +179,6 @@ describe("buildKeywords", () => {
       rawMd: "",
       title: "",
       eventJson: "",
-      sessionParticipantTerms: ["Alice Kim"],
-      eventParticipantTerms: ["alice kim", "Mina Park"],
       dictionaryTerms: Array.from(
         { length: 60 },
         (_, index) => `Term ${index}`,
@@ -223,13 +186,7 @@ describe("buildKeywords", () => {
     });
 
     expect(result).toHaveLength(50);
-    expect(result.slice(0, 4)).toEqual([
-      "Alice Kim",
-      "Mina Park",
-      "Term 0",
-      "Term 1",
-    ]);
-    expect(result).not.toContain("alice kim");
+    expect(result.slice(0, 2)).toEqual(["Term 0", "Term 1"]);
   });
 });
 

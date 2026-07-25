@@ -27,10 +27,6 @@ vi.mock("~/sidebar/timeline", () => ({
   ),
 }));
 
-vi.mock("~/sidebar/contacts", () => ({
-  ContactsNav: () => <div data-testid="contacts-nav" />,
-}));
-
 vi.mock("~/sidebar/settings", () => ({
   SettingsNav: () => <div data-testid="settings-nav" />,
 }));
@@ -88,7 +84,6 @@ describe("LeftSidebar", () => {
 
   it.each([
     ["settings", "settings-nav"],
-    ["contacts", "contacts-nav"],
     ["templates", "templates-nav"],
   ])("keeps %s below the window chrome", (type, testId) => {
     mocks.currentTab = { type };

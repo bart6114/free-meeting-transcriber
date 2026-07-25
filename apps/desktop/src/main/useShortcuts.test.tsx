@@ -83,8 +83,6 @@ vi.mock("~/store/zustand/tabs", () => {
     }) => {
       switch (tab.type) {
         case "sessions":
-        case "humans":
-        case "organizations":
         case "task":
         case "daily_summary":
           return `${tab.type}-${tab.id}`;

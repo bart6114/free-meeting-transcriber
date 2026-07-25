@@ -4,10 +4,7 @@ import {
 } from "./audio-retention-policy";
 
 import { liveQueryClient } from "~/db";
-import {
-  cleanupDeletedSessionAudio,
-  deleteLocalSessionAudio,
-} from "~/session/attachments";
+import { deleteLocalSessionAudio } from "~/session/attachments";
 import { listenerStore } from "~/store/zustand/listener/instance";
 
 export const AUDIO_RETENTION_TASK_ID = "audio-retention-cleanup";
@@ -162,42 +159,10 @@ export async function cleanupExpiredAudio(
   return deletedSessionIds;
 }
 
-async function cleanupLogicallyDeletedAudio() {
-  const rows = await liveQueryClient.execute<{ session_id: string }>(`
-    SELECT DISTINCT attachment.session_id
-    FROM session_attachments AS attachment
-    LEFT JOIN attachment_local_state AS local
-      ON local.attachment_id = attachment.id
-    WHERE attachment.source_type = 'session_audio'
-      AND attachment.source_id = 'primary'
-      AND attachment.deleted_at IS NOT NULL
-      AND COALESCE(local.availability, 'present') != 'absent'
-    ORDER BY attachment.session_id
-  `);
-  const deletedSessionIds: string[] = [];
-
-  await Promise.all(
-    rows.map(async ({ session_id: sessionId }) => {
-      if (!isSessionAudioIdle(sessionId)) {
-        return;
-      }
-
-      try {
-        if (
-          await cleanupDeletedSessionAudio(sessionId, () =>
-            isSessionAudioIdle(sessionId),
-          )
-        ) {
-          deletedSessionIds.push(sessionId);
-        }
-      } catch (error) {
-        console.error("[audio-retention] failed to finish audio deletion", {
-          sessionId,
-          error,
-        });
-      }
-    }),
-  );
-
-  return deletedSessionIds;
+// Graceful no-op: `session_attachments`/`attachment_local_state` were
+// dropped in Task 4 (cloudsync/e2ee/workspaces/sharing removal). Audio
+// retention gets rewired to scan `sessions/<id>/audio/` directly in Task 9
+// (Session store scaffold) of the filesystem-first-sessions plan.
+async function cleanupLogicallyDeletedAudio(): Promise<string[]> {
+  return [];
 }

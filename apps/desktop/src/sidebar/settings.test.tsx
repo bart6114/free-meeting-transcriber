@@ -118,8 +118,6 @@ describe("SettingsNav", () => {
       "Notifications",
       "Developers",
       "Permissions",
-      "Context",
-      "Contacts",
       "AI",
       "Transcription",
       "Intelligence",

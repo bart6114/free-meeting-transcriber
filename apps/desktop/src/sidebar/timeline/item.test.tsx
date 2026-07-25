@@ -5,14 +5,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   addDeletion: vi.fn(),
   amplitude: { mic: 0.4, speaker: 0.3 },
-  ignoreEvent: vi.fn(),
   invalidateResource: vi.fn(),
-  isIgnored: vi.fn(() => false),
   openCurrent: vi.fn(),
   openNew: vi.fn(),
   sessionMode: "inactive",
   stop: vi.fn(),
-  getOrCreateSessionForEventId: vi.fn(() => Promise.resolve("session-event")),
   storeTitle: "Live Note",
   nativeContextMenus: [] as Array<
     Array<{
@@ -69,10 +66,6 @@ vi.mock("~/session/hooks/useEnhancedNotes", () => ({
   useIsSessionEnhancing: () => false,
 }));
 
-vi.mock("~/session/queries", () => ({
-  getOrCreateSessionForEventId: mocks.getOrCreateSessionForEventId,
-}));
-
 vi.mock("~/shared/hooks/useNativeContextMenu", () => ({
   useNativeContextMenu: (
     menu: Array<{
@@ -85,16 +78,6 @@ vi.mock("~/shared/hooks/useNativeContextMenu", () => ({
     mocks.nativeContextMenus.push(menu);
     return vi.fn();
   },
-}));
-
-vi.mock("~/calendar/ignored-events", () => ({
-  useIgnoredEvents: () => ({
-    ignoreEvent: mocks.ignoreEvent,
-    ignoreSeries: vi.fn(),
-    isIgnored: mocks.isIgnored,
-    unignoreEvent: vi.fn(),
-    unignoreSeries: vi.fn(),
-  }),
 }));
 
 vi.mock("~/store/zustand/live-title", () => ({
@@ -241,24 +224,22 @@ describe("TimelineItemComponent", () => {
   });
 
   it("highlights an upcoming meeting row", () => {
+    mocks.storeTitle = "Team standup";
     render(
       <TimelineItemComponent
         item={{
-          type: "event",
-          id: "event-standup",
+          type: "session",
+          id: "session-standup",
           data: {
             title: "Team standup",
-            started_at: "2024-01-15T10:30:00.000Z",
-            ended_at: "2024-01-15T11:00:00.000Z",
-            tracking_id_event: "tracking-standup",
-            has_recurrence_rules: false,
+            created_at: "2024-01-15T10:30:00.000Z",
           },
         }}
         precision="time"
         selected={false}
         timezone="UTC"
         multiSelected={false}
-        flatItemKeys={["event-event-standup"]}
+        flatItemKeys={["session-session-standup"]}
         isUpcoming
         upcomingProgress={0.8}
       />,
@@ -286,24 +267,22 @@ describe("TimelineItemComponent", () => {
   });
 
   it("renders a full gauge for an active upcoming meeting row", () => {
+    mocks.storeTitle = "Team standup";
     render(
       <TimelineItemComponent
         item={{
-          type: "event",
-          id: "event-standup",
+          type: "session",
+          id: "session-standup",
           data: {
             title: "Team standup",
-            started_at: "2024-01-15T10:30:00.000Z",
-            ended_at: "2024-01-15T11:00:00.000Z",
-            tracking_id_event: "tracking-standup",
-            has_recurrence_rules: false,
+            created_at: "2024-01-15T10:30:00.000Z",
           },
         }}
         precision="time"
         selected={false}
         timezone="UTC"
         multiSelected={false}
-        flatItemKeys={["event-event-standup"]}
+        flatItemKeys={["session-session-standup"]}
         isUpcoming
         upcomingProgress={1}
       />,
@@ -317,24 +296,22 @@ describe("TimelineItemComponent", () => {
   });
 
   it("does not render an upcoming gauge on non-upcoming rows", () => {
+    mocks.storeTitle = "Team standup";
     render(
       <TimelineItemComponent
         item={{
-          type: "event",
-          id: "event-standup",
+          type: "session",
+          id: "session-standup",
           data: {
             title: "Team standup",
-            started_at: "2024-01-15T10:30:00.000Z",
-            ended_at: "2024-01-15T11:00:00.000Z",
-            tracking_id_event: "tracking-standup",
-            has_recurrence_rules: false,
+            created_at: "2024-01-15T10:30:00.000Z",
           },
         }}
         precision="time"
         selected={false}
         timezone="UTC"
         multiSelected={false}
-        flatItemKeys={["event-event-standup"]}
+        flatItemKeys={["session-session-standup"]}
         upcomingProgress={0.8}
       />,
     );
@@ -345,26 +322,24 @@ describe("TimelineItemComponent", () => {
   });
 
   it("exposes an arbitrary timeline row for visibility checks", () => {
+    mocks.storeTitle = "Team standup";
     const itemNodeRef = vi.fn();
 
     render(
       <TimelineItemComponent
         item={{
-          type: "event",
-          id: "event-standup",
+          type: "session",
+          id: "session-standup",
           data: {
             title: "Team standup",
-            started_at: "2024-01-15T10:30:00.000Z",
-            ended_at: "2024-01-15T11:00:00.000Z",
-            tracking_id_event: "tracking-standup",
-            has_recurrence_rules: false,
+            created_at: "2024-01-15T10:30:00.000Z",
           },
         }}
         precision="time"
         selected={false}
         timezone="UTC"
         multiSelected={false}
-        flatItemKeys={["event-event-standup"]}
+        flatItemKeys={["session-session-standup"]}
         itemNodeRef={itemNodeRef}
       />,
     );
@@ -374,39 +349,6 @@ describe("TimelineItemComponent", () => {
       .closest("button")?.parentElement;
 
     expect(itemNodeRef.mock.calls.some(([node]) => node === row)).toBe(true);
-  });
-
-  it("does not offer a new-tab action for event rows", () => {
-    render(
-      <TimelineItemComponent
-        item={{
-          type: "event",
-          id: "event-standup",
-          data: {
-            title: "Team standup",
-            started_at: "2024-01-15T10:30:00.000Z",
-            ended_at: "2024-01-15T11:00:00.000Z",
-            tracking_id_event: "tracking-standup",
-            has_recurrence_rules: false,
-          },
-        }}
-        precision="time"
-        selected={false}
-        timezone="UTC"
-        multiSelected={false}
-        flatItemKeys={["event-event-standup"]}
-      />,
-    );
-
-    const menu = mocks.nativeContextMenus.find((items) =>
-      items.some((item) => item.id === "ignore"),
-    );
-
-    expect(menu?.map((item) => item.id).filter(Boolean)).toEqual(["ignore"]);
-    expect(menu?.find((item) => item.id === "ignore")).toMatchObject({
-      id: "ignore",
-      text: "Delete Event",
-    });
   });
 
   it("renders finalizing session spinner at the end of the row", () => {

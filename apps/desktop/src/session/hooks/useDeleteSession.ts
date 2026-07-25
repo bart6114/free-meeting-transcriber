@@ -5,7 +5,6 @@ import { useCallback, useEffect } from "react";
 import { getCurrentWebviewWindowLabel } from "@hypr/plugin-windows";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
-import { useIgnoredEvents } from "~/calendar/ignored-events";
 import { trackPendingSoftDelete } from "~/session/pending-soft-deletes";
 import { finalizeSessionDeletion, softDeleteSession } from "~/session/queries";
 import { listenerStore } from "~/store/zustand/listener/instance";
@@ -54,18 +53,16 @@ export function useDeleteSession() {
   const invalidateResource = useTabs((state) => state.invalidateResource);
   const addDeletion = useUndoDelete((state) => state.addDeletion);
   const clearDeletion = useUndoDelete((state) => state.clearDeletion);
-  const { ignoreEvent, unignoreEvent, isIgnored } = useIgnoredEvents();
 
   return useCallback(
     (
       sessionId: string,
       options?: {
-        trackingId?: string | null;
         batchId?: string;
         title?: string;
       },
     ) => {
-      const { trackingId, batchId, title } = options ?? {};
+      const { batchId, title } = options ?? {};
       // A repeat delete would replace the pending tombstone and its finalize
       // callback, then no-op in softDeleteSession and clear the undo toast —
       // leaving the note soft-deleted with no undo.
@@ -87,11 +84,9 @@ export function useDeleteSession() {
       // Optimistic path: hide the row, drop tab history, and show the undo
       // toast before the soft-delete commits; rolled back below on failure.
       const tombstone = new Date().toISOString();
-      const wasIgnored = trackingId ? isIgnored(trackingId, null) : false;
       const hadOpenTab = useTabs
         .getState()
         .tabs.some((tab) => tab.type === "sessions" && tab.id === sessionId);
-      if (trackingId) ignoreEvent(trackingId);
       invalidateResource("sessions", sessionId);
 
       const commit = softDeleteSession(sessionId, tombstone);
@@ -146,9 +141,6 @@ export function useDeleteSession() {
           console.error("[delete-session] failed to finish deletion", error);
           if (!didDelete) {
             if (isMainWindow) clearOptimisticDeletion();
-            // Only undo the optimistic ignore; a pre-existing ignore must
-            // survive a failed delete.
-            if (trackingId && !wasIgnored) unignoreEvent(trackingId);
             if (hadOpenTab) {
               useTabs
                 .getState()
@@ -168,14 +160,7 @@ export function useDeleteSession() {
         }
       })();
     },
-    [
-      ignoreEvent,
-      unignoreEvent,
-      isIgnored,
-      invalidateResource,
-      addDeletion,
-      clearDeletion,
-    ],
+    [invalidateResource, addDeletion, clearDeletion],
   );
 }
 

@@ -71,7 +71,6 @@ async fn schema_check(db: &hypr_db_core::Db) -> std::result::Result<(), String> 
         hypr_db_app::get_session(db.pool(), "__fmtr_doctor__"),
         hypr_db_app::list_session_documents(db.pool(), "__fmtr_doctor__"),
         hypr_db_app::list_session_transcripts(db.pool(), "__fmtr_doctor__"),
-        hypr_db_app::list_session_participants(db.pool(), "__fmtr_doctor__"),
         hypr_db_app::list_session_action_items(db.pool(), "__fmtr_doctor__"),
     )
     .map(|_| ())

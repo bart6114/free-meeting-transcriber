@@ -8,7 +8,6 @@ fmtr --json meetings list --query "planning" --limit 20 --offset 0
 fmtr --json meetings get MEETING_ID
 fmtr --json meetings note MEETING_ID --kind note
 fmtr --json meetings note MEETING_ID --kind summary
-fmtr --json meetings history MEETING_ID --limit 20 --offset 0
 ```
 
 `doctor` exits with status 1 when its response contains `ready: false`.

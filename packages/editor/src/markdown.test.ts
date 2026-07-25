@@ -690,6 +690,59 @@ Some text.`;
     expect(json.content![1].content).toBeUndefined();
     expect(json.content![2].content?.[0]?.text).toBe("hello");
   });
+
+  // Pins the exact round-trip this app's note-save path relies on
+  // (`_memo.md` -> md2json -> editor model -> json2md -> `_memo.md`,
+  // see raw.tsx's persistChange / useSessionRawMd): a memo covering
+  // headings, bold, lists, and a code fence must serialize back to
+  // byte-identical markdown, or an external edit to `_memo.md` would be
+  // needlessly rewritten (and diffed/churned by sync tooling) on the very
+  // next save with no user-visible change.
+  test("memo fixture with headings, bold, lists, and a code fence round-trips byte-identically", () => {
+    const memo = [
+      "# Meeting Notes",
+      "",
+      "This paragraph has **bold** text for emphasis.",
+      "",
+      "- First item",
+      "- Second item",
+      "- Third item",
+      "",
+      "```js",
+      'console.log("hello");',
+      "```",
+    ].join("\n");
+
+    // json2md's bulletList renderer (state.renderList) inserts a blank line between every
+    // item -- a pinned normalization, not a bug: tight ("- a\n- b") and loose ("- a\n\n- b")
+    // lists parse to the identical JSON, so this is a one-time reformat on first save, not
+    // something that re-churns on every subsequent save (see the second assertion below).
+    const expectedSerialized = [
+      "# Meeting Notes",
+      "",
+      "This paragraph has **bold** text for emphasis.",
+      "",
+      "- First item",
+      "",
+      "- Second item",
+      "",
+      "- Third item",
+      "",
+      "```js",
+      'console.log("hello");',
+      "```",
+    ].join("\n");
+
+    const json1 = md2json(memo);
+    const serialized = json2md(json1);
+
+    expect(serialized).toBe(expectedSerialized);
+
+    // A second parse/serialize pass must converge on the exact same markdown -- once
+    // reformatted, the file is stable and further saves don't keep rewriting it.
+    const roundTripped = json2md(md2json(serialized));
+    expect(roundTripped).toBe(serialized);
+  });
 });
 
 describe("isValidContent", () => {

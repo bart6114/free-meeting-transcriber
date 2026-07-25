@@ -1,7 +1,7 @@
 import type { EditorView } from "prosemirror-view";
 import { forwardRef, useCallback, useMemo, useRef } from "react";
 
-import { parseJsonContent } from "@hypr/editor/markdown";
+import { json2md, parseJsonContent } from "@hypr/editor/markdown";
 import {
   NoteEditor,
   type JSONContent,
@@ -9,6 +9,7 @@ import {
   normalizePortableAttachmentUrls,
 } from "@hypr/editor/note";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
+import { sonnerToast } from "@hypr/ui/components/ui/toast";
 import { cn } from "@hypr/utils";
 
 import { AudioDropTarget } from "./audio-drop-target";
@@ -28,6 +29,7 @@ import {
   extractFirstLineTitle,
   documentTitlePlaceholder,
 } from "~/session/title-content";
+import { commands } from "~/types/tauri.gen";
 
 const extraNodeViews = { appLink: AppLinkView, session: SessionNodeView };
 
@@ -69,17 +71,27 @@ export const RawEditor = forwardRef<
     );
 
     const persistChange = useCallback(
-      (input: JSONContent) => {
+      async (input: JSONContent) => {
         const portableInput = normalizePortableAttachmentUrls(input);
         const title = extractFirstLineTitle(portableInput);
-        return updateSession({
-          raw_md: JSON.stringify(portableInput),
-          ...(title !== null || hasStoredNoteContent(rawMd)
-            ? { title: title ?? "" }
-            : {}),
-        });
+
+        const titleWrite =
+          title !== null || hasStoredNoteContent(rawMd)
+            ? updateSession({ title: title ?? "" })
+            : Promise.resolve();
+
+        const markdown = json2md(portableInput);
+        const noteWrite = commands
+          .sessionWriteNote(sessionId, markdown)
+          .then((result) => {
+            if (result.status === "error") {
+              throw new Error(result.error);
+            }
+          });
+
+        await Promise.all([titleWrite, noteWrite]);
       },
-      [rawMd, updateSession],
+      [rawMd, sessionId, updateSession],
     );
 
     const hasTrackedWriteRef = useRef(false);
@@ -100,6 +112,9 @@ export const RawEditor = forwardRef<
       (input: JSONContent) => {
         void persistChange(input).catch((error) => {
           console.error("[raw-editor] failed to persist note", error);
+          sonnerToast.error(`Note is NOT being saved: ${error}`, {
+            id: `note-save-failed:${sessionId}`,
+          });
         });
 
         if (!hasTrackedWriteRef.current) {
@@ -110,7 +125,7 @@ export const RawEditor = forwardRef<
           }
         }
       },
-      [persistChange, hasNonEmptyText],
+      [persistChange, hasNonEmptyText, sessionId],
     );
 
     const mentionConfig = useMentionConfig();

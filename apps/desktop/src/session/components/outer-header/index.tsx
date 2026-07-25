@@ -1,30 +1,15 @@
 import { useLingui } from "@lingui/react/macro";
-import {
-  ChevronDownIcon,
-  HeadsetIcon,
-  SquareIcon,
-  VideoIcon,
-} from "lucide-react";
+import { ChevronDownIcon, SquareIcon } from "lucide-react";
 import { useCallback } from "react";
 
-import { commands as openerCommands } from "@hypr/plugin-opener2";
-import { cn, safeParseDate } from "@hypr/utils";
+import { cn } from "@hypr/utils";
 
 import { RecordingIcon, useHasTranscript } from "../shared";
 import { MetadataButton } from "./metadata";
 import { OverflowButton } from "./overflow";
 
 import { useAudioPlayer } from "~/audio-player";
-import { useNow } from "~/calendar/hooks";
 import { useShell } from "~/contexts/shell";
-import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
-import { useEventCountdown } from "~/session/hooks/useEventCountdown";
-import {
-  getRemoteMeeting,
-  type RemoteMeeting,
-} from "~/session/hooks/useRemoteMeeting";
-import { useSessionEvent } from "~/session/hooks/useSessionEvent";
-import { useConfigValue } from "~/shared/config";
 import type { EditorView } from "~/store/zustand/tabs/schema";
 import { useListener } from "~/stt/contexts";
 import { useStartListening } from "~/stt/useStartListening";
@@ -107,53 +92,11 @@ function HeaderMeetingControl({
   sessionId: string;
   sessionMode: string;
 }) {
-  const sessionEvent = useSessionEvent(sessionId);
-  const now = useNow();
-
-  return (
-    <HeaderMeetingActionPill
-      sessionId={sessionId}
-      event={sessionEvent}
-      now={now}
-      sessionMode={sessionMode}
-    />
-  );
-}
-
-function HeaderMeetingActionPill({
-  sessionId,
-  event,
-  now,
-  sessionMode,
-}: {
-  sessionId: string;
-  event: {
-    ended_at?: string;
-    meeting_link?: string;
-    tracking_id?: string;
-  } | null;
-  now: Date;
-  sessionMode: string;
-}) {
   const startListening = useStartListening(sessionId);
-  const { canStartLiveSession, stop, stopTranscription } = useListener(
-    (state) => ({
-      canStartLiveSession: state.canStartLiveSession(sessionId),
-      stop: state.stop,
-      stopTranscription: state.stopTranscription,
-    }),
-  );
-  const autoJoinScheduledMeetings = useConfigValue(
-    "auto_join_scheduled_meetings",
-  );
-  const autoStartScheduledMeetings = useConfigValue(
-    "auto_start_scheduled_meetings",
-  );
-  const isWelcomeNote = event?.tracking_id === WELCOME_NOTE_TRACKING_ID;
-  const remote = getRemoteMeeting(isWelcomeNote ? null : event?.meeting_link);
-  const meetingLink = (remote ? event?.meeting_link : null) || null;
-  const endedAt = event?.ended_at ? safeParseDate(event.ended_at) : null;
-  const ended = !!endedAt && endedAt.getTime() <= now.getTime();
+  const { stop, stopTranscription } = useListener((state) => ({
+    stop: state.stop,
+    stopTranscription: state.stopTranscription,
+  }));
   const hasTranscript = useHasTranscript(sessionId);
   const { audioExists } = useAudioPlayer();
   const canResume = audioExists || hasTranscript;
@@ -166,25 +109,6 @@ function HeaderMeetingActionPill({
 
     void startListening();
   }, [sessionId, startListening]);
-  const handleCountdownExpire = useCallback(() => {
-    if (!autoStartScheduledMeetings || !canStartLiveSession) {
-      return;
-    }
-
-    if (autoJoinScheduledMeetings && meetingLink) {
-      void openerCommands.openUrl(meetingLink, null);
-    }
-    start();
-  }, [
-    autoJoinScheduledMeetings,
-    autoStartScheduledMeetings,
-    canStartLiveSession,
-    meetingLink,
-    start,
-  ]);
-  const countdown = useEventCountdown(sessionId, {
-    onExpire: handleCountdownExpire,
-  });
   const stopListening = useCallback(() => {
     if (!isMainWebviewWindow()) {
       void requestMainListenerControl("stop", sessionId);
@@ -214,27 +138,6 @@ function HeaderMeetingActionPill({
       };
     }
 
-    if (meetingLink && !ended) {
-      return {
-        label: t`Join & record`,
-        title: t`Join meeting and record`,
-        icon: remote ? getMeetingDisplay(remote.type).icon : undefined,
-        onClick: () => {
-          void openerCommands.openUrl(meetingLink, null);
-          start();
-        },
-      };
-    }
-
-    if (ended) {
-      return {
-        label: t`Resume`,
-        title: t`Resume listening`,
-        icon: <RecordingIcon />,
-        onClick: start,
-      };
-    }
-
     return {
       label: canResume ? t`Resume` : t`Record`,
       title: canResume ? t`Resume listening` : t`Record`,
@@ -243,22 +146,9 @@ function HeaderMeetingActionPill({
     };
   })();
   const disabled = sessionMode === "finalizing";
-  const showCountdown =
-    Boolean(countdown.label) &&
-    sessionMode !== "active" &&
-    sessionMode !== "running_batch" &&
-    sessionMode !== "finalizing";
 
   return (
     <div className="mr-1 flex min-w-0 shrink-0 items-center gap-2">
-      {showCountdown ? (
-        <div
-          data-header-meeting-countdown
-          className="text-muted-foreground timecode max-w-40 truncate whitespace-nowrap"
-        >
-          {countdown.label}
-        </div>
-      ) : null}
       <div className="border-border bg-card text-foreground flex h-7 max-w-56 shrink-0 items-center overflow-hidden rounded-md border">
         <button
           type="button"
@@ -298,39 +188,4 @@ function HeaderMeetingActionPill({
       </div>
     </div>
   );
-}
-
-function getMeetingDisplay(type: RemoteMeeting["type"]) {
-  switch (type) {
-    case "zoom":
-      return {
-        name: "Zoom",
-        icon: <img src="/assets/zoom.png" alt="" width={18} height={18} />,
-      };
-    case "google-meet":
-      return {
-        name: "Meet",
-        icon: <img src="/assets/meet.png" alt="" width={18} height={18} />,
-      };
-    case "webex":
-      return {
-        name: "Webex",
-        icon: <img src="/assets/webex.png" alt="" width={18} height={18} />,
-      };
-    case "teams":
-      return {
-        name: "Teams",
-        icon: <img src="/assets/teams.png" alt="" width={18} height={18} />,
-      };
-    case "cal-com":
-      return {
-        name: "Cal.com",
-        icon: <VideoIcon size={18} />,
-      };
-    default:
-      return {
-        name: "Meeting",
-        icon: <HeadsetIcon size={18} />,
-      };
-  }
 }

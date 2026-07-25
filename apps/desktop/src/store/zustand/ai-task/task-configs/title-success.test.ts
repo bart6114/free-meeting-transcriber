@@ -9,6 +9,16 @@ import { useLiveTitle } from "~/store/zustand/live-title";
 const mocks = vi.hoisted(() => ({
   loadSessionContentSnapshot: vi.fn(),
   applyGeneratedSessionTitle: vi.fn().mockResolvedValue(undefined),
+  sessionReadNote: vi.fn(
+    (): Promise<
+      { status: "ok"; data: string | null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: "Raw note" }),
+  ),
+  sessionWriteNote: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
 }));
 
 vi.mock("~/session/content-queries", () => ({
@@ -17,6 +27,13 @@ vi.mock("~/session/content-queries", () => ({
 
 vi.mock("~/session/content-mutations", () => ({
   applyGeneratedSessionTitle: mocks.applyGeneratedSessionTitle,
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionReadNote: mocks.sessionReadNote,
+    sessionWriteNote: mocks.sessionWriteNote,
+  },
 }));
 
 type TitleSuccessParams = Parameters<
@@ -73,9 +90,11 @@ describe("titleSuccess.onSuccess", () => {
     useLiveTitle.setState({ titles: {} });
     mocks.loadSessionContentSnapshot.mockResolvedValue(createSnapshot());
     mocks.applyGeneratedSessionTitle.mockResolvedValue(undefined);
+    mocks.sessionReadNote.mockResolvedValue({ status: "ok", data: "Raw note" });
+    mocks.sessionWriteNote.mockResolvedValue({ status: "ok", data: null });
   });
 
-  it("persists a trimmed title and all titled documents atomically", async () => {
+  it("persists a trimmed title, the enhanced-note documents via SQL, and the raw note file-first", async () => {
     await titleSuccess.onSuccess?.(createParams({ text: "  Weekly sync  " }));
 
     expect(mocks.applyGeneratedSessionTitle).toHaveBeenCalledWith({
@@ -84,12 +103,6 @@ describe("titleSuccess.onSuccess", () => {
       nextTitle: "Weekly sync",
       documents: [
         expect.objectContaining({
-          id: "session-1",
-          currentContent: "Raw note",
-          currentContentFormat: "markdown",
-          nextContent: expect.stringContaining("Weekly sync"),
-        }),
-        expect.objectContaining({
           id: "note-1",
           currentContent: "# Summary section",
           currentContentFormat: "markdown",
@@ -97,6 +110,47 @@ describe("titleSuccess.onSuccess", () => {
         }),
       ],
     });
+
+    // The raw note is stamped separately: fresh read, CAS-compare to the snapshot, write.
+    expect(mocks.sessionReadNote).toHaveBeenCalledWith("session-1");
+    expect(mocks.sessionWriteNote).toHaveBeenCalledWith(
+      "session-1",
+      expect.stringContaining("Weekly sync"),
+    );
+  });
+
+  it("skips the raw note stamp when the file changed since the snapshot was taken", async () => {
+    mocks.sessionReadNote.mockResolvedValue({
+      status: "ok",
+      data: "Someone else's edit",
+    });
+
+    await titleSuccess.onSuccess?.(createParams({ text: "Weekly sync" }));
+
+    expect(mocks.applyGeneratedSessionTitle).toHaveBeenCalled();
+    expect(mocks.sessionWriteNote).not.toHaveBeenCalled();
+  });
+
+  it("skips the raw note stamp when the note file does not exist yet", async () => {
+    mocks.sessionReadNote.mockResolvedValue({ status: "ok", data: null });
+
+    await titleSuccess.onSuccess?.(createParams({ text: "Weekly sync" }));
+
+    expect(mocks.sessionWriteNote).not.toHaveBeenCalled();
+  });
+
+  it("does not let a failed note read block the title/summary transaction", async () => {
+    mocks.sessionReadNote.mockResolvedValue({
+      status: "error",
+      error: "disk error",
+    });
+
+    await expect(
+      titleSuccess.onSuccess?.(createParams({ text: "Weekly sync" })),
+    ).resolves.toBeUndefined();
+
+    expect(mocks.applyGeneratedSessionTitle).toHaveBeenCalled();
+    expect(mocks.sessionWriteNote).not.toHaveBeenCalled();
   });
 
   it("does not overwrite an existing session title", async () => {

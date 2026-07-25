@@ -11,7 +11,6 @@ import {
   LockIcon,
   SparklesIcon,
   type LucideIcon,
-  UsersIcon,
 } from "lucide-react";
 import { useCallback } from "react";
 
@@ -25,7 +24,7 @@ import { AUTO_TEMPLATE_ID, useOpenTemplatesTab } from "~/templates";
 type SettingsNavItem =
   | { id: SettingsTab; label: string; icon: LucideIcon }
   | {
-      action: "open-templates" | "open-contacts";
+      action: "open-templates";
       label: string;
       icon: LucideIcon;
     };
@@ -35,7 +34,6 @@ type SettingsNavGroup = { label: string; items: SettingsNavItem[] };
 export function SettingsNav() {
   const { t } = useLingui();
   const currentTab = useTabs((state) => state.currentTab);
-  const openNew = useTabs((state) => state.openNew);
   const updateSettingsTabState = useTabs(
     (state) => state.updateSettingsTabState,
   );
@@ -62,10 +60,6 @@ export function SettingsNav() {
     });
   }, [openTemplatesTab]);
 
-  const handleOpenContacts = useCallback(() => {
-    openNew({ type: "contacts", state: { selected: null } });
-  }, [openNew]);
-
   const groups: SettingsNavGroup[] = [
     {
       label: t`General`,
@@ -73,16 +67,6 @@ export function SettingsNav() {
         { id: "app", label: t`App`, icon: CogIcon },
         { id: "notifications", label: t`Notifications`, icon: BellIcon },
         { id: "developers", label: t`Developers`, icon: Code2Icon },
-      ],
-    },
-    {
-      label: t`Context`,
-      items: [
-        {
-          action: "open-contacts",
-          label: t`Contacts`,
-          icon: UsersIcon,
-        },
       ],
     },
     {
@@ -130,11 +114,7 @@ export function SettingsNav() {
                     key={isSettingsItem ? item.id : item.action}
                     onClick={() => {
                       if (!isSettingsItem) {
-                        if (item.action === "open-templates") {
-                          handleOpenTemplates();
-                        } else {
-                          handleOpenContacts();
-                        }
+                        handleOpenTemplates();
                         return;
                       }
 

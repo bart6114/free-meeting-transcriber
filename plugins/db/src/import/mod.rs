@@ -300,6 +300,11 @@ pub async fn import_paths(
     })
 }
 
+// The db plugin's `setup()` no longer calls this at startup (Task 10 replaced
+// it with the desktop crate's `SessionStore::rebuild_index`) — kept, along
+// with the rest of this module, until Task 13 deletes the vault-to-DB
+// reconcile machinery entirely.
+#[allow(dead_code)]
 pub async fn import_legacy_data<R: tauri::Runtime>(
     app: &tauri::AppHandle<R>,
     pool: &SqlitePool,
@@ -319,6 +324,10 @@ pub async fn import_legacy_data<R: tauri::Runtime>(
     }
 }
 
+// Its only production caller was the CloudSync startup gate, removed with
+// CloudSync itself in Task 4 — kept as a `parity_verified` assertion helper
+// for the legacy-import test suite below.
+#[allow(dead_code)]
 pub(crate) async fn legacy_migration_verified(pool: &SqlitePool) -> Result<bool, sqlx::Error> {
     sqlx::query_scalar(
         "SELECT EXISTS(
@@ -740,6 +749,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "exercises legacy vault machinery removed in Task 13; backing tables dropped in Task 3"]
     async fn stale_snapshots_for_preexisting_sqlite_domains_do_not_block_cutover() {
         let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
         hypr_db_app::prepare_schema(&db).await.unwrap();

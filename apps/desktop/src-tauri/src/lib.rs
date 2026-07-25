@@ -5,18 +5,19 @@ mod db;
 mod embedded_cli;
 mod ext;
 mod search_index;
+mod session_store;
 mod store;
 mod supervisor;
 mod vault_export;
 mod vault_watch;
 
-use db::{cloudsync_runtime_config_from_env, open_desktop_db};
+use db::open_desktop_db;
 use ext::*;
 use store::*;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use tauri::Emitter;
+use tauri::{Emitter, Manager};
 use tauri_plugin_permissions::{Permission, PermissionsPluginExt};
 use tauri_plugin_windows::{AppWindow, WindowsPluginExt};
 
@@ -58,6 +59,61 @@ fn create_audio_provider(_bundle_id: &str) -> std::sync::Arc<dyn hypr_audio_actu
     std::sync::Arc::new(hypr_audio_actual::ActualAudio)
 }
 
+const FOCUS_RESCAN_MIN_INTERVAL: std::time::Duration = std::time::Duration::from_secs(5);
+static FOCUS_RESCAN_LAST: std::sync::Mutex<Option<std::time::Instant>> =
+    std::sync::Mutex::new(None);
+
+/// Wraps `tauri_plugin_windows::on_window_event` with a throttled session-index rescan:
+/// regaining window focus is a good proxy for "a vault file may have changed outside the
+/// app" (Finder rename, Obsidian, a synced editor, another device), so treat it like the
+/// watcher's `refresh_session` but for the whole vault, at most once per
+/// `FOCUS_RESCAN_MIN_INTERVAL`. The rescan itself never blocks the window event handler --
+/// it's fired into the background via `tokio::spawn`.
+fn on_window_event(window: &tauri::Window<tauri::Wry>, event: &tauri::WindowEvent) {
+    tauri_plugin_windows::on_window_event(window, event);
+
+    if !matches!(event, tauri::WindowEvent::Focused(true)) {
+        return;
+    }
+
+    // Checked before the throttle: a focus event that can't actually rescan (store not yet
+    // managed -- e.g. a very early focus during startup, or `vault_base` failed to resolve)
+    // must not burn the throttle window, or it'd suppress the *next*, genuinely actionable
+    // focus event for up to `FOCUS_RESCAN_MIN_INTERVAL` for no reason.
+    let Some(store) = window
+        .app_handle()
+        .try_state::<std::sync::Arc<session_store::SessionStore>>()
+    else {
+        return;
+    };
+    let store = store.inner().clone();
+
+    let now = std::time::Instant::now();
+    {
+        let mut last = FOCUS_RESCAN_LAST.lock().unwrap();
+        if last.is_some_and(|prev| now.duration_since(prev) < FOCUS_RESCAN_MIN_INTERVAL) {
+            return;
+        }
+        *last = Some(now);
+    }
+
+    tokio::spawn(async move {
+        match store.rebuild_index().await {
+            Ok(report) if !report.errors.is_empty() || !report.ghost_sessions.is_empty() => {
+                tracing::warn!(
+                    error_count = report.errors.len(),
+                    errors = ?report.errors,
+                    ghost_session_count = report.ghost_sessions.len(),
+                    ghost_sessions = ?report.ghost_sessions,
+                    "focus rescan found issues"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => tracing::error!(%error, "focus rescan failed"),
+        }
+    });
+}
+
 #[tokio::main]
 pub async fn main() {
     tauri::async_runtime::set(tokio::runtime::Handle::current());
@@ -73,13 +129,6 @@ pub async fn main() {
         create_audio_provider(&context.config().identifier);
 
     let db = open_desktop_db(&context.config().identifier).await;
-    let cloudsync_config = match cloudsync_runtime_config_from_env() {
-        Ok(config) => config,
-        Err(error) => {
-            tracing::warn!(%error, "invalid CloudSync environment configuration; CloudSync disabled");
-            None
-        }
-    };
 
     let mut builder = tauri_plugin_windows::extend_builder(tauri::Builder::default())
         .manage(audio)
@@ -106,10 +155,7 @@ pub async fn main() {
         .plugin(tauri_plugin_tracing::init())
         .plugin(tauri_plugin_analytics::init())
         .plugin(tauri_plugin_agent::init())
-        .plugin(tauri_plugin_db::init_with_cloudsync(
-            db.clone(),
-            cloudsync_config,
-        ))
+        .plugin(tauri_plugin_db::init(db.clone()))
         .plugin(tauri_plugin_bedrock::init());
 
     #[cfg(target_os = "macos")]
@@ -188,7 +234,7 @@ pub async fn main() {
 
     let app_result = builder
         .invoke_handler(specta_builder.invoke_handler())
-        .on_window_event(tauri_plugin_windows::on_window_event)
+        .on_window_event(on_window_event)
         .setup(move |app| {
             let app_handle = app.handle().clone();
 
@@ -237,6 +283,77 @@ pub async fn main() {
                 }
             }
 
+            {
+                use tauri_plugin_settings::SettingsPluginExt;
+                match app_handle.settings().vault_base() {
+                    Ok(base) => {
+                        // Task 12: drains the *old* DB-to-vault export
+                        // machinery one final time, repairing any
+                        // `transcripts.words_json` row the historical
+                        // int/float round-trip bug left unexported, before
+                        // this run's `rebuild_index` indexes whatever's on
+                        // disk. Gated by a marker file so it only ever runs
+                        // once per vault; `block_on` for the same reason
+                        // `rebuild_index` below is blocked on -- the UI must
+                        // not proceed until the vault reflects every row the
+                        // DB still has that files don't yet.
+                        match hypr_tauri_utils::block_on(session_store::migrate::run_once(
+                            &app_handle,
+                            db.pool(),
+                            base.as_std_path(),
+                        )) {
+                            Ok(report) => {
+                                tracing::info!(
+                                    skipped_marker_present = report.skipped_marker_present,
+                                    repaired_words_json = report.repaired_words_json,
+                                    unparseable_words_json_count = report.unparseable_words_json.len(),
+                                    drain_passes = report.drain_passes,
+                                    export_error_count = report.export_errors.len(),
+                                    export_errors = ?report.export_errors,
+                                    "one-time final export sweep complete"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("one-time final export sweep failed: {}", e);
+                            }
+                        }
+
+                        let store = std::sync::Arc::new(session_store::SessionStore::new(
+                            base.as_std_path().to_path_buf(),
+                            db.pool().clone(),
+                        ));
+                        app_handle.manage(store.clone());
+
+                        // Replaces the old `sync_from_vault` reconcile (formerly run
+                        // synchronously inside `tauri_plugin_db::init`'s own `setup()`):
+                        // files are the source of truth, so every startup rebuilds the
+                        // sessions/session_documents/transcripts index from what's on disk
+                        // before the UI proceeds. `block_on` mirrors how the old call
+                        // blocked setup on the reconcile finishing.
+                        match hypr_tauri_utils::block_on(store.rebuild_index()) {
+                            Ok(report) => {
+                                tracing::info!(
+                                    sessions = report.sessions,
+                                    notes = report.notes,
+                                    transcripts = report.transcripts,
+                                    error_count = report.errors.len(),
+                                    errors = ?report.errors,
+                                    ghost_session_count = report.ghost_sessions.len(),
+                                    ghost_sessions = ?report.ghost_sessions,
+                                    "startup session index rebuild complete"
+                                );
+                            }
+                            Err(e) => {
+                                tracing::error!("startup session index rebuild failed: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        tracing::error!("failed to resolve vault_base for session_store: {}", e);
+                    }
+                }
+            }
+
             if let (Some(ctx), Some(handle)) = (&root_supervisor_ctx, root_supervisor_handle) {
                 supervisor::monitor_supervisor(handle, ctx.is_exiting.clone(), app_handle.clone());
             }
@@ -249,24 +366,21 @@ pub async fn main() {
             }
 
             search_index::spawn(app_handle.clone(), db.clone());
-            // Spawned after `search_index`; both start here in the app-level
-            // `setup()` closure, which Tauri runs only after every plugin's
-            // own `setup()` — including `tauri_plugin_db::init_with_cloudsync`,
-            // whose `setup()` runs `sync_from_vault` synchronously
-            // (`import::import_legacy_data` via `hypr_tauri_utils::block_on`).
-            // So the vault-to-DB reconcile is always complete before this
-            // DB-to-vault mirror starts draining — reconcile first, mirror
-            // second. See `vault_export.rs`'s module doc for the full
-            // loop-prevention analysis.
+            // Spawned after `search_index`, both after the session-store block above:
+            // that block's `hypr_tauri_utils::block_on(store.rebuild_index())` has
+            // already finished by this point in the same `setup()` closure, so the
+            // files-to-index rebuild is always complete before this DB-to-vault mirror
+            // starts draining — reconcile first, mirror second. See `vault_export.rs`'s
+            // module doc for the full loop-prevention analysis.
             vault_export::spawn(app_handle.clone(), db.clone());
             // Spawned last, after both the startup reconcile (above, via the
-            // db plugin's own `setup()`) and the export worker: an external
-            // edit's import only needs to account for vault state from here
-            // on, since everything the vault held (or the export worker had
-            // queued) at launch is already reconciled. See
-            // `vault_watch.rs`'s module doc for the full ordering + loop
-            // prevention rationale.
-            vault_watch::spawn(app_handle, db.clone());
+            // session-store block) and the export worker: an external edit's refresh
+            // only needs to account for vault state from here on, since everything the
+            // vault held (or the export worker had queued) at launch is already
+            // reconciled. Relies on the session-store block above having already
+            // `.manage()`d the `Arc<SessionStore>` this looks up. See `vault_watch.rs`'s
+            // module doc for the full ordering + loop prevention rationale.
+            vault_watch::spawn(app_handle);
 
             Ok(())
         })
@@ -420,6 +534,19 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::check_embedded_cli::<tauri::Wry>,
             commands::install_embedded_cli::<tauri::Wry>,
             vault_export::export_vault_now::<tauri::Wry>,
+            session_store::commands::session_write_meta::<tauri::Wry>,
+            session_store::commands::session_write_note::<tauri::Wry>,
+            session_store::commands::session_read_note::<tauri::Wry>,
+            session_store::commands::session_write_document::<tauri::Wry>,
+            session_store::commands::session_append_transcript::<tauri::Wry>,
+            session_store::commands::session_flush_transcript::<tauri::Wry>,
+            session_store::commands::session_write_transcript::<tauri::Wry>,
+            session_store::commands::session_delete::<tauri::Wry>,
+            session_store::commands::session_restore::<tauri::Wry>,
+            session_store::commands::session_rebuild_index::<tauri::Wry>,
+            session_store::commands::session_store_audio::<tauri::Wry>,
+            session_store::commands::session_list_audio::<tauri::Wry>,
+            session_store::commands::session_delete_audio::<tauri::Wry>,
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }

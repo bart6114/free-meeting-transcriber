@@ -8,8 +8,6 @@ import {
   getCurrentWebviewWindowLabel,
 } from "@hypr/plugin-windows";
 
-import { useDevtoolsUserId } from "~/devtools-panel/hooks";
-import { createSession, updateSession } from "~/session/queries";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import {
   type DevtoolsOtaPreviewStatus,
@@ -44,10 +42,6 @@ type DevtoolsPanelAction =
   | "notifications:auto-stop"
   | "notifications:batch-done"
   | "notifications:clear"
-  | "countdown:note-60"
-  | "countdown:note-300"
-  | "countdown:zoom-60"
-  | "countdown:zoom-300"
   | "panel:opened"
   | "panel:closed"
   | "error:trigger";
@@ -124,7 +118,6 @@ function DevtoolsFloatingPanelSync() {
 
 function useDevtoolsPanelActions() {
   const openNew = useTabs((s) => s.openNew);
-  const user_id = useDevtoolsUserId();
   const showToastPreview = useDevtoolsToastPreview(
     (state) => state.showPreview,
   );
@@ -178,7 +171,6 @@ function useDevtoolsPanelActions() {
         type: "mic_detected",
         app_names: ["Zoom"],
         app_ids: ["us.zoom.xos"],
-        event_ids: [],
       },
       start_time: null,
       participants: null,
@@ -194,14 +186,13 @@ function useDevtoolsPanelActions() {
   const showMicOptionsNotification = useCallback(async () => {
     await notificationCommands.showNotification({
       key: `devtool-mic-options-${crypto.randomUUID()}`,
-      title: "Are you in Design sync right now?",
+      title: "Are you in a meeting?",
       message: "",
       timeout: { secs: 15, nanos: 0 },
       source: {
         type: "mic_detected",
         app_names: ["Zoom", "Google Chrome"],
         app_ids: ["us.zoom.xos", "com.google.Chrome"],
-        event_ids: ["devtool-event-1"],
       },
       start_time: null,
       participants: null,
@@ -239,40 +230,6 @@ function useDevtoolsPanelActions() {
       icon: { type: "bundle_id", bundle_id: "com.google.Chrome" },
     });
   }, []);
-
-  const createWithCountdown = useCallback(
-    async (seconds: number, meetingLink?: string) => {
-      if (!user_id) {
-        return;
-      }
-
-      const started_at = new Date(Date.now() + seconds * 1000).toISOString();
-      const event_json = JSON.stringify({
-        tracking_id: "devtool-test",
-        calendar_id: "devtool-test",
-        title: "Test Meeting",
-        started_at,
-        ended_at: new Date(
-          Date.now() + seconds * 1000 + 30 * 60 * 1000,
-        ).toISOString(),
-        is_all_day: false,
-        has_recurrence_rules: false,
-        ...(meetingLink ? { meeting_link: meetingLink } : {}),
-      });
-
-      const sessionId = await createSession(
-        meetingLink ? "Countdown Test (Zoom)" : "Countdown Test",
-        user_id,
-      );
-      await updateSession(sessionId, {
-        created_at: new Date().toISOString(),
-        event_json,
-      });
-
-      openNew({ type: "sessions", id: sessionId });
-    },
-    [openNew, user_id],
-  );
 
   const handleAction = useCallback(
     (action: string) => {
@@ -325,18 +282,6 @@ function useDevtoolsPanelActions() {
         case "notifications:clear":
           void clearNotifications();
           return;
-        case "countdown:note-60":
-          void createWithCountdown(60);
-          return;
-        case "countdown:note-300":
-          void createWithCountdown(300);
-          return;
-        case "countdown:zoom-60":
-          void createWithCountdown(60, "https://zoom.us/j/1234567890");
-          return;
-        case "countdown:zoom-300":
-          void createWithCountdown(300, "https://zoom.us/j/1234567890");
-          return;
         case "panel:opened":
         case "panel:closed":
           return;
@@ -348,7 +293,6 @@ function useDevtoolsPanelActions() {
       }
     },
     [
-      createWithCountdown,
       clearNotifications,
       showAutoStopNotification,
       showMicDetectedNotification,

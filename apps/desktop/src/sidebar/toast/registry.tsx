@@ -15,7 +15,6 @@ type ToastRegistryParams = {
   isAiTranscriptionTabActive: boolean;
   isAiIntelligenceTabActive: boolean;
   isBatchTranscribingInActiveTranscriptTab: boolean;
-  cloudsyncInitialSyncToastId: string | null;
   hasActiveDownload: boolean;
   downloadingModel: string | null;
   activeDownloads: DownloadProgress[];
@@ -37,7 +36,6 @@ export function createToastRegistry({
   isAiTranscriptionTabActive,
   isAiIntelligenceTabActive,
   isBatchTranscribingInActiveTranscriptTab,
-  cloudsyncInitialSyncToastId,
   hasActiveDownload,
   downloadingModel,
   activeDownloads,
@@ -61,15 +59,6 @@ export function createToastRegistry({
         loading: true,
       },
       condition: () => hasActiveDownload,
-    },
-    {
-      toast: {
-        id: cloudsyncInitialSyncToastId ?? "cloudsync-initial-sync",
-        description: "Syncing your data in the background...",
-        dismissible: true,
-        loading: true,
-      },
-      condition: () => cloudsyncInitialSyncToastId !== null,
     },
     {
       toast: {

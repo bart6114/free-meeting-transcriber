@@ -150,27 +150,21 @@ export function buildRenderTranscriptRequestFromRows(
 export function collectAssignedHumanIdsFromTranscriptRows(
   transcripts: TranscriptRow[],
 ): string[] {
-  const humanIds = new Set<string>();
+  const speakerLabels = new Set<string>();
 
   for (const transcript of transcripts) {
     for (const hint of transcript.speaker_hints ?? []) {
-      if (hint.type !== "user_speaker_assignment") {
+      if (hint.type !== "speaker_label") {
         continue;
       }
 
-      const value = parseHintValue(hint.value);
-      const humanId =
-        value && typeof value === "object"
-          ? (value as { human_id?: unknown }).human_id
-          : undefined;
-
-      if (typeof humanId === "string" && humanId) {
-        humanIds.add(humanId);
+      if (typeof hint.value === "string" && hint.value) {
+        speakerLabels.add(hint.value);
       }
     }
   }
 
-  return [...humanIds];
+  return [...speakerLabels];
 }
 
 function buildRenderTranscriptRequest(
@@ -271,11 +265,6 @@ function normalizeSpeakerHint(
     return null;
   }
 
-  const value = parseHintValue(hint.value);
-  if (!value || typeof value !== "object") {
-    return null;
-  }
-
   const wordIndex = wordIndexById.get(hint.word_id);
   if (typeof wordIndex !== "number") {
     return null;
@@ -283,6 +272,39 @@ function normalizeSpeakerHint(
 
   const word = words[wordIndex];
   if (!word) {
+    return null;
+  }
+
+  if (hint.type === "speaker_label") {
+    if (typeof hint.value !== "string" || !hint.value) {
+      return null;
+    }
+
+    const speakerLabel = hint.value;
+    const channel =
+      word.channel === 0
+        ? "DirectMic"
+        : word.channel === 1
+          ? "RemoteParty"
+          : "MixedCapture";
+
+    return word.speaker_index == null
+      ? {
+          human_id: speakerLabel,
+          scope: { kind: "channel", channel },
+        }
+      : {
+          human_id: speakerLabel,
+          scope: {
+            kind: "channel_speaker",
+            channel,
+            speaker_index: word.speaker_index,
+          },
+        };
+  }
+
+  const value = parseHintValue(hint.value);
+  if (!value || typeof value !== "object") {
     return null;
   }
 
@@ -294,59 +316,6 @@ function normalizeSpeakerHint(
     if (typeof (value as { channel?: unknown }).channel === "number") {
       word.channel = (value as { channel: number }).channel;
     }
-    return null;
-  }
-
-  if (
-    hint.type === "user_speaker_assignment" &&
-    typeof (value as { human_id?: unknown }).human_id === "string"
-  ) {
-    const humanId = (value as { human_id: string }).human_id;
-    if (
-      (value as { scope?: unknown }).scope === "segment" &&
-      Array.isArray((value as { word_ids?: unknown }).word_ids)
-    ) {
-      const wordIds = (value as { word_ids: unknown[] }).word_ids.filter(
-        (wordId): wordId is string =>
-          typeof wordId === "string" && wordId.length > 0,
-      );
-      if (wordIds.length > 0) {
-        return {
-          human_id: humanId,
-          scope: {
-            kind: "words",
-            word_ids: wordIds,
-          },
-        };
-      }
-    }
-
-    return word.speaker_index == null
-      ? {
-          human_id: humanId,
-          scope: {
-            kind: "channel",
-            channel:
-              word.channel === 0
-                ? "DirectMic"
-                : word.channel === 1
-                  ? "RemoteParty"
-                  : "MixedCapture",
-          },
-        }
-      : {
-          human_id: humanId,
-          scope: {
-            kind: "channel_speaker",
-            channel:
-              word.channel === 0
-                ? "DirectMic"
-                : word.channel === 1
-                  ? "RemoteParty"
-                  : "MixedCapture",
-            speaker_index: word.speaker_index,
-          },
-        };
   }
 
   return null;

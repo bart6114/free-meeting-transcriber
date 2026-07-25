@@ -44,17 +44,14 @@ vi.mock("~/db", () => ({
     if (options.enabled === false) return {};
     const data = hoisted.data ?? {
       sessions: {},
-      participants: [],
       enhancedNotes: [],
       keyFacts: {},
     };
     const rows = options.sql.includes("FROM sessions")
       ? Object.values(data.sessions)
-      : options.sql.includes("FROM session_participants")
-        ? data.participants
-        : options.sql.includes("kind = 'enhanced_note'")
-          ? data.enhancedNotes
-          : Object.values(data.keyFacts);
+      : options.sql.includes("kind = 'enhanced_note'")
+        ? data.enhancedNotes
+        : Object.values(data.keyFacts);
     return { data: options.mapRows(rows) };
   },
 }));
@@ -96,20 +93,6 @@ describe("insights regeneration", () => {
           created_at: "2026-05-28T10:00:00.000Z",
           event_json: "",
           raw_md: "Raw note text should not feed insights.",
-        },
-      },
-      mapping_session_participant: {
-        current_alex: {
-          session_id: "current",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        previous_alex: {
-          session_id: "previous",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
         },
       },
       enhanced_notes: {
@@ -154,20 +137,6 @@ describe("insights regeneration", () => {
           created_at: "2026-05-28T10:00:00.000Z",
           event_json: "",
           raw_md: "Raw note text should not feed insights.",
-        },
-      },
-      mapping_session_participant: {
-        current_alex: {
-          session_id: "current",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
-        },
-        previous_alex: {
-          session_id: "previous",
-          human_id: "alex",
-          user_id: "self",
-          source: "auto",
         },
       },
       enhanced_notes: {
@@ -273,15 +242,6 @@ function makeData(
           event_json: String(row.event_json ?? ""),
         },
       ]),
-    ),
-    participants: Object.values(tables.mapping_session_participant ?? {}).map(
-      (row) => ({
-        session_id: String(row.session_id ?? ""),
-        human_id: String(row.human_id ?? ""),
-        user_id: String(row.user_id ?? ""),
-        source: String(row.source ?? ""),
-        name: String(row.name ?? row.human_id ?? ""),
-      }),
     ),
     enhancedNotes: Object.values(tables.enhanced_notes ?? {}).map((row) => ({
       session_id: String(row.session_id ?? ""),

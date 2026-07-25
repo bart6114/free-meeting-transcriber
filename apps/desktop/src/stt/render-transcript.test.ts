@@ -33,8 +33,8 @@ const transcripts = {
     speaker_hints: [
       {
         word_id: "late-word",
-        type: "user_speaker_assignment",
-        value: { human_id: "remote" },
+        type: "speaker_label",
+        value: "remote",
       },
     ],
   },
@@ -65,53 +65,13 @@ const transcripts = {
     speaker_hints: [
       {
         word_id: "unordered-word",
-        type: "user_speaker_assignment",
-        value: { human_id: "remote" },
+        type: "speaker_label",
+        value: "remote",
       },
       {
         word_id: "unordered-word",
         type: "provider_speaker_index",
         value: { channel: 1, speaker_index: 2 },
-      },
-    ],
-  },
-  segmentOnly: {
-    started_at: 2_000,
-    words: [
-      {
-        id: "segment-word-1",
-        text: " hello",
-        start_ms: 0,
-        end_ms: 100,
-        channel: 1,
-      },
-      {
-        id: "segment-word-2",
-        text: " there",
-        start_ms: 100,
-        end_ms: 200,
-        channel: 1,
-      },
-    ],
-    speaker_hints: [
-      {
-        word_id: "segment-word-1",
-        type: "provider_speaker_index",
-        value: { channel: 1, speaker_index: 2 },
-      },
-      {
-        word_id: "segment-word-2",
-        type: "provider_speaker_index",
-        value: { channel: 1, speaker_index: 2 },
-      },
-      {
-        word_id: "segment-word-1",
-        type: "user_speaker_assignment",
-        value: {
-          human_id: "remote",
-          scope: "segment",
-          word_ids: ["segment-word-1", "segment-word-2"],
-        },
       },
     ],
   },
@@ -187,34 +147,20 @@ describe("buildRenderTranscriptRequestFromRows", () => {
     ]);
   });
 
-  it("turns segment speaker assignments into word-scoped render assignments", () => {
-    const request = createRequest(["segmentOnly"]);
-
-    expect(request?.transcripts[0]?.assignments).toEqual([
-      {
-        human_id: "remote",
-        scope: {
-          kind: "words",
-          word_ids: ["segment-word-1", "segment-word-2"],
-        },
-      },
-    ]);
-  });
-
-  it("collects assigned speaker human ids from transcript rows", () => {
+  it("collects assigned speaker labels from transcript rows", () => {
     expect(
       collectAssignedHumanIdsFromTranscriptRows([
         {
           speaker_hints: [
             {
               word_id: "word-1",
-              type: "user_speaker_assignment",
-              value: JSON.stringify({ human_id: "remote" }),
+              type: "speaker_label",
+              value: "remote",
             },
             {
               word_id: "word-2",
-              type: "user_speaker_assignment",
-              value: { human_id: "third" },
+              type: "speaker_label",
+              value: "third",
             },
             {
               word_id: "word-3",

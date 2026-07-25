@@ -24,7 +24,6 @@ import { getEnhancerService } from "~/services/enhancer";
 import { catalogLocalSessionAudio } from "~/session/attachments";
 import { enqueueSessionAudioOperation } from "~/session/audio-operations";
 import { useSession, useSessionHasTranscript } from "~/session/queries";
-import { getSessionEvent } from "~/session/utils";
 import { useConfigValue } from "~/shared/config";
 import { id } from "~/shared/utils";
 import type {
@@ -35,12 +34,8 @@ import {
   getLiveTranscriptionConfig,
   getTranscriptionLanguages,
 } from "~/stt/capabilities";
-import {
-  applyLiveTranscriptDeltaToDatabase,
-  createLiveTranscript,
-  softDeleteTranscript,
-  useSessionParticipantHumanIds,
-} from "~/stt/queries";
+import { softDeleteTranscript } from "~/stt/queries";
+import { commands } from "~/types/tauri.gen";
 
 export const MEETING_DISCLOSURE_MESSAGE =
   "I'm using Free Meeting Transcriber to record and transcribe this meeting.";
@@ -254,7 +249,6 @@ export function getPostCaptureAction(
 export function useStartListening(sessionId: string) {
   const session = useSession(sessionId);
   const hadTranscriptBeforeStart = useSessionHasTranscript(sessionId);
-  const participantHumanIds = useSessionParticipantHumanIds(sessionId);
   const getSessionMode = useListener((state) => state.getSessionMode);
 
   const aiLanguage = useConfigValue("ai_language");
@@ -288,39 +282,51 @@ export function useStartListening(sessionId: string) {
     stopMeetingChatTasks();
     let transcriptId: string | null = null;
     const startedAt = Date.now();
-    const memoMd = session?.raw_md ?? "";
-    const createdAt = new Date().toISOString();
     let lastTranscriptWrite = Promise.resolve();
     let transcriptWriteError: unknown;
-    const trackTranscriptWrite = (write: Promise<void>) => {
-      lastTranscriptWrite = write.catch((error) => {
-        transcriptWriteError = error;
-        console.error("[listener] failed to persist transcript", error);
+    const reportTranscriptWriteError = (error: unknown) => {
+      transcriptWriteError = error;
+      console.error("[listener] failed to persist transcript", error);
+      sonnerToast.error(`Transcript is NOT being saved: ${error}`, {
+        id: "live-transcript-persist-failed",
+        duration: Infinity,
       });
+    };
+    const trackTranscriptWrite = (write: Promise<void>) => {
+      lastTranscriptWrite = write.catch(reportTranscriptWriteError);
     };
     const keywords = await getSessionKeywords({
       sessionId,
       dictionaryTerms,
     });
 
+    let audioCatalogFailed = false;
     const onStopped: OnStoppedCallback = async (_sessionId, details) => {
       cancelMeetingRecordingDisclosure(sessionId);
       stopMeetingChatTasks();
       if (details.audioPath) {
+        const audioPath = details.audioPath;
         try {
           await enqueueSessionAudioOperation(sessionId, () =>
-            catalogLocalSessionAudio(sessionId),
+            catalogLocalSessionAudio(sessionId, audioPath),
           );
         } catch (error) {
+          audioCatalogFailed = true;
           console.error("[listener] failed to catalog recorded audio", error);
+          sonnerToast.error(
+            "Recording audio could not be moved into the session folder — it remains at its original location",
+            { id: "audio-catalog-failed" },
+          );
         }
       }
       await lastTranscriptWrite;
-      if (transcriptWriteError) {
-        sonnerToast.error(
-          "Free Meeting Transcriber could not save part of the live transcript.",
-          { id: "live-transcript-persist-failed" },
-        );
+      if (transcriptId) {
+        try {
+          const result = await commands.sessionFlushTranscript(sessionId);
+          if (result.status === "error") throw new Error(result.error);
+        } catch (error) {
+          reportTranscriptWriteError(error);
+        }
       }
 
       const postCaptureAction = getPostCaptureAction(
@@ -367,12 +373,13 @@ export function useStartListening(sessionId: string) {
         }
       }
 
-      // A failed batch repair — or a live transcript that never fully
-      // persisted — keeps the recording around as the only source for a later
-      // repair, regardless of the retention policy.
+      // A failed batch repair, a live transcript that never fully persisted, or an audio file
+      // that never made it into the session folder all keep the recording around as the only
+      // (or only correctly-located) source for a later repair, regardless of retention policy.
       if (
         (postCaptureAction !== "batch_then_enhance" || batchCompleted) &&
-        !transcriptWriteError
+        !transcriptWriteError &&
+        !audioCatalogFailed
       ) {
         await deleteProcessedAudioForRetention(audioRetention, sessionId);
       }
@@ -382,30 +389,22 @@ export function useStartListening(sessionId: string) {
       if (delta.new_words.length === 0 && delta.replaced_ids.length === 0) {
         return;
       }
-
-      if (!transcriptId) {
-        transcriptId = id();
-        trackTranscriptWrite(
-          createLiveTranscript(
-            {
-              id: transcriptId,
-              sessionId,
-              ownerUserId: session?.user_id ?? "",
-              createdAt,
-              startedAt,
-              memo: memoMd,
-              source: "live_capture",
-              provider: conn?.provider,
-              model: conn?.model,
-            },
-            delta,
-          ),
-        );
-        return;
-      }
+      if (!transcriptId) transcriptId = id();
 
       trackTranscriptWrite(
-        applyLiveTranscriptDeltaToDatabase(transcriptId, delta),
+        commands
+          .sessionAppendTranscript(sessionId, {
+            transcript_id: transcriptId,
+            new_words: delta.new_words,
+            replaced_ids: delta.replaced_ids,
+            // Live deltas from the transcription plugin carry no speaker-hint data (that's
+            // produced by the separate batch/assignment paths) -- nothing to forward here.
+            new_hints: [],
+            started_at_ms: startedAt,
+          })
+          .then((result) => {
+            if (result.status === "error") throw new Error(result.error);
+          }),
       );
     };
 
@@ -426,7 +425,7 @@ export function useStartListening(sessionId: string) {
         api_key: conn?.apiKey ?? "",
         keywords,
         transcription_mode: liveTranscriptionConfig.transcriptionMode,
-        participant_human_ids: participantHumanIds,
+        participant_human_ids: [],
         self_human_id: session?.user_id || null,
       },
       {
@@ -439,7 +438,7 @@ export function useStartListening(sessionId: string) {
       stopMeetingChatTasks();
       await lastTranscriptWrite;
       if (transcriptId) {
-        await softDeleteTranscript(transcriptId);
+        await softDeleteTranscript(sessionId, transcriptId);
       }
       return;
     }
@@ -460,9 +459,6 @@ export function useStartListening(sessionId: string) {
 
     void analyticsCommands.event({
       event: "session_started",
-      has_calendar_event: Boolean(
-        getSessionEvent({ event_json: session?.event_json }),
-      ),
       ...(conn
         ? {
             stt_provider: conn.provider,
@@ -477,7 +473,6 @@ export function useStartListening(sessionId: string) {
     dictionaryTerms,
     getSessionMode,
     hadTranscriptBeforeStart,
-    participantHumanIds,
     session,
     sessionId,
     setLeftSidebarExpanded,

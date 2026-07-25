@@ -30,8 +30,6 @@ pub type Result<T> = std::result::Result<T, Error>;
 pub struct ListMeetingsInput {
     #[schemars(description = "Case-insensitive title or meeting id substring")]
     pub query: Option<String>,
-    #[schemars(description = "Exact recurring series id")]
-    pub series_id: Option<String>,
     #[schemars(description = "Maximum results; defaults to 20 and is capped at 200")]
     #[schemars(range(min = 1, max = 200))]
     pub limit: Option<u32>,
@@ -58,18 +56,6 @@ pub struct GetMeetingTranscriptInput {
     pub limit: Option<u32>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
-#[serde(rename_all = "snake_case")]
-pub struct GetRecurringMeetingHistoryInput {
-    #[schemars(description = "A meeting id used to resolve its recurring series")]
-    pub meeting_id: String,
-    #[schemars(description = "Maximum meetings; defaults to 20 and is capped at 200")]
-    #[schemars(range(min = 1, max = 200))]
-    pub limit: Option<u32>,
-    #[schemars(description = "Number of meetings to skip; defaults to 0")]
-    pub offset: Option<u32>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub struct Pagination {
@@ -91,7 +77,6 @@ pub struct MeetingListItem {
     pub updated_at: String,
     pub started_at: String,
     pub ended_at: String,
-    pub series_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -125,18 +110,6 @@ pub struct Document {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
-pub struct Participant {
-    pub human_id: String,
-    pub display_name: String,
-    pub email: String,
-    pub role: String,
-    pub job_title: String,
-    pub organization_id: String,
-    pub organization_name: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
 pub struct ActionItem {
     pub id: String,
     pub assignee_human_id: String,
@@ -159,10 +132,8 @@ pub struct Meeting {
     pub ended_at: String,
     pub timezone: String,
     pub language: String,
-    pub series_id: String,
     pub note: Option<Document>,
     pub summaries: Vec<Document>,
-    pub participants: Vec<Participant>,
     pub action_items: Vec<ActionItem>,
 }
 
@@ -200,7 +171,6 @@ pub async fn list_meetings(pool: &SqlitePool, input: ListMeetingsInput) -> Resul
         pool,
         hypr_db_app::ListSessions {
             query: input.query.as_deref(),
-            series_id: input.series_id.as_deref(),
             limit: limit + 1,
             offset,
         },
@@ -226,11 +196,10 @@ pub async fn list_meetings(pool: &SqlitePool, input: ListMeetingsInput) -> Resul
 
 pub async fn get_meeting(pool: &SqlitePool, input: GetMeetingInput) -> Result<Meeting> {
     let meeting_id = input.meeting_id;
-    let (session, note, documents, participants, action_items) = tokio::try_join!(
+    let (session, note, documents, action_items) = tokio::try_join!(
         hypr_db_app::get_session(pool, &meeting_id),
         hypr_db_app::get_session_note(pool, &meeting_id),
         hypr_db_app::list_session_documents(pool, &meeting_id),
-        hypr_db_app::list_session_participants(pool, &meeting_id),
         hypr_db_app::list_session_action_items(pool, &meeting_id),
     )
     .map_err(|source| Error::Database {
@@ -256,10 +225,8 @@ pub async fn get_meeting(pool: &SqlitePool, input: GetMeetingInput) -> Result<Me
         ended_at: session.ended_at,
         timezone: session.timezone,
         language: session.language,
-        series_id: session.series_id,
         note: note.map(Document::from),
         summaries,
-        participants: participants.into_iter().map(Participant::from).collect(),
         action_items: action_items.into_iter().map(ActionItem::from).collect(),
     })
 }
@@ -289,42 +256,6 @@ pub async fn get_meeting_transcript(
             .unwrap_or(DEFAULT_TRANSCRIPT_LIMIT)
             .clamp(1, MAX_TRANSCRIPT_LIMIT),
     ))
-}
-
-pub async fn get_recurring_meeting_history(
-    pool: &SqlitePool,
-    input: GetRecurringMeetingHistoryInput,
-) -> Result<MeetingPage> {
-    let meeting = hypr_db_app::get_session(pool, &input.meeting_id)
-        .await
-        .map_err(|source| Error::Database {
-            action: "load meeting",
-            source,
-        })?
-        .ok_or_else(|| Error::NotFound(format!("meeting '{}'", input.meeting_id)))?;
-    let series_id = meeting.series_id.trim();
-    let limit = input
-        .limit
-        .unwrap_or(DEFAULT_LIST_LIMIT)
-        .clamp(1, MAX_LIST_LIMIT);
-    let offset = input.offset.unwrap_or(0);
-    if series_id.is_empty() {
-        return Ok(MeetingPage {
-            meetings: Vec::new(),
-            pagination: pagination(offset, limit, 0, Some(0), false),
-        });
-    }
-
-    list_meetings(
-        pool,
-        ListMeetingsInput {
-            query: None,
-            series_id: Some(series_id.to_string()),
-            limit: Some(limit),
-            offset: Some(offset),
-        },
-    )
-    .await
 }
 
 pub async fn get_meeting_export(pool: &SqlitePool, meeting_id: String) -> Result<MeetingExport> {
@@ -385,24 +316,10 @@ impl Meeting {
         } else {
             &self.started_at
         };
-        let mut lines = vec![
+        let lines = vec![
             format!("- ID: `{}`", self.id),
             format!("- Date: {occurred_at}"),
         ];
-        if !self.series_id.is_empty() {
-            lines.push(format!("- Series: `{}`", self.series_id));
-        }
-        let people = self
-            .participants
-            .iter()
-            .filter_map(|participant| {
-                let name = participant.display_name.trim();
-                (!name.is_empty()).then_some(name)
-            })
-            .collect::<Vec<_>>();
-        if !people.is_empty() {
-            lines.push(format!("- Participants: {}", people.join(", ")));
-        }
         lines.join("\n")
     }
 }
@@ -430,7 +347,6 @@ impl From<hypr_db_app::SessionListItem> for MeetingListItem {
             updated_at: value.updated_at,
             started_at: value.started_at,
             ended_at: value.ended_at,
-            series_id: value.series_id,
         }
     }
 }
@@ -446,20 +362,6 @@ impl From<hypr_db_app::SessionDocumentRow> for Document {
             sort_order: value.sort_order,
             created_at: value.created_at,
             updated_at: value.updated_at,
-        }
-    }
-}
-
-impl From<hypr_db_app::SessionParticipantRow> for Participant {
-    fn from(value: hypr_db_app::SessionParticipantRow) -> Self {
-        Self {
-            human_id: value.human_id,
-            display_name: value.display_name,
-            email: value.email,
-            role: value.role,
-            job_title: value.job_title,
-            organization_id: value.organization_id,
-            organization_name: value.organization_name,
         }
     }
 }
@@ -683,10 +585,10 @@ mod tests {
         let db = test_db().await;
         sqlx::query(
             "INSERT INTO sessions
-             (id, title, started_at, series_id, workspace_id, owner_user_id, metadata_json)
+             (id, title, started_at, workspace_id, owner_user_id, metadata_json)
              VALUES
-             ('meeting-1', 'Planning', '2026-07-13', 'series-1', 'workspace-1', 'owner-1', '{\"private\":true}'),
-             ('meeting-2', 'Prior planning', '2026-07-06', 'series-1', 'workspace-1', 'owner-1', '{}')",
+             ('meeting-1', 'Planning', '2026-07-13', 'workspace-1', 'owner-1', '{\"private\":true}'),
+             ('meeting-2', 'Prior planning', '2026-07-06', 'workspace-1', 'owner-1', '{}')",
         )
         .execute(db.pool())
         .await
@@ -697,14 +599,6 @@ mod tests {
              VALUES
              ('meeting-1', 'meeting-1', 'note', 'markdown', 'Launch decision', 'Notes'),
              ('summary-1', 'meeting-1', 'summary', 'markdown', 'Ship Tuesday', 'Summary')",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
-        sqlx::query(
-            "INSERT INTO session_participants
-             (id, session_id, human_id, display_name, email, role, metadata_json)
-             VALUES ('participant-1', 'meeting-1', 'human-1', 'Alice', 'alice@example.com', 'attendee', '{\"private\":true}')",
         )
         .execute(db.pool())
         .await
@@ -748,13 +642,11 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(meeting.note.as_ref().unwrap().markdown, "Launch decision");
-        assert_eq!(meeting.participants[0].display_name, "Alice");
         assert_eq!(meeting.action_items[0].text, "Prepare launch");
         let serialized = serde_json::to_value(&meeting).unwrap();
         assert!(serialized.get("workspace_id").is_none());
         assert!(serialized.get("owner_user_id").is_none());
         assert!(serialized.get("metadata_json").is_none());
-        assert!(serialized["participants"][0].get("metadata_json").is_none());
 
         let transcript = get_meeting_transcript(
             db.pool(),
@@ -769,24 +661,5 @@ mod tests {
         assert_eq!(transcript.text, "two");
         assert_eq!(transcript.pagination.total, Some(2));
         assert_eq!(transcript.words[0]["transcript_id"], "transcript-1");
-
-        let history = get_recurring_meeting_history(
-            db.pool(),
-            GetRecurringMeetingHistoryInput {
-                meeting_id: "meeting-1".to_string(),
-                limit: None,
-                offset: None,
-            },
-        )
-        .await
-        .unwrap();
-        assert_eq!(
-            history
-                .meetings
-                .iter()
-                .map(|meeting| meeting.id.as_str())
-                .collect::<Vec<_>>(),
-            vec!["meeting-1", "meeting-2"]
-        );
     }
 }
