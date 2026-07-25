@@ -5,7 +5,6 @@ import { commands as detectCommands } from "@hypr/plugin-detect";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
 import { useListener } from "./contexts";
-import { startMeetingChatCapture } from "./meeting-chat-capture";
 import { getSessionKeywords } from "./useKeywords";
 import {
   canRunBatchTranscription,
@@ -269,17 +268,10 @@ export function useStartListening(sessionId: string) {
 
   const runBatchRef = useRef(runBatch);
   const canRunBatchRef = useRef(canRunBatchTranscription(conn));
-  const stopMeetingChatCaptureRef = useRef<(() => void) | null>(null);
   runBatchRef.current = runBatch;
   canRunBatchRef.current = canRunBatchTranscription(conn);
 
-  const stopMeetingChatTasks = useCallback(() => {
-    stopMeetingChatCaptureRef.current?.();
-    stopMeetingChatCaptureRef.current = null;
-  }, []);
-
   const startListening = useCallback(async () => {
-    stopMeetingChatTasks();
     let transcriptId: string | null = null;
     const startedAt = Date.now();
     let lastTranscriptWrite = Promise.resolve();
@@ -303,7 +295,6 @@ export function useStartListening(sessionId: string) {
     let audioCatalogFailed = false;
     const onStopped: OnStoppedCallback = async (_sessionId, details) => {
       cancelMeetingRecordingDisclosure(sessionId);
-      stopMeetingChatTasks();
       if (details.audioPath) {
         const audioPath = details.audioPath;
         try {
@@ -435,7 +426,6 @@ export function useStartListening(sessionId: string) {
     );
 
     if (!started) {
-      stopMeetingChatTasks();
       await lastTranscriptWrite;
       if (transcriptId) {
         await softDeleteTranscript(sessionId, transcriptId);
@@ -444,11 +434,6 @@ export function useStartListening(sessionId: string) {
     }
 
     setLeftSidebarExpanded(false);
-
-    stopMeetingChatCaptureRef.current = startMeetingChatCapture({
-      sessionId,
-      excludedTexts: [MEETING_DISCLOSURE_MESSAGE],
-    });
 
     if (meetingDisclosureAutoSendChat) {
       startMeetingRecordingDisclosure(
@@ -479,7 +464,6 @@ export function useStartListening(sessionId: string) {
     meetingDisclosureAutoSendChat,
     spokenLanguages,
     start,
-    stopMeetingChatTasks,
   ]);
 
   return startListening;

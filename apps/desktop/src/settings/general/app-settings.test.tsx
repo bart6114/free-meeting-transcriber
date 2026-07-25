@@ -13,7 +13,6 @@ function setting(value = true) {
 function renderAppSettings({
   floatingBar = true,
   meetingDisclosureAutoPost = setting(),
-  captureMeetingChat = setting(false),
 } = {}) {
   return {
     ...render(
@@ -25,12 +24,10 @@ function renderAppSettings({
         showTrayIcon={setting()}
         telemetryConsent={setting()}
         meetingDisclosureAutoPost={meetingDisclosureAutoPost}
-        captureMeetingChat={captureMeetingChat}
         audioRetention={{ value: "forever", onChange: vi.fn() }}
       />,
     ),
     meetingDisclosureAutoPost,
-    captureMeetingChat,
   };
 }
 
@@ -62,15 +59,6 @@ describe("AppSettingsView", () => {
     );
 
     expect(meetingDisclosureAutoPost.onChange).toHaveBeenCalledWith(true);
-  });
-
-  it("discloses Accessibility-based meeting chat capture", () => {
-    renderAppSettings();
-
-    expect(screen.getByText("Capture meeting chat in Memos")).toBeTruthy();
-    expect(
-      screen.getByText(/supported meeting apps and browser meetings/),
-    ).toBeTruthy();
   });
 
   it("clarifies that a recording disclosure does not confirm consent", () => {

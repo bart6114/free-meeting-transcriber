@@ -14,7 +14,6 @@ import { cn } from "@hypr/utils";
 
 import { AudioDropTarget } from "./audio-drop-target";
 import { useNoteFileHandlerConfig } from "./file-handler";
-import { MeetingChatHighlights } from "./meeting-chat-highlights";
 
 import { AppLinkView } from "~/editor-bridge/app-link-view";
 import { useMentionConfig } from "~/editor-bridge/mention-config";
@@ -134,32 +133,27 @@ export const RawEditor = forwardRef<
         targetProps={audioDropTargetProps}
         isActive={isAudioDragActive}
       >
-        <>
-          <NoteEditor
-            ref={ref}
-            className={cn(["session-note-editor", className])}
-            key={`session-${sessionId}-raw`}
-            initialContent={initialContent}
-            resolveAttachment={resolveAttachment}
-            handleChange={handleChange}
-            placeholderComponent={documentTitlePlaceholder}
-            mentionConfig={mentionConfig}
-            sessionMentionDropConfig={sessionMentionDropConfig}
-            onNavigateToTitle={onNavigateToTitle}
-            onLinkOpen={openEditorLink}
-            fileHandlerConfig={fileHandlerConfig}
-            taskSource={
-              syncTasks
-                ? { type: "session_raw_note", id: sessionId }
-                : undefined
-            }
-            extraNodeViews={extraNodeViews}
-            showFormatToolbar={showFormatToolbar}
-            onViewReady={onViewReady}
-            onViewDisposed={onViewDisposed}
-          />
-          <MeetingChatHighlights sessionId={sessionId} />
-        </>
+        <NoteEditor
+          ref={ref}
+          className={cn(["session-note-editor", className])}
+          key={`session-${sessionId}-raw`}
+          initialContent={initialContent}
+          resolveAttachment={resolveAttachment}
+          handleChange={handleChange}
+          placeholderComponent={documentTitlePlaceholder}
+          mentionConfig={mentionConfig}
+          sessionMentionDropConfig={sessionMentionDropConfig}
+          onNavigateToTitle={onNavigateToTitle}
+          onLinkOpen={openEditorLink}
+          fileHandlerConfig={fileHandlerConfig}
+          taskSource={
+            syncTasks ? { type: "session_raw_note", id: sessionId } : undefined
+          }
+          extraNodeViews={extraNodeViews}
+          showFormatToolbar={showFormatToolbar}
+          onViewReady={onViewReady}
+          onViewDisposed={onViewDisposed}
+        />
       </AudioDropTarget>
     );
   },

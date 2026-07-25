@@ -16,10 +16,6 @@ import {
 import { modelSupportsImageInput } from "~/settings/ai/shared/model-capabilities";
 import type { SettingValues } from "~/settings/schema";
 import {
-  formatMeetingChatContext,
-  loadMeetingChatRecords,
-} from "~/stt/meeting-chat-records";
-import {
   buildRenderTranscriptRequestFromRows,
   renderTranscriptSegments,
   type TranscriptRow,
@@ -55,10 +51,7 @@ async function transformArgs(
     throw new Error(`Session ${sessionId} no longer exists`);
   }
 
-  const meetingChatContext = formatMeetingChatContext(
-    await loadMeetingChatRecords(sessionId),
-  );
-  const sessionContext = getSessionContext(snapshot, meetingChatContext);
+  const sessionContext = getSessionContext(snapshot);
   const templateRecord = await loadTemplate(templateId);
   const template = templateRecord
     ? {
@@ -163,10 +156,7 @@ function getOptionalSettingsValue(
   return typeof value === "string" && value.length > 0 ? value : undefined;
 }
 
-function getSessionContext(
-  snapshot: SessionContentSnapshot,
-  meetingChatContext: string,
-) {
+function getSessionContext(snapshot: SessionContentSnapshot) {
   const transcriptsMeta = snapshot.transcripts.map((transcript) => ({
     id: transcript.id,
     startedAt: transcript.started_at,
@@ -176,11 +166,7 @@ function getSessionContext(
 
   return {
     preMeetingMemo: transcriptsMeta[0]?.memoMd ?? "",
-    postMeetingMemo: meetingChatContext
-      ? [snapshot.rawMarkdown, meetingChatContext]
-          .filter((value) => value.trim())
-          .join("\n\n")
-      : snapshot.rawMarkdown,
+    postMeetingMemo: snapshot.rawMarkdown,
     session: getSessionData(snapshot),
     participants: getParticipants(snapshot),
     transcriptsMeta,

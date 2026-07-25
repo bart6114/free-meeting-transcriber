@@ -20,7 +20,6 @@ type SessionEmptySqlRow = {
   note_body_format: string;
   transcript_count: number;
   enhanced_note_count: number;
-  meeting_chat_count: number;
   tag_count: number;
 };
 
@@ -529,13 +528,6 @@ export async function isSessionEmpty(sessionId: string): Promise<boolean> {
         ) AS enhanced_note_count,
         (
           SELECT COUNT(*)
-          FROM session_documents
-          WHERE session_id = sessions.id
-            AND kind = 'meeting_chat'
-            AND deleted_at IS NULL
-        ) AS meeting_chat_count,
-        (
-          SELECT COUNT(*)
           FROM session_tags
           WHERE session_id = sessions.id AND deleted_at IS NULL
         ) AS tag_count
@@ -575,7 +567,6 @@ export async function isSessionEmpty(sessionId: string): Promise<boolean> {
   return (
     Number(row.transcript_count) === 0 &&
     Number(row.enhanced_note_count) === 0 &&
-    Number(row.meeting_chat_count) === 0 &&
     Number(row.tag_count) === 0
   );
 }

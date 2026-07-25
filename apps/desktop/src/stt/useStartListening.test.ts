@@ -33,8 +33,6 @@ const {
   sendMeetingChatMessageMock,
   sonnerToastWarningMock,
   sonnerToastErrorMock,
-  startMeetingChatCaptureMock,
-  stopMeetingChatCaptureMock,
   catalogLocalSessionAudioMock,
   getEnhancerServiceMock,
   requestMainAutoEnhanceMock,
@@ -61,8 +59,6 @@ const {
   sendMeetingChatMessageMock: vi.fn(),
   sonnerToastWarningMock: vi.fn(),
   sonnerToastErrorMock: vi.fn(),
-  startMeetingChatCaptureMock: vi.fn(),
-  stopMeetingChatCaptureMock: vi.fn(),
   catalogLocalSessionAudioMock: vi.fn(),
   getEnhancerServiceMock: vi.fn(),
   requestMainAutoEnhanceMock: vi.fn(),
@@ -94,10 +90,6 @@ vi.mock("@hypr/ui/components/ui/toast", () => ({
 
 vi.mock("~/ai/task-window-sync", () => ({
   requestMainAutoEnhance: requestMainAutoEnhanceMock,
-}));
-
-vi.mock("./meeting-chat-capture", () => ({
-  startMeetingChatCapture: startMeetingChatCaptureMock,
 }));
 
 vi.mock("./useKeywords", () => ({
@@ -274,7 +266,7 @@ describe("useStartListening", () => {
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language"
         ? "en"
-        : key === "consent_auto_send_chat" || key === "capture_meeting_chat"
+        : key === "consent_auto_send_chat"
           ? false
           : [],
     );
@@ -304,7 +296,6 @@ describe("useStartListening", () => {
         warnings: [],
       },
     });
-    startMeetingChatCaptureMock.mockReturnValue(stopMeetingChatCaptureMock);
   });
 
   test("collapses the left sidebar after listening starts", async () => {
@@ -853,7 +844,7 @@ describe("useStartListening", () => {
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language"
         ? "de"
-        : key === "consent_auto_send_chat" || key === "capture_meeting_chat"
+        : key === "consent_auto_send_chat"
           ? false
           : ["en"],
     );
@@ -882,7 +873,7 @@ describe("useStartListening", () => {
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language"
         ? "en"
-        : key === "consent_auto_send_chat" || key === "capture_meeting_chat"
+        : key === "consent_auto_send_chat"
           ? false
           : ["ko"],
     );
@@ -911,7 +902,7 @@ describe("useStartListening", () => {
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language"
         ? "en"
-        : key === "consent_auto_send_chat" || key === "capture_meeting_chat"
+        : key === "consent_auto_send_chat"
           ? false
           : ["ko"],
     );
@@ -1295,70 +1286,5 @@ describe("useStartListening", () => {
       { id: "meeting-disclosure-send-failed" },
     );
     warn.mockRestore();
-  });
-
-  test("starts meeting chat capture with the disclosure text excluded", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? false
-          : [],
-    );
-
-    const { result } = renderHook(() => useStartListening("session-1"));
-
-    await act(async () => {
-      await result.current();
-    });
-
-    await waitFor(() => {
-      expect(startMeetingChatCaptureMock).toHaveBeenCalledWith({
-        sessionId: "session-1",
-        excludedTexts: [
-          "I'm using Free Meeting Transcriber to record and transcribe this meeting.",
-        ],
-      });
-    });
-
-    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
-    await act(async () => {
-      await onStopped?.("session-1", {
-        durationSeconds: 42,
-        audioPath: null,
-        requestedLiveTranscription: false,
-        liveTranscriptionActive: false,
-      });
-    });
-    expect(stopMeetingChatCaptureMock).toHaveBeenCalledOnce();
-  });
-
-  test("starts capture discovery before a supported meeting app is active", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? false
-          : [],
-    );
-    listMicUsingApplicationsMock.mockResolvedValue({
-      status: "ok",
-      data: [{ id: "com.google.Chrome", name: "Google Chrome" }],
-    });
-
-    const { result } = renderHook(() => useStartListening("session-1"));
-    await act(async () => {
-      await result.current();
-    });
-    await waitFor(() => {
-      expect(startMeetingChatCaptureMock).toHaveBeenCalledWith({
-        sessionId: "session-1",
-        excludedTexts: [
-          "I'm using Free Meeting Transcriber to record and transcribe this meeting.",
-        ],
-      });
-    });
-
-    expect(listMicUsingApplicationsMock).not.toHaveBeenCalled();
   });
 });

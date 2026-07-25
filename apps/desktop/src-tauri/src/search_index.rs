@@ -10,7 +10,7 @@ use tauri_plugin_tantivy::{
 };
 
 // Increment when the SQLite-to-Tantivy document shape changes so existing indexes are rebuilt.
-const PROJECTION_VERSION: i64 = 3;
+const PROJECTION_VERSION: i64 = 4;
 const BATCH_SIZE: i64 = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -287,28 +287,11 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
     .fetch_all(pool)
     .await?;
 
-    let meeting_chat_messages: Vec<String> = sqlx::query_scalar(
-        "SELECT body
-         FROM session_documents
-         WHERE session_id = ? AND kind = 'meeting_chat' AND deleted_at IS NULL
-         ORDER BY sort_order, created_at, id",
-    )
-    .bind(id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut content_parts = Vec::with_capacity(
-        1 + enhanced_bodies.len() + meeting_chat_messages.len() + transcripts.len(),
-    );
+    let mut content_parts = Vec::with_capacity(1 + enhanced_bodies.len() + transcripts.len());
     if let Some(raw_body) = raw_body {
         content_parts.push(extract_plain_text(&raw_body));
     }
     content_parts.extend(enhanced_bodies.iter().map(|body| extract_plain_text(body)));
-    content_parts.extend(
-        meeting_chat_messages
-            .iter()
-            .map(|message| flatten_meeting_chat(message)),
-    );
     content_parts.extend(
         transcripts
             .iter()
@@ -436,29 +419,6 @@ fn flatten_transcript(value: &str) -> String {
     let parsed =
         serde_json::from_str::<Value>(value).unwrap_or_else(|_| Value::String(value.to_string()));
     flatten_transcript_value(&parsed)
-}
-
-fn flatten_meeting_chat(value: &str) -> String {
-    let Ok(Value::Object(record)) = serde_json::from_str::<Value>(value) else {
-        return extract_plain_text(value);
-    };
-
-    let mut parts = ["platform", "sender", "timestamp", "text"]
-        .into_iter()
-        .filter_map(|key| record.get(key).and_then(Value::as_str))
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    parts.extend(
-        record
-            .get("links")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_string),
-    );
-
-    merge_content(parts.iter().map(String::as_str))
 }
 
 fn flatten_transcript_value(value: &Value) -> String {
@@ -624,17 +584,6 @@ mod tests {
             ),
             "hello world again nested array"
         );
-    }
-
-    #[test]
-    fn flattens_meeting_chat_metadata_text_and_links() {
-        assert_eq!(
-            flatten_meeting_chat(
-                r#"{"platform":"zoom","sender":"Ada","timestamp":"10:42 AM","text":"Here is the doc","links":["https://example.com/spec"]}"#,
-            ),
-            "zoom Ada 10:42 AM Here is the doc https://example.com/spec"
-        );
-        assert_eq!(flatten_meeting_chat("plain chat"), "plain chat");
     }
 
     #[test]
