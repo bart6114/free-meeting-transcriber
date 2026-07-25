@@ -158,16 +158,8 @@ msgid "Automatically detect when a meeting starts based on microphone activity."
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-#~ msgid "Automatically open the meeting link when scheduled listening starts."
-#~ msgstr ""
-
-#: src/settings/general/app-settings.tsx
 msgid "Automatically post a disclosure after listening starts when the active meeting chat supports safe posting. Posting failure does not stop listening. A disclosure does not confirm participant consent."
 msgstr ""
-
-#: src/settings/general/app-settings.tsx
-#~ msgid "Automatically start listening when an event-backed note reaches its scheduled start time."
-#~ msgstr "Hasi automatikoki entzuten gertaerak babestutako ohar bat programatutako hasiera-orura iristen denean."
 
 #: src/settings/general/app-settings.tsx
 msgid "Automatically stop listening when the meeting app releases the microphone."
@@ -192,10 +184,6 @@ msgstr ""
 
 #: src/session/components/outer-header/metadata/date.tsx
 msgid "Cancel date edit"
-msgstr ""
-
-#: src/settings/general/app-settings.tsx
-msgid "Capture meeting chat in Memos"
 msgstr ""
 
 #: src/onboarding/folder-location.tsx
@@ -321,14 +309,6 @@ msgstr ""
 msgid "Delete"
 msgstr ""
 
-#: src/sidebar/timeline/item.tsx
-#~ msgid "Delete All Recurring Events"
-#~ msgstr ""
-
-#: src/sidebar/timeline/item.tsx
-#~ msgid "Delete Event"
-#~ msgstr ""
-
 #: src/settings/ai/stt/select.tsx
 msgid "Delete model"
 msgstr ""
@@ -344,10 +324,6 @@ msgstr ""
 #: src/sidebar/timeline/index.tsx
 msgid "Delete Selected ({sessionCount})"
 msgstr ""
-
-#: src/sidebar/timeline/item.tsx
-#~ msgid "Delete This Event"
-#~ msgstr ""
 
 #: src/session/components/outer-header/overflow/delete.tsx
 msgid "Deleting..."
@@ -434,7 +410,6 @@ msgid "Export"
 msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
-#: src/settings/general/storage/reexport-all.tsx
 msgid "Exporting..."
 msgstr ""
 
@@ -547,10 +522,6 @@ msgstr ""
 msgid "Help Free Meeting Transcriber read meeting activity"
 msgstr ""
 
-#: src/sidebar/timeline/index.tsx
-#~ msgid "Hide Deleted Events"
-#~ msgstr ""
-
 #: src/settings/general/app-settings.tsx
 msgid "How long recorded meeting audio is kept on this device."
 msgstr ""
@@ -575,6 +546,10 @@ msgstr ""
 msgid "Include"
 msgstr ""
 
+#: src/settings/general/storage/rebuild-index.tsx
+msgid "Index rebuilt from the files in your folder."
+msgstr ""
+
 #: src/templates/sections-editor.tsx
 msgid "Insert above"
 msgstr ""
@@ -588,21 +563,9 @@ msgstr ""
 msgid "Intelligence"
 msgstr ""
 
-#: src/session/components/outer-header/index.tsx
-#~ msgid "Join & record"
-#~ msgstr ""
-
-#: src/session/components/outer-header/index.tsx
-#~ msgid "Join meeting and record"
-#~ msgstr ""
-
 #: src/onboarding/final.tsx
 msgid "Join our community and stay updated:"
 msgstr ""
-
-#: src/settings/general/app-settings.tsx
-#~ msgid "Join scheduled meetings"
-#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Keep Free Meeting Transcriber available from the menu bar."
@@ -875,16 +838,8 @@ msgstr ""
 msgid "Previous match"
 msgstr ""
 
-#: src/settings/general/storage/reexport-all.tsx
-msgid "Re-export all files"
-msgstr ""
-
-#: src/settings/general/storage/reexport-all.tsx
-msgid "Re-export queued — files will update in the vault within a few seconds."
-msgstr ""
-
-#: src/settings/general/storage/reexport-all.tsx
-msgid "Re-render every session, contact, and calendar file"
+#: src/settings/general/storage/rebuild-index.tsx
+msgid "Re-read every session file and rebuild the database index"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
@@ -893,6 +848,14 @@ msgstr ""
 
 #: src/onboarding/index.tsx
 msgid "Ready to go"
+msgstr ""
+
+#: src/settings/general/storage/rebuild-index.tsx
+msgid "Rebuild index from files"
+msgstr ""
+
+#: src/settings/general/storage/rebuild-index.tsx
+msgid "Rebuilding..."
 msgstr ""
 
 #: src/shared/open-note-dialog.tsx
@@ -1096,21 +1059,9 @@ msgstr ""
 msgid "Share usage data"
 msgstr "Partekatu erabilera datuak"
 
-#: src/sidebar/timeline/item.tsx
-#~ msgid "Show All Recurring Events"
-#~ msgstr ""
-
 #: src/settings/general/app-settings.tsx
 msgid "Show app in Dock"
 msgstr ""
-
-#: src/sidebar/timeline/index.tsx
-#~ msgid "Show Deleted Events"
-#~ msgstr ""
-
-#: src/sidebar/timeline/item.tsx
-#~ msgid "Show Event"
-#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Show floating bar"
@@ -1128,10 +1079,6 @@ msgstr ""
 #: src/settings/general/app-settings.tsx
 msgid "Show the compact floating control while listening."
 msgstr "Erakutsi kontrol mugikor trinkoa entzuten duzun bitartean."
-
-#: src/sidebar/timeline/item.tsx
-#~ msgid "Show This Event"
-#~ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "Show tray icon"
@@ -1156,10 +1103,6 @@ msgstr ""
 #: src/main/empty.tsx
 msgid "Start Recording"
 msgstr ""
-
-#: src/settings/general/app-settings.tsx
-#~ msgid "Start when meeting begins"
-#~ msgstr "Hasi bilera hasten denean"
 
 #: src/onboarding/index.tsx
 msgid "Start with permissions"
@@ -1327,10 +1270,6 @@ msgstr ""
 
 #: src/onboarding/index.tsx
 msgid "Where your notes and recordings are stored"
-msgstr ""
-
-#: src/settings/general/app-settings.tsx
-msgid "While listening, use Accessibility access to copy visible chat from supported meeting apps and browser meetings into the active note."
 msgstr ""
 
 #: src/settings/todo/permission.tsx
