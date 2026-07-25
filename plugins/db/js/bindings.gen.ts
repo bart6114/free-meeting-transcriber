@@ -54,14 +54,6 @@ async executeProxy(sql: string, params: JsonValue[], method: string) : Promise<R
     else return { status: "error", error: e  as any };
 }
 },
-async getLegacyImportReport() : Promise<Result<LegacyImportReport, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:db|get_legacy_import_report") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async subscribe(sql: string, params: JsonValue[], onEvent: TAURI_CHANNEL<QueryEvent>) : Promise<Result<SubscriptionRegistration, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:db|subscribe", { sql, params, onEvent }) };
@@ -98,17 +90,12 @@ export type ExecuteProxyResult = { rows: JsonValue[] }
 export type GetMeetingInput = { meeting_id: string }
 export type GetMeetingTranscriptInput = { meeting_id: string; offset: number | null; limit: number | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
-export type LegacyImportItemReport = { sourcePath: string; sourceKind: string; sourceSha256: string; status: string; discoveredCount: number; importedCount: number; matchedCount: number; skippedCount: number; conflictCount: number; error: string }
-export type LegacyImportReport = { state: StorageMigrationState; latestRun: LegacyImportRun | null; items: LegacyImportItemReport[]; targets: LegacyImportTargetReport[] }
-export type LegacyImportRun = { id: string; importerVersion: number; sourceRoot: string; dryRun: boolean; status: string; discoveredCount: number; importedCount: number; matchedCount: number; skippedCount: number; conflictCount: number; errorCount: number; startedAt: string; completedAt: string | null; error: string }
-export type LegacyImportTargetReport = { sourcePath: string; tableName: string; targetId: string; status: string; error: string }
 export type ListMeetingsInput = { query: string | null; limit: number | null; offset: number | null }
 export type Meeting = { id: string; title: string; kind: string; status: string; created_at: string; updated_at: string; started_at: string; ended_at: string; timezone: string; language: string; note: Document | null; summaries: Document[]; action_items: ActionItem[] }
 export type MeetingListItem = { id: string; title: string; kind: string; status: string; created_at: string; updated_at: string; started_at: string; ended_at: string }
 export type MeetingPage = { meetings: MeetingListItem[]; pagination: Pagination }
 export type Pagination = { offset: number; limit: number; returned: number; total: number | null; next_offset: number | null }
 export type QueryEvent = { event: "result"; data: JsonValue[] } | { event: "error"; data: string }
-export type StorageMigrationState = { phase: string; latestRunId: string; parityVerified: boolean; cutoverAt: string | null; rollbackUntil: string | null; lastError: string; updatedAt: string }
 export type SubscriptionRegistration = { id: string; analysis: DependencyAnalysis }
 export type TAURI_CHANNEL<TSend> = null
 export type TransactionStatement = { sql: string; params: JsonValue[]; expectedRowsAffected?: number | null }

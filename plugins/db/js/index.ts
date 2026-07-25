@@ -3,7 +3,6 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import type {
   GetMeetingInput,
   GetMeetingTranscriptInput as GeneratedGetMeetingTranscriptInput,
-  LegacyImportReport,
   ListMeetingsInput as GeneratedListMeetingsInput,
   Meeting,
   MeetingPage,
@@ -13,7 +12,6 @@ import type {
 
 export type {
   GetMeetingInput,
-  LegacyImportReport,
   Meeting,
   MeetingPage,
   TranscriptPage,
@@ -73,10 +71,6 @@ export async function executeProxy(
   method: "run" | "all" | "get" | "values",
 ): Promise<{ rows: unknown[] }> {
   return invoke("plugin:db|execute_proxy", { sql, params, method });
-}
-
-export async function getLegacyImportReport(): Promise<LegacyImportReport> {
-  return invoke("plugin:db|get_legacy_import_report");
 }
 
 export async function subscribe<T = Record<string, unknown>>(

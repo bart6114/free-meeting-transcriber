@@ -1,12 +1,10 @@
 #![forbid(unsafe_code)]
 
-mod legacy_import;
 mod session_ops;
 mod session_types;
 mod template_ops;
 mod template_types;
 
-pub use legacy_import::*;
 pub use session_ops::*;
 pub use session_types::*;
 pub use template_ops::*;

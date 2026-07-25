@@ -13,8 +13,8 @@
 //! session -- `plugins/notify`'s own-write TTL (1.8s) was shorter than the
 //! FSEvents delivery latency it was racing, so a real own-write occasionally
 //! arrived *after* the TTL window closed and got treated as an external
-//! delete. That version also called `tauri_plugin_db::import_paths`, which
-//! could itself write DB rows (a "files win" reconcile) in response.
+//! delete. That version also called the legacy import plugin's files-win
+//! reconcile, which could itself write DB rows in response.
 //!
 //! This version never does either of those things:
 //!
@@ -38,12 +38,11 @@
 //!    last hash this store wrote there is *always* recognized as this
 //!    store's own write, no matter how late the filesystem event arrives --
 //!    that's what `own_write_is_ignored_even_if_late` below asserts.
-//!    `plugins/notify`'s `mark_own_writes`/TTL mechanism still exists and
-//!    `vault_export.rs` (the legacy DB-to-vault mirror, retired in Task 13)
-//!    still calls it before its own writes -- this module may incidentally
-//!    benefit from that upstream filtering (fewer events reach it at all),
-//!    but its own correctness never depends on it: every event that *does*
-//!    arrive here is re-checked against the journal from scratch.
+//!    `plugins/notify`'s `mark_own_writes`/TTL mechanism still exists
+//!    upstream -- this module may incidentally benefit from that filtering
+//!    (fewer events reach it at all), but its own correctness never depends
+//!    on it: every event that *does* arrive here is re-checked against the
+//!    journal from scratch.
 //!
 //! # What "external" means for a path outside `sessions/<id>/`
 //!
@@ -70,10 +69,9 @@
 //!
 //! Wired from `lib.rs`'s app-level `setup()` closure, after the session
 //! store is constructed and `.manage()`d and its startup `rebuild_index`
-//! pass has completed, and after `vault_export::spawn` -- see `lib.rs`'s
-//! comments at the `vault_watch::spawn` call site for the full ordering
-//! rationale (a live edit only has to account for vault state from here
-//! on).
+//! pass has completed -- see `lib.rs`'s comments at the `vault_watch::spawn`
+//! call site for the full ordering rationale (a live edit only has to
+//! account for vault state from here on).
 
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -175,8 +173,13 @@ fn is_agents_md_path(relative: &str) -> bool {
     relative == "AGENTS.md"
 }
 
+/// The retired legacy exporter's first-run marker file. The worker that
+/// wrote it is gone (Task 13), but the file itself still sits at the root of
+/// every previously-migrated vault, so a touch/sync of it must stay ignored.
+const LEGACY_EXPORT_MARKER_FILENAME: &str = ".fmt-export-version";
+
 fn is_export_marker_path(relative: &str) -> bool {
-    relative == crate::vault_export::EXPORT_MARKER_FILENAME
+    relative == LEGACY_EXPORT_MARKER_FILENAME
 }
 
 /// `hypr_fs_sync_core::export::tmp_sibling_path` names atomic-write temp
@@ -377,7 +380,7 @@ mod tests {
     #[test]
     fn export_marker_path_is_ignored() {
         assert!(matches!(
-            classify_event(crate::vault_export::EXPORT_MARKER_FILENAME, false),
+            classify_event(LEGACY_EXPORT_MARKER_FILENAME, false),
             WatchAction::Ignore
         ));
     }

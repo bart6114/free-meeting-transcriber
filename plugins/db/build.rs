@@ -4,7 +4,6 @@ const COMMANDS: &[&str] = &[
     "execute_transaction",
     "get_meeting",
     "get_meeting_transcript",
-    "get_legacy_import_report",
     "list_meetings",
     "subscribe",
     "unsubscribe",

@@ -1,10 +1,8 @@
 mod commands;
 mod error;
-mod import;
 mod runtime;
 
 pub use error::{Error, Result};
-pub use import::{SyncReport, import_paths, sync_from_vault};
 pub use runtime::open_app_db;
 use tauri::Manager;
 
@@ -19,71 +17,6 @@ pub struct TransactionStatement {
     pub params: Vec<serde_json::Value>,
     #[serde(default)]
     pub expected_rows_affected: Option<u64>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, specta::Type, sqlx::FromRow)]
-#[serde(rename_all = "camelCase")]
-pub struct StorageMigrationState {
-    pub phase: String,
-    pub latest_run_id: String,
-    pub parity_verified: bool,
-    pub cutover_at: Option<String>,
-    pub rollback_until: Option<String>,
-    pub last_error: String,
-    pub updated_at: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, specta::Type, sqlx::FromRow)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyImportRun {
-    pub id: String,
-    pub importer_version: i64,
-    pub source_root: String,
-    pub dry_run: bool,
-    pub status: String,
-    pub discovered_count: i64,
-    pub imported_count: i64,
-    pub matched_count: i64,
-    pub skipped_count: i64,
-    pub conflict_count: i64,
-    pub error_count: i64,
-    pub started_at: String,
-    pub completed_at: Option<String>,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, specta::Type, sqlx::FromRow)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyImportItemReport {
-    pub source_path: String,
-    pub source_kind: String,
-    pub source_sha256: String,
-    pub status: String,
-    pub discovered_count: i64,
-    pub imported_count: i64,
-    pub matched_count: i64,
-    pub skipped_count: i64,
-    pub conflict_count: i64,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, specta::Type, sqlx::FromRow)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyImportTargetReport {
-    pub source_path: String,
-    pub table_name: String,
-    pub target_id: String,
-    pub status: String,
-    pub error: String,
-}
-
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-#[serde(rename_all = "camelCase")]
-pub struct LegacyImportReport {
-    pub state: StorageMigrationState,
-    pub latest_run: Option<LegacyImportRun>,
-    pub items: Vec<LegacyImportItemReport>,
-    pub targets: Vec<LegacyImportTargetReport>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, PartialEq)]
@@ -110,7 +43,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::execute,
             commands::execute_transaction,
             commands::execute_proxy,
-            commands::get_legacy_import_report,
             commands::subscribe,
             commands::unsubscribe,
         ])
@@ -161,21 +93,12 @@ mod test {
     }
 
     #[test]
-    fn default_permissions_include_legacy_migration_workflow() {
+    fn default_permissions_exclude_legacy_import_workflow() {
         let permissions = include_str!("../permissions/default.toml");
 
-        assert!(permissions.contains("allow-get-legacy-import-report"));
-    }
-
-    #[test]
-    fn default_permissions_exclude_removed_cleanup_flow() {
-        let permissions = include_str!("../permissions/default.toml");
-
-        assert!(!permissions.contains("legacy-cleanup"));
-        // Only sync_from_vault's conflict semantics should be reachable at
-        // runtime now — the old direct-import-with-DB-wins retry command is
-        // gone, not just unused.
-        assert!(!permissions.contains("run-legacy-import"));
+        // The whole legacy import/report surface died with Task 13 — nothing
+        // legacy-shaped may be reachable at runtime anymore.
+        assert!(!permissions.contains("legacy"));
     }
 
     fn capture_channel() -> (Channel<QueryEvent>, Arc<Mutex<Vec<QueryEvent>>>) {
@@ -222,15 +145,6 @@ mod test {
         .await
         .unwrap();
         hypr_db_app::prepare_schema(&db).await.unwrap();
-        sqlx::query(
-            "UPDATE storage_migration_state
-             SET importer_version = ?, parity_verified = 1
-             WHERE id = 'legacy_v1'",
-        )
-        .bind(hypr_db_app::LEGACY_IMPORTER_VERSION)
-        .execute(db.pool())
-        .await
-        .unwrap();
 
         (dir, Arc::new(runtime::PluginDbRuntime::new(Arc::new(db))))
     }

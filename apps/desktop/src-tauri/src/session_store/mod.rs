@@ -133,11 +133,11 @@ fn sha256(bytes: &[u8]) -> String {
 
 /// `write_note`/`write_document` never write a frontmatter block -- `_memo.md` and every
 /// other `sessions/<id>/<kind>.md` file are meant to hold raw markdown only. A file can still
-/// gain a leading frontmatter block from outside those writers: an external edit, the legacy
-/// importer, or -- until Task 13 retires it -- the old `vault_export` DB-to-vault mirror,
-/// which always wraps a `session_documents` row's body in one on export, and which (before
-/// this function existed) could nest a wrapper on top of an already-wrapped file, boot/focus
-/// after boot/focus.
+/// gain a leading frontmatter block from outside those writers: an external edit, or -- until
+/// Task 13 removed it -- the legacy `vault_export` DB-to-vault mirror, which always wrapped a
+/// `session_documents` row's body in one on export, and which (before this function existed)
+/// could nest a wrapper on top of an already-wrapped file, boot/focus after boot/focus. Those
+/// wrapped files still exist in real vaults, so the strip stays load-bearing.
 ///
 /// Strips repeatedly, one layer per loop iteration, so a file carrying two or more nested
 /// exporter wrappers (the shape that specific bug left behind) converges to the true inner
@@ -145,8 +145,8 @@ fn sha256(bytes: &[u8]) -> String {
 /// wrapper content indexed forever.
 ///
 /// Each layer is only stripped if it's *recognizable as the exporter's own wrapping* -- its
-/// frontmatter has an `id` and/or `position` key, the keys `vault_export`'s
-/// `render_session_document` always writes (see `crates/fs-sync-core/src/export.rs`). A block
+/// frontmatter has an `id` and/or `position` key, the keys the legacy exporter's
+/// `render_session_document` always wrote (see `crates/fs-sync-core/src/export.rs`). A block
 /// that parses as well-formed frontmatter but has neither key is treated as genuine user
 /// content (some other note/document convention, not this app's own wrapper) and the function
 /// stops and returns everything from that point on, untouched. This is what makes it safe
@@ -175,9 +175,9 @@ fn strip_leading_frontmatter(content: String) -> String {
     }
 }
 
-/// The specific, narrow signal that a parsed leading frontmatter block is `vault_export`'s own
-/// wrapping rather than arbitrary user/third-party frontmatter: `render_session_document`
-/// always writes an `id` key, and always writes a `position` key (see
+/// The specific, narrow signal that a parsed leading frontmatter block is the legacy
+/// exporter's own wrapping rather than arbitrary user/third-party frontmatter:
+/// `render_session_document` always wrote an `id` key, and always wrote a `position` key (see
 /// `crates/fs-sync-core/src/export.rs`'s `render_session_document`). Either one present is
 /// enough to treat the block as this app's own wrapper.
 fn is_exporter_wrapper(frontmatter: &HashMap<String, serde_json::Value>) -> bool {

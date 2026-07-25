@@ -103,14 +103,6 @@ async installEmbeddedCli() : Promise<Result<EmbeddedCliStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async exportVaultNow() : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("export_vault_now") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async sessionWriteMeta(meta: SessionMeta) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_write_meta", { meta }) };

@@ -10,7 +10,6 @@ Default permissions for the plugin
 - `allow-list-meetings`
 - `allow-get-meeting`
 - `allow-get-meeting-transcript`
-- `allow-get-legacy-import-report`
 - `allow-subscribe`
 - `allow-unsubscribe`
 
@@ -97,32 +96,6 @@ Enables the execute_transaction command without any pre-configured scope.
 <td>
 
 Denies the execute_transaction command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:allow-get-legacy-import-report`
-
-</td>
-<td>
-
-Enables the get_legacy_import_report command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`db:deny-get-legacy-import-report`
-
-</td>
-<td>
-
-Denies the get_legacy_import_report command without any pre-configured scope.
 
 </td>
 </tr>

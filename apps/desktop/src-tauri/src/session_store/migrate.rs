@@ -1,45 +1,23 @@
-//! Task 12: one-time final export sweep.
+//! One-time `transcripts.words_json` repair, gated by a marker file.
 //!
-//! The session store (Tasks 5-11) owns every *new* write, and startup runs
-//! `rebuild::rebuild_index` to index whatever's already on disk. That leaves
-//! exactly one gap before the old DB-to-vault machinery (`vault_export.rs`,
-//! `crates/fs-sync-core`) is deleted in Task 13: DB content that predates the
-//! store and was never exported to files at all — most notably transcripts,
-//! since `export::render_transcripts`'s `unwrap_or_default()` silently drops
-//! a `transcripts.words_json` row that doesn't strict-parse as
-//! `Vec<TranscriptWord>` (see `repair_words_json`'s doc for exactly which
-//! shapes fail, and why "integers" alone turned out not to be one of them).
-//!
-//! `run_once` drains the *old* export machinery one final time — reusing
-//! `vault_export::enqueue_all_entities` + `vault_export::drain_queue`
-//! directly rather than spawning `vault_export::run`'s long-lived worker
-//! task — after first repairing any `words_json` row it can. It runs exactly
-//! once per vault, gated by a marker file at the vault root, and never runs
-//! again once that marker exists.
+//! Some pre-store write paths left `words_json` rows that fail strict
+//! `Vec<TranscriptWord>` parsing (missing/null/string-typed numeric fields —
+//! see `repair_words_json`'s doc). `run_once` rewrites every row a lenient
+//! reparse can recover, exactly once per vault: a marker file at the vault
+//! root records that the sweep already ran, and its presence short-circuits
+//! every later startup.
 
 use std::path::Path;
 
 use sqlx::SqlitePool;
-use tauri::AppHandle;
-
-use crate::vault_export;
 
 /// Plain top-level marker file, not session content — written directly with
-/// `std::fs::write` (via `spawn_blocking`), the same way
-/// `vault_export.rs::ensure_first_run_full_export` writes its own
-/// `.fmt-export-version` marker. Not routed through the session store: the
-/// store's write paths are for `sessions/**` content, and this sweep runs
-/// *before* the store's `rebuild_index`, so nothing has indexed anything
-/// yet.
+/// `std::fs::write` (via `spawn_blocking`). Not routed through the session
+/// store: the store's write paths are for `sessions/**` content, and this
+/// sweep runs *before* the store's `rebuild_index`, so nothing has indexed
+/// anything yet.
 const MARKER_FILENAME: &str = ".store-migrated-v1";
 const MARKER_CONTENT: &str = "1";
-
-/// Defends against a permanently-stuck entity looping forever — `drain_with`
-/// (see `vault_export.rs`) already makes maximal progress within a single
-/// call (it keeps re-batching until nothing further can be acked), so this
-/// mostly bounds pointless extra passes once every failure is backed off;
-/// see `run_once`'s loop for the exact behavior.
-const MAX_DRAIN_PASSES: usize = 5;
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct MigrateReport {
@@ -52,32 +30,16 @@ pub struct MigrateReport {
     /// field-coercing reparse.
     pub repaired_words_json: usize,
     /// `transcripts.id` for rows that failed even the lenient reparse. Left
-    /// untouched in the DB; their owning session's export is skipped for
-    /// this sweep (see `run_once`) so the old exporter's `unwrap_or_default`
-    /// can't silently write an empty word list. Recorded here as the
-    /// inventory Task 14's hardening pass needs.
+    /// untouched in the DB; recorded here as the inventory Task 14's
+    /// hardening pass needs. A bad row never aborts the sweep or blocks the
+    /// marker.
     pub unparseable_words_json: Vec<String>,
-    /// How many `drain_queue` calls this sweep actually made (capped at
-    /// `MAX_DRAIN_PASSES`).
-    pub drain_passes: usize,
-    /// Human-readable notes for anything that didn't fully succeed: entities
-    /// still stuck in `vault_export_dirty` after `MAX_DRAIN_PASSES`, and
-    /// sessions skipped because one of their transcripts stayed unparseable.
-    /// One bad row is logged here and the sweep continues — it never aborts
-    /// the whole pass.
-    pub export_errors: Vec<String>,
 }
 
-/// Runs the sweep exactly once per vault. Returns early (a no-op,
+/// Runs the repair sweep exactly once per vault. Returns early (a no-op,
 /// `MigrateReport::skipped_marker_present`) if `<vault_base>/.store-migrated-v1`
-/// already exists. Order matters: repair `words_json` *before* enqueuing/
-/// draining, so the drain never has a chance to render a still-broken row as
-/// an empty word list.
-pub async fn run_once<R: tauri::Runtime>(
-    app: &AppHandle<R>,
-    pool: &SqlitePool,
-    vault_base: &Path,
-) -> Result<MigrateReport, String> {
+/// already exists.
+pub async fn run_once(pool: &SqlitePool, vault_base: &Path) -> Result<MigrateReport, String> {
     let marker = vault_base.join(MARKER_FILENAME);
     let marker_for_check = marker.clone();
     let already_migrated = tokio::task::spawn_blocking(move || marker_for_check.exists())
@@ -92,58 +54,7 @@ pub async fn run_once<R: tauri::Runtime>(
     }
 
     let mut report = MigrateReport::default();
-
-    let sessions_to_skip = repair_transcripts_words_json(pool, &mut report).await?;
-
-    vault_export::enqueue_all_entities(pool)
-        .await
-        .map_err(|error| error.to_string())?;
-
-    if !sessions_to_skip.is_empty() {
-        let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
-        for session_id in &sessions_to_skip {
-            sqlx::query(
-                "DELETE FROM vault_export_dirty WHERE entity_type = 'session' AND entity_id = ?",
-            )
-            .bind(session_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|error| error.to_string())?;
-        }
-        tx.commit().await.map_err(|error| error.to_string())?;
-    }
-
-    let mut backoff = vault_export::RetryBackoff::new();
-    for _ in 0..MAX_DRAIN_PASSES {
-        report.drain_passes += 1;
-        vault_export::drain_queue(app, pool, &mut backoff)
-            .await
-            .map_err(|error| error.to_string())?;
-
-        let remaining: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
-            .fetch_one(pool)
-            .await
-            .map_err(|error| error.to_string())?;
-        if remaining == 0 {
-            break;
-        }
-    }
-
-    let stuck: Vec<(String, String)> = sqlx::query_as(
-        "SELECT entity_type, entity_id FROM vault_export_dirty ORDER BY entity_type, entity_id",
-    )
-    .fetch_all(pool)
-    .await
-    .map_err(|error| error.to_string())?;
-    for (entity_type, entity_id) in stuck {
-        let message = format!(
-            "{entity_type} {entity_id} still queued after {} drain pass(es); left for the live export worker to retry",
-            report.drain_passes
-        );
-        tracing::warn!("{message}");
-        report.export_errors.push(message);
-    }
-
+    repair_transcripts_words_json(pool, &mut report).await?;
     write_marker(&marker).await?;
 
     Ok(report)
@@ -167,17 +78,12 @@ async fn write_marker(marker: &Path) -> Result<(), String> {
 
 /// Repairs every live `transcripts.words_json` row that fails strict
 /// `Vec<TranscriptWord>` parsing but succeeds a lenient reparse, updating the
-/// DB row in place (one transaction per row). Returns the distinct
-/// `session_id`s of any row that stayed unparseable even after that lenient
-/// pass — `run_once` excludes those sessions from this sweep's drain
-/// entirely, so the old exporter never gets a chance to render their
-/// `transcript.json` with the broken word list silently blanked out
-/// (`export::render_transcripts` uses `unwrap_or_default()`, which this
-/// module intentionally does not touch — see the module doc).
+/// DB row in place. Rows that stay unparseable even after the lenient pass
+/// are left untouched and recorded in the report.
 async fn repair_transcripts_words_json(
     pool: &SqlitePool,
     report: &mut MigrateReport,
-) -> Result<Vec<String>, String> {
+) -> Result<(), String> {
     let rows: Vec<(String, String, String)> = sqlx::query_as(
         "SELECT id, session_id, words_json FROM transcripts WHERE deleted_at IS NULL",
     )
@@ -185,20 +91,20 @@ async fn repair_transcripts_words_json(
     .await
     .map_err(|error| error.to_string())?;
 
-    let mut sessions_to_skip = Vec::new();
-
     for (transcript_id, session_id, words_json) in rows {
         match repair_words_json(&words_json) {
             RepairOutcome::AlreadyValid => {}
             RepairOutcome::Repaired(new_words_json) => {
-                let mut tx = pool.begin().await.map_err(|error| error.to_string())?;
+                // No read-then-update race to guard against: this sweep runs
+                // during startup, before the store or any UI writer exists,
+                // so nothing else can touch the row between the SELECT above
+                // and this UPDATE.
                 sqlx::query("UPDATE transcripts SET words_json = ? WHERE id = ?")
                     .bind(&new_words_json)
                     .bind(&transcript_id)
-                    .execute(&mut *tx)
+                    .execute(pool)
                     .await
                     .map_err(|error| error.to_string())?;
-                tx.commit().await.map_err(|error| error.to_string())?;
                 report.repaired_words_json += 1;
             }
             RepairOutcome::Unrepairable(reason) => {
@@ -206,20 +112,14 @@ async fn repair_transcripts_words_json(
                     transcript_id = %transcript_id,
                     session_id = %session_id,
                     reason = %reason,
-                    "words_json failed even lenient repair; leaving the DB row untouched and excluding its session from this sweep"
+                    "words_json failed even lenient repair; leaving the DB row untouched"
                 );
-                report.unparseable_words_json.push(transcript_id.clone());
-                report.export_errors.push(format!(
-                    "session {session_id} export skipped this sweep: transcript {transcript_id} words_json unparseable even after lenient repair ({reason})"
-                ));
-                sessions_to_skip.push(session_id);
+                report.unparseable_words_json.push(transcript_id);
             }
         }
     }
 
-    sessions_to_skip.sort();
-    sessions_to_skip.dedup();
-    Ok(sessions_to_skip)
+    Ok(())
 }
 
 enum RepairOutcome {
@@ -308,32 +208,12 @@ fn coerce_numeric_field(value: Option<&serde_json::Value>) -> Option<serde_json:
 
 #[cfg(test)]
 mod tests {
-    use tauri::Manager;
-
     use super::*;
 
     async fn test_db() -> hypr_db_core::Db {
         let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
         hypr_db_app::prepare_schema(&db).await.unwrap();
         db
-    }
-
-    /// Mirrors `plugins/tantivy/tests/index_location.rs`'s workaround:
-    /// `tauri_plugin_notify::init()`/`tauri_plugin_settings::init()` are
-    /// pinned to (or default-instantiated against) `tauri::Wry`, which can't
-    /// be attached via `.plugin()` to a `tauri::test::mock_builder()` app
-    /// (`MockRuntime`). Managing the states those plugins' own `setup()`
-    /// hooks would have managed sidesteps that entirely, and needs no env
-    /// var tricks (parallel-test-safe, unlike overriding `FMTR_VAULT_BASE`).
-    fn mock_app(vault_base: &std::path::Path) -> tauri::App<tauri::test::MockRuntime> {
-        let app = tauri::test::mock_builder()
-            .build(tauri::test::mock_context(tauri::test::noop_assets()))
-            .unwrap();
-        app.manage(tauri_plugin_settings::StartupSnapshot::new(
-            vault_base.to_path_buf(),
-        ));
-        app.manage(tauri_plugin_notify::WatcherState::empty());
-        app
     }
 
     async fn seed_session_and_transcript(pool: &SqlitePool, session_id: &str, words_json: &str) {
@@ -354,8 +234,12 @@ mod tests {
         .unwrap();
     }
 
-    fn file_mtime(path: &std::path::Path) -> std::time::SystemTime {
-        std::fs::metadata(path).unwrap().modified().unwrap()
+    async fn words_json_for(pool: &SqlitePool, transcript_id: &str) -> String {
+        sqlx::query_scalar("SELECT words_json FROM transcripts WHERE id = ?")
+            .bind(transcript_id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
     }
 
     // ------------------------------------------------------------------
@@ -436,7 +320,7 @@ mod tests {
     // ------------------------------------------------------------------
 
     #[tokio::test]
-    async fn first_run_repairs_legacy_words_json_exports_transcript_and_writes_marker() {
+    async fn first_run_repairs_legacy_words_json_in_the_db_and_writes_marker() {
         let db = test_db().await;
         let vault = tempfile::tempdir().unwrap();
         seed_session_and_transcript(
@@ -446,51 +330,24 @@ mod tests {
         )
         .await;
 
-        let app = mock_app(vault.path());
-        let handle = app.handle().clone();
-
-        let report = super::run_once(&handle, db.pool(), vault.path())
-            .await
-            .unwrap();
+        let report = super::run_once(db.pool(), vault.path()).await.unwrap();
 
         assert!(!report.skipped_marker_present);
         assert_eq!(report.repaired_words_json, 1);
         assert!(report.unparseable_words_json.is_empty());
-        assert!(report.export_errors.is_empty());
-
-        let transcript_path = vault
-            .path()
-            .join("sessions/session-legacy-1/transcript.json");
-        assert!(
-            transcript_path.is_file(),
-            "transcript.json must be exported"
-        );
-        let content = std::fs::read_to_string(&transcript_path).unwrap();
-        let value: serde_json::Value = serde_json::from_str(&content).unwrap();
-        let words = value["transcripts"][0]["words"].as_array().unwrap();
-        assert_eq!(words.len(), 1);
-        assert_eq!(words[0]["text"], "hello");
-        assert_eq!(words[0]["start_ms"], 0.0);
-        assert_eq!(words[0]["end_ms"], 500.0);
 
         let marker = vault.path().join(MARKER_FILENAME);
         assert!(marker.is_file(), "marker file must be written");
 
-        let repaired_words_json: String = sqlx::query_scalar(
-            "SELECT words_json FROM transcripts WHERE id = 'session-legacy-1-transcript'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
+        let repaired = words_json_for(db.pool(), "session-legacy-1-transcript").await;
         assert!(
-            serde_json::from_str::<Vec<hypr_fs_format::TranscriptWord>>(&repaired_words_json)
-                .is_ok(),
+            serde_json::from_str::<Vec<hypr_fs_format::TranscriptWord>>(&repaired).is_ok(),
             "the DB row itself must now strict-parse"
         );
     }
 
     #[tokio::test]
-    async fn second_run_is_a_no_op_and_touches_no_files() {
+    async fn marker_already_present_short_circuits_and_leaves_the_row_untouched() {
         let db = test_db().await;
         let vault = tempfile::tempdir().unwrap();
         seed_session_and_transcript(
@@ -499,51 +356,9 @@ mod tests {
             r#"[{"text":"hi","start_ms":"0","end_ms":"100","channel":"0"}]"#,
         )
         .await;
-
-        let app = mock_app(vault.path());
-        let handle = app.handle().clone();
-
-        super::run_once(&handle, db.pool(), vault.path())
-            .await
-            .unwrap();
-
-        let meta_path = vault.path().join("sessions/session-legacy-2/_meta.json");
-        let transcript_path = vault
-            .path()
-            .join("sessions/session-legacy-2/transcript.json");
-        let meta_mtime_before = file_mtime(&meta_path);
-        let transcript_mtime_before = file_mtime(&transcript_path);
-
-        let report = super::run_once(&handle, db.pool(), vault.path())
-            .await
-            .unwrap();
-
-        assert!(report.skipped_marker_present);
-        assert_eq!(report.repaired_words_json, 0);
-        assert_eq!(report.drain_passes, 0);
-
-        assert_eq!(file_mtime(&meta_path), meta_mtime_before);
-        assert_eq!(file_mtime(&transcript_path), transcript_mtime_before);
-    }
-
-    #[tokio::test]
-    async fn marker_already_present_short_circuits_before_touching_anything() {
-        let db = test_db().await;
-        let vault = tempfile::tempdir().unwrap();
-        seed_session_and_transcript(
-            db.pool(),
-            "session-legacy-3",
-            r#"[{"text":"hi","start_ms":"0","end_ms":"100","channel":"0"}]"#,
-        )
-        .await;
         std::fs::write(vault.path().join(MARKER_FILENAME), MARKER_CONTENT).unwrap();
 
-        let app = mock_app(vault.path());
-        let handle = app.handle().clone();
-
-        let report = super::run_once(&handle, db.pool(), vault.path())
-            .await
-            .unwrap();
+        let report = super::run_once(db.pool(), vault.path()).await.unwrap();
 
         assert_eq!(
             report,
@@ -552,112 +367,63 @@ mod tests {
                 ..Default::default()
             }
         );
-        assert!(
-            !vault
-                .path()
-                .join("sessions/session-legacy-3/transcript.json")
-                .exists(),
-            "nothing should have been exported"
-        );
-
-        let words_json: String = sqlx::query_scalar(
-            "SELECT words_json FROM transcripts WHERE id = 'session-legacy-3-transcript'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
         assert_eq!(
-            words_json, r#"[{"text":"hi","start_ms":"0","end_ms":"100","channel":"0"}]"#,
-            "the row must be untouched"
+            words_json_for(db.pool(), "session-legacy-2-transcript").await,
+            r#"[{"text":"hi","start_ms":"0","end_ms":"100","channel":"0"}]"#,
+            "a repairable row must stay untouched once the marker exists"
         );
     }
 
     #[tokio::test]
-    async fn a_row_unparseable_even_leniently_is_left_untouched_and_never_exported_empty() {
+    async fn second_run_is_a_no_op() {
+        let db = test_db().await;
+        let vault = tempfile::tempdir().unwrap();
+        seed_session_and_transcript(
+            db.pool(),
+            "session-legacy-3",
+            r#"[{"text":"hi","start_ms":"0","end_ms":"100","channel":"0"}]"#,
+        )
+        .await;
+
+        super::run_once(db.pool(), vault.path()).await.unwrap();
+        let report = super::run_once(db.pool(), vault.path()).await.unwrap();
+
+        assert!(report.skipped_marker_present);
+        assert_eq!(report.repaired_words_json, 0);
+    }
+
+    #[tokio::test]
+    async fn an_unparseable_row_is_reported_left_untouched_and_does_not_block_the_marker() {
         let db = test_db().await;
         let vault = tempfile::tempdir().unwrap();
         seed_session_and_transcript(db.pool(), "session-broken", "not valid json words at all")
             .await;
+        seed_session_and_transcript(
+            db.pool(),
+            "session-repairable",
+            r#"[{"text":"fine","start_ms":"0","end_ms":"10","channel":"0"}]"#,
+        )
+        .await;
 
-        let app = mock_app(vault.path());
-        let handle = app.handle().clone();
-
-        let report = super::run_once(&handle, db.pool(), vault.path())
-            .await
-            .unwrap();
+        let report = super::run_once(db.pool(), vault.path()).await.unwrap();
 
         assert!(!report.skipped_marker_present);
-        assert_eq!(report.repaired_words_json, 0);
         assert_eq!(
             report.unparseable_words_json,
             vec!["session-broken-transcript".to_string()]
         );
-        assert!(
-            !report.export_errors.is_empty(),
-            "the skipped session must be logged"
+        assert_eq!(
+            report.repaired_words_json, 1,
+            "one bad row must not block another row's repair"
         );
 
-        assert!(
-            !vault
-                .path()
-                .join("sessions/session-broken/transcript.json")
-                .exists(),
-            "an unparseable row must never be exported as an empty word list"
+        assert_eq!(
+            words_json_for(db.pool(), "session-broken-transcript").await,
+            "not valid json words at all"
         );
         assert!(
-            !vault
-                .path()
-                .join("sessions/session-broken/_meta.json")
-                .exists(),
-            "the whole session is skipped this sweep, not just its transcript"
-        );
-
-        let words_json: String = sqlx::query_scalar(
-            "SELECT words_json FROM transcripts WHERE id = 'session-broken-transcript'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-        assert_eq!(words_json, "not valid json words at all");
-
-        let marker = vault.path().join(MARKER_FILENAME);
-        assert!(
-            marker.is_file(),
-            "one bad row must not block the rest of the sweep from completing"
-        );
-    }
-
-    #[tokio::test]
-    async fn one_bad_session_does_not_block_a_good_sessions_export() {
-        let db = test_db().await;
-        let vault = tempfile::tempdir().unwrap();
-        seed_session_and_transcript(db.pool(), "session-broken", "garbage").await;
-        seed_session_and_transcript(
-            db.pool(),
-            "session-good",
-            r#"[{"text":"fine","start_ms":0,"end_ms":10,"channel":0}]"#,
-        )
-        .await;
-
-        let app = mock_app(vault.path());
-        let handle = app.handle().clone();
-
-        let report = super::run_once(&handle, db.pool(), vault.path())
-            .await
-            .unwrap();
-
-        assert_eq!(report.unparseable_words_json.len(), 1);
-        assert!(
-            vault
-                .path()
-                .join("sessions/session-good/transcript.json")
-                .is_file()
-        );
-        assert!(
-            !vault
-                .path()
-                .join("sessions/session-broken/transcript.json")
-                .exists()
+            vault.path().join(MARKER_FILENAME).is_file(),
+            "one bad row must not block the marker"
         );
     }
 }

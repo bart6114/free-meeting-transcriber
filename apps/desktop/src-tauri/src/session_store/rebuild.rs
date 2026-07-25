@@ -302,10 +302,9 @@ impl SessionStore {
         // The `WHERE` guard on the `DO UPDATE` makes this a true no-op (no row touched, no
         // `AFTER UPDATE` trigger fired) when nothing actually changed -- load-bearing now that
         // Task 10 calls `rebuild_index` automatically on every startup and window focus:
-        // without it, every one of those passes fires `sessions`' `vault_export_dirty` trigger
-        // for every session unconditionally, which repeatedly re-queues the *old*, still-active
-        // `vault_export` DB-to-vault mirror (retired in Task 13) even when the file on disk
-        // hasn't changed since the index already reflects it.
+        // without it, every one of those passes fires `sessions`' `search_index_dirty` trigger
+        // for every session unconditionally, re-queueing a full search re-projection even
+        // when the file on disk hasn't changed since the index already reflects it.
         sqlx::query(
             "INSERT INTO sessions (id, title, started_at, ended_at, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -334,7 +333,7 @@ impl SessionStore {
         body: &str,
     ) -> Result<(), StoreError> {
         // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
-        // re-firing `session_documents`' `vault_export_dirty` trigger on every automatic
+        // re-firing `session_documents`' `search_index_dirty` trigger on every automatic
         // rebuild/refresh pass (Task 10).
         sqlx::query(
             "INSERT INTO session_documents (id, session_id, kind, body_format, body, updated_at)
@@ -365,7 +364,7 @@ impl SessionStore {
             .map_err(|e| StoreError::Serialize(e.to_string()))?;
 
         // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
-        // re-firing `transcripts`' `vault_export_dirty` trigger on every automatic
+        // re-firing `transcripts`' `search_index_dirty` trigger on every automatic
         // rebuild/refresh pass (Task 10).
         sqlx::query(
             "INSERT INTO transcripts (id, session_id, started_at_ms, memo, words_json, speaker_hints_json, updated_at)
@@ -575,25 +574,25 @@ mod tests {
     }
 
     /// Task 10 calls `rebuild_index` automatically on every startup and window focus, so a
-    /// no-op rebuild must not requeue the (still-active, Task-13-retired) `vault_export`
-    /// worker -- otherwise every session gets a needless (and, in the presence of the export
-    /// format mismatch that Task 13 is meant to retire, actively corrupting) DB-to-vault mirror
-    /// pass on every single boot, forever, even when nothing on disk changed.
+    /// no-op rebuild must be a true DB no-op: the upserts' `WHERE` guards must keep unchanged
+    /// rows from firing their `AFTER UPDATE` triggers (observable via the `search_index_dirty`
+    /// queue) -- otherwise every boot/focus re-queues every session for a needless search
+    /// re-projection, forever, even when nothing on disk changed.
     #[tokio::test]
-    async fn rebuild_of_unchanged_files_does_not_requeue_vault_export() {
+    async fn rebuild_of_unchanged_files_does_not_requeue_search_reindexing() {
         let (store, _vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "# hi").await.unwrap();
         store.rebuild_index().await.unwrap();
 
-        sqlx::query("DELETE FROM vault_export_dirty")
+        sqlx::query("DELETE FROM search_index_dirty")
             .execute(store.pool())
             .await
             .unwrap();
 
         store.rebuild_index().await.unwrap();
 
-        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
+        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
             .fetch_one(store.pool())
             .await
             .unwrap();
@@ -605,14 +604,15 @@ mod tests {
     /// `std::fs::write` (bypassing `write_meta` entirely, the way another device or a
     /// hand-edit would) so the guard's `DO UPDATE` branch -- not just its no-op branch -- gets
     /// exercised, and asserts both halves of "the reconcile actually reconciled": the index
-    /// value changed, and `vault_export` got queued to mirror that change back out.
+    /// value changed, and the session got queued for search reindexing.
     #[tokio::test]
-    async fn rebuild_of_a_genuinely_changed_file_updates_the_index_and_requeues_vault_export() {
+    async fn rebuild_of_a_genuinely_changed_file_updates_the_index_and_requeues_search_reindexing()
+    {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.rebuild_index().await.unwrap();
 
-        sqlx::query("DELETE FROM vault_export_dirty")
+        sqlx::query("DELETE FROM search_index_dirty")
             .execute(store.pool())
             .await
             .unwrap();
@@ -630,20 +630,20 @@ mod tests {
         assert_eq!(title, "Two");
 
         let dirty: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM vault_export_dirty WHERE entity_type = 'session' AND entity_id = 's1'",
+            "SELECT COUNT(*) FROM search_index_dirty WHERE entity_type = 'session' AND entity_id = 's1'",
         )
         .fetch_one(store.pool())
         .await
         .unwrap();
         assert_eq!(
             dirty, 1,
-            "a genuine change must still requeue vault_export, not just no-ops getting skipped"
+            "a genuine change must still queue search reindexing, not just no-ops getting skipped"
         );
     }
 
     /// Reproduces the failure mode a real boot smoke turned up: a `_memo.md` that already
-    /// carries a frontmatter wrapper (as an external edit, the legacy importer, or the old
-    /// `vault_export` mirror would leave behind) must not have that wrapper compound with each
+    /// carries a frontmatter wrapper (as an external edit or the retired legacy exporter
+    /// would leave behind) must not have that wrapper compound with each
     /// automatic rebuild pass. Without `strip_leading_frontmatter` in the read path, each of
     /// these calls would index the *previous* pass's own wrapper verbatim, growing the indexed
     /// body by one nested frontmatter block every time -- exactly what Task 10's automatic
