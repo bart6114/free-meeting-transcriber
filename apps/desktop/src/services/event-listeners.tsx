@@ -30,7 +30,6 @@ type CaptureIdentitySqlRow = {
 const CAPTURE_IDENTITY_SQL = `
   SELECT session.id AS session_id, session.owner_user_id
   FROM sessions AS session
-  WHERE session.deleted_at IS NULL
   ORDER BY session.id
 `;
 

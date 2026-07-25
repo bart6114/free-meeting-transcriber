@@ -123,7 +123,7 @@ const SESSION_CONTENT_SQL = `
         LIMIT 1
       )
     )
-  WHERE session.id = ? AND session.deleted_at IS NULL
+  WHERE session.id = ?
   LIMIT 1
 `;
 
@@ -144,7 +144,6 @@ export async function loadActiveSessionIds(): Promise<string[]> {
     `
       SELECT id
       FROM sessions
-      WHERE deleted_at IS NULL
       ORDER BY created_at DESC, id
     `,
   );

@@ -126,7 +126,7 @@ const SESSION_SELECT_SQL = `
       )
     )
     AND note.deleted_at IS NULL
-  WHERE sessions.id = ? AND sessions.deleted_at IS NULL
+  WHERE sessions.id = ?
   LIMIT 1
 `;
 
@@ -190,7 +190,7 @@ export function useSessionSummary(
     sql: `
       SELECT id, title, created_at
       FROM sessions
-      WHERE id = ? AND deleted_at IS NULL
+      WHERE id = ?
       LIMIT 1
     `,
     params: [sessionId],
@@ -208,7 +208,6 @@ export function useSessionSummaries(): SessionSummaryRecord[] {
     sql: `
       SELECT id, title, created_at
       FROM sessions
-      WHERE deleted_at IS NULL
       ORDER BY created_at DESC, id
     `,
   });
@@ -346,7 +345,7 @@ export function updateEnhancedNoteContent(
         sql: `
           UPDATE sessions
           SET title = ?, updated_at = ?
-          WHERE id = ? AND deleted_at IS NULL
+          WHERE id = ?
         `,
         params: [sessionTitle, now, sessionId],
       });
@@ -400,7 +399,7 @@ export function updateSession(
         sql: `
           UPDATE sessions
           SET ${assignments.join(", ")}, updated_at = ?
-          WHERE id = ? AND deleted_at IS NULL
+          WHERE id = ?
         `,
         params: [...params, now, sessionId],
       });
@@ -485,7 +484,7 @@ export async function softDeleteSession(
   // tombstone column left to read back from), so anything the undo toast needs to
   // display has to be captured up front.
   const [session] = await liveQueryClient.execute<SessionDeleteSqlRow>(
-    `SELECT id, title FROM sessions WHERE id = ? AND deleted_at IS NULL LIMIT 1`,
+    `SELECT id, title FROM sessions WHERE id = ? LIMIT 1`,
     [sessionId],
   );
   if (!session) return null;
@@ -554,7 +553,7 @@ export async function isSessionEmpty(sessionId: string): Promise<boolean> {
           )
         )
         AND note.deleted_at IS NULL
-      WHERE sessions.id = ? AND sessions.deleted_at IS NULL
+      WHERE sessions.id = ?
       LIMIT 1
     `,
     [sessionId],
@@ -621,14 +620,14 @@ function createEmptyNoteStatement(sessionId: string, now: string, body = "") {
     sql: `
       INSERT INTO session_documents (
         id, session_id, kind, body_format, body, created_by,
-        updated_by, created_at, updated_at, deleted_at
+        updated_by, updated_at, deleted_at
       )
       SELECT ?, id, 'note', 'prosemirror_json', ?,
-        owner_user_id, owner_user_id, ?, ?, NULL
+        owner_user_id, owner_user_id, ?, NULL
       FROM sessions
-      WHERE id = ? AND deleted_at IS NULL
+      WHERE id = ?
     `,
-    params: [sessionId, body, now, now, sessionId],
+    params: [sessionId, body, now, sessionId],
   };
 }
 

@@ -110,9 +110,7 @@ describe("transcript queries", () => {
         speakerHints: [expect.objectContaining({ word_id: "word-1" })],
       }),
     ]);
-    expect(mocks.queryOptions[0]?.sql).toContain(
-      "ORDER BY started_at_ms, created_at, id",
-    );
+    expect(mocks.queryOptions[0]?.sql).toContain("ORDER BY started_at_ms, id");
   });
 
   it("treats non-array transcript payloads as empty without hiding the row", () => {

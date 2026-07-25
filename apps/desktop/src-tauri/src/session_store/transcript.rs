@@ -784,28 +784,20 @@ mod tests {
             );
         }
 
-        // Recreate the table (mirrors the canonical migration's transcripts DDL) and
-        // confirm flush_all() recovers the session that previously failed.
+        // Recreate the table (mirrors 20260725120000_drop_sync_machinery's transcripts
+        // DDL) and confirm flush_all() recovers the session that previously failed.
         sqlx::query(
             "CREATE TABLE IF NOT EXISTS transcripts (
-              id                    TEXT PRIMARY KEY NOT NULL,
-              workspace_id          TEXT NOT NULL DEFAULT '',
-              owner_user_id         TEXT NOT NULL DEFAULT '',
-              session_id            TEXT NOT NULL DEFAULT '',
-              source                TEXT NOT NULL DEFAULT '',
-              provider              TEXT NOT NULL DEFAULT '',
-              model                 TEXT NOT NULL DEFAULT '',
-              language              TEXT NOT NULL DEFAULT '',
-              started_at_ms         INTEGER NOT NULL DEFAULT 0,
-              ended_at_ms           INTEGER,
-              audio_attachment_id   TEXT NOT NULL DEFAULT '',
-              memo                   TEXT NOT NULL DEFAULT '',
-              words_json            TEXT NOT NULL DEFAULT '[]',
-              speaker_hints_json    TEXT NOT NULL DEFAULT '[]',
-              metadata_json         TEXT NOT NULL DEFAULT '{}',
-              created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-              updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-              deleted_at            TEXT
+              id                  TEXT PRIMARY KEY NOT NULL,
+              owner_user_id       TEXT NOT NULL DEFAULT '',
+              session_id          TEXT NOT NULL DEFAULT '',
+              started_at_ms       INTEGER NOT NULL DEFAULT 0,
+              ended_at_ms         INTEGER,
+              memo                TEXT NOT NULL DEFAULT '',
+              words_json          TEXT NOT NULL DEFAULT '[]',
+              speaker_hints_json  TEXT NOT NULL DEFAULT '[]',
+              updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+              deleted_at          TEXT
             ) STRICT",
         )
         .execute(store.pool())

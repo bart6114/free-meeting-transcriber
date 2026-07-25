@@ -152,7 +152,6 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "INSERT INTO search_index_dirty (entity_type, entity_id)
          SELECT 'session', id
          FROM sessions
-         WHERE deleted_at IS NULL
          ON CONFLICT(entity_type, entity_id) DO UPDATE SET
            generation = search_index_dirty.generation + 1,
            queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
@@ -244,7 +243,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
     let Some(session) = sqlx::query(
         "SELECT title, created_at, event_json
          FROM sessions
-         WHERE id = ? AND deleted_at IS NULL",
+         WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -257,7 +256,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
         "SELECT body
          FROM session_documents
          WHERE session_id = ? AND kind = 'note' AND deleted_at IS NULL
-         ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, created_at, id
+         ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, id
          LIMIT 1",
     )
     .bind(id)
@@ -271,7 +270,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
          WHERE session_id = ?
            AND kind IN ('summary', 'template_output')
            AND deleted_at IS NULL
-         ORDER BY sort_order, created_at, id",
+         ORDER BY sort_order, id",
     )
     .bind(id)
     .fetch_all(pool)
@@ -281,7 +280,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
         "SELECT words_json
          FROM transcripts
          WHERE session_id = ? AND deleted_at IS NULL
-         ORDER BY started_at_ms, created_at, id",
+         ORDER BY started_at_ms, id",
     )
     .bind(id)
     .fetch_all(pool)
@@ -315,7 +314,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
 
 async fn projection_consistency_snapshot(pool: &SqlitePool) -> Result<(i64, i64), sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let active_count = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE deleted_at IS NULL")
+    let active_count = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&mut *tx)
         .await?;
     let pending_count = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")

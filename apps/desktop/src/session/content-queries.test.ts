@@ -103,7 +103,7 @@ describe("session content SQLite snapshots", () => {
     ]);
   });
 
-  it("lists only active SQLite session ids", async () => {
+  it("lists SQLite session ids newest first", async () => {
     mocks.execute.mockResolvedValueOnce([
       { id: "session-2" },
       { id: "session-1" },
@@ -113,6 +113,8 @@ describe("session content SQLite snapshots", () => {
       "session-2",
       "session-1",
     ]);
-    expect(mocks.execute.mock.calls[0][0]).toContain("deleted_at IS NULL");
+    expect(mocks.execute.mock.calls[0][0]).toContain(
+      "ORDER BY created_at DESC, id",
+    );
   });
 });

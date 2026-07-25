@@ -49,12 +49,9 @@ pub struct SessionDocumentRow {
     pub title: String,
     pub body_format: String,
     pub body: String,
-    pub source_hash: String,
-    pub generation_metadata_json: String,
     pub sort_order: i64,
     pub created_by: String,
     pub updated_by: String,
-    pub created_at: String,
     pub updated_at: String,
 }
 
@@ -63,18 +60,11 @@ pub struct SessionTranscriptRow {
     pub id: String,
     pub owner_user_id: String,
     pub session_id: String,
-    pub source: String,
-    pub provider: String,
-    pub model: String,
-    pub language: String,
     pub started_at_ms: i64,
     pub ended_at_ms: Option<i64>,
-    pub audio_attachment_id: String,
     pub memo: String,
     pub words_json: String,
     pub speaker_hints_json: String,
-    pub metadata_json: String,
-    pub created_at: String,
     pub updated_at: String,
 }
 

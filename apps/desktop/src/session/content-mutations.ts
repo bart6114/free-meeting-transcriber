@@ -41,7 +41,7 @@ export function persistGeneratedEnhancedNote({
             AND deleted_at IS NULL
             AND EXISTS (
               SELECT 1 FROM sessions
-              WHERE sessions.id = ? AND sessions.deleted_at IS NULL
+              WHERE sessions.id = ?
             )
         `,
         params: [
@@ -129,7 +129,7 @@ export function applyGeneratedSessionTitle({
         sql: `
           UPDATE sessions
           SET title = ?, updated_at = ?
-          WHERE id = ? AND title = ? AND deleted_at IS NULL
+          WHERE id = ? AND title = ?
         `,
         params: [nextTitle, now, sessionId, currentTitle],
         expectedRowsAffected: 1,

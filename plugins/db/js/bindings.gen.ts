@@ -85,7 +85,7 @@ async unsubscribe(subscriptionId: string) : Promise<Result<null, string>> {
 export type ActionItem = { id: string; assignee_human_id: string; status: string; text: string; due_at: string; completed_at: string | null }
 export type DependencyAnalysis = { kind: "reactive"; data: { targets: DependencyTarget[] } } | { kind: "non_reactive"; data: { reason: string } }
 export type DependencyTarget = { kind: "table"; data: string } | { kind: "virtual_table"; data: string }
-export type Document = { id: string; kind: string; template_id: string; title: string; markdown: string; sort_order: number; created_at: string; updated_at: string }
+export type Document = { id: string; kind: string; template_id: string; title: string; markdown: string; sort_order: number; updated_at: string }
 export type ExecuteProxyResult = { rows: JsonValue[] }
 export type GetMeetingInput = { meeting_id: string }
 export type GetMeetingTranscriptInput = { meeting_id: string; offset: number | null; limit: number | null }
