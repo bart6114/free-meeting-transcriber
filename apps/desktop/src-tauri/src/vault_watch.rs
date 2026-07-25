@@ -184,9 +184,9 @@ fn is_export_marker_path(relative: &str) -> bool {
 
 /// `hypr_fs_sync_core::export::tmp_sibling_path` names atomic-write temp
 /// files `.tmp-{pid}-{nonce}-{original_name}` as a *sibling* of the real
-/// file, so the pattern can appear either as the whole basename (a
-/// top-level tmp file) or as a `.`-prefixed segment ahead of another dotted
-/// name -- `contains` catches both without needing to anchor at the start.
+/// file, so the prefix is always the very start of the basename -- anchored
+/// `starts_with`, not `contains`, so a legitimate user file that merely
+/// embeds the substring (e.g. `notes.tmp-ideas.md`) still refreshes.
 /// `plugins/notify`'s own `should_skip_path` already filters basenames that
 /// simply *start* with `.tmp` before a `FileChanged` is even emitted; this
 /// is a second, independent check on the exact pattern this app's own
@@ -196,7 +196,7 @@ fn has_tmp_write_basename(relative: &str) -> bool {
     relative
         .rsplit('/')
         .next()
-        .is_some_and(|name| name.contains(".tmp-"))
+        .is_some_and(|name| name.starts_with(".tmp-"))
 }
 
 /// Everything this module ignores independent of the journal check -- see
@@ -390,6 +390,14 @@ mod tests {
         assert!(matches!(
             classify_event("sessions/s1/.tmp-1234-5678-_memo.md", false),
             WatchAction::Ignore
+        ));
+    }
+
+    #[test]
+    fn a_user_file_merely_containing_tmp_dash_still_refreshes() {
+        assert!(matches!(
+            classify_event("sessions/s1/notes.tmp-ideas.md", false),
+            WatchAction::Refresh(id) if id == "s1"
         ));
     }
 

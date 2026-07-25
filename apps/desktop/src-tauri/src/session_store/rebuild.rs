@@ -35,11 +35,13 @@ impl SessionStore {
         }
 
         let present: HashSet<&str> = folder_ids.iter().map(String::as_str).collect();
-        for indexed_id in self.all_indexed_session_ids().await? {
-            if !present.contains(indexed_id.as_str()) {
-                self.delete_session_index_tx(&indexed_id).await?;
-            }
-        }
+        let stale: Vec<String> = self
+            .all_indexed_session_ids()
+            .await?
+            .into_iter()
+            .filter(|indexed_id| !present.contains(indexed_id.as_str()))
+            .collect();
+        self.delete_session_index_tx(&stale).await?;
 
         Ok(report)
     }
@@ -80,7 +82,7 @@ impl SessionStore {
 
         match self.read_meta(id).await {
             Ok(None) => {
-                self.delete_session_index_tx(id).await?;
+                self.delete_session_index_tx(&[id.to_string()]).await?;
                 match self.session_has_content(id).await {
                     Ok(true) => report.ghost_sessions.push(id.to_string()),
                     Ok(false) => {}
@@ -242,6 +244,22 @@ impl SessionStore {
                     if stem == "_memo" {
                         continue;
                     }
+                    // Hidden files are never session documents: this covers stale
+                    // `.tmp-<pid>-<nonce>-<name>` leftovers from a crashed atomic write
+                    // (`hypr_fs_sync_core::export::tmp_sibling_path`), which would
+                    // otherwise be indexed under a garbage kind.
+                    if stem.starts_with('.') {
+                        continue;
+                    }
+                    // The retired sync machinery's files-win reconcile wrote conflict
+                    // backups as `<stem>.conflict-<timestamp>.md` siblings
+                    // (`unique_conflict_backup_path` in the deleted
+                    // `plugins/db/src/import/legacy_vault.rs`). The producer is gone,
+                    // but pre-existing vaults can still contain them -- they are frozen
+                    // evidence, not live documents, so never index them.
+                    if stem.contains(".conflict-") {
+                        continue;
+                    }
                     let content = std::fs::read_to_string(&path)
                         .map(super::strip_leading_frontmatter)
                         .map_err(|e| StoreError::Io(format!("failed to read {stem}.md: {e}")));
@@ -401,38 +419,12 @@ impl SessionStore {
     /// backing them are confirmed gone (the directory scan that produced `keep_kinds` did
     /// succeed), so per mirror honesty their index rows go too.
     async fn prune_document_rows(&self, id: &str, keep_kinds: &[String]) -> Result<(), StoreError> {
-        let existing: Vec<String> =
-            sqlx::query_scalar("SELECT id FROM session_documents WHERE session_id = ?")
-                .bind(id)
-                .fetch_all(self.pool())
-                .await?;
         let keep_ids: Vec<String> = keep_kinds.iter().map(|k| format!("{id}:{k}")).collect();
-        for existing_id in existing {
-            if !keep_ids.contains(&existing_id) {
-                sqlx::query("DELETE FROM session_documents WHERE id = ?")
-                    .bind(&existing_id)
-                    .execute(self.pool())
-                    .await?;
-            }
-        }
-        Ok(())
+        prune_rows_not_in(self.pool(), "session_documents", id, &keep_ids).await
     }
 
     async fn prune_transcript_rows(&self, id: &str, keep_ids: &[String]) -> Result<(), StoreError> {
-        let existing: Vec<String> =
-            sqlx::query_scalar("SELECT id FROM transcripts WHERE session_id = ?")
-                .bind(id)
-                .fetch_all(self.pool())
-                .await?;
-        for existing_id in existing {
-            if !keep_ids.contains(&existing_id) {
-                sqlx::query("DELETE FROM transcripts WHERE id = ?")
-                    .bind(&existing_id)
-                    .execute(self.pool())
-                    .await?;
-            }
-        }
-        Ok(())
+        prune_rows_not_in(self.pool(), "transcripts", id, keep_ids).await
     }
 
     async fn all_indexed_session_ids(&self) -> Result<Vec<String>, StoreError> {
@@ -448,35 +440,73 @@ impl SessionStore {
 
     /// Same rationale as Task 6's `delete_session` fix: a partial delete across the three
     /// index tables must never be observable, so it's one transaction. File-system-free by
-    /// design -- rebuild/refresh never touch the vault.
-    async fn delete_session_index_tx(&self, id: &str) -> Result<(), StoreError> {
+    /// design -- rebuild/refresh never touch the vault. Takes a batch so `rebuild_index`'s
+    /// vanished-session prune is three `IN (...)` deletes per chunk instead of three per id.
+    async fn delete_session_index_tx(&self, ids: &[String]) -> Result<(), StoreError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+
         let mut tx = self
             .pool()
             .begin()
             .await
             .map_err(|e| StoreError::Db(format!("failed to start transaction: {e}")))?;
 
-        sqlx::query("DELETE FROM sessions WHERE id = ?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-        sqlx::query("DELETE FROM session_documents WHERE session_id = ?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-        sqlx::query("DELETE FROM transcripts WHERE session_id = ?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
+        // Chunked to stay far below SQLite's bound-parameter limit (999 on older builds).
+        for chunk in ids.chunks(500) {
+            let placeholders = placeholder_list(chunk.len());
+            for (table, column) in [
+                ("sessions", "id"),
+                ("session_documents", "session_id"),
+                ("transcripts", "session_id"),
+            ] {
+                let sql = format!("DELETE FROM {table} WHERE {column} IN ({placeholders})");
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
+                for id in chunk {
+                    query = query.bind(id);
+                }
+                query
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| StoreError::Db(e.to_string()))?;
+            }
+        }
 
         tx.commit()
             .await
             .map_err(|e| StoreError::Db(format!("failed to commit transaction: {e}")))?;
         Ok(())
     }
+}
+
+fn placeholder_list(count: usize) -> String {
+    vec!["?"; count].join(", ")
+}
+
+/// One `DELETE ... WHERE session_id = ? AND id NOT IN (...)` instead of a select-then-loop
+/// issuing one DELETE per stale row. `keep_ids` is bounded by the number of files in a single
+/// session directory, so it always fits one statement's bound-parameter budget.
+async fn prune_rows_not_in(
+    pool: &sqlx::SqlitePool,
+    table: &str,
+    session_id: &str,
+    keep_ids: &[String],
+) -> Result<(), StoreError> {
+    let sql = if keep_ids.is_empty() {
+        format!("DELETE FROM {table} WHERE session_id = ?")
+    } else {
+        format!(
+            "DELETE FROM {table} WHERE session_id = ? AND id NOT IN ({})",
+            placeholder_list(keep_ids.len())
+        )
+    };
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(session_id);
+    for keep_id in keep_ids {
+        query = query.bind(keep_id);
+    }
+    query.execute(pool).await?;
+    Ok(())
 }
 
 /// Pushes a human-readable line to `errors` and remembers the first raw `StoreError`
@@ -830,6 +860,34 @@ mod tests {
             !report.errors.is_empty(),
             "an unreadable file must be reported, not silently treated as absent"
         );
+    }
+
+    /// Vaults created before this branch can still hold the retired sync machinery's
+    /// conflict backups (`<stem>.conflict-<timestamp>.md`) and, after a crash mid-write,
+    /// `.tmp-<pid>-<nonce>-<name>` atomic-write leftovers. Neither is a live document;
+    /// rebuild must not index them as one.
+    #[tokio::test]
+    async fn rebuild_ignores_conflict_backups_and_tmp_leftovers() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store.write_note("s1", "live note").await.unwrap();
+        let dir = vault.path().join("sessions/s1");
+        std::fs::write(
+            dir.join("_memo.conflict-2026-07-23T12-00-00.123Z.md"),
+            "stale conflict copy",
+        )
+        .unwrap();
+        std::fs::write(dir.join(".tmp-1234-5678-_memo.md"), "crashed atomic write").unwrap();
+
+        let report = store.rebuild_index().await.unwrap();
+
+        assert_eq!(report.notes, 1, "only the live note should be indexed");
+        let kinds: Vec<String> =
+            sqlx::query_scalar("SELECT kind FROM session_documents WHERE session_id='s1'")
+                .fetch_all(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(kinds, vec!["note".to_string()]);
     }
 
     #[tokio::test]
