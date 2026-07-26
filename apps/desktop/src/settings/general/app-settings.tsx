@@ -23,7 +23,6 @@ interface AppSettingsViewProps {
   showAppInDock: SettingItem;
   showTrayIcon: SettingItem;
   telemetryConsent: SettingItem;
-  meetingDisclosureAutoPost: SettingItem;
   audioRetention: {
     value: string;
     onChange: (value: string) => void;
@@ -37,7 +36,6 @@ export function AppSettingsView({
   showAppInDock,
   showTrayIcon,
   telemetryConsent,
-  meetingDisclosureAutoPost,
   audioRetention,
 }: AppSettingsViewProps) {
   return (
@@ -101,19 +99,6 @@ export function AppSettingsView({
             }
             checked={autoStopMeetings.value}
             onChange={autoStopMeetings.onChange}
-          />
-          <SettingRow
-            title={<Trans>Post recording disclosure in meeting chat</Trans>}
-            description={
-              <Trans>
-                Automatically post a disclosure after listening starts when the
-                active meeting chat supports safe posting. Posting failure does
-                not stop listening. A disclosure does not confirm participant
-                consent.
-              </Trans>
-            }
-            checked={meetingDisclosureAutoPost.value}
-            onChange={meetingDisclosureAutoPost.onChange}
           />
           <SettingRow
             title={<Trans>Show floating bar</Trans>}

@@ -1,12 +1,8 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 import { getSessionKeywords } from "./useKeywords";
-import {
-  getPostCaptureAction,
-  sendMeetingRecordingDisclosure,
-  useStartListening,
-} from "./useStartListening";
+import { getPostCaptureAction, useStartListening } from "./useStartListening";
 
 import { enqueueSessionAudioOperation } from "~/session/audio-operations";
 
@@ -15,7 +11,6 @@ const {
   queueAutoEnhanceIfSummaryEmptyMock,
   resetEnhanceTasksMock,
   startMock,
-  getSessionModeMock,
   runBatchMock,
   useListenerMock,
   useSessionMock,
@@ -29,8 +24,6 @@ const {
   leftSidebarExpanded,
   setLeftSidebarExpandedMock,
   deleteProcessedAudioForRetentionMock,
-  listMicUsingApplicationsMock,
-  sendMeetingChatMessageMock,
   sonnerToastWarningMock,
   sonnerToastErrorMock,
   catalogLocalSessionAudioMock,
@@ -41,7 +34,6 @@ const {
   queueAutoEnhanceIfSummaryEmptyMock: vi.fn(),
   resetEnhanceTasksMock: vi.fn(),
   startMock: vi.fn(),
-  getSessionModeMock: vi.fn(),
   runBatchMock: vi.fn(),
   useListenerMock: vi.fn(),
   useSessionMock: vi.fn(),
@@ -55,8 +47,6 @@ const {
   leftSidebarExpanded: { value: true },
   setLeftSidebarExpandedMock: vi.fn(),
   deleteProcessedAudioForRetentionMock: vi.fn(),
-  listMicUsingApplicationsMock: vi.fn(),
-  sendMeetingChatMessageMock: vi.fn(),
   sonnerToastWarningMock: vi.fn(),
   sonnerToastErrorMock: vi.fn(),
   catalogLocalSessionAudioMock: vi.fn(),
@@ -72,13 +62,6 @@ vi.mock("@hypr/plugin-transcription", () => ({
 
 vi.mock("./contexts", () => ({
   useListener: useListenerMock,
-}));
-
-vi.mock("@hypr/plugin-detect", () => ({
-  commands: {
-    listMicUsingApplications: listMicUsingApplicationsMock,
-    sendMeetingChatMessage: sendMeetingChatMessageMock,
-  },
 }));
 
 vi.mock("@hypr/ui/components/ui/toast", () => ({
@@ -163,13 +146,6 @@ vi.mock("~/types/tauri.gen", () => ({
   },
 }));
 
-let disclosureSessionSequence = 0;
-
-function nextDisclosureSessionId() {
-  disclosureSessionSequence += 1;
-  return `disclosure-session-${disclosureSessionSequence}`;
-}
-
 describe("getPostCaptureAction", () => {
   test("runs batch then enhance after record-only capture finishes when audio is available", () => {
     expect(
@@ -248,11 +224,9 @@ describe("useStartListening", () => {
     }));
     useListenerMock.mockImplementation((selector) =>
       selector({
-        getSessionMode: getSessionModeMock,
         start: startMock,
       }),
     );
-    getSessionModeMock.mockReturnValue("active");
     useSessionMock.mockReturnValue({
       id: "session-1",
       user_id: "user-1",
@@ -264,11 +238,7 @@ describe("useStartListening", () => {
     softDeleteTranscriptMock.mockResolvedValue(undefined);
     catalogLocalSessionAudioMock.mockResolvedValue(undefined);
     useConfigValueMock.mockImplementation((key) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? false
-          : [],
+      key === "ai_language" ? "en" : [],
     );
     leftSidebarExpanded.value = true;
     useSTTConnectionMock.mockReturnValue({
@@ -284,17 +254,6 @@ describe("useStartListening", () => {
     isSupportedLanguagesLiveMock.mockResolvedValue({
       status: "ok",
       data: true,
-    });
-    listMicUsingApplicationsMock.mockResolvedValue({
-      status: "ok",
-      data: [{ id: "com.tinyspeck.slackmacgap", name: "Slack" }],
-    });
-    sendMeetingChatMessageMock.mockResolvedValue({
-      status: "ok",
-      data: {
-        sent: true,
-        warnings: [],
-      },
     });
   });
 
@@ -323,11 +282,7 @@ describe("useStartListening", () => {
   test("keeps the left sidebar state when listening fails to start", async () => {
     startMock.mockResolvedValue(false);
     useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? true
-          : [],
+      key === "ai_language" ? "en" : [],
     );
 
     const { result } = renderHook(() => useStartListening("session-1"));
@@ -337,8 +292,6 @@ describe("useStartListening", () => {
     });
 
     expect(setLeftSidebarExpandedMock).not.toHaveBeenCalled();
-    expect(sendMeetingChatMessageMock).not.toHaveBeenCalled();
-    expect(listMicUsingApplicationsMock).not.toHaveBeenCalled();
   });
 
   test("reads keywords from the same pre-start snapshot as the transcript memo", async () => {
@@ -842,11 +795,7 @@ describe("useStartListening", () => {
 
   test("keeps supported non-English realtime local models live", async () => {
     useConfigValueMock.mockImplementation((key) =>
-      key === "ai_language"
-        ? "de"
-        : key === "consent_auto_send_chat"
-          ? false
-          : ["en"],
+      key === "ai_language" ? "de" : ["en"],
     );
     useSTTConnectionMock.mockReturnValue({
       conn: {
@@ -871,11 +820,7 @@ describe("useStartListening", () => {
 
   test("keeps realtime local transcription live by filtering unsupported extra spoken languages", async () => {
     useConfigValueMock.mockImplementation((key) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? false
-          : ["ko"],
+      key === "ai_language" ? "en" : ["ko"],
     );
     useSTTConnectionMock.mockReturnValue({
       conn: {
@@ -900,11 +845,7 @@ describe("useStartListening", () => {
 
   test("uses the main language for Deepgram live capture when extras are unsupported", async () => {
     useConfigValueMock.mockImplementation((key) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? false
-          : ["ko"],
+      key === "ai_language" ? "en" : ["ko"],
     );
     useSTTConnectionMock.mockReturnValue({
       conn: {
@@ -932,359 +873,5 @@ describe("useStartListening", () => {
       languages: ["en"],
       transcription_mode: undefined,
     });
-  });
-
-  test("does not send the recording disclosure when auto-post is disabled", async () => {
-    const { result } = renderHook(() => useStartListening("session-1"));
-
-    await act(async () => {
-      await result.current();
-    });
-
-    expect(sendMeetingChatMessageMock).not.toHaveBeenCalled();
-    expect(listMicUsingApplicationsMock).not.toHaveBeenCalled();
-  });
-
-  test("posts the recording disclosure after listening starts when enabled", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? true
-          : [],
-    );
-    const sessionId = nextDisclosureSessionId();
-
-    const { result } = renderHook(() => useStartListening(sessionId));
-
-    await act(async () => {
-      await result.current();
-    });
-
-    await waitFor(() => {
-      expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-        "I'm using Free Meeting Transcriber to record and transcribe this meeting.",
-        ["com.tinyspeck.slackmacgap"],
-      );
-    });
-  });
-
-  test("posts the recording disclosure once across repeated successful starts", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? true
-          : [],
-    );
-    const sessionId = nextDisclosureSessionId();
-
-    const { result } = renderHook(() => useStartListening(sessionId));
-
-    await act(async () => {
-      await result.current();
-    });
-    await waitFor(() => {
-      expect(sendMeetingChatMessageMock).toHaveBeenCalledTimes(1);
-    });
-
-    await act(async () => {
-      await result.current();
-    });
-
-    expect(startMock).toHaveBeenCalledTimes(2);
-    expect(sendMeetingChatMessageMock).toHaveBeenCalledTimes(1);
-  });
-
-  test("shares the once-per-session disclosure guard across hook mounts", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? true
-          : [],
-    );
-    let resolveMicApps:
-      | ((value: {
-          status: "ok";
-          data: { id: string; name: string }[];
-        }) => void)
-      | undefined;
-    listMicUsingApplicationsMock.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveMicApps = resolve;
-        }),
-    );
-    const sessionId = nextDisclosureSessionId();
-    const firstHook = renderHook(() => useStartListening(sessionId));
-    const secondHook = renderHook(() => useStartListening(sessionId));
-
-    await act(async () => {
-      await firstHook.result.current();
-    });
-    await act(async () => {
-      await secondHook.result.current();
-    });
-
-    await act(async () => {
-      resolveMicApps?.({
-        status: "ok",
-        data: [{ id: "com.tinyspeck.slackmacgap", name: "Slack" }],
-      });
-      await Promise.resolve();
-    });
-
-    await waitFor(() => {
-      expect(sendMeetingChatMessageMock).toHaveBeenCalledTimes(1);
-    });
-    expect(listMicUsingApplicationsMock).toHaveBeenCalledTimes(1);
-  });
-
-  test("retries until Slack becomes mic-active without reporting intermediate failures", async () => {
-    listMicUsingApplicationsMock
-      .mockResolvedValueOnce({
-        status: "ok",
-        data: [{ id: "us.zoom.xos", name: "zoom.us" }],
-      })
-      .mockResolvedValueOnce({
-        status: "ok",
-        data: [{ id: "com.tinyspeck.slackmacgap", name: "Slack" }],
-      });
-
-    await expect(
-      sendMeetingRecordingDisclosure({
-        maxAttempts: 2,
-        retryIntervalMs: 0,
-      }),
-    ).resolves.toEqual({ status: "sent" });
-
-    expect(listMicUsingApplicationsMock).toHaveBeenCalledTimes(2);
-    expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-      expect.stringContaining("Free Meeting Transcriber"),
-      ["com.tinyspeck.slackmacgap"],
-    );
-    expect(sonnerToastWarningMock).not.toHaveBeenCalled();
-  });
-
-  test("keeps the Slack scope when Free Meeting Transcriber also appears in the mic-active apps", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? true
-          : [],
-    );
-    listMicUsingApplicationsMock.mockResolvedValue({
-      status: "ok",
-      data: [
-        {
-          id: "org.freemeetingtranscriber.dev",
-          name: "Free Meeting Transcriber Dev",
-        },
-        { id: "com.tinyspeck.slackmacgap", name: "Slack" },
-      ],
-    });
-    const sessionId = nextDisclosureSessionId();
-
-    const { result } = renderHook(() => useStartListening(sessionId));
-
-    await act(async () => {
-      await result.current();
-    });
-
-    await waitFor(() => {
-      expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-        expect.stringContaining("Free Meeting Transcriber"),
-        ["org.freemeetingtranscriber.dev", "com.tinyspeck.slackmacgap"],
-      );
-    });
-  });
-
-  test("passes an ambiguous meeting scope for Rust to reject before AX mutation", async () => {
-    listMicUsingApplicationsMock.mockResolvedValue({
-      status: "ok",
-      data: [
-        { id: "us.zoom.xos", name: "zoom.us" },
-        { id: "com.tinyspeck.slackmacgap", name: "Slack" },
-      ],
-    });
-    sendMeetingChatMessageMock.mockResolvedValue({
-      status: "ok",
-      data: {
-        sent: false,
-        warnings: ["expected exactly one recognized meeting app bundle"],
-      },
-    });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    await sendMeetingRecordingDisclosure({
-      maxAttempts: 1,
-      retryIntervalMs: 0,
-    });
-
-    expect(sendMeetingChatMessageMock).toHaveBeenCalledWith(
-      expect.stringContaining("Free Meeting Transcriber"),
-      ["us.zoom.xos", "com.tinyspeck.slackmacgap"],
-    );
-    expect(warn).toHaveBeenCalledWith(
-      "[listener] meeting disclosure was not sent",
-      "expected exactly one recognized meeting app bundle",
-    );
-    expect(sonnerToastWarningMock).toHaveBeenCalledWith(
-      "Recording started, but Free Meeting Transcriber could not post the meeting chat disclosure.",
-      { id: "meeting-disclosure-send-failed" },
-    );
-    warn.mockRestore();
-  });
-
-  test("reports one terminal failure after the bounded retry window", async () => {
-    listMicUsingApplicationsMock.mockResolvedValue({
-      status: "error",
-      error: "audio process query failed",
-    });
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-
-    await expect(
-      sendMeetingRecordingDisclosure({
-        maxAttempts: 3,
-        retryIntervalMs: 0,
-      }),
-    ).resolves.toEqual({
-      status: "notSent",
-      reason: "audio process query failed",
-    });
-
-    expect(listMicUsingApplicationsMock).toHaveBeenCalledTimes(3);
-    expect(sendMeetingChatMessageMock).not.toHaveBeenCalled();
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(sonnerToastWarningMock).toHaveBeenCalledTimes(1);
-    warn.mockRestore();
-  });
-
-  test("cancels disclosure before chat mutation when listening stops", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? true
-          : [],
-    );
-    let resolveMicApps:
-      | ((value: {
-          status: "ok";
-          data: { id: string; name: string }[];
-        }) => void)
-      | undefined;
-    listMicUsingApplicationsMock.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveMicApps = resolve;
-        }),
-    );
-    const sessionId = nextDisclosureSessionId();
-    const { result } = renderHook(() => useStartListening(sessionId));
-
-    await act(async () => {
-      await result.current();
-    });
-    await waitFor(() => {
-      expect(listMicUsingApplicationsMock).toHaveBeenCalledOnce();
-    });
-
-    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
-    await act(async () => {
-      await onStopped?.(sessionId, {
-        durationSeconds: 1,
-        audioPath: null,
-        requestedLiveTranscription: false,
-        liveTranscriptionActive: false,
-      });
-    });
-
-    await act(async () => {
-      resolveMicApps?.({
-        status: "ok",
-        data: [{ id: "com.tinyspeck.slackmacgap", name: "Slack" }],
-      });
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(sendMeetingChatMessageMock).not.toHaveBeenCalled();
-    expect(sonnerToastWarningMock).not.toHaveBeenCalled();
-  });
-
-  test("does not overlap disclosure sends after a quick stop and restart", async () => {
-    useConfigValueMock.mockImplementation((key: string) =>
-      key === "ai_language"
-        ? "en"
-        : key === "consent_auto_send_chat"
-          ? true
-          : [],
-    );
-    let resolveSend:
-      | ((value: {
-          status: "ok";
-          data: { sent: boolean; warnings: string[] };
-        }) => void)
-      | undefined;
-    sendMeetingChatMessageMock.mockImplementationOnce(
-      () =>
-        new Promise((resolve) => {
-          resolveSend = resolve;
-        }),
-    );
-    const sessionId = nextDisclosureSessionId();
-    const { result } = renderHook(() => useStartListening(sessionId));
-
-    await act(async () => {
-      await result.current();
-    });
-    await waitFor(() => {
-      expect(sendMeetingChatMessageMock).toHaveBeenCalledOnce();
-    });
-
-    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
-    await act(async () => {
-      await onStopped?.(sessionId, {
-        durationSeconds: 1,
-        audioPath: null,
-        requestedLiveTranscription: false,
-        liveTranscriptionActive: false,
-      });
-      await result.current();
-    });
-
-    expect(sendMeetingChatMessageMock).toHaveBeenCalledOnce();
-
-    await act(async () => {
-      resolveSend?.({ status: "ok", data: { sent: true, warnings: [] } });
-      await Promise.resolve();
-    });
-    expect(sendMeetingChatMessageMock).toHaveBeenCalledOnce();
-  });
-
-  test("returns a typed failure and warns when disclosure mutation rejects", async () => {
-    const error = new Error("IPC unavailable");
-    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-    sendMeetingChatMessageMock.mockRejectedValueOnce(error);
-
-    await expect(
-      sendMeetingRecordingDisclosure({
-        maxAttempts: 1,
-        retryIntervalMs: 0,
-      }),
-    ).resolves.toEqual({ status: "notSent", reason: "IPC unavailable" });
-
-    expect(warn).toHaveBeenCalledWith(
-      "[listener] meeting disclosure was not sent",
-      error,
-    );
-    expect(sonnerToastWarningMock).toHaveBeenCalledWith(
-      "Recording started, but Free Meeting Transcriber could not post the meeting chat disclosure.",
-      { id: "meeting-disclosure-send-failed" },
-    );
-    warn.mockRestore();
   });
 });
