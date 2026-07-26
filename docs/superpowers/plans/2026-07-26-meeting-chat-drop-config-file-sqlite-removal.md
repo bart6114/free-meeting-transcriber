@@ -128,6 +128,79 @@ the work can pause at any phase boundary with a healthy app.
 
 ---
 
+## 1b. Target end state — the Obsidian model
+
+The end state this plan builds toward, stated as invariants so every phase
+can be checked against them. The vault is the app, à la Obsidian: a folder
+of human-readable files that IS the user's data, fully usable without the
+app, synced/backed up by whatever the user already uses, editable by other
+tools. The app is a view over it.
+
+### Invariants
+
+1. **Files are the only durable store.** No database anywhere. Every byte
+   the user would care about losing lives in the vault as markdown or plain
+   JSON.
+2. **Everything derived is disposable.** The in-memory index, the Tantivy
+   search index, and any future snapshot cache can be deleted at any time
+   and the app rebuilds them from files with zero data loss and zero
+   behavior change. "Delete the caches, relaunch, diff the UI" is a
+   standing QA ritual (added to the Phase H gates below).
+3. **External edits are first-class.** Editing any vault file in another
+   app (or a sync client replacing it) is picked up by `vault_watch` and
+   reflected in the UI without restart. The journal's own-write filter
+   keeps the app from reacting to itself; everything else is a legitimate
+   external edit, never a conflict to "reconcile" (the Task 11 lesson:
+   files win, always).
+4. **Human-readable formats.** Markdown for anything a person reads or
+   writes (`_memo.md`, `enhanced/*.md`); JSON sidecars for structured data
+   (`_meta.json`, `transcript.json`, `tasks.json`, `templates/*.json`,
+   `config.json`) — same split Obsidian itself uses (`.md` notes +
+   `.obsidian/` JSON). No binary formats, no append-only logs, no locks
+   beyond atomic tmp+rename writes.
+5. **A vault is portable.** Point the app at any folder with this layout
+   (or an empty one) and it works: `global.json` holds only the pointer;
+   opening someone else's copy of a vault, a restored backup, or a synced
+   replica requires no import step. Markers (`.store-migrated-v1`,
+   `.files-canonical-v1`) travel with the vault so one-time migrations
+   never re-run on a moved vault.
+
+### End-state vault layout
+
+```
+<vault>/
+  config.json                  # all app settings (D2) — hand-editable
+  AGENTS.md                    # generated agent instructions (existing)
+  templates/<id>.json          # summary templates (D6)
+  sessions/<id>/
+    _meta.json                 # title, timestamps, event_json, folder_path, tags
+    _memo.md                   # the user's note (existing)
+    transcript.json            # transcript words/hints (existing)
+    tasks.json                 # action items (D4)
+    enhanced/<doc-id>.md       # AI summaries / template outputs (D5)
+    audio/…                    # recordings (existing)
+  .trash/                      # transactional deletes (existing)
+  .store-migrated-v1           # Task 12 marker (existing)
+  .files-canonical-v1          # exodus marker (D11)
+```
+
+Outside the vault (app-data, machine-local, never synced): `global.json`
+(vault pointer only), `search_index/` (disposable Tantivy cache),
+`models/` (downloaded weights), `store.json` (UI state), window state,
+OS keychain (secrets). **No `app.db`** — see Phase H for its retirement.
+
+### What this rules out
+
+- Any future feature that stores canonical data outside the vault files.
+  New data classes get a file home first, index second — that ordering is
+  now an architectural rule, not a preference.
+- A persistent index/cache that users must not delete. If D7's measurement
+  ever forces a snapshot cache, it lives in app-data, is versioned, and
+  invariant 2 still holds (delete → full rescan, identical result).
+- Write paths that bypass the store's atomic-write + journal discipline.
+
+---
+
 ## 2. Phase A — meeting chat & consent: total drop
 
 Everything below is safe to land from a Linux box **except A3/A4 verification,
@@ -481,13 +554,30 @@ Only after E–G are green on the owner's machine:
   (`mod.rs:22`) and every SQL statement (content.rs lines 32/92/144/185,
   transcript.rs:289, rebuild.rs's upsert half — already repurposed in E-1);
   `vault_watch.rs`'s `is_app_db_path` ignore rule dies.
-- Startup deletes/ignores the orphaned `app.db*` files? **Leave them on
-  disk** (cheap, reversible); log once. A later release can clean up.
+- Retire `app.db*` actively (the end state is *no database on disk*, not an
+  orphaned one): on first boot after H, if the exodus marker
+  `.files-canonical-v1` is present and `app.db` still exists, rename
+  `app.db` / `-wal` / `-shm` to `app.db.pre-files-backup*` in app-data and
+  log once. Reversible by hand, invisible to sync (app-data is never
+  synced), and a later release deletes the backup after a deprecation
+  window.
 - `migrate.rs` (words_json repair) is obsolete once transcripts are
   file-only — verify the repair already ran (marker) and delete the module;
   keep the marker files themselves ignored by the watcher.
 - End-state greps (empty outside docs/.superpowers/git history):
   `sqlx|SqlitePool|app_settings|search_index_dirty|plugin:db|@hypr/plugin-db|drizzle|hypr_db_app|hypr-db-`
+- **Obsidian-model verification ritual** (the §1b invariants, on the owner's
+  real vault, evidence in the report):
+  1. Disposable caches: quit → delete `search_index/` (and any snapshot
+     cache) → relaunch → identical UI, search works after reindex.
+  2. Vault portability: copy the vault to a new path → point a fresh
+     app-data at it (`FMTR_VAULT_BASE`) → everything present, no import
+     step, markers respected (no migration re-runs).
+  3. External-edit round trip: edit `_memo.md` and `config.json` in a text
+     editor while the app runs → UI reflects both without restart.
+  4. Grep the running app's open file descriptors / app-data dir: no
+     `*.db*` files in use or present (beyond the one-time
+     `app.db.pre-files-backup`).
 - Final whole-branch review + the full QA pass (qa-critical-ux minus
   calendar), incl. the original incident scenario (record → quit → relaunch
   → transcript present) and a cold boot timed on the owner's real vault
