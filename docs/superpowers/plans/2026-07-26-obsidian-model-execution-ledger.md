@@ -54,6 +54,51 @@ intend to revive, say so — this is the one Phase H deletion that is a product
 decision rather than dead-code removal.** Fully reversible: it lives in git
 history on this unmerged branch.
 
+## Whole-branch review (2026-07-26, post-H, three independent read-only reviewers)
+
+Dimensions: reactivity/cache-coherence, data-loss/durability, behavioral parity vs the
+replaced SQL. What the reviews **validated** matters as much as what they found: write-through
+is uniform with a consistent index-before-notify ordering, the 10ms coalescer provably cannot
+drop changes, the search worker's generation/acknowledge logic is sound, every id-scoped
+subscription matches the id kind Rust emits, the "corruption never looks like deletion"
+invariant holds across all five artifact kinds, `.trash` is written before every destructive
+step, and every `ORDER BY`/`WHERE`/`COALESCE` in the retired SQL has a traceable counterpart.
+Parity confidence: high on read paths.
+
+### Confirmed defects (fixes in flight)
+
+1. **`useSessionRawMd` silent data loss** (`session/queries.ts:86-108`) — caches `_memo.md`
+   under a key nothing ever invalidates, with `staleTime: Infinity`, and *prefers* it over the
+   fresh index value. Tab-switch or external edit → editor remounts with stale content → the
+   next keystroke persists it back over the file. **Pre-existing** (identical at merge base)
+   but it defeats the very bus Phases E–H installed. Flagged by 2 of 3 reviewers.
+2. **`write_file` overwrites external edits with no recovery** (`session_store/mod.rs:101-141`)
+   — atomic but unconditional; never trashes what it replaces. The repo's own sibling
+   `fs_sync_core::export::write_file_atomic` already does this, calling it "the critical fix
+   from whole-branch review". Fix trashes only when on-disk bytes differ from the journal hash,
+   so normal writes stay trash-free.
+3. **`tasks` entity emitted into a void** — Rust notifies, no FE subscriber exists; the
+   "Phase E adds store-change events" TODO survived into the final commit. Whole-source
+   `replace_tasks` means a stale second window reverts the first's change. Flagged by all 3.
+4. **`delete_session` doesn't clear the live transcript buffer** (`content.rs:169`) — an
+   in-flight debounced flush recreates `sessions/<id>/`, so undo then fails with ENOTEMPTY and
+   the user's undo-delete is permanently broken.
+5. **No path validation on session ids** — `delete_session("")` trashes the entire `sessions/`
+   tree; an absolute id escapes the vault. Other commands (templates, audio) already guard.
+6. Reseed can clobber an edited default template (`is_file()` false negative on stat failure);
+   `app.db` retirement can orphan the WAL; read-modify-write lost updates across windows.
+
+### Accepted / deferred (not defects to fix now)
+
+- `applyGeneratedSessionTitle` lost transaction atomicity — inherent to dropping the
+  transactional store; needs an explicit owner decision, not an accidental fix.
+- Transcript ordering dropped its `created_at` tiebreaker (ties only among soft-deleted
+  transcripts, which all collapse to `started_at == 0`). Narrow; queued.
+- `AGENTS.md` is rewritten at the vault root every boot with no existence check — pre-existing,
+  but now materially likelier since the vault is expected to be a pre-existing user directory.
+- Audio deletion remains the only user content with no `.trash` recovery path (deliberate
+  retention behavior, carried over unchanged).
+
 ## Owner-machine checklist (accumulating)
 
 Items that require macOS and/or the real vault; commands to be filled in as phases land.
