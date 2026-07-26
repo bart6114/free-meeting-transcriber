@@ -34,8 +34,8 @@ completely finished."
 | Plan spot-verify | done | — | claims hold; drift notes below |
 | A — meeting-chat total drop | done (Linux gates green) | fa11943, 9513f62, c01de0b | awaiting owner macOS verify |
 | B — dead DB weight | done | 40276b7 | last-ever SQL migration added (20260726120000_drop_dead_tables) |
-| C — config.json | C1 done; C2/C3 pending | ed21619 | C1 = Rust service in plugins/settings + split-brain fix (C4 folded in). Open decision for C2/C3: array-ish keys (spoken_languages, ignored/included_platforms, personalization_dictionary_terms) are JSON-stringified strings today; controller decision = store REAL JSON arrays in config.json (hand-editability, invariant 4), FE adapts in C3 — no config.json exists in the wild yet, so no format break. |
-| D — file homes + exodus | pending | — | |
+| C — config.json | done | ed21619 (C1), 9a4c910 (C3; C2 cancelled) | config.json = real JSON arrays, FE boundary stringifies; provider ids deterministic (keychain survives re-add); hasValues heuristic = differs-from-default (residual edge: explicit-default value ≡ unset, only surfaces via boot init). plugins/settings legacy load/save commands now FE-orphaned → delete in H sweep. plugins/importer tinybase-shaped output still live — own follow-up, out of scope. Owner-machine check pending: 2-window settings round-trip, theme, dock toggle. |
+| D — file homes (no exodus) | D-1 in progress | — | order D-1 → D-3 → D-2 → D-4 → D-5 |
 | E — reactivity core | pending | — | |
 | F — search on files | pending | — | |
 | G — FE/db decoupling | pending | — | |
