@@ -12,7 +12,7 @@ pub mod paths;
 pub mod rebuild;
 pub mod transcript;
 
-pub use content::SessionMeta;
+pub use content::{SessionMeta, SessionMetaPatch};
 pub use rebuild::RebuildReport;
 pub use transcript::TranscriptDelta;
 

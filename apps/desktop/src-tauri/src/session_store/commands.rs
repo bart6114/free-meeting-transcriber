@@ -4,7 +4,7 @@ use tauri::{AppHandle, Manager};
 
 use hypr_fs_format::TranscriptWithData;
 
-use super::{RebuildReport, SessionMeta, SessionStore, TranscriptDelta};
+use super::{RebuildReport, SessionMeta, SessionMetaPatch, SessionStore, TranscriptDelta};
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
 /// `SessionStore` method, map `StoreError` to `String` for the IPC boundary. `SessionStore` is
@@ -26,6 +26,19 @@ pub async fn session_write_meta<R: tauri::Runtime>(
 ) -> Result<(), String> {
     store(&app)?
         .write_meta(&meta)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_update_meta<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+    patch: SessionMetaPatch,
+) -> Result<(), String> {
+    store(&app)?
+        .update_meta(&session_id, patch)
         .await
         .map_err(|e| e.to_string())
 }

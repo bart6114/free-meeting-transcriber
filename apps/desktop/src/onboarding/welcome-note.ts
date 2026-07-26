@@ -5,6 +5,7 @@ import { liveQueryClient } from "~/db";
 import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
 import { createSession } from "~/session/queries";
 import { DEFAULT_USER_ID } from "~/shared/utils";
+import { commands } from "~/types/tauri.gen";
 
 const PENDING_WELCOME_SESSION_KEY = "fmtr.pending-welcome-session";
 
@@ -45,9 +46,15 @@ export function takePendingWelcomeSession(): string | null {
 }
 
 async function findOrCreateWelcomeSession(): Promise<string> {
-  const rows = await liveQueryClient.execute<{ id: string }>(
+  // The lookup itself may stay SQL until Phase E; the mutation below must not -- session meta
+  // (including the event envelope) is `_meta.json`-canonical, so the stale-meeting-link clear
+  // is a read-modify-write through the store command, never a raw SQL json_set.
+  const rows = await liveQueryClient.execute<{
+    id: string;
+    event_json: string;
+  }>(
     `
-      SELECT id
+      SELECT id, event_json
       FROM sessions
       WHERE CASE
           WHEN json_valid(event_json)
@@ -59,15 +66,7 @@ async function findOrCreateWelcomeSession(): Promise<string> {
     [WELCOME_NOTE_TRACKING_ID],
   );
   if (rows[0]) {
-    await liveQueryClient.execute(
-      `
-        UPDATE sessions
-        SET event_json = json_set(event_json, '$.meeting_link', '')
-        WHERE id = ?
-          AND json_extract(event_json, '$.meeting_link') != ''
-      `,
-      [rows[0].id],
-    );
+    await clearStaleMeetingLink(rows[0].id, rows[0].event_json);
     return rows[0].id;
   }
 
@@ -88,4 +87,30 @@ async function findOrCreateWelcomeSession(): Promise<string> {
     event_json: JSON.stringify(event),
     raw_md: JSON.stringify(md2json(WELCOME_NOTE)),
   });
+}
+
+/**
+ * Best-effort: a welcome note is still usable with a stale meeting link, so a failed clear
+ * (e.g. a pre-store session with no `_meta.json` yet) logs instead of failing onboarding.
+ */
+async function clearStaleMeetingLink(
+  sessionId: string,
+  eventJson: string,
+): Promise<void> {
+  try {
+    const event: Partial<SessionEvent> = JSON.parse(eventJson);
+    if (!event || typeof event !== "object" || !event.meeting_link) {
+      return;
+    }
+    event.meeting_link = "";
+    const result = await commands.sessionUpdateMeta(sessionId, { event });
+    if (result.status === "error") {
+      console.error(
+        "[welcome-note] failed to clear stale meeting link",
+        result.error,
+      );
+    }
+  } catch (error) {
+    console.error("[welcome-note] failed to clear stale meeting link", error);
+  }
 }

@@ -3,6 +3,11 @@ import { beforeEach, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   createSession: vi.fn(),
   execute: vi.fn(),
+  sessionUpdateMeta: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
 }));
 
 vi.mock("~/db", () => ({
@@ -11,6 +16,12 @@ vi.mock("~/db", () => ({
 
 vi.mock("~/session/queries", () => ({
   createSession: mocks.createSession,
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionUpdateMeta: mocks.sessionUpdateMeta,
+  },
 }));
 
 import {
@@ -29,18 +40,63 @@ beforeEach(() => {
   });
 });
 
-it("reuses an existing onboarding welcome note and clears a stale meeting link", async () => {
-  mocks.execute.mockResolvedValueOnce([{ id: "welcome-session" }]);
+it("reuses an existing onboarding welcome note and clears a stale meeting link through the store", async () => {
+  mocks.execute.mockResolvedValueOnce([
+    {
+      id: "welcome-session",
+      event_json: JSON.stringify({
+        tracking_id: "fmtr-onboarding-demo-v1",
+        meeting_link: "https://stale.example.com/meet",
+      }),
+    },
+  ]);
 
   await expect(getOrCreateWelcomeSession()).resolves.toBe("welcome-session");
   expect(mocks.createSession).not.toHaveBeenCalled();
   expect(mocks.execute).toHaveBeenCalledWith(expect.any(String), [
     "fmtr-onboarding-demo-v1",
   ]);
-  expect(mocks.execute).toHaveBeenCalledWith(
-    expect.stringContaining("json_set(event_json, '$.meeting_link', '')"),
-    ["welcome-session"],
-  );
+  // The event envelope is `_meta.json`-canonical now: the clear is a read-modify-write
+  // through the store command, never a raw SQL json_set.
+  expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("welcome-session", {
+    event: {
+      tracking_id: "fmtr-onboarding-demo-v1",
+      meeting_link: "",
+    },
+  });
+});
+
+it("leaves the event untouched when the meeting link is already empty", async () => {
+  mocks.execute.mockResolvedValueOnce([
+    {
+      id: "welcome-session",
+      event_json: JSON.stringify({
+        tracking_id: "fmtr-onboarding-demo-v1",
+        meeting_link: "",
+      }),
+    },
+  ]);
+
+  await expect(getOrCreateWelcomeSession()).resolves.toBe("welcome-session");
+  expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
+});
+
+it("still returns the session when the stale-link clear fails", async () => {
+  mocks.execute.mockResolvedValueOnce([
+    {
+      id: "welcome-session",
+      event_json: JSON.stringify({
+        tracking_id: "fmtr-onboarding-demo-v1",
+        meeting_link: "https://stale.example.com/meet",
+      }),
+    },
+  ]);
+  mocks.sessionUpdateMeta.mockResolvedValueOnce({
+    status: "error",
+    error: "no _meta.json",
+  });
+
+  await expect(getOrCreateWelcomeSession()).resolves.toBe("welcome-session");
 });
 
 it("creates a welcome note without a meeting link", async () => {

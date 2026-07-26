@@ -420,6 +420,8 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
+            event: None,
+            folder: None,
         }
     }
 

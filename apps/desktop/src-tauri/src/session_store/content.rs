@@ -12,6 +12,33 @@ pub struct SessionMeta {
     pub ended_at: Option<String>,
     pub created_at: String,
     pub tags: Vec<String>,
+    /// Opaque calendar-event envelope (the sessions row's `event_json`). The store never
+    /// inspects its interior -- it round-trips whatever JSON the frontend hands it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+}
+
+/// Partial update for `_meta.json`: `None` means "leave as-is", so callers can patch a single
+/// field without knowing the rest. There is deliberately no way to clear a field back to
+/// absent -- no mutation site needs that today.
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, Default, PartialEq)]
+pub struct SessionMetaPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub started_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ended_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 impl SessionStore {
@@ -28,14 +55,19 @@ impl SessionStore {
         let started_at = meta.started_at.as_deref().unwrap_or("");
         let ended_at = meta.ended_at.as_deref().unwrap_or("");
         let created_at = meta.created_at.clone();
+        let event_json = event_json_column(meta);
+        let folder_path = meta.folder.as_deref().unwrap_or("");
 
         sqlx::query(
-            "INSERT INTO sessions (id, title, started_at, ended_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            "INSERT INTO sessions (id, title, started_at, ended_at, created_at, event_json, folder_path, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
              ON CONFLICT(id) DO UPDATE SET
                title = excluded.title,
                started_at = excluded.started_at,
                ended_at = excluded.ended_at,
+               created_at = excluded.created_at,
+               event_json = excluded.event_json,
+               folder_path = excluded.folder_path,
                updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
         )
         .bind(&id)
@@ -43,11 +75,58 @@ impl SessionStore {
         .bind(started_at)
         .bind(ended_at)
         .bind(&created_at)
+        .bind(&event_json)
+        .bind(folder_path)
         .execute(pool)
         .await
         .map_err(|e| StoreError::Db(e.to_string()))?;
 
         Ok(())
+    }
+
+    /// Read-modify-write partial update of `_meta.json`, then the same file-first dual-write
+    /// as `write_meta`. Errors (rather than synthesizing a fresh meta) when the session has no
+    /// `_meta.json`: every store-created session has one, and inventing one here would let a
+    /// title edit racing a delete quietly resurrect the session folder.
+    pub async fn update_meta(&self, id: &str, patch: SessionMetaPatch) -> Result<(), StoreError> {
+        let mut meta = self
+            .read_meta(id)
+            .await?
+            .ok_or_else(|| StoreError::Io(format!("session {id} has no _meta.json to update")))?;
+
+        let SessionMetaPatch {
+            title,
+            started_at,
+            ended_at,
+            created_at,
+            tags,
+            event,
+            folder,
+        } = patch;
+
+        if let Some(title) = title {
+            meta.title = title;
+        }
+        if let Some(started_at) = started_at {
+            meta.started_at = Some(started_at);
+        }
+        if let Some(ended_at) = ended_at {
+            meta.ended_at = Some(ended_at);
+        }
+        if let Some(created_at) = created_at {
+            meta.created_at = created_at;
+        }
+        if let Some(tags) = tags {
+            meta.tags = tags;
+        }
+        if let Some(event) = event {
+            meta.event = Some(event);
+        }
+        if let Some(folder) = folder {
+            meta.folder = Some(folder);
+        }
+
+        self.write_meta(&meta).await
     }
 
     pub async fn read_meta(&self, id: &str) -> Result<Option<SessionMeta>, StoreError> {
@@ -249,6 +328,18 @@ impl SessionStore {
     }
 }
 
+/// `sessions.event_json` is `TEXT NOT NULL DEFAULT ''`, so an absent `event` maps to the
+/// empty string (matching the `started_at`/`ended_at` `unwrap_or("")` convention), never NULL.
+/// Serialization goes through `serde_json::Value::to_string`, which is deterministic for the
+/// same value -- rebuild's change-guarded upsert depends on that to recognize an unchanged
+/// file as a no-op.
+pub(super) fn event_json_column(meta: &SessionMeta) -> String {
+    meta.event
+        .as_ref()
+        .map(|v| v.to_string())
+        .unwrap_or_default()
+}
+
 /// Finds the most-recently-trashed candidate for `id` under today's `.trash/<date>/sessions/`.
 /// `move_to_trash`'s `unique_path` disambiguates same-day repeat trashing of the same id as
 /// `<id>`, then `<id>-1`, `<id>-2`, ... in that chronological order (each new trash of the same
@@ -316,6 +407,8 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
+            event: None,
+            folder: None,
         }
     }
 
@@ -345,6 +438,115 @@ mod tests {
             store.read_meta("s1").await.unwrap().unwrap().title,
             "Jury feedback"
         );
+    }
+
+    #[tokio::test]
+    async fn write_meta_round_trips_event_folder_and_tags_through_file_and_index() {
+        let (store, vault) = test_store().await;
+        let mut m = meta("s1", "Sprint sync");
+        m.event = Some(serde_json::json!({
+            "tracking_id": "evt-1",
+            "meeting_link": "https://example.com/x",
+        }));
+        m.folder = Some("work/standups".to_string());
+        m.tags = vec!["planning".to_string(), "q3".to_string()];
+        store.write_meta(&m).await.unwrap();
+
+        assert_eq!(store.read_meta("s1").await.unwrap().unwrap(), m);
+
+        let (event_json, folder_path): (String, String) =
+            sqlx::query_as("SELECT event_json, folder_path FROM sessions WHERE id='s1'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&event_json).unwrap(),
+            m.event.clone().unwrap()
+        );
+        assert_eq!(folder_path, "work/standups");
+
+        // Tags live in the file only at this layer -- the tag-table dual-write stays at the
+        // frontend mutation site until Phase E.
+        let raw = std::fs::read_to_string(vault.path().join("sessions/s1/_meta.json")).unwrap();
+        assert!(raw.contains("planning"));
+    }
+
+    /// Old `_meta.json` files (written before `event`/`folder` existed) must keep
+    /// deserializing -- the new fields default to absent, and the SQL mirror gets the
+    /// schema-default empty strings, not an error.
+    #[tokio::test]
+    async fn read_meta_accepts_pre_event_folder_files() {
+        let (store, vault) = test_store().await;
+        let dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            br#"{"id":"s1","title":"Old","started_at":null,"ended_at":null,"created_at":"2026-07-01T00:00:00Z","tags":[]}"#,
+        )
+        .unwrap();
+
+        let m = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(m.event, None);
+        assert_eq!(m.folder, None);
+
+        store.write_meta(&m).await.unwrap();
+        let (event_json, folder_path): (String, String) =
+            sqlx::query_as("SELECT event_json, folder_path FROM sessions WHERE id='s1'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(event_json, "");
+        assert_eq!(folder_path, "");
+    }
+
+    #[tokio::test]
+    async fn update_meta_patches_only_the_given_fields() {
+        let (store, _vault) = test_store().await;
+        let mut m = meta("s1", "Original");
+        m.event = Some(serde_json::json!({"tracking_id": "evt-1"}));
+        store.write_meta(&m).await.unwrap();
+
+        store
+            .update_meta(
+                "s1",
+                SessionMetaPatch {
+                    title: Some("Renamed".to_string()),
+                    tags: Some(vec!["kept".to_string()]),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        let after = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(after.title, "Renamed");
+        assert_eq!(after.tags, vec!["kept".to_string()]);
+        assert_eq!(after.event, m.event, "unpatched fields must survive");
+        assert_eq!(after.created_at, m.created_at);
+
+        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id='s1'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(title, "Renamed", "dual-write must reach the index");
+    }
+
+    /// A patch against a session with no `_meta.json` must fail loudly instead of inventing
+    /// one -- otherwise a title edit racing a delete would resurrect the session folder.
+    #[tokio::test]
+    async fn update_meta_errors_when_meta_file_is_missing() {
+        let (store, vault) = test_store().await;
+        let result = store
+            .update_meta(
+                "ghost",
+                SessionMetaPatch {
+                    title: Some("nope".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(!vault.path().join("sessions/ghost").exists());
     }
 
     #[tokio::test]

@@ -324,21 +324,27 @@ impl SessionStore {
         // for every session unconditionally, re-queueing a full search re-projection even
         // when the file on disk hasn't changed since the index already reflects it.
         sqlx::query(
-            "INSERT INTO sessions (id, title, started_at, ended_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+            "INSERT INTO sessions (id, title, started_at, ended_at, created_at, event_json, folder_path, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
              ON CONFLICT(id) DO UPDATE SET
                title = excluded.title,
                started_at = excluded.started_at,
-               ended_at = excluded.ended_at
+               ended_at = excluded.ended_at,
+               event_json = excluded.event_json,
+               folder_path = excluded.folder_path
              WHERE title IS NOT excluded.title
                 OR started_at IS NOT excluded.started_at
-                OR ended_at IS NOT excluded.ended_at",
+                OR ended_at IS NOT excluded.ended_at
+                OR event_json IS NOT excluded.event_json
+                OR folder_path IS NOT excluded.folder_path",
         )
         .bind(&meta.id)
         .bind(&meta.title)
         .bind(meta.started_at.as_deref().unwrap_or(""))
         .bind(meta.ended_at.as_deref().unwrap_or(""))
         .bind(&meta.created_at)
+        .bind(super::content::event_json_column(meta))
+        .bind(meta.folder.as_deref().unwrap_or(""))
         .execute(self.pool())
         .await?;
         Ok(())
@@ -539,6 +545,8 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
+            event: None,
+            folder: None,
         }
     }
 
@@ -732,6 +740,59 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn rebuild_restores_event_and_folder_columns_from_files() {
+        let (store, _vault) = test_store().await;
+        let mut m = meta("s1", "One");
+        m.event = Some(serde_json::json!({"tracking_id": "evt-1", "meeting_link": ""}));
+        m.folder = Some("work".to_string());
+        store.write_meta(&m).await.unwrap();
+
+        sqlx::query("DELETE FROM sessions")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let (event_json, folder_path): (String, String) =
+            sqlx::query_as("SELECT event_json, folder_path FROM sessions WHERE id='s1'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&event_json).unwrap(),
+            m.event.unwrap()
+        );
+        assert_eq!(folder_path, "work");
+    }
+
+    /// The change-guard no-op property must hold for the widened columns too: a meta whose
+    /// `event` is populated re-serializes to the identical `event_json` string on every
+    /// rebuild pass, so an unchanged file must still not requeue search reindexing.
+    #[tokio::test]
+    async fn rebuild_of_unchanged_event_and_folder_does_not_requeue_search_reindexing() {
+        let (store, _vault) = test_store().await;
+        let mut m = meta("s1", "One");
+        m.event = Some(serde_json::json!({"tracking_id": "evt-1", "meeting_link": "x"}));
+        m.folder = Some("work".to_string());
+        store.write_meta(&m).await.unwrap();
+        store.rebuild_index().await.unwrap();
+
+        sqlx::query("DELETE FROM search_index_dirty")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(dirty, 0);
     }
 
     #[tokio::test]

@@ -12,6 +12,11 @@ const mocks = vi.hoisted(() => ({
       { status: "ok"; data: null } | { status: "error"; error: string }
     > => Promise.resolve({ status: "ok", data: null }),
   ),
+  sessionUpdateMeta: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
   sessionWriteNote: vi.fn(
     (): Promise<
       { status: "ok"; data: null } | { status: "error"; error: string }
@@ -54,6 +59,7 @@ vi.mock("~/session/pending-soft-deletes", () => ({
 vi.mock("~/types/tauri.gen", () => ({
   commands: {
     sessionWriteMeta: mocks.sessionWriteMeta,
+    sessionUpdateMeta: mocks.sessionUpdateMeta,
     sessionWriteNote: mocks.sessionWriteNote,
     sessionDelete: mocks.sessionDelete,
     sessionRestore: mocks.sessionRestore,
@@ -75,29 +81,51 @@ describe("session SQLite operations", () => {
     vi.clearAllMocks();
     vi.useRealTimers();
     mocks.sessionWriteMeta.mockResolvedValue({ status: "ok", data: null });
+    mocks.sessionUpdateMeta.mockResolvedValue({ status: "ok", data: null });
     mocks.sessionWriteNote.mockResolvedValue({ status: "ok", data: null });
     mocks.sessionDelete.mockResolvedValue({ status: "ok", data: null });
     mocks.sessionRestore.mockResolvedValue({ status: "ok", data: true });
     mocks.waitForPendingSoftDelete.mockResolvedValue(undefined);
   });
 
-  it("commits title changes as bookkeeping only -- note content never goes through SQL", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1]);
-
+  it("routes title changes through the store's meta patch, never raw SQL", async () => {
     await updateSession("session-1", { title: "Updated title" });
 
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements).toHaveLength(1);
-    expect(statements[0].sql).toContain("UPDATE sessions");
-    expect(statements[0].params).toContain("Updated title");
+    expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
+      title: "Updated title",
+    });
+    // No `UPDATE sessions` here: the store's dual-write owns the SQL mirror, and a raw
+    // UPDATE would leave `_meta.json` stale (the next rebuild would revert the title).
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
+  });
+
+  it("maps folder/event changes onto the store patch shape", async () => {
+    await updateSession("session-1", {
+      folder_id: "work",
+      event_json: '{"tracking_id":"evt-1"}',
+    });
+
+    expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
+      folder: "work",
+      event: { tracking_id: "evt-1" },
+    });
+  });
+
+  it("throws when the store rejects the meta patch", async () => {
+    mocks.sessionUpdateMeta.mockResolvedValueOnce({
+      status: "error",
+      error: "no _meta.json",
+    });
+
+    await expect(
+      updateSession("session-1", { title: "Updated title" }),
+    ).rejects.toThrow("no _meta.json");
   });
 
   it("is a no-op when there is nothing to change", async () => {
     await updateSession("session-1", {});
     expect(mocks.executeTransaction).not.toHaveBeenCalled();
+    expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });
 
   it("creates a session via the store, then seeds initial content as markdown", async () => {
@@ -111,19 +139,23 @@ describe("session SQLite operations", () => {
       }),
     });
 
+    // The event rides the store write itself, parsed into the meta envelope -- never a
+    // separate `UPDATE sessions SET event_json` statement.
     expect(mocks.sessionWriteMeta).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Welcome" }),
+      expect.objectContaining({
+        title: "Welcome",
+        event: { tracking_id: "welcome" },
+      }),
     );
 
-    // Bookkeeping placeholder (always-empty body) + the event_json update.
+    // Bookkeeping placeholder (always-empty body) only.
     const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
       sql: string;
       params: unknown[];
     }>;
+    expect(statements).toHaveLength(1);
     expect(statements[0].sql).toContain("session_documents");
     expect(statements[0].params).toContain("");
-    expect(statements[1].sql).toContain("UPDATE sessions");
-    expect(statements[1].params).toContain('{"tracking_id":"welcome"}');
 
     // Real content lands in the file-canonical store as markdown, not SQL.
     expect(mocks.sessionWriteNote).toHaveBeenCalledWith(
@@ -149,8 +181,8 @@ describe("session SQLite operations", () => {
     expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("commits enhanced note content and the derived session title together", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1, 1]);
+  it("commits enhanced note content via SQL and the derived session title via the store", async () => {
+    mocks.executeTransaction.mockResolvedValueOnce([1]);
 
     await updateEnhancedNoteContent(
       "enhanced-note-1",
@@ -163,13 +195,25 @@ describe("session SQLite operations", () => {
       sql: string;
       params: unknown[];
     }>;
-    expect(statements).toHaveLength(2);
+    expect(statements).toHaveLength(1);
     expect(statements[0].sql).toContain("UPDATE session_documents");
     expect(statements[0].params).toContain("enhanced-note-1");
     expect(statements[0].params).toContain('{"type":"doc"}');
-    expect(statements[1].sql).toContain("UPDATE sessions");
-    expect(statements[1].params).toContain("session-1");
-    expect(statements[1].params).toContain("Edited title");
+    expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
+      title: "Edited title",
+    });
+  });
+
+  it("does not touch session meta when no derived title accompanies the note content", async () => {
+    mocks.executeTransaction.mockResolvedValueOnce([1]);
+
+    await updateEnhancedNoteContent(
+      "enhanced-note-1",
+      "session-1",
+      '{"type":"doc"}',
+    );
+
+    expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });
 
   it("soft-deletes an enhanced note instead of removing its data", async () => {

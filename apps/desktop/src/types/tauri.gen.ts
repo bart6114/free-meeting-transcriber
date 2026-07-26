@@ -103,6 +103,14 @@ async sessionWriteMeta(meta: SessionMeta) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async sessionUpdateMeta(sessionId: string, patch: SessionMetaPatch) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_update_meta", { sessionId, patch }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async sessionWriteNote(sessionId: string, markdown: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_write_note", { sessionId, markdown }) };
@@ -231,7 +239,18 @@ notes: number; transcripts: number;
  * `transcript.json`) but no `_meta.json` -- left deliberately unindexed; files untouched.
  */
 ghost_sessions: string[]; errors: string[] }
-export type SessionMeta = { id: string; title: string; started_at: string | null; ended_at: string | null; created_at: string; tags: string[] }
+export type SessionMeta = { id: string; title: string; started_at: string | null; ended_at: string | null; created_at: string; tags: string[];
+/**
+ * Opaque calendar-event envelope (the sessions row's `event_json`). The store never
+ * inspects its interior -- it round-trips whatever JSON the frontend hands it.
+ */
+event?: JsonValue | null; folder?: string | null }
+/**
+ * Partial update for `_meta.json`: `None` means "leave as-is", so callers can patch a single
+ * field without knowing the rest. There is deliberately no way to clear a field back to
+ * absent -- no mutation site needs that today.
+ */
+export type SessionMetaPatch = { title?: string | null; started_at?: string | null; ended_at?: string | null; created_at?: string | null; tags?: string[] | null; event?: JsonValue | null; folder?: string | null }
 export type TranscriptDelta = { transcript_id: string; new_words: TranscriptWord[]; replaced_ids: string[]; new_hints: TranscriptSpeakerHint[]; started_at_ms: number }
 export type TranscriptSpeakerHint = { id?: string | null; word_id: string; type: string; value?: JsonValue }
 export type TranscriptWithData = { id: string; user_id?: string; created_at?: string; session_id: string; started_at?: number; ended_at?: number | null; memo_md?: string; words?: TranscriptWord[]; speaker_hints?: TranscriptSpeakerHint[] }

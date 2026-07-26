@@ -10,7 +10,7 @@ import { enqueueDatabaseWrite } from "~/db/write-queue";
 import { waitForPendingSoftDelete } from "~/session/pending-soft-deletes";
 import { DEFAULT_USER_ID, id } from "~/shared/utils";
 import type { DeletedSessionData } from "~/store/zustand/undo-delete";
-import { commands } from "~/types/tauri.gen";
+import { commands, type SessionMetaPatch } from "~/types/tauri.gen";
 
 type SessionDeleteSqlRow = { id: string; title: string };
 type SessionEmptySqlRow = {
@@ -340,18 +340,20 @@ export function updateEnhancedNoteContent(
       },
     ];
 
-    if (sessionTitle !== undefined) {
-      statements.push({
-        sql: `
-          UPDATE sessions
-          SET title = ?, updated_at = ?
-          WHERE id = ?
-        `,
-        params: [sessionTitle, now, sessionId],
-      });
-    }
-
     await executeTransaction(statements);
+
+    // Session title is store-canonical (`_meta.json`), so it must not ride the SQL
+    // transaction above -- the store's dual-write updates the sessions row itself.
+    if (sessionTitle !== undefined) {
+      const result = await commands.sessionUpdateMeta(sessionId, {
+        title: sessionTitle,
+      });
+      if (result.status === "error") {
+        throw new Error(
+          `Failed to update session ${sessionId} title: ${result.error}`,
+        );
+      }
+    }
   });
 }
 
@@ -373,39 +375,27 @@ export function deleteEnhancedNote(enhancedNoteId: string): Promise<void> {
   });
 }
 
+// File-first: `_meta.json` is canonical for session meta, so every change goes through the
+// store's `session_update_meta` (read-modify-write of the file, then the SQL dual-write) --
+// a raw `UPDATE sessions` here would leave the file stale and the next rebuild would revert
+// the change to the old file value.
 export function updateSession(
   sessionId: string,
   changes: SessionChanges,
 ): Promise<void> {
   return enqueueDatabaseWrite(`session:${sessionId}`, async () => {
-    const now = new Date().toISOString();
-    const assignments: string[] = [];
-    const params: unknown[] = [];
+    const patch: SessionMetaPatch = {};
+    if (changes.title !== undefined) patch.title = changes.title;
+    if (changes.created_at !== undefined) patch.created_at = changes.created_at;
+    if (changes.folder_id !== undefined) patch.folder = changes.folder_id;
+    if (changes.event_json) patch.event = JSON.parse(changes.event_json);
 
-    for (const [column, value] of [
-      ["title", changes.title],
-      ["created_at", changes.created_at],
-      ["folder_path", changes.folder_id],
-      ["event_json", changes.event_json],
-    ] as const) {
-      if (value === undefined) continue;
-      assignments.push(`${column} = ?`);
-      params.push(value);
+    if (Object.keys(patch).length === 0) return;
+
+    const result = await commands.sessionUpdateMeta(sessionId, patch);
+    if (result.status === "error") {
+      throw new Error(`Failed to update session ${sessionId}: ${result.error}`);
     }
-
-    const statements: Array<{ sql: string; params: unknown[] }> = [];
-    if (assignments.length > 0) {
-      statements.push({
-        sql: `
-          UPDATE sessions
-          SET ${assignments.join(", ")}, updated_at = ?
-          WHERE id = ?
-        `,
-        params: [...params, now, sessionId],
-      });
-    }
-
-    if (statements.length > 0) await executeTransaction(statements);
   });
 }
 
@@ -428,6 +418,10 @@ export async function createSession(
     ended_at: null,
     created_at: now,
     tags: [],
+    // The event rides the store write itself (never a separate SQL UPDATE): `_meta.json` is
+    // canonical, and the store's dual-write seeds the sessions row's event_json.
+    event: initial?.event_json ? JSON.parse(initial.event_json) : null,
+    folder: null,
   });
   if (metaWrite.status === "error") {
     throw new Error(
@@ -435,21 +429,12 @@ export async function createSession(
     );
   }
 
-  const statements: Array<{ sql: string; params: unknown[] }> = [
-    // Bookkeeping placeholder only: always an empty body. Canonical-id-vs-fallback reads
-    // (SESSION_SELECT_SQL above, useKeywords.ts, isSessionEmpty below) COALESCE onto a
-    // store-written "<id>:note" row when this bare-id row is empty, so this just keeps a
-    // row present for the join -- real note content lives only in the file-canonical store
-    // from here on (sessionWriteNote below), never in this row's body.
-    createEmptyNoteStatement(sessionId, now, ""),
-  ];
-  if (initial?.event_json) {
-    statements.push({
-      sql: `UPDATE sessions SET event_json = ? WHERE id = ?`,
-      params: [initial.event_json, sessionId],
-    });
-  }
-  await executeTransaction(statements);
+  // Bookkeeping placeholder only: always an empty body. Canonical-id-vs-fallback reads
+  // (SESSION_SELECT_SQL above, useKeywords.ts, isSessionEmpty below) COALESCE onto a
+  // store-written "<id>:note" row when this bare-id row is empty, so this just keeps a
+  // row present for the join -- real note content lives only in the file-canonical store
+  // from here on (sessionWriteNote below), never in this row's body.
+  await executeTransaction([createEmptyNoteStatement(sessionId, now, "")]);
 
   if (initial?.raw_md) {
     let markdown = "";
