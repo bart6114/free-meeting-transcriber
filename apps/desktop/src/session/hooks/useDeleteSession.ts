@@ -6,7 +6,7 @@ import { getCurrentWebviewWindowLabel } from "@hypr/plugin-windows";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
 import { trackPendingSoftDelete } from "~/session/pending-soft-deletes";
-import { finalizeSessionDeletion, softDeleteSession } from "~/session/queries";
+import { softDeleteSession } from "~/session/queries";
 import { listenerStore } from "~/store/zustand/listener/instance";
 import { useTabs } from "~/store/zustand/tabs";
 import {
@@ -100,22 +100,16 @@ export function useDeleteSession() {
       };
 
       if (isMainWindow) {
-        // Finalize gates on the commit so a failed or no-op delete never
-        // removes the session folder.
-        const finalize = () =>
-          commit
-            .then(async (deletedData) => {
-              if (!deletedData) return;
-              await finalizeSessionDeletion(sessionId);
-            })
-            .catch(() => undefined);
+        // No confirm callback: `session_delete` has already trashed the folder by the
+        // time `commit` resolves, so letting the undo window lapse just dismisses the
+        // toast. There is nothing to finalize (see session/queries.ts).
         addDeletion(
           {
             session: { id: sessionId, title: title ?? "" },
             tombstone,
             deletedAt: Date.now(),
           },
-          finalize,
+          undefined,
           batchId,
         );
       }
@@ -147,12 +141,9 @@ export function useDeleteSession() {
                 .openCurrent({ type: "sessions", id: sessionId });
             }
             sonnerToast.error("Could not delete this note. Please try again.");
-          } else {
-            // The delete committed but main never learned about it, so its
-            // finalize-time cleanup will not run. Finalize here so the
-            // session folder is still removed.
-            void finalizeSessionDeletion(sessionId);
           }
+          // The `didDelete` branch needs no cleanup: the folder is already in
+          // `.trash/`, whether or not main ever heard about this delete.
         } finally {
           if (didDelete) {
             await closeSessionNoteWindows(sessionId);
@@ -182,9 +173,7 @@ export function useRemoteSessionDeletionUndoListener(active: boolean) {
       }
 
       invalidateResource("sessions", payload.sessionId);
-      addDeletion(payload.data, async () => {
-        await finalizeSessionDeletion(payload.sessionId);
-      });
+      addDeletion(payload.data);
       void closeSessionNoteWindows(payload.sessionId);
     }).then((fn) => {
       unlisten = fn;

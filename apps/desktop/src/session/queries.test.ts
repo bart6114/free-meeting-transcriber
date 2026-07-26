@@ -55,14 +55,6 @@ vi.mock("@hypr/plugin-analytics", () => ({
   commands: { eventFireAndForget: mocks.analyticsEventFireAndForget },
 }));
 
-vi.mock("@hypr/plugin-fs-sync", () => ({
-  commands: {
-    deleteSessionFolder: vi.fn(() =>
-      Promise.resolve({ status: "ok", data: null }),
-    ),
-  },
-}));
-
 vi.mock("~/session/pending-soft-deletes", () => ({
   waitForPendingSoftDelete: mocks.waitForPendingSoftDelete,
 }));

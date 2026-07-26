@@ -9,6 +9,7 @@ import {
   type TaskSource,
 } from "@hypr/editor/tasks";
 
+import { subscribeIndexChanged } from "~/shared/index-query";
 import { enqueueDatabaseWrite } from "~/shared/write-queue";
 import {
   commands,
@@ -38,7 +39,21 @@ export type TaskStorageDependencies = {
     insertionOrder: number,
   ) => Promise<void>;
   enqueueWrite: (key: string, write: () => Promise<void>) => Promise<void>;
+  subscribeTasksChanged: (
+    source: TaskSource,
+    onChange: () => void,
+  ) => () => void;
 };
+
+// The Rust index keys `tasks` events by the owning *session* id: `session_raw_note` sources
+// use their own id, `enhanced_note` sources are resolved server-side to the session that owns
+// the doc (not knowable from the doc id here), and every other source type collapses onto the
+// vault-root key. Only the first case can be scoped from the source alone; the rest subscribe
+// to the whole entity and rely on the snapshot diff in `updateSourceSnapshot` to drop refreshes
+// that changed nothing.
+function taskEventIds(source: TaskSource): readonly string[] | undefined {
+  return source.type === "session_raw_note" ? [source.id] : undefined;
+}
 
 const emptyTasks: TaskRecord[] = [];
 
@@ -69,6 +84,8 @@ const defaultDependencies: TaskStorageDependencies = {
     );
   },
   enqueueWrite: enqueueDatabaseWrite,
+  subscribeTasksChanged: (source, onChange) =>
+    subscribeIndexChanged("tasks", onChange, taskEventIds(source)),
 };
 
 export function useStoreBackedTaskStorage(): TaskStorage {
@@ -76,16 +93,18 @@ export function useStoreBackedTaskStorage(): TaskStorage {
 }
 
 // Tasks are file-canonical in `sessions/<id>/tasks.json`, read and written through the
-// session-store commands. The only writer of a source's tasks is the editor surface that
-// renders it, so reactivity is local: fetch on first subscribe, refetch after our own
-// writes land. External file edits are picked up on the next subscribe (Phase E adds
-// store-change events).
+// session-store commands. A source is fetched on first subscribe, refetched after our own
+// writes land, and refetched whenever the index bus reports a `tasks` change -- the last one
+// matters because `replace_tasks` is a whole-source replace, so a second window (or an
+// external editor) working from a stale snapshot would otherwise revert the other window's
+// edits on its next write.
 export function createStoreBackedTaskStorage(
   dependencies: TaskStorageDependencies = defaultDependencies,
 ): TaskStorage {
   const sourceSnapshots = new Map<string, TaskRecord[]>();
   const taskSnapshots = new Map<string, TaskRecord>();
   const sourceListeners = new Map<string, Set<() => void>>();
+  const sourceBusUnsubscribes = new Map<string, () => void>();
 
   const updateSourceSnapshot = (
     source: TaskSource,
@@ -160,6 +179,15 @@ export function createStoreBackedTaskStorage(
       if (!listeners) {
         listeners = new Set();
         sourceListeners.set(sourceKey, listeners);
+        // A bus refresh can only ever *read*: it lands in `updateSourceSnapshot`, which
+        // notifies listeners solely when the data actually differs, so our own writes
+        // (which echo back as `tasks` events) settle instead of looping.
+        sourceBusUnsubscribes.set(
+          sourceKey,
+          dependencies.subscribeTasksChanged(source, () => {
+            void refreshSource(source);
+          }),
+        );
         void refreshSource(source);
       }
 
@@ -172,6 +200,8 @@ export function createStoreBackedTaskStorage(
           sourceListeners.get(sourceKey) === currentListeners
         ) {
           sourceListeners.delete(sourceKey);
+          sourceBusUnsubscribes.get(sourceKey)?.();
+          sourceBusUnsubscribes.delete(sourceKey);
         }
       };
     },

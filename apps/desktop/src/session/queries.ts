@@ -1,9 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 
 import { json2md, md2json } from "@hypr/editor/markdown";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
-import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 
 import { waitForPendingSoftDelete } from "~/session/pending-soft-deletes";
 import { useIndexQuery } from "~/shared/index-query";
@@ -71,40 +69,24 @@ export function useSession(sessionId: string): SessionRecord | null {
 }
 
 /**
- * File-canonical note content for the editor: prefers `sessions/<id>/_memo.md` (read via
- * `session_read_note`) and falls back to the index's `raw_md` only while the file read hasn't
- * resolved yet, or when the file genuinely doesn't exist (e.g. a session never touched by the
- * store). Returns `null` while the index row itself hasn't loaded -- callers should keep
- * showing a loading state for that, same as `useSession` returning `null`.
+ * Note content for the editor, as the stringified prosemirror doc consumers expect.
+ * Returns `null` while the session itself hasn't loaded -- callers should keep showing a
+ * loading state for that, same as `useSession` returning `null`.
  *
- * `staleTime: Infinity` is deliberate: this is a one-shot "seed the editor's initial content"
- * load, not a live subscription -- once mounted, the editor tracks further edits itself
- * (`persistChange`), and NoteEditor only re-syncs its content from a changed `rawMd` when the
- * editor isn't focused (see `shouldReplaceEditorContent` in `@hypr/editor/note`), so refetching
- * this on every render/focus would risk clobbering in-progress typing for no benefit.
+ * This is `useSession`'s `raw_md` and nothing else, deliberately: the index entry's
+ * `note_markdown` *is* `sessions/<id>/_memo.md` (seeded by the rescan's own `read_note`,
+ * kept current by `session_write_note`'s write-through and by the vault watcher's
+ * `refresh_session` on external edits), and it rides the `sessions` half of the
+ * `index-changed` bus. A second, separately-cached `session_read_note` here used to shadow
+ * it; nothing ever invalidated that cache, so a remount inside the cache window (tab switch,
+ * second window, an Obsidian edit) handed the editor pre-edit content that the next
+ * keystroke's `persistChange` then wrote back over `_memo.md`.
+ *
+ * Live updates are safe for the focused editor: NoteEditor only re-syncs its content from a
+ * changed `rawMd` when it isn't focused (`shouldReplaceEditorContent` in `@hypr/editor/note`).
  */
 export function useSessionRawMd(sessionId: string): string | null {
-  const indexSession = useSession(sessionId);
-  const noteFile = useQuery({
-    queryKey: ["session-note-file", sessionId],
-    queryFn: async () => {
-      const result = await commands.sessionReadNote(sessionId);
-      if (result.status === "error") {
-        throw new Error(result.error);
-      }
-      return result.data;
-    },
-    enabled: Boolean(sessionId),
-    staleTime: Infinity,
-  });
-
-  if (!indexSession) return null;
-
-  const fileMarkdown = noteFile.data;
-  if (fileMarkdown !== null && fileMarkdown !== undefined) {
-    return JSON.stringify(md2json(fileMarkdown));
-  }
-  return indexSession.raw_md;
+  return useSession(sessionId)?.raw_md ?? null;
 }
 
 export function useSessionSummary(
@@ -447,31 +429,14 @@ export async function restoreDeletedSession(
   }
 }
 
-/**
- * @deprecated `session_delete` (the store command `softDeleteSession` now calls)
- * already moves the session folder to `.trash/` atomically, so there is nothing left
- * for this to finalize. Kept only for the rare cross-window path in
- * `useDeleteSession.ts` where a background window's delete commits but the main
- * window never learns about it in time to skip its own finalize call -- calling this
- * on an already-trashed folder is a harmless no-op.
- */
-export async function finalizeSessionDeletion(
-  sessionId: string,
-): Promise<void> {
-  try {
-    const result = await fsSyncCommands.deleteSessionFolder(sessionId);
-    if (result.status !== "error") return;
-    console.error("[delete-session] failed to delete session folder", {
-      sessionId,
-      error: result.error,
-    });
-  } catch (error) {
-    console.error("[delete-session] failed to delete session folder", {
-      sessionId,
-      error,
-    });
-  }
-}
+// There is deliberately no "finalize the deletion" step: `session_delete` moves the whole
+// session folder into `.trash/<date>/` atomically and `session_restore` reverses it, so a
+// delete is already complete when `softDeleteSession` resolves. The old finalize called
+// fs-sync's `delete_session_folder` (a plain `remove_dir_all`, no trash, no undo) on a 5s
+// timer -- on an already-trashed session that was a no-op, but anything that recreated the
+// path inside that window (a sync client pulling the folder back from another device, a
+// late transcript flush) was destroyed irrecoverably. Hard-deleting on a synced vault is
+// not something this app does.
 
 function mapSessionRecord(record: StoreSessionRecord): SessionRecord {
   // `note_markdown` is always markdown (the file-canonical `_memo.md`); consumers

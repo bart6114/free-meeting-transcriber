@@ -2,6 +2,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TaskRecord, TaskSource } from "@hypr/editor/tasks";
 
+const mocks = vi.hoisted(() => ({
+  subscribeIndexChanged: vi.fn(() => () => {}),
+  sessionListTasks: vi.fn(() => Promise.resolve({ status: "ok", data: [] })),
+}));
+
+vi.mock("~/shared/index-query", () => ({
+  subscribeIndexChanged: mocks.subscribeIndexChanged,
+}));
+
+vi.mock("~/types/tauri.gen", () => ({
+  commands: { sessionListTasks: mocks.sessionListTasks },
+}));
+
 import {
   createStoreBackedTaskStorage,
   type TaskItem,
@@ -54,21 +67,42 @@ function createHarness(initialTasks: TaskItem[] = []) {
       await write();
     },
   );
+
+  // Stands in for the `index-changed` bus: records what each source subscribed with and
+  // lets a test fire the matching subscribers the way a Rust `IndexEntity::Tasks` emit would.
+  const busSubscribers = new Map<string, () => void>();
+  const subscribeTasksChanged = vi.fn(
+    (source: TaskSource, onChange: () => void) => {
+      const sourceKey = `${source.type}:${source.id}`;
+      busSubscribers.set(sourceKey, onChange);
+      return () => {
+        busSubscribers.delete(sourceKey);
+      };
+    },
+  );
+  const emitTasksChanged = (source: TaskSource) => {
+    busSubscribers.get(`${source.type}:${source.id}`)?.();
+  };
+
   const dependencies: TaskStorageDependencies = {
     listTasks,
     replaceTasks,
     removeTasks,
     moveTasks,
     enqueueWrite,
+    subscribeTasksChanged,
   };
 
   return {
     dependencies,
+    emitTasksChanged,
     enqueueWrite,
+    busSubscribers,
     listTasks,
     replaceTasks,
     removeTasks,
     moveTasks,
+    subscribeTasksChanged,
   };
 }
 
@@ -224,6 +258,76 @@ describe("store-backed task storage", () => {
     expect(fetched).toContain("session_raw_note:session-1");
   });
 
+  // Regression: `replace_tasks` is a whole-source replace, so a window holding a snapshot
+  // from before another writer's change reverts that change on its next write. Before the
+  // bus subscription existed, a source was only ever refetched on first subscribe and after
+  // this storage's own writes -- an external `tasks` change was invisible until remount.
+  it("refetches a source when the index bus reports an external tasks change", async () => {
+    const harness = createHarness([taskItem()]);
+    const storage = createStoreBackedTaskStorage(harness.dependencies);
+    const listener = vi.fn();
+
+    storage.subscribeSource(sessionSource, listener);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+    expect(harness.listTasks).toHaveBeenCalledOnce();
+
+    // Another window ticks the checkbox; the file (and the index) now say "done".
+    harness.listTasks.mockResolvedValue([taskItem({ status: "done" })]);
+    harness.emitTasksChanged(sessionSource);
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    expect(harness.listTasks).toHaveBeenCalledTimes(2);
+    expect(storage.getTasksForSource(sessionSource)[0]?.status).toBe("done");
+    expect(storage.getTask("task-1")?.status).toBe("done");
+  });
+
+  it("scopes the bus subscription to the source and drops it on teardown", async () => {
+    const harness = createHarness();
+    const storage = createStoreBackedTaskStorage(harness.dependencies);
+
+    const unsubscribe = storage.subscribeSource(sessionSource, vi.fn());
+    expect(harness.subscribeTasksChanged).toHaveBeenCalledOnce();
+    expect(harness.subscribeTasksChanged.mock.calls[0]?.[0]).toEqual(
+      sessionSource,
+    );
+    expect(harness.busSubscribers.size).toBe(1);
+
+    unsubscribe();
+    expect(harness.busSubscribers.size).toBe(0);
+
+    // A late event after teardown must not resurrect the source.
+    harness.listTasks.mockClear();
+    harness.emitTasksChanged(sessionSource);
+    await Promise.resolve();
+    expect(harness.listTasks).not.toHaveBeenCalled();
+  });
+
+  it("settles instead of looping when our own write echoes back off the bus", async () => {
+    const harness = createHarness([taskItem()]);
+    const storage = createStoreBackedTaskStorage(harness.dependencies);
+    const listener = vi.fn();
+
+    storage.subscribeSource(sessionSource, listener);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledOnce());
+
+    harness.listTasks.mockResolvedValue([
+      taskItem({ text: "Updated follow up" }),
+    ]);
+    storage.upsertTasksForSource(sessionSource, [
+      { ...task, textPreview: "Updated follow up" },
+    ]);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+
+    // The Rust write-through emits `tasks` for this session too; the refresh it triggers
+    // reads back what we just wrote, so nothing changes and no further write is issued.
+    harness.replaceTasks.mockClear();
+    harness.emitTasksChanged(sessionSource);
+    await vi.waitFor(() => expect(harness.listTasks).toHaveBeenCalledTimes(3));
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(harness.replaceTasks).not.toHaveBeenCalled();
+  });
+
   it("drops malformed items instead of exposing invalid task records", async () => {
     const harness = createHarness([taskItem({ id: "", status: "unknown" })]);
     const storage = createStoreBackedTaskStorage(harness.dependencies);
@@ -235,5 +339,38 @@ describe("store-backed task storage", () => {
     expect(storage.getTasksForSource(sessionSource)).toEqual([]);
     expect(storage.getTask("task-1")).toBeNull();
     expect(listener).not.toHaveBeenCalled();
+  });
+});
+
+// Pins the real wiring (not the injected test double) onto the `index-changed` bus: without
+// this, `tasks` events stay an entity nothing on the frontend listens for.
+describe("store-backed task storage: default index-bus wiring", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.subscribeIndexChanged.mockReturnValue(() => {});
+    mocks.sessionListTasks.mockResolvedValue({ status: "ok", data: [] });
+  });
+
+  it("subscribes session note sources to `tasks` scoped to the session id", () => {
+    createStoreBackedTaskStorage().subscribeSource(sessionSource, vi.fn());
+
+    expect(mocks.subscribeIndexChanged).toHaveBeenCalledWith(
+      "tasks",
+      expect.any(Function),
+      ["session-1"],
+    );
+  });
+
+  it("subscribes enhanced-note sources unscoped, since Rust keys their events by the owning session id", () => {
+    createStoreBackedTaskStorage().subscribeSource(
+      { type: "enhanced_note", id: "note-1" },
+      vi.fn(),
+    );
+
+    expect(mocks.subscribeIndexChanged).toHaveBeenCalledWith(
+      "tasks",
+      expect.any(Function),
+      undefined,
+    );
   });
 });
