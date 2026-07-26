@@ -5,10 +5,10 @@ import { json2md, md2json } from "@hypr/editor/markdown";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 
-import { enqueueDatabaseWrite } from "~/db/write-queue";
 import { waitForPendingSoftDelete } from "~/session/pending-soft-deletes";
 import { useIndexQuery } from "~/shared/index-query";
 import { DEFAULT_USER_ID, id } from "~/shared/utils";
+import { enqueueDatabaseWrite } from "~/shared/write-queue";
 import type { DeletedSessionData } from "~/store/zustand/undo-delete";
 import {
   commands,

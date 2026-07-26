@@ -2,7 +2,7 @@ import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 
 import { enqueueSessionAudioOperation } from "./audio-operations";
 
-import { enqueueDatabaseWrite } from "~/db/write-queue";
+import { enqueueDatabaseWrite } from "~/shared/write-queue";
 import { commands } from "~/types/tauri.gen";
 
 // Graceful no-op: `session_attachments`/`attachment_local_state` were

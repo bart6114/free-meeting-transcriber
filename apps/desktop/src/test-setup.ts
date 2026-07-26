@@ -56,13 +56,6 @@ vi.mock("@tauri-apps/api/path", () => ({
   sep: vi.fn().mockReturnValue("/"),
 }));
 
-vi.mock("@hypr/plugin-db", () => ({
-  execute: vi.fn().mockResolvedValue([]),
-  executeProxy: vi.fn().mockResolvedValue({ rows: [] }),
-  executeTransaction: vi.fn().mockResolvedValue([]),
-  subscribe: vi.fn().mockResolvedValue(() => Promise.resolve()),
-}));
-
 function translate(
   input:
     | TemplateStringsArray

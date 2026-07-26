@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 
-import { enqueueDatabaseWrite } from "~/db/write-queue";
 import { useIndexQuery } from "~/shared/index-query";
 import { DEFAULT_USER_ID } from "~/shared/utils";
+import { enqueueDatabaseWrite } from "~/shared/write-queue";
 import type { RenderLabelContext, SegmentKey } from "~/stt/live-segment";
 import {
   collectAssignedHumanIdsFromTranscriptRows,

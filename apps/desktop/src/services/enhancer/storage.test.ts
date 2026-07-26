@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
   ),
 }));
 
-vi.mock("~/db/write-queue", () => ({
+vi.mock("~/shared/write-queue", () => ({
   enqueueDatabaseWrite: mocks.enqueueDatabaseWrite,
 }));
 

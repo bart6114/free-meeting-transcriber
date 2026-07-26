@@ -19,7 +19,7 @@ vi.mock("@tauri-apps/plugin-process", () => ({
   relaunch: relaunchMock,
 }));
 
-vi.mock("~/db/write-queue", () => ({
+vi.mock("~/shared/write-queue", () => ({
   flushDatabaseWritesWithin: flushDatabaseWritesWithinMock,
 }));
 

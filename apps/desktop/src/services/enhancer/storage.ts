@@ -1,10 +1,10 @@
-import { enqueueDatabaseWrite } from "~/db/write-queue";
 import {
   loadSessionContentSnapshot,
   type SessionContentSnapshot,
 } from "~/session/content-queries";
 import { isStoreConflictError } from "~/session/store-errors";
 import { id } from "~/shared/utils";
+import { enqueueDatabaseWrite } from "~/shared/write-queue";
 import { commands } from "~/types/tauri.gen";
 
 export type EnhancerNote = SessionContentSnapshot["enhancedNotes"][number];

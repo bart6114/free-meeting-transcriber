@@ -185,7 +185,6 @@ pub async fn main() {
         .plugin(tauri_plugin_tracing::init())
         .plugin(tauri_plugin_analytics::init())
         .plugin(tauri_plugin_agent::init())
-        .plugin(tauri_plugin_db::init(db.clone()))
         .plugin(tauri_plugin_bedrock::init());
 
     #[cfg(target_os = "macos")]

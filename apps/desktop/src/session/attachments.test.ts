@@ -6,8 +6,6 @@ const mocks = vi.hoisted(() => ({
   sessionStoreAudio: vi.fn(),
   sessionListAudio: vi.fn(),
   sessionDeleteAudio: vi.fn(),
-  execute: vi.fn(),
-  executeTransaction: vi.fn().mockResolvedValue([0, 1, 1]),
   enqueueDatabaseWrite: vi.fn(
     async (_key: string, write: () => Promise<number[]>) => write(),
   ),
@@ -28,12 +26,7 @@ vi.mock("~/types/tauri.gen", () => ({
   },
 }));
 
-vi.mock("~/db", () => ({
-  executeTransaction: mocks.executeTransaction,
-  liveQueryClient: { execute: mocks.execute },
-}));
-
-vi.mock("~/db/write-queue", () => ({
+vi.mock("~/shared/write-queue", () => ({
   enqueueDatabaseWrite: mocks.enqueueDatabaseWrite,
 }));
 
@@ -49,7 +42,6 @@ import {
 describe("attachment catalog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.executeTransaction.mockResolvedValue([0, 1, 1]);
     mocks.audioDelete.mockResolvedValue({ status: "ok", data: true });
     mocks.audioMetadata.mockResolvedValue({
       status: "ok",
@@ -85,7 +77,6 @@ describe("attachment catalog", () => {
     ).resolves.toBeUndefined();
 
     expect(mocks.enqueueDatabaseWrite).not.toHaveBeenCalled();
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("computes a stable lowercase SHA-256 checksum", async () => {
@@ -138,7 +129,6 @@ describe("attachment catalog", () => {
       "session-1",
       "recording.wav",
     );
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("deletes the recording without touching the database", async () => {
@@ -146,7 +136,6 @@ describe("attachment catalog", () => {
       true,
     );
     expect(mocks.audioDelete).toHaveBeenCalledWith("session-1");
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("completes logical deletion when local audio is already absent", async () => {
@@ -155,7 +144,6 @@ describe("attachment catalog", () => {
     await expect(deleteSessionAudio("session-1", () => true)).resolves.toBe(
       true,
     );
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("resolves false when retention finds no local audio to delete", async () => {
@@ -164,7 +152,6 @@ describe("attachment catalog", () => {
     await expect(
       deleteLocalSessionAudio("session-1", () => true),
     ).resolves.toBe(false);
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   // cleanupDeletedSessionAudio is likewise a graceful no-op — there is no
@@ -174,7 +161,6 @@ describe("attachment catalog", () => {
     await expect(
       cleanupDeletedSessionAudio("session-1", () => true),
     ).resolves.toBe(false);
-    expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.audioDelete).not.toHaveBeenCalled();
   });
 
@@ -182,7 +168,6 @@ describe("attachment catalog", () => {
     await expect(deleteSessionAudio("session-1", () => false)).resolves.toBe(
       false,
     );
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
     expect(mocks.audioDelete).not.toHaveBeenCalled();
   });
 });

@@ -1,4 +1,4 @@
-import { enqueueDatabaseWrite } from "~/db/write-queue";
+import { enqueueDatabaseWrite } from "~/shared/write-queue";
 import { commands } from "~/types/tauri.gen";
 
 // Markdown-based since D-3: `enhanced/<doc-id>.md` is the doc's canonical home, so the
