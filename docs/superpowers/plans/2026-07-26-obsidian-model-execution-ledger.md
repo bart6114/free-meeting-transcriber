@@ -104,6 +104,25 @@ Parity confidence: high on read paths.
   review described and the one that actually happens — is fully closed; closing the rest needs
   a tombstone/generation scheme.
 
+### Fix pass outcome (f90d448 Rust, 737eddc FE, 0aaedff follow-ups)
+
+All confirmed defects fixed and pinned by regression tests that were verified to fail
+without the fix. Two bonus finds the reviewers missed, caught by the implementers:
+`write_document` interpolated a frontend-supplied `kind` into the path, so
+`kind = "../../../escaped"` walked out of the vault; and `write_note` indexed raw markdown
+while `read_note` strips exporter frontmatter, so index and file could disagree until a
+rescan silently changed the displayed note.
+
+Both implementers also **corrected this controller's briefing**, which is worth recording:
+the task ordering spec I gave was wrong (`(source_order, id)`, not
+`(source_order, created_at, id)`), and my instruction to scope the tasks subscription to
+`source.id` would have reintroduced the same silent-no-events bug for `enhanced_note`
+sources, because Rust resolves a doc id to its owning session before emitting. Those
+sources subscribe unscoped instead.
+
+Final gates: **194 Rust tests, 1159 FE tests / 168 files, typecheck clean, zero known
+failures.**
+
 ### Accepted / deferred (not defects to fix now)
 
 - `applyGeneratedSessionTitle` lost transaction atomicity — inherent to dropping the
