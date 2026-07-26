@@ -21,6 +21,15 @@ pub struct LiveTranscriptBuffer {
 }
 
 const DEBOUNCE: std::time::Duration = std::time::Duration::from_secs(1);
+const RETRY_DELAY_CAP: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// Backoff for the debounced-flush retry loop: doubling keeps a persistently failing disk
+/// from being hammered every second, the cap keeps retries frequent enough to catch a
+/// recovered disk quickly, and there is deliberately no max-attempts abandon -- a buffer
+/// that can't flush holds the only copy of those words.
+fn next_retry_delay(current: std::time::Duration) -> std::time::Duration {
+    (current * 2).min(RETRY_DELAY_CAP)
+}
 
 impl SessionStore {
     /// Buffers the delta and schedules a flush ~1s later. Has no session/index preconditions,
@@ -43,20 +52,22 @@ impl SessionStore {
         // the previous transcript's words into the new one's file entry. If the outgoing
         // buffer still has unflushed changes, persist them first -- clearing an unflushed
         // buffer would silently drop words that never made it to disk.
-        let needs_flush_before_switch = {
-            let live = self.live.lock().await;
-            live.get(session_id).is_some_and(|buffer| {
-                buffer.dirty
-                    && !buffer.transcript_id.is_empty()
-                    && buffer.transcript_id != delta.transcript_id
-            })
-        };
+        let mut live = self.live.lock().await;
+        let needs_flush_before_switch = live.get(session_id).is_some_and(|buffer| {
+            buffer.dirty
+                && !buffer.transcript_id.is_empty()
+                && buffer.transcript_id != delta.transcript_id
+        });
         if needs_flush_before_switch {
+            // flush_transcript takes this same lock internally, so the guard must be
+            // released across the call; flush_transcript re-checks state under its own
+            // guard, so the gap can't flush stale or already-clean content.
+            drop(live);
             self.flush_transcript(session_id).await?;
+            live = self.live.lock().await;
         }
 
         let needs_spawn = {
-            let mut live = self.live.lock().await;
             let buffer = live.entry(session_id.to_string()).or_default();
 
             if !buffer.transcript_id.is_empty() && buffer.transcript_id != delta.transcript_id {
@@ -83,31 +94,34 @@ impl SessionStore {
             buffer.dirty = true;
             !was_dirty
         };
+        drop(live);
 
         if needs_spawn {
             let store = self.clone();
             let session_id = session_id.to_string();
             tokio::spawn(async move {
+                let mut delay = DEBOUNCE;
                 loop {
-                    tokio::time::sleep(DEBOUNCE).await;
-                    let still_dirty = {
-                        let live = store.live.lock().await;
-                        live.get(&session_id).is_some_and(|buffer| buffer.dirty)
-                    };
-                    if !still_dirty {
-                        return;
+                    tokio::time::sleep(delay).await;
+                    // No separate "is it still dirty" pre-check: flush_transcript itself
+                    // no-ops with Ok when the buffer went clean in the meantime (explicit
+                    // flush, batch write), so Ok always means this flusher is done.
+                    match store.flush_transcript(&session_id).await {
+                        Ok(()) => return,
+                        Err(err) => {
+                            // flush_transcript re-dirties the buffer on Err, so the next
+                            // iteration picks this session back up. Retries never stop --
+                            // the buffer holds the only copy of these words -- they just
+                            // slow down while the failure persists.
+                            delay = next_retry_delay(delay);
+                            tracing::error!(
+                                session_id = %session_id,
+                                error = %err,
+                                next_retry_in_secs = delay.as_secs(),
+                                "debounced transcript flush failed; will retry with backoff while buffer stays dirty"
+                            );
+                        }
                     }
-                    if let Err(err) = store.flush_transcript(&session_id).await {
-                        tracing::error!(
-                            session_id = %session_id,
-                            error = %err,
-                            "debounced transcript flush failed; will retry while buffer stays dirty"
-                        );
-                        // flush_transcript re-dirties the buffer on Err, so the next
-                        // iteration's `still_dirty` check will pick this session back up.
-                        continue;
-                    }
-                    return;
                 }
             });
         }
@@ -356,6 +370,21 @@ mod tests {
             metadata: None,
         }
     }
+
+    // Mirrors 20260725120000_drop_sync_machinery's transcripts DDL, for tests that DROP the
+    // table to force index-write failures and then need to restore it.
+    const TRANSCRIPTS_TABLE_DDL: &str = "CREATE TABLE IF NOT EXISTS transcripts (
+      id                  TEXT PRIMARY KEY NOT NULL,
+      owner_user_id       TEXT NOT NULL DEFAULT '',
+      session_id          TEXT NOT NULL DEFAULT '',
+      started_at_ms       INTEGER NOT NULL DEFAULT 0,
+      ended_at_ms         INTEGER,
+      memo                TEXT NOT NULL DEFAULT '',
+      words_json          TEXT NOT NULL DEFAULT '[]',
+      speaker_hints_json  TEXT NOT NULL DEFAULT '[]',
+      updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+      deleted_at          TEXT
+    ) STRICT";
 
     fn delta_with_words(words: &[&str]) -> TranscriptDelta {
         TranscriptDelta {
@@ -784,33 +813,12 @@ mod tests {
             );
         }
 
-        // Recreate the table (mirrors the canonical migration's transcripts DDL) and
-        // confirm flush_all() recovers the session that previously failed.
-        sqlx::query(
-            "CREATE TABLE IF NOT EXISTS transcripts (
-              id                    TEXT PRIMARY KEY NOT NULL,
-              workspace_id          TEXT NOT NULL DEFAULT '',
-              owner_user_id         TEXT NOT NULL DEFAULT '',
-              session_id            TEXT NOT NULL DEFAULT '',
-              source                TEXT NOT NULL DEFAULT '',
-              provider              TEXT NOT NULL DEFAULT '',
-              model                 TEXT NOT NULL DEFAULT '',
-              language              TEXT NOT NULL DEFAULT '',
-              started_at_ms         INTEGER NOT NULL DEFAULT 0,
-              ended_at_ms           INTEGER,
-              audio_attachment_id   TEXT NOT NULL DEFAULT '',
-              memo                   TEXT NOT NULL DEFAULT '',
-              words_json            TEXT NOT NULL DEFAULT '[]',
-              speaker_hints_json    TEXT NOT NULL DEFAULT '[]',
-              metadata_json         TEXT NOT NULL DEFAULT '{}',
-              created_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-              updated_at            TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-              deleted_at            TEXT
-            ) STRICT",
-        )
-        .execute(store.pool())
-        .await
-        .unwrap();
+        // Recreate the table and confirm flush_all() recovers the session that
+        // previously failed.
+        sqlx::query(TRANSCRIPTS_TABLE_DDL)
+            .execute(store.pool())
+            .await
+            .unwrap();
 
         store.flush_all().await.unwrap();
 
@@ -820,5 +828,129 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(row_count, 1);
+    }
+
+    /// Direct test for `append_transcript`'s `needs_flush_before_switch` branch: a delta for
+    /// a *different* transcript_id arriving while the buffer still holds unflushed words for
+    /// the previous transcript must flush those words to file + index first (the buffer reset
+    /// for the new transcript would otherwise silently drop them), and the new transcript's
+    /// delta must then buffer and flush normally.
+    #[tokio::test]
+    async fn switching_transcript_id_flushes_dirty_old_buffer_before_buffering_new_delta() {
+        let (store, vault) = test_store().await;
+        // Dirty buffer for t1 -- never explicitly flushed, debounce timer not yet fired.
+        store
+            .append_transcript("s1", delta_with_words(&["old-words"]))
+            .await
+            .unwrap();
+
+        store
+            .append_transcript(
+                "s1",
+                TranscriptDelta {
+                    transcript_id: "t2".to_string(),
+                    new_words: vec![word("y0", "new-words")],
+                    replaced_ids: vec![],
+                    new_hints: vec![],
+                    started_at_ms: 2000.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        // t1's words must already be on disk and in the index -- the switch itself flushed
+        // them, no explicit flush_transcript and no debounce wait.
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let transcripts = json["transcripts"].as_array().unwrap();
+        let t1 = transcripts.iter().find(|t| t["id"] == "t1").unwrap();
+        let t1_texts: Vec<&str> = t1["words"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(t1_texts, vec!["old-words"]);
+        let t1_row: String = sqlx::query_scalar("SELECT words_json FROM transcripts WHERE id='t1'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert!(t1_row.contains("old-words"));
+
+        // The incoming delta proceeded normally: t2 is buffered dirty and flushes with only
+        // its own words, alongside (not replacing) t1's entry.
+        store.flush_transcript("s1").await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let transcripts = json["transcripts"].as_array().unwrap();
+        assert_eq!(transcripts.len(), 2);
+        let t2 = transcripts.iter().find(|t| t["id"] == "t2").unwrap();
+        let t2_texts: Vec<&str> = t2["words"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|w| w["text"].as_str().unwrap())
+            .collect();
+        assert_eq!(t2_texts, vec!["new-words"]);
+    }
+
+    #[test]
+    fn retry_delay_doubles_and_caps_without_ever_reaching_zero() {
+        let mut delay = DEBOUNCE;
+        let mut observed = Vec::new();
+        for _ in 0..8 {
+            delay = next_retry_delay(delay);
+            observed.push(delay.as_secs());
+        }
+        assert_eq!(observed, vec![2, 4, 8, 16, 30, 30, 30, 30]);
+    }
+
+    /// The debounce flusher must keep retrying after a failure (now with backoff) rather
+    /// than abandoning the buffer: drop the index table so the first attempt fails, restore
+    /// it, and assert a later retry lands the words with no further appends and no explicit
+    /// flush call.
+    #[tokio::test]
+    async fn debounce_retry_recovers_after_transient_failure_without_new_appends() {
+        let (store, _vault) = test_store().await;
+        sqlx::query("DROP TABLE transcripts")
+            .execute(store.pool())
+            .await
+            .unwrap();
+        store
+            .append_transcript("s1", delta_with_words(&["survivor"]))
+            .await
+            .unwrap();
+
+        // First flush attempt fires at ~1s and fails; restore the table before the backoff
+        // retry (~2s later) fires.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        sqlx::query(TRANSCRIPTS_TABLE_DDL)
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        // Poll instead of a single fixed sleep: on a loaded machine the recovery may only
+        // land on a later (further backed-off) retry, and "retries never stop" is exactly
+        // the property under test.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        loop {
+            let row_count: i64 =
+                sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
+                    .fetch_one(store.pool())
+                    .await
+                    .unwrap();
+            if row_count == 1 {
+                break;
+            }
+            assert!(
+                std::time::Instant::now() < deadline,
+                "debounce retry loop never landed the words after the failure cleared"
+            );
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
     }
 }

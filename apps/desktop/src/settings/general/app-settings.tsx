@@ -24,7 +24,6 @@ interface AppSettingsViewProps {
   showTrayIcon: SettingItem;
   telemetryConsent: SettingItem;
   meetingDisclosureAutoPost: SettingItem;
-  captureMeetingChat: SettingItem;
   audioRetention: {
     value: string;
     onChange: (value: string) => void;
@@ -39,7 +38,6 @@ export function AppSettingsView({
   showTrayIcon,
   telemetryConsent,
   meetingDisclosureAutoPost,
-  captureMeetingChat,
   audioRetention,
 }: AppSettingsViewProps) {
   return (
@@ -116,18 +114,6 @@ export function AppSettingsView({
             }
             checked={meetingDisclosureAutoPost.value}
             onChange={meetingDisclosureAutoPost.onChange}
-          />
-          <SettingRow
-            title={<Trans>Capture meeting chat in Memos</Trans>}
-            description={
-              <Trans>
-                While listening, use Accessibility access to copy visible chat
-                from supported meeting apps and browser meetings into the active
-                note.
-              </Trans>
-            }
-            checked={captureMeetingChat.value}
-            onChange={captureMeetingChat.onChange}
           />
           <SettingRow
             title={<Trans>Show floating bar</Trans>}

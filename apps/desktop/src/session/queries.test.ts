@@ -245,7 +245,6 @@ describe("session SQLite operations", () => {
         note_body_format: "prosemirror_json",
         transcript_count: 0,
         enhanced_note_count: 0,
-        meeting_chat_count: 0,
         tag_count: 0,
       },
     ]);
@@ -258,7 +257,6 @@ describe("session SQLite operations", () => {
     ["note body", { note_body: "Written content" }],
     ["transcript", { transcript_count: 1 }],
     ["enhanced note", { enhanced_note_count: 1 }],
-    ["captured meeting chat", { meeting_chat_count: 1 }],
     ["tag", { tag_count: 1 }],
   ])("keeps a session with %s data", async (_label, overrides) => {
     mocks.execute.mockResolvedValueOnce([
@@ -269,7 +267,6 @@ describe("session SQLite operations", () => {
         note_body_format: "prosemirror_json",
         transcript_count: 0,
         enhanced_note_count: 0,
-        meeting_chat_count: 0,
         tag_count: 0,
         ...overrides,
       },

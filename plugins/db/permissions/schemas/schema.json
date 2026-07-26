@@ -331,18 +331,6 @@
           "markdownDescription": "Denies the execute_transaction command without any pre-configured scope."
         },
         {
-          "description": "Enables the get_legacy_import_report command without any pre-configured scope.",
-          "type": "string",
-          "const": "allow-get-legacy-import-report",
-          "markdownDescription": "Enables the get_legacy_import_report command without any pre-configured scope."
-        },
-        {
-          "description": "Denies the get_legacy_import_report command without any pre-configured scope.",
-          "type": "string",
-          "const": "deny-get-legacy-import-report",
-          "markdownDescription": "Denies the get_legacy_import_report command without any pre-configured scope."
-        },
-        {
           "description": "Enables the get_meeting command without any pre-configured scope.",
           "type": "string",
           "const": "allow-get-meeting",
@@ -403,10 +391,10 @@
           "markdownDescription": "Denies the unsubscribe command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-execute`\n- `allow-execute-proxy`\n- `allow-execute-transaction`\n- `allow-list-meetings`\n- `allow-get-meeting`\n- `allow-get-meeting-transcript`\n- `allow-get-legacy-import-report`\n- `allow-subscribe`\n- `allow-unsubscribe`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-execute`\n- `allow-execute-proxy`\n- `allow-execute-transaction`\n- `allow-list-meetings`\n- `allow-get-meeting`\n- `allow-get-meeting-transcript`\n- `allow-subscribe`\n- `allow-unsubscribe`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-execute`\n- `allow-execute-proxy`\n- `allow-execute-transaction`\n- `allow-list-meetings`\n- `allow-get-meeting`\n- `allow-get-meeting-transcript`\n- `allow-get-legacy-import-report`\n- `allow-subscribe`\n- `allow-unsubscribe`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-execute`\n- `allow-execute-proxy`\n- `allow-execute-transaction`\n- `allow-list-meetings`\n- `allow-get-meeting`\n- `allow-get-meeting-transcript`\n- `allow-subscribe`\n- `allow-unsubscribe`"
         }
       ]
     }

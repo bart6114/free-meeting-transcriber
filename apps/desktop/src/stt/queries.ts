@@ -81,7 +81,7 @@ export function useSessionTranscripts(sessionId: string): TranscriptRecord[] {
       SELECT ${TRANSCRIPT_COLUMNS}
       FROM transcripts
       WHERE session_id = ? AND deleted_at IS NULL
-      ORDER BY started_at_ms, created_at, id
+      ORDER BY started_at_ms, id
     `,
     params: [sessionId],
     enabled: Boolean(sessionId),

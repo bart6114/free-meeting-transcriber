@@ -38,21 +38,20 @@ export function ensureSummaryDocument(
         sql: `
           INSERT INTO session_documents (
             id, session_id, kind, template_id, title,
-            body_format, body, sort_order, created_by, updated_by, created_at,
+            body_format, body, sort_order, created_by, updated_by,
             updated_at, deleted_at
           )
           SELECT
             ?, id, ?, ?, 'Summary', 'prosemirror_json', '', ?,
-            owner_user_id, owner_user_id, ?, ?, NULL
+            owner_user_id, owner_user_id, ?, NULL
           FROM sessions
-          WHERE id = ? AND deleted_at IS NULL
+          WHERE id = ?
         `,
         params: [
           noteId,
           normalizedTemplateId ? "template_output" : "summary",
           normalizedTemplateId,
           position,
-          now,
           now,
           sessionId,
         ],
@@ -98,7 +97,7 @@ export function replaceSummaryDocumentTemplate({
             body = '',
             updated_by = COALESCE((
               SELECT owner_user_id FROM sessions
-              WHERE sessions.id = ? AND sessions.deleted_at IS NULL
+              WHERE sessions.id = ?
             ), updated_by),
             updated_at = ?
           WHERE id = ?
@@ -107,7 +106,7 @@ export function replaceSummaryDocumentTemplate({
             AND deleted_at IS NULL
             AND EXISTS (
               SELECT 1 FROM sessions
-              WHERE sessions.id = ? AND sessions.deleted_at IS NULL
+              WHERE sessions.id = ?
             )
         `,
         params: [

@@ -8,7 +8,7 @@ type OwnerUserSqlRow = {
 const OWNER_USER_SQL = `
   SELECT owner_user_id AS user_id
   FROM sessions
-  WHERE owner_user_id <> '' AND deleted_at IS NULL
+  WHERE owner_user_id <> ''
   ORDER BY updated_at DESC, owner_user_id
   LIMIT 1
 `;

@@ -20,7 +20,6 @@ export type MeetingFloatData = {
 const MEETING_FLOAT_SQL = `
   SELECT session.id AS session_id, session.title, session.owner_user_id
   FROM sessions AS session
-  WHERE session.deleted_at IS NULL
 `;
 
 export async function loadMeetingFloatData(): Promise<MeetingFloatData> {

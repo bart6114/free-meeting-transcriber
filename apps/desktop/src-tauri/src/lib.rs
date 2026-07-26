@@ -8,7 +8,6 @@ mod search_index;
 mod session_store;
 mod store;
 mod supervisor;
-mod vault_export;
 mod vault_watch;
 
 use db::open_desktop_db;
@@ -29,6 +28,37 @@ static EXIT_FLUSH_COMPLETE: AtomicBool = AtomicBool::new(false);
 
 fn mark_exit_flush_complete() {
     EXIT_FLUSH_COMPLETE.store(true, Ordering::SeqCst);
+}
+
+const EXIT_FLUSH_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+
+/// Synchronous, bounded flush of the session store's live transcript buffers, for exit paths
+/// where the frontend's `complete_app_exit` flush never runs (force-quit, event emit failure,
+/// or an `Exit` that skipped `ExitRequested`). Words still in the debounce buffer are the only
+/// copy in existence -- losing them on quit is the original transcript-loss incident this
+/// store exists to prevent -- but a hung disk must not make the app unquittable, hence the
+/// deadline. The flush runs on the async runtime's worker threads while this (event-loop)
+/// thread parks on a channel: `flush_all` never needs the event-loop thread, and the wait is
+/// bounded even if the flush task itself wedges in file I/O.
+fn flush_session_store_bounded(store: std::sync::Arc<session_store::SessionStore>) {
+    let (tx, rx) = std::sync::mpsc::channel();
+    tauri::async_runtime::spawn(async move {
+        let _ = tx.send(store.flush_all().await);
+    });
+    match rx.recv_timeout(EXIT_FLUSH_TIMEOUT) {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::error!(%error, "exit-path session_store flush failed"),
+        Err(_) => tracing::error!(
+            timeout = ?EXIT_FLUSH_TIMEOUT,
+            "exit-path session_store flush timed out; exiting anyway"
+        ),
+    }
+}
+
+fn flush_session_store_on_exit<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    if let Some(store) = app.try_state::<std::sync::Arc<session_store::SessionStore>>() {
+        flush_session_store_bounded(store.inner().clone());
+    }
 }
 
 fn should_force_quit() -> bool {
@@ -287,18 +317,12 @@ pub async fn main() {
                 use tauri_plugin_settings::SettingsPluginExt;
                 match app_handle.settings().vault_base() {
                     Ok(base) => {
-                        // Task 12: drains the *old* DB-to-vault export
-                        // machinery one final time, repairing any
-                        // `transcripts.words_json` row the historical
-                        // int/float round-trip bug left unexported, before
-                        // this run's `rebuild_index` indexes whatever's on
-                        // disk. Gated by a marker file so it only ever runs
-                        // once per vault; `block_on` for the same reason
+                        // One-time, marker-gated `transcripts.words_json`
+                        // repair, before this run's `rebuild_index` indexes
+                        // whatever's on disk. `block_on` for the same reason
                         // `rebuild_index` below is blocked on -- the UI must
-                        // not proceed until the vault reflects every row the
-                        // DB still has that files don't yet.
+                        // not proceed against unrepaired rows.
                         match hypr_tauri_utils::block_on(session_store::migrate::run_once(
-                            &app_handle,
                             db.pool(),
                             base.as_std_path(),
                         )) {
@@ -306,15 +330,13 @@ pub async fn main() {
                                 tracing::info!(
                                     skipped_marker_present = report.skipped_marker_present,
                                     repaired_words_json = report.repaired_words_json,
-                                    unparseable_words_json_count = report.unparseable_words_json.len(),
-                                    drain_passes = report.drain_passes,
-                                    export_error_count = report.export_errors.len(),
-                                    export_errors = ?report.export_errors,
-                                    "one-time final export sweep complete"
+                                    unparseable_words_json_count =
+                                        report.unparseable_words_json.len(),
+                                    "one-time words_json repair sweep complete"
                                 );
                             }
                             Err(e) => {
-                                tracing::error!("one-time final export sweep failed: {}", e);
+                                tracing::error!("one-time words_json repair sweep failed: {}", e);
                             }
                         }
 
@@ -324,12 +346,10 @@ pub async fn main() {
                         ));
                         app_handle.manage(store.clone());
 
-                        // Replaces the old `sync_from_vault` reconcile (formerly run
-                        // synchronously inside `tauri_plugin_db::init`'s own `setup()`):
-                        // files are the source of truth, so every startup rebuilds the
+                        // Files are the source of truth, so every startup rebuilds the
                         // sessions/session_documents/transcripts index from what's on disk
-                        // before the UI proceeds. `block_on` mirrors how the old call
-                        // blocked setup on the reconcile finishing.
+                        // before the UI proceeds. `block_on`: the UI must not come up
+                        // against a stale index.
                         match hypr_tauri_utils::block_on(store.rebuild_index()) {
                             Ok(report) => {
                                 tracing::info!(
@@ -366,20 +386,12 @@ pub async fn main() {
             }
 
             search_index::spawn(app_handle.clone(), db.clone());
-            // Spawned after `search_index`, both after the session-store block above:
-            // that block's `hypr_tauri_utils::block_on(store.rebuild_index())` has
-            // already finished by this point in the same `setup()` closure, so the
-            // files-to-index rebuild is always complete before this DB-to-vault mirror
-            // starts draining — reconcile first, mirror second. See `vault_export.rs`'s
-            // module doc for the full loop-prevention analysis.
-            vault_export::spawn(app_handle.clone(), db.clone());
-            // Spawned last, after both the startup reconcile (above, via the
-            // session-store block) and the export worker: an external edit's refresh
-            // only needs to account for vault state from here on, since everything the
-            // vault held (or the export worker had queued) at launch is already
-            // reconciled. Relies on the session-store block above having already
+            // Spawned last, after the session-store block above has finished its
+            // startup `rebuild_index` pass: an external edit's refresh only needs to
+            // account for vault state from here on, since everything the vault held at
+            // launch is already indexed. Relies on that block having already
             // `.manage()`d the `Arc<SessionStore>` this looks up. See `vault_watch.rs`'s
-            // module doc for the full ordering + loop prevention rationale.
+            // module doc for the full ordering rationale.
             vault_watch::spawn(app_handle);
 
             Ok(())
@@ -433,17 +445,39 @@ pub async fn main() {
                 ctx.mark_exiting();
             }
 
-            if EXIT_FLUSH_COMPLETE.load(Ordering::SeqCst) || should_force_quit() {
+            if EXIT_FLUSH_COMPLETE.load(Ordering::SeqCst) {
+                return;
+            }
+
+            if should_force_quit() {
+                // Force-quit (macOS Cmd+Q intercept) is real user intent to exit now, but
+                // the debounce buffer may still hold the only copy of recent words -- the
+                // original transcript-loss incident. Bounded best-effort flush, then let
+                // the exit proceed.
+                flush_session_store_on_exit(app);
+                mark_exit_flush_complete();
                 return;
             }
 
             api.prevent_exit();
             if app.emit_to("main", APP_EXIT_REQUESTED_EVENT, ()).is_err() {
+                // The frontend never received the event, so complete_app_exit (and its
+                // flush_all) will never run -- flush here rather than exit with a dirty
+                // transcript buffer.
+                flush_session_store_on_exit(app);
                 mark_exit_flush_complete();
                 app.exit(0);
             }
         }
         tauri::RunEvent::Exit => {
+            // Last resort for any platform path where Exit fires without the
+            // ExitRequested/complete_app_exit flush having run. flush_all is a no-op when
+            // nothing is dirty, so this can never double-write.
+            if !EXIT_FLUSH_COMPLETE.load(Ordering::SeqCst) {
+                flush_session_store_on_exit(app);
+                mark_exit_flush_complete();
+            }
+
             {
                 use tauri_plugin_store2::Store2PluginExt;
                 if let Ok(store) = app.store2().store() {
@@ -533,7 +567,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::set_recently_opened_sessions::<tauri::Wry>,
             commands::check_embedded_cli::<tauri::Wry>,
             commands::install_embedded_cli::<tauri::Wry>,
-            vault_export::export_vault_now::<tauri::Wry>,
             session_store::commands::session_write_meta::<tauri::Wry>,
             session_store::commands::session_write_note::<tauri::Wry>,
             session_store::commands::session_read_note::<tauri::Wry>,
@@ -555,13 +588,58 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
 mod test {
     use super::*;
 
+    /// The bounded exit-path flush must actually drain a dirty transcript buffer, and a
+    /// second call with nothing dirty must be a harmless no-op (exit paths can overlap:
+    /// e.g. force-quit's flush followed by RunEvent::Exit's last-resort flush on a racing
+    /// mark; idempotence is what makes that safe).
+    #[test]
+    fn exit_flush_bounded_drains_dirty_buffer_and_second_call_is_a_noop() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = hypr_tauri_utils::block_on(async {
+            let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
+            hypr_db_app::prepare_schema(&db).await.unwrap();
+            std::sync::Arc::new(session_store::SessionStore::new(
+                temp.path().to_path_buf(),
+                db.pool().clone(),
+            ))
+        });
+
+        hypr_tauri_utils::block_on(store.append_transcript(
+            "s1",
+            session_store::TranscriptDelta {
+                transcript_id: "t1".to_string(),
+                new_words: vec![hypr_fs_format::TranscriptWord {
+                    id: Some("w0".to_string()),
+                    text: "quit-survivor".to_string(),
+                    start_ms: 0.0,
+                    end_ms: 0.0,
+                    channel: 0.0,
+                    speaker: None,
+                    metadata: None,
+                }],
+                replaced_ids: vec![],
+                new_hints: vec![],
+                started_at_ms: 1000.0,
+            },
+        ))
+        .unwrap();
+
+        flush_session_store_bounded(store.clone());
+        let path = temp.path().join("sessions/s1/transcript.json");
+        let first = std::fs::read(&path).unwrap();
+        assert!(String::from_utf8_lossy(&first).contains("quit-survivor"));
+
+        flush_session_store_bounded(store);
+        assert_eq!(std::fs::read(&path).unwrap(), first);
+    }
+
     #[test]
     fn startup_failure_message_includes_the_original_error() {
-        let message = startup_failure_message(&"legacy import did not pass parity verification");
+        let message = startup_failure_message(&"database schema preparation failed");
 
         assert_eq!(
             message,
-            "Free Meeting Transcriber failed to start: legacy import did not pass parity verification"
+            "Free Meeting Transcriber failed to start: database schema preparation failed"
         );
     }
 

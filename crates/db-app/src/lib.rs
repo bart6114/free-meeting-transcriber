@@ -1,12 +1,10 @@
 #![forbid(unsafe_code)]
 
-mod legacy_import;
 mod session_ops;
 mod session_types;
 mod template_ops;
 mod template_types;
 
-pub use legacy_import::*;
 pub use session_ops::*;
 pub use session_types::*;
 pub use template_ops::*;
@@ -206,6 +204,11 @@ pub const APP_MIGRATION_STEPS: &[hypr_db_migrate::MigrationStep] = &[
         scope: hypr_db_migrate::MigrationScope::Plain,
         sql: include_str!("../migrations/20260724110000_drop_cloud_tables.sql"),
     },
+    hypr_db_migrate::MigrationStep {
+        id: "20260725120000_drop_sync_machinery",
+        scope: hypr_db_migrate::MigrationScope::Plain,
+        sql: include_str!("../migrations/20260725120000_drop_sync_machinery.sql"),
+    },
 ];
 
 /// No migration step opts into `MigrationScope::CloudsyncAlter` anymore —
@@ -376,7 +379,7 @@ mod tests {
         assert!(tables.contains(&"_sqlx_migrations".to_string()));
         assert!(tables.contains(&"templates".to_string()));
         assert!(tables.contains(&"sessions".to_string()));
-        assert!(tables.contains(&"migration_import_runs".to_string()));
+        assert!(tables.contains(&"transcripts".to_string()));
     }
 
     #[tokio::test]
@@ -403,19 +406,14 @@ mod tests {
                 "chat_messages",
                 "daily_notes",
                 "entity_mentions",
-                "migration_import_items",
-                "migration_import_runs",
-                "migration_import_targets",
                 "search_index_dirty",
                 "search_index_state",
                 "session_documents",
                 "session_tags",
                 "sessions",
-                "storage_migration_state",
                 "tags",
                 "templates",
                 "transcripts",
-                "vault_export_dirty",
             ]
         );
     }
@@ -665,12 +663,10 @@ mod tests {
         .await
         .unwrap();
 
-        sqlx::query(
-            "UPDATE sessions SET deleted_at = '2026-07-14T00:00:00Z' WHERE id = 'session-1'",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
+        sqlx::query("UPDATE sessions SET ended_at = '2026-07-14T00:00:00Z' WHERE id = 'session-1'")
+            .execute(db.pool())
+            .await
+            .unwrap();
         sqlx::query("UPDATE sessions SET title = 'Updated' WHERE id = 'session-2'")
             .execute(db.pool())
             .await
@@ -692,6 +688,245 @@ mod tests {
                 ("session".to_string(), "session-2".to_string(), 2),
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn drop_sync_machinery_migration_preserves_live_rows() {
+        let db = Db::connect_memory_plain().await.unwrap();
+        hypr_db_migrate::migrate(
+            &db,
+            hypr_db_migrate::DbSchema {
+                steps: migration_steps_before("20260725120000_drop_sync_machinery"),
+                validate_cloudsync_table: alter_guard_required,
+            },
+        )
+        .await
+        .unwrap();
+
+        sqlx::query(
+            "INSERT INTO sessions
+             (id, workspace_id, owner_user_id, title, kind, status, created_at, updated_at,
+              started_at, ended_at, timezone, language, event_id, external_event_id,
+              external_provider, series_id, source_apps_json, event_json, folder_path, slug,
+              metadata_json, deleted_at)
+             VALUES
+             ('live', 'ws-1', 'owner-1', 'Live session', 'meeting', 'active',
+              '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', '2026-07-01T09:00:00Z',
+              '2026-07-01T10:00:00Z', 'Europe/Brussels', 'en', 'event-1', 'ext-event-1',
+              'zoom', 'series-1', '[{\"app\":\"zoom\"}]', '{\"tracking_id\":\"t-1\"}',
+              'folder/a', 'live-session', '{\"source\":\"test\"}', NULL),
+             ('hidden', '', '', 'Soft-hidden session', 'meeting', 'active',
+              '2026-07-01T00:00:00Z', '2026-07-02T00:00:00Z', '', '', '', '', '', '',
+              '', '', '[]', '', '', '', '{}', '2026-07-03T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO session_documents
+             (id, session_id, kind, title, template_id, body_format, body, source_hash,
+              generation_metadata_json, sort_order, created_by, updated_by, updated_at,
+              deleted_at)
+             VALUES
+             ('live:key_facts', 'live', 'key_facts', '', '', 'md', 'facts', 'hash-1', '{}',
+              0, '', '', '2026-07-02T00:00:00Z', NULL),
+             ('live:meeting-chat:abc', 'live', 'meeting_chat', '', '', 'md', 'chat', 'hash-2',
+              '{}', 0, '', '', '2026-07-02T00:00:00Z', NULL),
+             ('summary-1', 'live', 'summary', 'Summary', 'template-1', 'prosemirror_json',
+              'summary body', '', '{}', 3, 'owner-1', 'owner-1', '2026-07-02T00:00:00Z',
+              '2026-07-04T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+        sqlx::query(
+            "INSERT INTO transcripts
+             (id, session_id, owner_user_id, started_at_ms, ended_at_ms, memo, words_json,
+              speaker_hints_json, updated_at, deleted_at)
+             VALUES
+             ('transcript-live', 'live', 'owner-1', 100, 200, 'memo',
+              '[{\"text\":\"hello\"}]', '[{\"type\":\"speaker\"}]', '2026-07-02T00:00:00Z',
+              NULL),
+             ('transcript-superseded', 'live', '', 0, NULL, '', '[]', '[]',
+              '2026-07-02T00:00:00Z', '2026-07-05T00:00:00Z')",
+        )
+        .execute(db.pool())
+        .await
+        .unwrap();
+
+        hypr_db_migrate::migrate(&db, schema()).await.unwrap();
+
+        let session_identity = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+            ),
+        >(
+            "SELECT id, owner_user_id, title, kind, status, created_at, updated_at,
+                    started_at, ended_at
+             FROM sessions ORDER BY id",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            session_identity,
+            vec![(
+                "live".to_string(),
+                "owner-1".to_string(),
+                "Live session".to_string(),
+                "meeting".to_string(),
+                "active".to_string(),
+                "2026-07-01T00:00:00Z".to_string(),
+                "2026-07-02T00:00:00Z".to_string(),
+                "2026-07-01T09:00:00Z".to_string(),
+                "2026-07-01T10:00:00Z".to_string(),
+            )]
+        );
+
+        let session_details = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+            ),
+        >(
+            "SELECT timezone, language, external_provider, source_apps_json,
+                    event_json, folder_path, slug, metadata_json
+             FROM sessions WHERE id = 'live'",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            session_details,
+            vec![(
+                "Europe/Brussels".to_string(),
+                "en".to_string(),
+                "zoom".to_string(),
+                "[{\"app\":\"zoom\"}]".to_string(),
+                "{\"tracking_id\":\"t-1\"}".to_string(),
+                "folder/a".to_string(),
+                "live-session".to_string(),
+                "{\"source\":\"test\"}".to_string(),
+            )]
+        );
+
+        let documents = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+                String,
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            "SELECT id, session_id, kind, title, template_id, body_format, body,
+                    sort_order, created_by, updated_by, updated_at, deleted_at
+             FROM session_documents ORDER BY id",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            documents,
+            vec![(
+                "summary-1".to_string(),
+                "live".to_string(),
+                "summary".to_string(),
+                "Summary".to_string(),
+                "template-1".to_string(),
+                "prosemirror_json".to_string(),
+                "summary body".to_string(),
+                3,
+                "owner-1".to_string(),
+                "owner-1".to_string(),
+                "2026-07-02T00:00:00Z".to_string(),
+                Some("2026-07-04T00:00:00Z".to_string()),
+            )]
+        );
+
+        let transcripts = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                i64,
+                Option<i64>,
+                String,
+                String,
+                String,
+                String,
+                Option<String>,
+            ),
+        >(
+            "SELECT id, owner_user_id, session_id, started_at_ms, ended_at_ms, memo,
+                    words_json, speaker_hints_json, updated_at, deleted_at
+             FROM transcripts ORDER BY id",
+        )
+        .fetch_all(db.pool())
+        .await
+        .unwrap();
+        assert_eq!(
+            transcripts,
+            vec![
+                (
+                    "transcript-live".to_string(),
+                    "owner-1".to_string(),
+                    "live".to_string(),
+                    100,
+                    Some(200),
+                    "memo".to_string(),
+                    "[{\"text\":\"hello\"}]".to_string(),
+                    "[{\"type\":\"speaker\"}]".to_string(),
+                    "2026-07-02T00:00:00Z".to_string(),
+                    None,
+                ),
+                (
+                    "transcript-superseded".to_string(),
+                    "".to_string(),
+                    "live".to_string(),
+                    0,
+                    None,
+                    "".to_string(),
+                    "[]".to_string(),
+                    "[]".to_string(),
+                    "2026-07-02T00:00:00Z".to_string(),
+                    Some("2026-07-05T00:00:00Z".to_string()),
+                ),
+            ]
+        );
+
+        // The stranded vault_export_* triggers must be gone: writes to the
+        // surviving tables they were attached to would otherwise fail with
+        // "no such table: vault_export_dirty".
+        sqlx::query("INSERT INTO tags (id, name) VALUES ('tag-1', 'Tag')")
+            .execute(db.pool())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

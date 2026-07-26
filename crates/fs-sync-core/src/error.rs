@@ -12,8 +12,6 @@ pub enum Error {
     Path(String),
     #[error(transparent)]
     Frontmatter(#[from] hypr_frontmatter::Error),
-    #[error("Markdown error: {0}")]
-    Markdown(String),
 }
 
 impl Serialize for Error {

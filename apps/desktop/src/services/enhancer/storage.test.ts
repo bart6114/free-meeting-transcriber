@@ -93,7 +93,6 @@ describe("enhancer SQLite storage", () => {
       "template-2",
       5,
       expect.any(String),
-      expect.any(String),
       "session-1",
     ]);
     expect(statement.expectedRowsAffected).toBe(1);

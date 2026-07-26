@@ -7,7 +7,6 @@ permissions = [
   "allow-list-meetings",
   "allow-get-meeting",
   "allow-get-meeting-transcript",
-  "allow-get-legacy-import-report",
   "allow-subscribe",
   "allow-unsubscribe",
 ]

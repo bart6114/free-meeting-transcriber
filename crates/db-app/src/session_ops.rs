@@ -22,21 +22,17 @@ const SESSION_COLUMNS: &str = "
 const SESSION_DOCUMENT_COLUMNS: &str = "
     SELECT document.id, document.session_id, document.kind,
            document.template_id, document.title, document.body_format, document.body,
-           document.source_hash, document.generation_metadata_json, document.sort_order,
-           document.created_by, document.updated_by, document.created_at, document.updated_at
+           document.sort_order, document.created_by, document.updated_by, document.updated_at
     FROM session_documents AS document
-    JOIN sessions AS session ON session.id = document.session_id AND session.deleted_at IS NULL
+    JOIN sessions AS session ON session.id = document.session_id
 ";
 
 const SESSION_TRANSCRIPT_COLUMNS: &str = "
-    SELECT transcript.id, transcript.owner_user_id,
-           transcript.session_id, transcript.source, transcript.provider, transcript.model,
-           transcript.language, transcript.started_at_ms, transcript.ended_at_ms,
-           transcript.audio_attachment_id, transcript.memo, transcript.words_json,
-           transcript.speaker_hints_json, transcript.metadata_json, transcript.created_at,
-           transcript.updated_at
+    SELECT transcript.id, transcript.owner_user_id, transcript.session_id,
+           transcript.started_at_ms, transcript.ended_at_ms, transcript.memo,
+           transcript.words_json, transcript.speaker_hints_json, transcript.updated_at
     FROM transcripts AS transcript
-    JOIN sessions AS session ON session.id = transcript.session_id AND session.deleted_at IS NULL
+    JOIN sessions AS session ON session.id = transcript.session_id
 ";
 
 const SESSION_ACTION_ITEM_COLUMNS: &str = "
@@ -47,7 +43,7 @@ const SESSION_ACTION_ITEM_COLUMNS: &str = "
            action_item.created_by, action_item.updated_by, action_item.metadata_json,
            action_item.created_at, action_item.updated_at
     FROM action_items AS action_item
-    JOIN sessions AS session ON session.id = action_item.session_id AND session.deleted_at IS NULL
+    JOIN sessions AS session ON session.id = action_item.session_id
 ";
 
 pub async fn list_sessions(
@@ -55,10 +51,9 @@ pub async fn list_sessions(
     input: ListSessions<'_>,
 ) -> Result<Vec<SessionListItem>, sqlx::Error> {
     let mut query = QueryBuilder::<Sqlite>::new(SESSION_LIST_COLUMNS);
-    query.push(" WHERE deleted_at IS NULL");
 
     if let Some(search) = input.query.map(str::trim).filter(|query| !query.is_empty()) {
-        query.push(" AND (instr(lower(title), lower(");
+        query.push(" WHERE (instr(lower(title), lower(");
         query.push_bind(search);
         query.push(")) > 0 OR instr(lower(id), lower(");
         query.push_bind(search);
@@ -86,7 +81,7 @@ pub async fn get_session(
     let mut query = QueryBuilder::<Sqlite>::new(SESSION_COLUMNS);
     query.push(" WHERE id = ");
     query.push_bind(session_id);
-    query.push(" AND deleted_at IS NULL LIMIT 1");
+    query.push(" LIMIT 1");
     query
         .build_query_as::<SessionRow>()
         .fetch_optional(pool)
@@ -102,7 +97,7 @@ pub async fn list_session_documents(
     query.push_bind(session_id);
     query.push(
         " AND document.deleted_at IS NULL
-          ORDER BY document.sort_order, document.created_at, document.id",
+          ORDER BY document.sort_order, document.id",
     );
     query
         .build_query_as::<SessionDocumentRow>()
@@ -122,7 +117,7 @@ pub async fn get_session_note(
           ORDER BY CASE WHEN document.id = ",
     );
     query.push_bind(session_id);
-    query.push(" THEN 0 ELSE 1 END, document.created_at, document.id LIMIT 1");
+    query.push(" THEN 0 ELSE 1 END, document.id LIMIT 1");
     query
         .build_query_as::<SessionDocumentRow>()
         .fetch_optional(pool)
@@ -138,7 +133,7 @@ pub async fn list_session_transcripts(
     query.push_bind(session_id);
     query.push(
         " AND transcript.deleted_at IS NULL
-          ORDER BY transcript.started_at_ms, transcript.created_at, transcript.id",
+          ORDER BY transcript.started_at_ms, transcript.id",
     );
     query
         .build_query_as::<SessionTranscriptRow>()
@@ -195,10 +190,6 @@ mod tests {
         insert_session(db.pool(), "alpha-old", "Alpha Planning", "2026-01-01").await;
         insert_session(db.pool(), "alpha-new", "ALPHA Review", "2026-02-01").await;
         insert_session(db.pool(), "beta", "Beta Review", "2026-03-01").await;
-        sqlx::query("UPDATE sessions SET deleted_at = '2026-04-01' WHERE id = 'beta'")
-            .execute(db.pool())
-            .await
-            .unwrap();
 
         let first = list_sessions(
             db.pool(),
@@ -242,12 +233,12 @@ mod tests {
         insert_session(db.pool(), "session-1", "Planning", "2026-01-01").await;
         sqlx::query(
             "INSERT INTO session_documents
-             (id, session_id, kind, body, sort_order, created_at)
+             (id, session_id, kind, body, sort_order)
              VALUES
-             ('fallback', 'session-1', 'note', 'fallback body', 0, '2026-01-01'),
-             ('session-1', 'session-1', 'note', 'canonical body', 1, '2026-02-01'),
-             ('summary', 'session-1', 'summary', 'summary body', 2, '2026-03-01'),
-             ('deleted', 'session-1', 'note', 'deleted body', 3, '2026-04-01')",
+             ('fallback', 'session-1', 'note', 'fallback body', 0),
+             ('session-1', 'session-1', 'note', 'canonical body', 1),
+             ('summary', 'session-1', 'summary', 'summary body', 2),
+             ('deleted', 'session-1', 'note', 'deleted body', 3)",
         )
         .execute(db.pool())
         .await
@@ -326,7 +317,9 @@ mod tests {
             .unwrap();
         assert_eq!(fallback.id, "fallback");
 
-        sqlx::query("UPDATE sessions SET deleted_at = '2026-07-01' WHERE id = 'session-1'")
+        // session_delete hard-deletes the index row now (no sessions.deleted_at
+        // anymore); the JOINs must stop returning child rows once it's gone.
+        sqlx::query("DELETE FROM sessions WHERE id = 'session-1'")
             .execute(db.pool())
             .await
             .unwrap();

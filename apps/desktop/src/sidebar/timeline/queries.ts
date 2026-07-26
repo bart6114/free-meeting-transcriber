@@ -24,7 +24,6 @@ export function useTimelineSessionsTable(): TimelineSessionsTable {
         event_json,
         folder_path AS folder_id
       FROM sessions
-      WHERE deleted_at IS NULL
       ORDER BY created_at, id
     `,
     mapRows: mapTimelineSessionRows,

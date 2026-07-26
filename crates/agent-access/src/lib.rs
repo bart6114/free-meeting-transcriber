@@ -104,7 +104,6 @@ pub struct Document {
     pub title: String,
     pub markdown: String,
     pub sort_order: i64,
-    pub created_at: String,
     pub updated_at: String,
 }
 
@@ -141,10 +140,6 @@ pub struct Meeting {
 #[serde(rename_all = "snake_case")]
 pub struct Transcript {
     pub id: String,
-    pub source: String,
-    pub provider: String,
-    pub model: String,
-    pub language: String,
     pub started_at_ms: i64,
     pub ended_at_ms: Option<i64>,
     pub memo: String,
@@ -360,7 +355,6 @@ impl From<hypr_db_app::SessionDocumentRow> for Document {
             title: value.title,
             markdown: body_to_markdown(&value.body, &value.body_format),
             sort_order: value.sort_order,
-            created_at: value.created_at,
             updated_at: value.updated_at,
         }
     }
@@ -385,10 +379,6 @@ impl From<hypr_db_app::SessionTranscriptRow> for Transcript {
         let text = transcript_text(&words);
         Self {
             id: value.id,
-            source: value.source,
-            provider: value.provider,
-            model: value.model,
-            language: value.language,
             started_at_ms: value.started_at_ms,
             ended_at_ms: value.ended_at_ms,
             memo: value.memo,
@@ -585,10 +575,10 @@ mod tests {
         let db = test_db().await;
         sqlx::query(
             "INSERT INTO sessions
-             (id, title, started_at, workspace_id, owner_user_id, metadata_json)
+             (id, title, started_at, owner_user_id, metadata_json)
              VALUES
-             ('meeting-1', 'Planning', '2026-07-13', 'workspace-1', 'owner-1', '{\"private\":true}'),
-             ('meeting-2', 'Prior planning', '2026-07-06', 'workspace-1', 'owner-1', '{}')",
+             ('meeting-1', 'Planning', '2026-07-13', 'owner-1', '{\"private\":true}'),
+             ('meeting-2', 'Prior planning', '2026-07-06', 'owner-1', '{}')",
         )
         .execute(db.pool())
         .await
@@ -613,8 +603,8 @@ mod tests {
         .unwrap();
         sqlx::query(
             "INSERT INTO transcripts
-             (id, session_id, started_at_ms, words_json, memo, metadata_json)
-             VALUES ('transcript-1', 'meeting-1', 0, '[{\"text\":\"one\"},{\"text\":\"two\"}]', 'internal memo', '{\"private\":true}')",
+             (id, session_id, started_at_ms, words_json, memo)
+             VALUES ('transcript-1', 'meeting-1', 0, '[{\"text\":\"one\"},{\"text\":\"two\"}]', 'internal memo')",
         )
         .execute(db.pool())
         .await

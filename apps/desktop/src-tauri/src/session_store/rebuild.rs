@@ -35,11 +35,13 @@ impl SessionStore {
         }
 
         let present: HashSet<&str> = folder_ids.iter().map(String::as_str).collect();
-        for indexed_id in self.all_indexed_session_ids().await? {
-            if !present.contains(indexed_id.as_str()) {
-                self.delete_session_index_tx(&indexed_id).await?;
-            }
-        }
+        let stale: Vec<String> = self
+            .all_indexed_session_ids()
+            .await?
+            .into_iter()
+            .filter(|indexed_id| !present.contains(indexed_id.as_str()))
+            .collect();
+        self.delete_session_index_tx(&stale).await?;
 
         Ok(report)
     }
@@ -80,7 +82,7 @@ impl SessionStore {
 
         match self.read_meta(id).await {
             Ok(None) => {
-                self.delete_session_index_tx(id).await?;
+                self.delete_session_index_tx(&[id.to_string()]).await?;
                 match self.session_has_content(id).await {
                     Ok(true) => report.ghost_sessions.push(id.to_string()),
                     Ok(false) => {}
@@ -242,6 +244,22 @@ impl SessionStore {
                     if stem == "_memo" {
                         continue;
                     }
+                    // Hidden files are never session documents: this covers stale
+                    // `.tmp-<pid>-<nonce>-<name>` leftovers from a crashed atomic write
+                    // (`hypr_fs_sync_core::export::tmp_sibling_path`), which would
+                    // otherwise be indexed under a garbage kind.
+                    if stem.starts_with('.') {
+                        continue;
+                    }
+                    // The retired sync machinery's files-win reconcile wrote conflict
+                    // backups as `<stem>.conflict-<timestamp>.md` siblings
+                    // (`unique_conflict_backup_path` in the deleted
+                    // `plugins/db/src/import/legacy_vault.rs`). The producer is gone,
+                    // but pre-existing vaults can still contain them -- they are frozen
+                    // evidence, not live documents, so never index them.
+                    if stem.contains(".conflict-") {
+                        continue;
+                    }
                     let content = std::fs::read_to_string(&path)
                         .map(super::strip_leading_frontmatter)
                         .map_err(|e| StoreError::Io(format!("failed to read {stem}.md: {e}")));
@@ -302,10 +320,9 @@ impl SessionStore {
         // The `WHERE` guard on the `DO UPDATE` makes this a true no-op (no row touched, no
         // `AFTER UPDATE` trigger fired) when nothing actually changed -- load-bearing now that
         // Task 10 calls `rebuild_index` automatically on every startup and window focus:
-        // without it, every one of those passes fires `sessions`' `vault_export_dirty` trigger
-        // for every session unconditionally, which repeatedly re-queues the *old*, still-active
-        // `vault_export` DB-to-vault mirror (retired in Task 13) even when the file on disk
-        // hasn't changed since the index already reflects it.
+        // without it, every one of those passes fires `sessions`' `search_index_dirty` trigger
+        // for every session unconditionally, re-queueing a full search re-projection even
+        // when the file on disk hasn't changed since the index already reflects it.
         sqlx::query(
             "INSERT INTO sessions (id, title, started_at, ended_at, created_at, updated_at)
              VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
@@ -334,7 +351,7 @@ impl SessionStore {
         body: &str,
     ) -> Result<(), StoreError> {
         // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
-        // re-firing `session_documents`' `vault_export_dirty` trigger on every automatic
+        // re-firing `session_documents`' `search_index_dirty` trigger on every automatic
         // rebuild/refresh pass (Task 10).
         sqlx::query(
             "INSERT INTO session_documents (id, session_id, kind, body_format, body, updated_at)
@@ -365,7 +382,7 @@ impl SessionStore {
             .map_err(|e| StoreError::Serialize(e.to_string()))?;
 
         // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
-        // re-firing `transcripts`' `vault_export_dirty` trigger on every automatic
+        // re-firing `transcripts`' `search_index_dirty` trigger on every automatic
         // rebuild/refresh pass (Task 10).
         sqlx::query(
             "INSERT INTO transcripts (id, session_id, started_at_ms, memo, words_json, speaker_hints_json, updated_at)
@@ -402,38 +419,12 @@ impl SessionStore {
     /// backing them are confirmed gone (the directory scan that produced `keep_kinds` did
     /// succeed), so per mirror honesty their index rows go too.
     async fn prune_document_rows(&self, id: &str, keep_kinds: &[String]) -> Result<(), StoreError> {
-        let existing: Vec<String> =
-            sqlx::query_scalar("SELECT id FROM session_documents WHERE session_id = ?")
-                .bind(id)
-                .fetch_all(self.pool())
-                .await?;
         let keep_ids: Vec<String> = keep_kinds.iter().map(|k| format!("{id}:{k}")).collect();
-        for existing_id in existing {
-            if !keep_ids.contains(&existing_id) {
-                sqlx::query("DELETE FROM session_documents WHERE id = ?")
-                    .bind(&existing_id)
-                    .execute(self.pool())
-                    .await?;
-            }
-        }
-        Ok(())
+        prune_rows_not_in(self.pool(), "session_documents", id, &keep_ids).await
     }
 
     async fn prune_transcript_rows(&self, id: &str, keep_ids: &[String]) -> Result<(), StoreError> {
-        let existing: Vec<String> =
-            sqlx::query_scalar("SELECT id FROM transcripts WHERE session_id = ?")
-                .bind(id)
-                .fetch_all(self.pool())
-                .await?;
-        for existing_id in existing {
-            if !keep_ids.contains(&existing_id) {
-                sqlx::query("DELETE FROM transcripts WHERE id = ?")
-                    .bind(&existing_id)
-                    .execute(self.pool())
-                    .await?;
-            }
-        }
-        Ok(())
+        prune_rows_not_in(self.pool(), "transcripts", id, keep_ids).await
     }
 
     async fn all_indexed_session_ids(&self) -> Result<Vec<String>, StoreError> {
@@ -449,35 +440,73 @@ impl SessionStore {
 
     /// Same rationale as Task 6's `delete_session` fix: a partial delete across the three
     /// index tables must never be observable, so it's one transaction. File-system-free by
-    /// design -- rebuild/refresh never touch the vault.
-    async fn delete_session_index_tx(&self, id: &str) -> Result<(), StoreError> {
+    /// design -- rebuild/refresh never touch the vault. Takes a batch so `rebuild_index`'s
+    /// vanished-session prune is three `IN (...)` deletes per chunk instead of three per id.
+    async fn delete_session_index_tx(&self, ids: &[String]) -> Result<(), StoreError> {
+        if ids.is_empty() {
+            return Ok(());
+        }
+
         let mut tx = self
             .pool()
             .begin()
             .await
             .map_err(|e| StoreError::Db(format!("failed to start transaction: {e}")))?;
 
-        sqlx::query("DELETE FROM sessions WHERE id = ?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-        sqlx::query("DELETE FROM session_documents WHERE session_id = ?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-        sqlx::query("DELETE FROM transcripts WHERE session_id = ?")
-            .bind(id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
+        // Chunked to stay far below SQLite's bound-parameter limit (999 on older builds).
+        for chunk in ids.chunks(500) {
+            let placeholders = placeholder_list(chunk.len());
+            for (table, column) in [
+                ("sessions", "id"),
+                ("session_documents", "session_id"),
+                ("transcripts", "session_id"),
+            ] {
+                let sql = format!("DELETE FROM {table} WHERE {column} IN ({placeholders})");
+                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
+                for id in chunk {
+                    query = query.bind(id);
+                }
+                query
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(|e| StoreError::Db(e.to_string()))?;
+            }
+        }
 
         tx.commit()
             .await
             .map_err(|e| StoreError::Db(format!("failed to commit transaction: {e}")))?;
         Ok(())
     }
+}
+
+fn placeholder_list(count: usize) -> String {
+    vec!["?"; count].join(", ")
+}
+
+/// One `DELETE ... WHERE session_id = ? AND id NOT IN (...)` instead of a select-then-loop
+/// issuing one DELETE per stale row. `keep_ids` is bounded by the number of files in a single
+/// session directory, so it always fits one statement's bound-parameter budget.
+async fn prune_rows_not_in(
+    pool: &sqlx::SqlitePool,
+    table: &str,
+    session_id: &str,
+    keep_ids: &[String],
+) -> Result<(), StoreError> {
+    let sql = if keep_ids.is_empty() {
+        format!("DELETE FROM {table} WHERE session_id = ?")
+    } else {
+        format!(
+            "DELETE FROM {table} WHERE session_id = ? AND id NOT IN ({})",
+            placeholder_list(keep_ids.len())
+        )
+    };
+    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(session_id);
+    for keep_id in keep_ids {
+        query = query.bind(keep_id);
+    }
+    query.execute(pool).await?;
+    Ok(())
 }
 
 /// Pushes a human-readable line to `errors` and remembers the first raw `StoreError`
@@ -575,25 +604,25 @@ mod tests {
     }
 
     /// Task 10 calls `rebuild_index` automatically on every startup and window focus, so a
-    /// no-op rebuild must not requeue the (still-active, Task-13-retired) `vault_export`
-    /// worker -- otherwise every session gets a needless (and, in the presence of the export
-    /// format mismatch that Task 13 is meant to retire, actively corrupting) DB-to-vault mirror
-    /// pass on every single boot, forever, even when nothing on disk changed.
+    /// no-op rebuild must be a true DB no-op: the upserts' `WHERE` guards must keep unchanged
+    /// rows from firing their `AFTER UPDATE` triggers (observable via the `search_index_dirty`
+    /// queue) -- otherwise every boot/focus re-queues every session for a needless search
+    /// re-projection, forever, even when nothing on disk changed.
     #[tokio::test]
-    async fn rebuild_of_unchanged_files_does_not_requeue_vault_export() {
+    async fn rebuild_of_unchanged_files_does_not_requeue_search_reindexing() {
         let (store, _vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "# hi").await.unwrap();
         store.rebuild_index().await.unwrap();
 
-        sqlx::query("DELETE FROM vault_export_dirty")
+        sqlx::query("DELETE FROM search_index_dirty")
             .execute(store.pool())
             .await
             .unwrap();
 
         store.rebuild_index().await.unwrap();
 
-        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM vault_export_dirty")
+        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
             .fetch_one(store.pool())
             .await
             .unwrap();
@@ -605,14 +634,15 @@ mod tests {
     /// `std::fs::write` (bypassing `write_meta` entirely, the way another device or a
     /// hand-edit would) so the guard's `DO UPDATE` branch -- not just its no-op branch -- gets
     /// exercised, and asserts both halves of "the reconcile actually reconciled": the index
-    /// value changed, and `vault_export` got queued to mirror that change back out.
+    /// value changed, and the session got queued for search reindexing.
     #[tokio::test]
-    async fn rebuild_of_a_genuinely_changed_file_updates_the_index_and_requeues_vault_export() {
+    async fn rebuild_of_a_genuinely_changed_file_updates_the_index_and_requeues_search_reindexing()
+    {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.rebuild_index().await.unwrap();
 
-        sqlx::query("DELETE FROM vault_export_dirty")
+        sqlx::query("DELETE FROM search_index_dirty")
             .execute(store.pool())
             .await
             .unwrap();
@@ -630,20 +660,20 @@ mod tests {
         assert_eq!(title, "Two");
 
         let dirty: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM vault_export_dirty WHERE entity_type = 'session' AND entity_id = 's1'",
+            "SELECT COUNT(*) FROM search_index_dirty WHERE entity_type = 'session' AND entity_id = 's1'",
         )
         .fetch_one(store.pool())
         .await
         .unwrap();
         assert_eq!(
             dirty, 1,
-            "a genuine change must still requeue vault_export, not just no-ops getting skipped"
+            "a genuine change must still queue search reindexing, not just no-ops getting skipped"
         );
     }
 
     /// Reproduces the failure mode a real boot smoke turned up: a `_memo.md` that already
-    /// carries a frontmatter wrapper (as an external edit, the legacy importer, or the old
-    /// `vault_export` mirror would leave behind) must not have that wrapper compound with each
+    /// carries a frontmatter wrapper (as an external edit or the retired legacy exporter
+    /// would leave behind) must not have that wrapper compound with each
     /// automatic rebuild pass. Without `strip_leading_frontmatter` in the read path, each of
     /// these calls would index the *previous* pass's own wrapper verbatim, growing the indexed
     /// body by one nested frontmatter block every time -- exactly what Task 10's automatic
@@ -830,6 +860,34 @@ mod tests {
             !report.errors.is_empty(),
             "an unreadable file must be reported, not silently treated as absent"
         );
+    }
+
+    /// Vaults created before this branch can still hold the retired sync machinery's
+    /// conflict backups (`<stem>.conflict-<timestamp>.md`) and, after a crash mid-write,
+    /// `.tmp-<pid>-<nonce>-<name>` atomic-write leftovers. Neither is a live document;
+    /// rebuild must not index them as one.
+    #[tokio::test]
+    async fn rebuild_ignores_conflict_backups_and_tmp_leftovers() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store.write_note("s1", "live note").await.unwrap();
+        let dir = vault.path().join("sessions/s1");
+        std::fs::write(
+            dir.join("_memo.conflict-2026-07-23T12-00-00.123Z.md"),
+            "stale conflict copy",
+        )
+        .unwrap();
+        std::fs::write(dir.join(".tmp-1234-5678-_memo.md"), "crashed atomic write").unwrap();
+
+        let report = store.rebuild_index().await.unwrap();
+
+        assert_eq!(report.notes, 1, "only the live note should be indexed");
+        let kinds: Vec<String> =
+            sqlx::query_scalar("SELECT kind FROM session_documents WHERE session_id='s1'")
+                .fetch_all(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(kinds, vec!["note".to_string()]);
     }
 
     #[tokio::test]

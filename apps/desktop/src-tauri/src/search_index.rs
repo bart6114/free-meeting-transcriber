@@ -10,7 +10,7 @@ use tauri_plugin_tantivy::{
 };
 
 // Increment when the SQLite-to-Tantivy document shape changes so existing indexes are rebuilt.
-const PROJECTION_VERSION: i64 = 3;
+const PROJECTION_VERSION: i64 = 4;
 const BATCH_SIZE: i64 = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 
@@ -152,7 +152,6 @@ async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
         "INSERT INTO search_index_dirty (entity_type, entity_id)
          SELECT 'session', id
          FROM sessions
-         WHERE deleted_at IS NULL
          ON CONFLICT(entity_type, entity_id) DO UPDATE SET
            generation = search_index_dirty.generation + 1,
            queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
@@ -244,7 +243,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
     let Some(session) = sqlx::query(
         "SELECT title, created_at, event_json
          FROM sessions
-         WHERE id = ? AND deleted_at IS NULL",
+         WHERE id = ?",
     )
     .bind(id)
     .fetch_optional(pool)
@@ -257,7 +256,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
         "SELECT body
          FROM session_documents
          WHERE session_id = ? AND kind = 'note' AND deleted_at IS NULL
-         ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, created_at, id
+         ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, id
          LIMIT 1",
     )
     .bind(id)
@@ -271,7 +270,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
          WHERE session_id = ?
            AND kind IN ('summary', 'template_output')
            AND deleted_at IS NULL
-         ORDER BY sort_order, created_at, id",
+         ORDER BY sort_order, id",
     )
     .bind(id)
     .fetch_all(pool)
@@ -281,34 +280,17 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
         "SELECT words_json
          FROM transcripts
          WHERE session_id = ? AND deleted_at IS NULL
-         ORDER BY started_at_ms, created_at, id",
+         ORDER BY started_at_ms, id",
     )
     .bind(id)
     .fetch_all(pool)
     .await?;
 
-    let meeting_chat_messages: Vec<String> = sqlx::query_scalar(
-        "SELECT body
-         FROM session_documents
-         WHERE session_id = ? AND kind = 'meeting_chat' AND deleted_at IS NULL
-         ORDER BY sort_order, created_at, id",
-    )
-    .bind(id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut content_parts = Vec::with_capacity(
-        1 + enhanced_bodies.len() + meeting_chat_messages.len() + transcripts.len(),
-    );
+    let mut content_parts = Vec::with_capacity(1 + enhanced_bodies.len() + transcripts.len());
     if let Some(raw_body) = raw_body {
         content_parts.push(extract_plain_text(&raw_body));
     }
     content_parts.extend(enhanced_bodies.iter().map(|body| extract_plain_text(body)));
-    content_parts.extend(
-        meeting_chat_messages
-            .iter()
-            .map(|message| flatten_meeting_chat(message)),
-    );
     content_parts.extend(
         transcripts
             .iter()
@@ -332,7 +314,7 @@ async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<Ind
 
 async fn projection_consistency_snapshot(pool: &SqlitePool) -> Result<(i64, i64), sqlx::Error> {
     let mut tx = pool.begin().await?;
-    let active_count = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE deleted_at IS NULL")
+    let active_count = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
         .fetch_one(&mut *tx)
         .await?;
     let pending_count = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
@@ -436,29 +418,6 @@ fn flatten_transcript(value: &str) -> String {
     let parsed =
         serde_json::from_str::<Value>(value).unwrap_or_else(|_| Value::String(value.to_string()));
     flatten_transcript_value(&parsed)
-}
-
-fn flatten_meeting_chat(value: &str) -> String {
-    let Ok(Value::Object(record)) = serde_json::from_str::<Value>(value) else {
-        return extract_plain_text(value);
-    };
-
-    let mut parts = ["platform", "sender", "timestamp", "text"]
-        .into_iter()
-        .filter_map(|key| record.get(key).and_then(Value::as_str))
-        .map(str::to_string)
-        .collect::<Vec<_>>();
-    parts.extend(
-        record
-            .get("links")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(str::to_string),
-    );
-
-    merge_content(parts.iter().map(String::as_str))
 }
 
 fn flatten_transcript_value(value: &Value) -> String {
@@ -624,17 +583,6 @@ mod tests {
             ),
             "hello world again nested array"
         );
-    }
-
-    #[test]
-    fn flattens_meeting_chat_metadata_text_and_links() {
-        assert_eq!(
-            flatten_meeting_chat(
-                r#"{"platform":"zoom","sender":"Ada","timestamp":"10:42 AM","text":"Here is the doc","links":["https://example.com/spec"]}"#,
-            ),
-            "zoom Ada 10:42 AM Here is the doc https://example.com/spec"
-        );
-        assert_eq!(flatten_meeting_chat("plain chat"), "plain chat");
     }
 
     #[test]

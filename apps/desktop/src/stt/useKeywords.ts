@@ -79,7 +79,7 @@ export async function getSessionKeywords({
           )
         )
         AND note.deleted_at IS NULL
-      WHERE session.id = ? AND session.deleted_at IS NULL
+      WHERE session.id = ?
       LIMIT 1
     `,
     [sessionId],

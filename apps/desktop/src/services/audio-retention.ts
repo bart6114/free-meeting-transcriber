@@ -121,7 +121,6 @@ export async function cleanupExpiredAudio(
           AND json_array_length(transcript.words_json) > 0
       ) AS has_words
     FROM sessions AS session
-    WHERE session.deleted_at IS NULL
     ORDER BY session.created_at, session.id
   `);
 

@@ -474,8 +474,8 @@ mod tests {
     }
 
     /// `write_note` never writes frontmatter, but a file can gain a wrapper from outside it
-    /// (an external edit, the legacy importer, or -- until Task 13 -- the old `vault_export`
-    /// mirror, which always wraps a `session_documents` row on export). `read_note` must strip
+    /// (an external edit, or -- before Task 13 removed it -- the legacy `vault_export`
+    /// mirror, which always wrapped a `session_documents` row on export). `read_note` must strip
     /// a well-formed leading block rather than index it verbatim: otherwise `rebuild_index`,
     /// which Task 10 now runs on every startup and window focus, feeds the wrapper back into
     /// `session_documents.body`, and the next export wraps *that* in another layer -- one more
