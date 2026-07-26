@@ -143,7 +143,13 @@ impl SessionStore {
         let note_bytes = markdown.as_bytes().to_vec();
         self.write_file(paths::note_path(id), note_bytes).await?;
 
-        self.index_set_note(id, Some(markdown.to_string()));
+        // Store what `read_note` would return, not the raw bytes: a body that starts with an
+        // exporter-shaped frontmatter block would otherwise sit un-stripped in the index and
+        // change under the user on the next rescan.
+        self.index_set_note(
+            id,
+            Some(super::strip_leading_frontmatter(markdown.to_string())),
+        );
         self.notify_index_changed(super::IndexEntity::Sessions, vec![id.to_string()]);
 
         Ok(())
@@ -477,6 +483,27 @@ mod tests {
             store.read_note("s1").await.unwrap().unwrap(),
             "# Meeting notes\n\nDiscussed: X, Y, Z"
         );
+    }
+
+    #[tokio::test]
+    async fn write_note_indexes_what_read_note_would_return() {
+        // An exporter-shaped frontmatter block is stripped on read, so it must be stripped on
+        // the write-through too -- otherwise the index and the file disagree until the next
+        // rescan, at which point the displayed note silently changes under the user.
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_note("s1", "---\nid: legacy-1\nposition: 0\n---\n\nReal body")
+            .await
+            .unwrap();
+
+        let indexed = store.session_get("s1").unwrap().note_markdown;
+        let on_read = store.read_note("s1").await.unwrap();
+        assert_eq!(
+            indexed, on_read,
+            "index must hold exactly what read_note returns"
+        );
+        assert_eq!(indexed.as_deref(), Some("Real body"));
     }
 
     #[tokio::test]

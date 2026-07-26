@@ -210,10 +210,14 @@ impl SessionStore {
             .get(session_id)
             .cloned()
             .unwrap_or_default();
+        // `(started_at, created_at, id)` -- the SQL this replaced ordered by all three, and the
+        // tiebreaker is load-bearing: soft-deleted transcripts are written without a
+        // `started_at`, so they all collapse to 0 and would otherwise order by random UUID.
         transcripts.sort_by(|a, b| {
             a.started_at
                 .partial_cmp(&b.started_at)
                 .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.created_at.cmp(&b.created_at))
                 .then_with(|| a.id.cmp(&b.id))
         });
         transcripts
@@ -1099,6 +1103,41 @@ mod tests {
             .map(|t| t.id)
             .collect();
         assert_eq!(ids, vec!["t-early", "t-late"]);
+    }
+
+    #[tokio::test]
+    async fn transcripts_sharing_a_started_at_fall_back_to_created_at_not_id() {
+        // Soft-deleted transcripts are written without a `started_at`, so they all collapse to
+        // 0.0 and tie. `created_at` is store-managed (insertion time), so ties must resolve in
+        // insertion order; the ids here are chosen so ordering by id would disagree.
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+
+        store
+            .write_transcript(
+                "s1",
+                transcript("zzz-written-first", 0.0, vec![word("w0", "a")]),
+            )
+            .await
+            .unwrap();
+        store
+            .write_transcript(
+                "s1",
+                transcript("aaa-written-second", 0.0, vec![word("w1", "b")]),
+            )
+            .await
+            .unwrap();
+
+        let ids: Vec<String> = store
+            .session_transcripts("s1")
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(
+            ids,
+            vec!["zzz-written-first", "aaa-written-second"],
+            "ties must resolve chronologically, not by id"
+        );
     }
 
     #[tokio::test]

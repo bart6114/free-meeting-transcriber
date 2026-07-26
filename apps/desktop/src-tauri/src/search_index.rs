@@ -296,7 +296,8 @@ fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
     };
 
     // Same assembly order as the SQL projection: note body, then summary/
-    // template_output docs by (sort_order, id), then transcripts by (started_at, id).
+    // template_output docs by (sort_order, id), then transcripts by
+    // (started_at, created_at, id).
     let enhanced_docs = store.session_enhanced_docs(id);
     let transcripts = store.session_transcripts(id);
 
