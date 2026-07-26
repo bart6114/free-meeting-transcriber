@@ -38,9 +38,9 @@ completely finished."
 | D — file homes (no exodus) | DONE | 966214b (D-1), aba1625 (D-3), 1d6d6a2 (D-2), 994d67c (gen layout), 1ac6d2e (D-4), 21b4d6b (D-5) | crates/vault-read = canonical vault format home; CLI zero SQLite deps; templates/tasks cut straight to files, meta/enhanced dual-write until E/F/H |
 | E — reactivity core | DONE | 7671fdd (E1), 4208775 (E2), d95e043 (E3) | VaultIndex + 10ms coalesced index-changed bus + 10 typed commands; all 14 FE subscription sites ported; owner-user deleted (D10). Transcript finding: deleted_at was SQL-only transient bookkeeping — file truth has no tombstones (soft-delete zeroes words); supersede becomes store primitive in E3. FE baseline now 1150/167. | D-1 fixed title-revert bug; D-3 found rebuild already pruned index-only UUID rows (shadow hack papered over it) — preserved for legacy rows; enhanced docs = YAML frontmatter via hypr-frontmatter; deletion = .trash move + hard row delete (no undo path existed); store-level CAS with "conflict:" typed errors (store-errors.ts). NOTE: any `cargo test -p desktop --lib` run on Linux prettier-relayouts tauri.gen.ts — checkout + hand-apply. |
 | E — reactivity core | pending | — | |
-| F — search on files | in progress | — | E3 findings: empty-note placeholder was actively harmful (shadowed real note in search) — deleted; tag tables have zero readers — SQL tag writes dead; supersede = session_replace_transcripts (hard-deletes SQL rows, trashes prior file). FE has ZERO SQL; plugins/db reachable only via unimported src/db/index.ts. |
-| G — FE/db decoupling | pending | — | |
-| H — SQLite deletion | pending | — | gated on owner-machine exodus verify |
+| F — search on files | DONE | d66240a | Rust-side bus taps; DirtyQueue reproduces generation semantics (race test ported); projection_version now a file in disposable search_index/; PROJECTION_VERSION→5. E3 findings: empty-note placeholder deleted (was shadowing note content in search); tag tables dead; supersede = session_replace_transcripts. |
+| G — FE/db decoupling | DONE | 5d33c7b | packages/db{,-react,-tauri,-runtime}, plugins/db JS, src/db deleted; write-queue → shared/; db plugin unregistered; only Rust crates left for H. |
+| H — SQLite deletion | in progress | — | exodus gate waived by owner (fresh start); app.db renamed to .pre-files-backup on boot |
 
 ## Owner-machine checklist (accumulating)
 
