@@ -9,8 +9,23 @@
 **Hard rules in force:**
 - Never edit shipped migrations.
 - Phase B `drop_dead_tables` is the LAST new SQL migration.
-- Phase D-6 exodus (marker `.files-canonical-v1`) must land + verify before any Phase H SQLite infra deletion.
 - Do not touch `telemetry_consent` while removing `consent_auto_send_chat`.
+
+**OWNER DIRECTIVE CHANGE (2026-07-26, after C1):** "Drop the legacy solution,
+no actual migration needed — start data capture from scratch. Keep going until
+completely finished."
+- C2 (settings migration) CANCELLED — config.json starts from defaults; the FE
+  legacy resolution chain (legacy-snapshots, TinybaseValues, quirk parsing) is
+  deleted outright in C3.
+- D-6 data exodus CANCELLED — no `.files-canonical-v1` marker, no DB→file
+  export. New file homes start empty; DB-only data (templates→reseeded
+  defaults, action items, UUID summaries, event_json/folder_path/tags,
+  settings, providers) is NOT carried over.
+- Safety net retained: Phase H renames `app.db*` → `app.db.pre-files-backup*`
+  in app-data on first boot (hand-recoverable, never synced). Providers/API
+  keys: keychain entries survive untouched; provider config rows are lost →
+  user re-adds providers once.
+- No more per-phase review stops — run A→H to completion.
 
 ## Phase status
 
