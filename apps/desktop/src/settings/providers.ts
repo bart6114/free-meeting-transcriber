@@ -1,9 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import type { AiProviderEntry, JsonValue } from "@hypr/plugin-settings";
 import { commands as store2Commands } from "@hypr/plugin-store2";
 
-import { executeTransaction, liveQueryClient, useLiveQuery } from "~/db";
-import { enqueueDatabaseWrite } from "~/db/write-queue";
+import {
+  fetchConfig,
+  useConfigStoreState,
+  writeConfigValues,
+} from "~/shared/config/store";
 
 export type AiProviderType = "llm" | "stt";
 
@@ -13,14 +17,11 @@ export type AiProviderConfig = {
   api_key: string;
 };
 
-type AppSettingRow = { id: string; value_json: string };
-
-const LEGACY_SETTINGS_ID = "legacy_settings_document";
 const PROVIDER_SECRET_SCOPE = "ai-provider-api-keys";
 const MACOS_KEYCHAIN_ACCESS_ERROR_PREFIX =
   "macOS couldn't access your login Keychain.";
 const EMPTY_PROVIDER_API_KEYS: Record<string, string> = {};
-const EMPTY_ROWS: AppSettingRow[] = [];
+const EMPTY_PROVIDER_ENTRIES: Partial<Record<string, AiProviderEntry>> = {};
 
 export function useAiProviders(
   type: AiProviderType,
@@ -32,14 +33,11 @@ export function useAiProvidersState(type: AiProviderType): {
   providers: Record<string, AiProviderConfig>;
   isReady: boolean;
 } {
-  const { data: rows = EMPTY_ROWS, isLoading } = useLiveQuery<
-    AppSettingRow,
-    AppSettingRow[]
-  >({
-    sql: `SELECT id, value_json FROM app_settings ORDER BY id`,
-    mapRows: (rows) => rows,
-  });
-  const providers = parseAiProviders(rows, type);
+  const { snapshot, isLoading } = useConfigStoreState();
+  const providers = parseAiProviders(
+    snapshot?.config.ai_providers ?? EMPTY_PROVIDER_ENTRIES,
+    type,
+  );
   const providerIds = Object.keys(providers).sort();
   const secureApiKeysQuery = useQuery({
     queryKey: ["ai-provider-api-keys", type, providerIds],
@@ -75,15 +73,8 @@ export async function getStoredAiProvider(
   type: AiProviderType,
   providerId: string,
 ): Promise<AiProviderConfig | undefined> {
-  const rows = await liveQueryClient.execute<AppSettingRow>(
-    `
-      SELECT id, value_json
-      FROM app_settings
-      WHERE id IN (?, ?)
-    `,
-    [providerStorageId(type, providerId), LEGACY_SETTINGS_ID],
-  );
-  const provider = parseAiProviders(rows, type)[
+  const config = await fetchConfig();
+  const provider = parseAiProviders(config.ai_providers, type)[
     providerRowId(type, providerId)
   ];
   if (!provider) return undefined;
@@ -95,95 +86,33 @@ export async function getStoredAiProvider(
   };
 }
 
-export function setAiProvider(
+export async function setAiProvider(
   type: AiProviderType,
   providerId: string,
   changes: Partial<Pick<AiProviderConfig, "base_url" | "api_key">>,
 ): Promise<void> {
-  const storageId = providerStorageId(type, providerId);
-  return enqueueDatabaseWrite(storageId, async () => {
-    const previousApiKey = await getProviderApiKey(type, providerId);
+  const rowId = providerRowId(type, providerId);
+  const previousApiKey = await getProviderApiKey(type, providerId);
 
-    try {
-      for (let attempt = 0; attempt < 5; attempt += 1) {
-        const rows = await liveQueryClient.execute<AppSettingRow>(
-          `
-          SELECT id, value_json
-          FROM app_settings
-          WHERE id IN (?, ?)
-        `,
-          [storageId, LEGACY_SETTINGS_ID],
-        );
-        const direct = rows.find((row) => row.id === storageId);
-        const legacy = parseLegacyProvider(
-          rows.find((row) => row.id === LEGACY_SETTINGS_ID)?.value_json,
-          type,
-          providerId,
-        );
-        const current = direct
-          ? (parseProviderValue(direct.value_json, type) ?? legacy)
-          : legacy;
-        const next: AiProviderConfig = {
-          type,
-          base_url: changes.base_url ?? current?.base_url ?? "",
-          api_key: changes.api_key ?? previousApiKey ?? current?.api_key ?? "",
-        };
-        await setProviderApiKey(type, providerId, next.api_key);
+  try {
+    const config = await fetchConfig();
+    const current = parseAiProviders(config.ai_providers, type)[rowId];
+    const next: AiProviderConfig = {
+      type,
+      base_url: changes.base_url ?? current?.base_url ?? "",
+      api_key: changes.api_key ?? previousApiKey ?? "",
+    };
+    await setProviderApiKey(type, providerId, next.api_key);
 
-        const persisted = { ...next, api_key: "" };
-        const now = new Date().toISOString();
-        const statements = [
-          direct
-            ? {
-                sql: `
-                UPDATE app_settings
-                SET value_json = ?, updated_at = ?
-                WHERE id = ? AND value_json = ?
-              `,
-                params: [
-                  JSON.stringify(persisted),
-                  now,
-                  storageId,
-                  direct.value_json,
-                ],
-              }
-            : {
-                sql: `
-                INSERT INTO app_settings (id, value_json, updated_at)
-                VALUES (?, ?, ?)
-                ON CONFLICT(id) DO NOTHING
-              `,
-                params: [storageId, JSON.stringify(persisted), now],
-              },
-        ];
-
-        const legacyRow = rows.find((row) => row.id === LEGACY_SETTINGS_ID);
-        const redactedLegacy = redactLegacyProviderApiKey(
-          legacyRow?.value_json,
-          type,
-          providerId,
-        );
-        if (legacyRow && redactedLegacy) {
-          statements.push({
-            sql: `
-            UPDATE app_settings
-            SET value_json = ?, updated_at = ?
-            WHERE id = ?
-          `,
-            params: [redactedLegacy, now, LEGACY_SETTINGS_ID],
-          });
-        }
-
-        const [updated = 0] = await executeTransaction(statements);
-        if (updated === 1) return;
-      }
-
-      throw new Error(`Provider ${type}:${providerId} changed too frequently`);
-    } catch (error) {
-      await setProviderApiKey(type, providerId, previousApiKey ?? "");
-      throw error;
-    }
-  });
+    const entries: Partial<Record<string, AiProviderEntry>> = {
+      ...config.ai_providers,
+      [rowId]: { type, base_url: next.base_url },
+    };
+    await writeConfigValues({ ai_providers: entries as JsonValue });
+  } catch (error) {
+    await setProviderApiKey(type, providerId, previousApiKey ?? "");
+    throw error;
+  }
 }
 
 export function useSetAiProvider(type: AiProviderType, providerId: string) {
@@ -238,97 +167,24 @@ export async function loadSecureAiProviderApiKeys(
   return apiKeys;
 }
 
-export async function migratePlaintextAiProviderApiKeys(): Promise<void> {
-  let rows = await liveQueryClient.execute<AppSettingRow>(
-    `SELECT id, value_json FROM app_settings ORDER BY id`,
-  );
-  const migratedLlm = await migratePlaintextProviderApiKeys(rows, "llm");
-  if (migratedLlm) {
-    rows = await liveQueryClient.execute<AppSettingRow>(
-      `SELECT id, value_json FROM app_settings ORDER BY id`,
-    );
-  }
-  const migratedStt = await migratePlaintextProviderApiKeys(rows, "stt");
-  if (migratedLlm || migratedStt) {
-    await liveQueryClient.execute(`PRAGMA wal_checkpoint(TRUNCATE)`);
-  }
-}
-
 export function parseAiProviders(
-  rows: AppSettingRow[],
+  entries: Partial<Record<string, AiProviderEntry>>,
   type: AiProviderType,
 ): Record<string, AiProviderConfig> {
   const result: Record<string, AiProviderConfig> = {};
-  const legacy = rows.find((row) => row.id === LEGACY_SETTINGS_ID);
-  const legacyDocument = parseJsonObject(legacy?.value_json);
-  const legacyAi = parseObjectValue(legacyDocument.ai);
-  const legacyProviders = parseObjectValue(legacyAi[type]);
+  const prefix = `${type}:`;
 
-  for (const [providerId, value] of Object.entries(legacyProviders)) {
-    const config = normalizeProvider(value, type);
-    if (config) result[providerRowId(type, providerId)] = config;
-  }
-
-  const prefix = providerStorageId(type, "");
-  for (const row of rows) {
-    if (!row.id.startsWith(prefix)) continue;
-    const providerId = row.id.slice(prefix.length);
-    if (!providerId) continue;
-    const config = parseProviderValue(row.value_json, type);
-    if (config) result[providerRowId(type, providerId)] = config;
+  for (const [rowId, entry] of Object.entries(entries)) {
+    if (!rowId.startsWith(prefix) || rowId.length === prefix.length) continue;
+    if (!entry || entry.type !== type) continue;
+    result[rowId] = {
+      type,
+      base_url: typeof entry.base_url === "string" ? entry.base_url : "",
+      api_key: "",
+    };
   }
 
   return result;
-}
-
-function parseLegacyProvider(
-  valueJson: string | undefined,
-  type: AiProviderType,
-  providerId: string,
-): AiProviderConfig | undefined {
-  return parseAiProviders(
-    valueJson ? [{ id: LEGACY_SETTINGS_ID, value_json: valueJson }] : [],
-    type,
-  )[providerRowId(type, providerId)];
-}
-
-function parseProviderValue(
-  valueJson: string,
-  type: AiProviderType,
-): AiProviderConfig | undefined {
-  try {
-    return normalizeProvider(JSON.parse(valueJson), type);
-  } catch {
-    return undefined;
-  }
-}
-
-function normalizeProvider(
-  value: unknown,
-  type: AiProviderType,
-): AiProviderConfig | undefined {
-  const row = parseObjectValue(value);
-  if (Object.keys(row).length === 0) return undefined;
-  return {
-    type,
-    base_url: typeof row.base_url === "string" ? row.base_url : "",
-    api_key: typeof row.api_key === "string" ? row.api_key : "",
-  };
-}
-
-function parseJsonObject(value: string | undefined): Record<string, unknown> {
-  if (!value) return {};
-  try {
-    return parseObjectValue(JSON.parse(value));
-  } catch {
-    return {};
-  }
-}
-
-function parseObjectValue(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
 }
 
 async function getProviderApiKey(
@@ -357,133 +213,6 @@ async function setProviderApiKey(
   if (result.status === "error") {
     throw new Error(result.error);
   }
-}
-
-async function migratePlaintextProviderApiKeys(
-  rows: AppSettingRow[],
-  type: AiProviderType,
-): Promise<boolean> {
-  const legacyRow = rows.find((row) => row.id === LEGACY_SETTINGS_ID);
-  const legacyProviders = parseAiProviders(legacyRow ? [legacyRow] : [], type);
-  const directProviders = parseAiProviders(
-    rows.filter((row) => row.id.startsWith(providerStorageId(type, ""))),
-    type,
-  );
-  const rowIds = new Set([
-    ...Object.keys(legacyProviders),
-    ...Object.keys(directProviders),
-  ]);
-  const providerIds: string[] = [];
-
-  for (const rowId of rowIds) {
-    const providerId = rowId.slice(`${type}:`.length);
-    const directApiKey = directProviders[rowId]?.api_key.trim() ?? "";
-    const legacyApiKey = legacyProviders[rowId]?.api_key.trim() ?? "";
-    if (!directApiKey && !legacyApiKey) continue;
-
-    const existingApiKey = await getProviderApiKey(type, providerId);
-    if (!existingApiKey) {
-      await setProviderApiKey(type, providerId, directApiKey || legacyApiKey);
-    }
-    providerIds.push(providerId);
-  }
-
-  if (providerIds.length > 0) {
-    await redactPlaintextProviderApiKeys(rows, type, providerIds);
-  }
-
-  return providerIds.length > 0;
-}
-
-async function redactPlaintextProviderApiKeys(
-  rows: AppSettingRow[],
-  type: AiProviderType,
-  providerIds: string[],
-): Promise<void> {
-  const migrated = new Set(providerIds);
-  const now = new Date().toISOString();
-  const statements = rows.flatMap((row) => {
-    const prefix = providerStorageId(type, "");
-    if (!row.id.startsWith(prefix)) {
-      return [];
-    }
-
-    const providerId = row.id.slice(prefix.length);
-    const config = parseProviderValue(row.value_json, type);
-    if (!migrated.has(providerId) || !config?.api_key) {
-      return [];
-    }
-
-    return [
-      {
-        sql: `
-          UPDATE app_settings
-          SET value_json = ?, updated_at = ?
-          WHERE id = ? AND value_json = ?
-        `,
-        params: [
-          JSON.stringify({ ...config, api_key: "" }),
-          now,
-          row.id,
-          row.value_json,
-        ],
-      },
-    ];
-  });
-
-  const legacyRow = rows.find((row) => row.id === LEGACY_SETTINGS_ID);
-  if (legacyRow) {
-    let redactedLegacy = legacyRow.value_json;
-    for (const providerId of providerIds) {
-      redactedLegacy =
-        redactLegacyProviderApiKey(redactedLegacy, type, providerId) ??
-        redactedLegacy;
-    }
-    if (redactedLegacy !== legacyRow.value_json) {
-      statements.push({
-        sql: `
-          UPDATE app_settings
-          SET value_json = ?, updated_at = ?
-          WHERE id = ?
-        `,
-        params: [redactedLegacy, now, LEGACY_SETTINGS_ID],
-      });
-    }
-  }
-
-  if (statements.length > 0) {
-    await executeTransaction([
-      { sql: `PRAGMA secure_delete = ON`, params: [] },
-      ...statements,
-    ]);
-  }
-}
-
-function redactLegacyProviderApiKey(
-  valueJson: string | undefined,
-  type: AiProviderType,
-  providerId: string,
-): string | null {
-  if (!valueJson) return null;
-
-  try {
-    const document = JSON.parse(valueJson) as Record<string, unknown>;
-    const ai = parseObjectValue(document.ai);
-    const providers = parseObjectValue(ai[type]);
-    const provider = parseObjectValue(providers[providerId]);
-    if (typeof provider.api_key !== "string" || !provider.api_key) {
-      return null;
-    }
-
-    provider.api_key = "";
-    return JSON.stringify(document);
-  } catch {
-    return null;
-  }
-}
-
-function providerStorageId(type: AiProviderType, providerId: string): string {
-  return `ai_provider:${type}:${providerId}`;
 }
 
 function providerRowId(type: AiProviderType, providerId: string): string {

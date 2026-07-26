@@ -5,7 +5,6 @@ pub enum StoreKey {
     OnboardingNeeded2,
     DismissedToasts,
     OnboardingLocal,
-    TinybaseValues,
     PinnedTabs,
     RecentlyOpenedSessions,
 }

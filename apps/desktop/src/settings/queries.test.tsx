@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  execute: vi.fn(),
+  getConfig: vi.fn(),
+  setConfigValues: vi.fn(),
   getPreferredLanguages: vi.fn(),
-  getTemplateSource: vi.fn(),
   setProperties: vi.fn(async () => undefined),
-  executeTransaction: vi.fn(
-    (_statements: Array<{ sql: string; params: unknown[] }>) =>
-      Promise.resolve([1]),
-  ),
+}));
+
+vi.mock("@hypr/plugin-settings", () => ({
+  commands: {
+    getConfig: mocks.getConfig,
+    setConfigValues: mocks.setConfigValues,
+  },
 }));
 
 vi.mock("@hypr/plugin-analytics", () => ({
@@ -24,139 +27,132 @@ vi.mock("@hypr/plugin-detect", () => ({
   },
 }));
 
-vi.mock("@hypr/plugin-template", () => ({
-  commands: {
-    getTemplateSource: mocks.getTemplateSource,
-  },
-}));
-
-vi.mock("~/db", () => ({
-  executeTransaction: mocks.executeTransaction,
-  liveQueryClient: { execute: mocks.execute },
-  useLiveQuery: vi.fn(() => ({ data: undefined })),
-}));
-
-vi.mock("~/db/write-queue", () => ({
-  enqueueDatabaseWrite: (_key: string, operation: () => Promise<unknown>) =>
-    operation(),
-}));
-
 import {
+  getStoredSettingValues,
   initializeApplicationSettings,
-  parseSettingRows,
   setSettingValues,
   updateSettingValue,
 } from "./queries";
 
-describe("SQLite settings", () => {
+import { resetConfigStoreForTests } from "~/shared/config/store";
+
+function appConfig(overrides: Record<string, unknown> = {}) {
+  return {
+    autostart: false,
+    auto_stop_meetings: true,
+    floating_bar_enabled: true,
+    floating_bar_opacity: 0.78,
+    live_caption_opacity: 0.3,
+    live_caption_width: 440,
+    live_caption_line_count: 1,
+    live_caption_position: "topCenter",
+    live_caption_minimized: true,
+    show_app_in_dock: true,
+    show_tray_icon: true,
+    theme: "system",
+    save_recordings: true,
+    audio_retention: "forever",
+    notification_detect: true,
+    respect_dnd: false,
+    telemetry_consent: true,
+    cloud_sync_enabled: true,
+    ai_language: "en",
+    spoken_languages: [],
+    personalization_dictionary_terms: [],
+    custom_summary_instructions: "",
+    custom_summary_instructions_token_aware: false,
+    auto_summary_prompt: "",
+    ignored_platforms: [],
+    included_platforms: [],
+    mic_active_threshold: 15,
+    ai_providers: {},
+    ...overrides,
+  };
+}
+
+describe("config-backed settings", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.execute.mockResolvedValue([]);
+    resetConfigStoreForTests();
+    mocks.getConfig.mockResolvedValue({ status: "ok", data: appConfig() });
+    mocks.setConfigValues.mockResolvedValue({ status: "ok", data: null });
     mocks.getPreferredLanguages.mockResolvedValue({
       status: "error",
       error: "unavailable",
     });
-    mocks.getTemplateSource.mockResolvedValue({
+  });
+
+  it("treats config defaults as unset values", async () => {
+    const stored = await getStoredSettingValues();
+
+    expect(stored.hasValues.size).toBe(0);
+    expect(stored.values.theme).toBeUndefined();
+  });
+
+  it("exposes explicit config values, stringifying array keys", async () => {
+    mocks.getConfig.mockResolvedValue({
       status: "ok",
-      data: "# General Instructions\n\nBuilt-in prompt.",
+      data: appConfig({
+        theme: "dark",
+        spoken_languages: ["en", "ko"],
+        current_stt_provider: "fmtr",
+      }),
     });
+
+    const stored = await getStoredSettingValues();
+
+    expect(stored.values.theme).toBe("dark");
+    expect(stored.values.spoken_languages).toBe('["en","ko"]');
+    expect(stored.values.current_stt_provider).toBe("fmtr");
+    expect(stored.hasValues.has("theme")).toBe(true);
+    expect(stored.hasValues.has("audio_retention")).toBe(false);
   });
 
-  it("maps the imported settings document into typed values", () => {
-    const result = parseSettingRows([
-      {
-        id: "legacy_settings_document",
-        value_json: JSON.stringify({
-          general: {
-            theme: "dark",
-            save_recordings: false,
-          },
-          language: {
-            spoken_languages: ["en", "ko"],
-          },
-          notification: {
-            ignored_platforms: ["com.example.video"],
-          },
-        }),
-      },
-    ]);
-
-    expect(result.values.theme).toBe("dark");
-    expect(result.values.audio_retention).toBe("none");
-    expect(result.values.spoken_languages).toBe('["en","ko"]');
-    expect(result.values.ignored_platforms).toBe('["com.example.video"]');
-    expect(result.hasValues.has("theme")).toBe(true);
-  });
-
-  it("prefers valid direct rows and falls back from corrupt ones", () => {
-    const result = parseSettingRows([
-      {
-        id: "legacy_settings_document",
-        value_json: JSON.stringify({
-          general: { theme: "dark", audio_retention: "forever" },
-        }),
-      },
-      { id: "theme", value_json: JSON.stringify("light") },
-      { id: "audio_retention", value_json: "not-json" },
-    ]);
-
-    expect(result.values.theme).toBe("light");
-    expect(result.values.audio_retention).toBe("forever");
-  });
-
-  it("recovers main-store values after settings document values and aliases", () => {
-    const result = parseSettingRows([
-      {
-        id: "legacy_settings_document",
-        value_json: JSON.stringify({
-          general: { ai_language: "fr" },
-          language: { spoken_languages: ["fr"] },
-        }),
-      },
-      {
-        id: "legacy_main_values_document",
-        value_json: JSON.stringify({
-          ai_language: "ko",
-          spoken_languages: JSON.stringify(["ko"]),
-          theme: "dark",
-        }),
-      },
-    ]);
-
-    expect(result.values.ai_language).toBe("fr");
-    expect(result.values.spoken_languages).toBe('["fr"]');
-    expect(result.values.theme).toBe("dark");
-  });
-
-  it("writes multiple independent values in one transaction", async () => {
+  it("writes schema-typed JSON values in a single config call", async () => {
     await setSettingValues({
       theme: "dark",
       notification_detect: false,
+      spoken_languages: '["en","ko"]',
     });
 
-    const statements = mocks.executeTransaction.mock.calls[0][0];
-    expect(statements).toHaveLength(2);
-    expect(statements[0].sql).toContain("INSERT INTO app_settings");
-    expect(statements[0].sql).toContain("ON CONFLICT(id) DO UPDATE");
-    expect(statements[0].params.slice(0, 2)).toEqual([
-      "theme",
-      JSON.stringify("dark"),
-    ]);
-    expect(statements[1].params.slice(0, 2)).toEqual([
-      "notification_detect",
-      JSON.stringify(false),
-    ]);
+    expect(mocks.setConfigValues).toHaveBeenCalledTimes(1);
+    expect(mocks.setConfigValues).toHaveBeenCalledWith({
+      theme: "dark",
+      notification_detect: false,
+      spoken_languages: ["en", "ko"],
+    });
   });
 
-  it("persists OS language defaults only when no stored values exist", async () => {
-    let rows: Array<{ id: string; value_json: string }> = [];
-    mocks.execute.mockImplementation(async () => rows);
-    mocks.executeTransaction.mockImplementation(async (statements) => {
-      rows = statements.map((statement) => ({
-        id: String(statement.params[0]),
-        value_json: String(statement.params[1]),
-      }));
-      return statements.map(() => 1);
+  it("surfaces backend type rejections to the caller", async () => {
+    mocks.setConfigValues.mockResolvedValue({
+      status: "error",
+      error: "invalid type",
+    });
+
+    await expect(setSettingValues({ theme: "dark" })).rejects.toThrow(
+      "invalid type",
+    );
+  });
+
+  it("persists OS language defaults only when no explicit values exist", async () => {
+    mocks.getPreferredLanguages.mockResolvedValue({
+      status: "ok",
+      data: ["ko", "en"],
+    });
+
+    await initializeApplicationSettings();
+
+    expect(mocks.setConfigValues).toHaveBeenCalledTimes(1);
+    expect(mocks.setConfigValues).toHaveBeenCalledWith({
+      ai_language: "ko",
+      spoken_languages: ["ko", "en"],
+    });
+  });
+
+  it("keeps explicitly configured languages over OS preferences", async () => {
+    mocks.getConfig.mockResolvedValue({
+      status: "ok",
+      data: appConfig({ ai_language: "fr", spoken_languages: ["fr"] }),
     });
     mocks.getPreferredLanguages.mockResolvedValue({
       status: "ok",
@@ -165,145 +161,28 @@ describe("SQLite settings", () => {
 
     await initializeApplicationSettings();
 
-    const statements = mocks.executeTransaction.mock.calls[0][0];
-    expect(statements.map((statement) => statement.params.slice(0, 2))).toEqual(
-      [
-        ["ai_language", JSON.stringify("ko")],
-        ["spoken_languages", JSON.stringify(JSON.stringify(["ko", "en"]))],
-      ],
-    );
+    expect(mocks.setConfigValues).not.toHaveBeenCalled();
   });
 
   it("does not invent a model for a stale/legacy transcription provider — STT is on-device only", async () => {
     // "deepgram" is a stale value from before STT went on-device only; there
     // is no more built-in per-provider default to repair it with, so
     // initialization should leave it untouched (no write happens at all).
-    const rows = [
-      {
-        id: "current_stt_provider",
-        value_json: JSON.stringify("deepgram"),
-      },
-      { id: "current_stt_model", value_json: JSON.stringify("") },
-    ];
-    mocks.execute.mockImplementation(async () => rows);
-
-    await initializeApplicationSettings();
-
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
-  });
-
-  it("migrates legacy summary instructions into the editable Auto prompt", async () => {
-    let rows = [
-      {
-        id: "custom_summary_instructions",
-        value_json: JSON.stringify(
-          "Use the selected summary template for the summary structure and section headings.\n\nStart with decisions.\n\n{{ template }}",
-        ),
-      },
-    ];
-    mocks.execute.mockImplementation(async () => rows);
-    mocks.executeTransaction.mockImplementation(async (statements) => {
-      for (const statement of statements) {
-        const id = String(statement.params[0]);
-        const next = {
-          id,
-          value_json: String(statement.params[1]),
-        };
-        const index = rows.findIndex((row) => row.id === id);
-        if (index === -1) rows.push(next);
-        else rows[index] = next;
-      }
-      return statements.map(() => 1);
+    mocks.getConfig.mockResolvedValue({
+      status: "ok",
+      data: appConfig({ current_stt_provider: "deepgram" }),
     });
 
     await initializeApplicationSettings();
 
-    expect(mocks.getTemplateSource).toHaveBeenCalledWith("enhanceSystem");
-    const statement = mocks.executeTransaction.mock.calls[0][0][0];
-    expect(statement.params[0]).toBe("auto_summary_prompt");
-    expect(JSON.parse(String(statement.params[1]))).toBe(`# General Instructions
-
-Built-in prompt.
-
-# Custom Summary Instructions
-
-For structure, formatting, tone, and emphasis, these instructions take precedence over the Format Requirements. They do not override the requirements to stay accurate, use only the provided source material, and return only the summary.
-
-Start with decisions.`);
+    expect(mocks.setConfigValues).not.toHaveBeenCalled();
   });
 
-  it("does not overwrite an explicitly reset Auto prompt", async () => {
-    mocks.execute.mockResolvedValue([
-      {
-        id: "custom_summary_instructions",
-        value_json: JSON.stringify("Start with decisions."),
-      },
-      { id: "auto_summary_prompt", value_json: JSON.stringify("") },
-    ]);
-
-    await initializeApplicationSettings();
-
-    expect(mocks.getTemplateSource).not.toHaveBeenCalled();
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    "",
-    "Use the selected summary template for the summary structure and section headings.\n\n{{ template }}",
-  ])(
-    "ignores legacy default-only summary instructions",
-    async (instructions) => {
-      mocks.execute.mockResolvedValue([
-        {
-          id: "custom_summary_instructions",
-          value_json: JSON.stringify(instructions),
-        },
-      ]);
-
-      await initializeApplicationSettings();
-
-      expect(mocks.getTemplateSource).not.toHaveBeenCalled();
-      expect(mocks.executeTransaction).not.toHaveBeenCalled();
-    },
-  );
-
-  it("keeps legacy Jinja-like text literal in the migrated prompt", async () => {
-    mocks.execute.mockResolvedValue([
-      {
-        id: "custom_summary_instructions",
-        value_json: JSON.stringify("Group by {{ customer_name }}."),
-      },
-    ]);
-
-    await initializeApplicationSettings();
-
-    const statement = mocks.executeTransaction.mock.calls[0][0][0];
-    expect(JSON.parse(String(statement.params[1]))).toContain(
-      'Group by {{ "{{" }} customer_name }}.',
-    );
-  });
-
-  it("leaves legacy instructions untouched when the prompt source is unavailable", async () => {
-    mocks.execute.mockResolvedValue([
-      {
-        id: "custom_summary_instructions",
-        value_json: JSON.stringify("Start with decisions."),
-      },
-    ]);
-    mocks.getTemplateSource.mockRejectedValue(new Error("plugin unavailable"));
-
-    await expect(initializeApplicationSettings()).resolves.toBeUndefined();
-
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
-  });
-
-  it("updates against the latest SQLite value inside the write queue", async () => {
-    mocks.execute.mockResolvedValue([
-      {
-        id: "personalization_dictionary_terms",
-        value_json: JSON.stringify(JSON.stringify(["Vertex"])),
-      },
-    ]);
+  it("updates against the latest config value", async () => {
+    mocks.getConfig.mockResolvedValue({
+      status: "ok",
+      data: appConfig({ personalization_dictionary_terms: ["Vertex"] }),
+    });
 
     const next = await updateSettingValue(
       "personalization_dictionary_terms",
@@ -311,10 +190,17 @@ Start with decisions.`);
     );
 
     expect(next).toBe(JSON.stringify(["Vertex", "Erebor"]));
-    const statement = mocks.executeTransaction.mock.calls[0][0][0];
-    expect(statement.params.slice(0, 2)).toEqual([
+    expect(mocks.setConfigValues).toHaveBeenCalledWith({
+      personalization_dictionary_terms: ["Vertex", "Erebor"],
+    });
+  });
+
+  it("falls back to the schema default when updating an unset value", async () => {
+    const next = await updateSettingValue(
       "personalization_dictionary_terms",
-      JSON.stringify(next),
-    ]);
+      (current) => JSON.stringify([...JSON.parse(current ?? "[]"), "Erebor"]),
+    );
+
+    expect(next).toBe(JSON.stringify(["Erebor"]));
   });
 });

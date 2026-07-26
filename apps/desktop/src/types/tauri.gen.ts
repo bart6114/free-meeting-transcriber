@@ -47,14 +47,6 @@ async showDevtool() : Promise<boolean> {
 async completeAppExit() : Promise<void> {
     await TAURI_INVOKE("complete_app_exit");
 },
-async getTinybaseValues() : Promise<Result<string | null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("get_tinybase_values") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async getPinnedTabs() : Promise<Result<string | null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("get_pinned_tabs") };

@@ -40,13 +40,13 @@ pub struct AppConfig {
     pub telemetry_consent: bool,
     pub cloud_sync_enabled: bool,
     pub ai_language: String,
-    pub spoken_languages: String,
-    pub personalization_dictionary_terms: String,
+    pub spoken_languages: Vec<String>,
+    pub personalization_dictionary_terms: Vec<String>,
     pub custom_summary_instructions: String,
     pub custom_summary_instructions_token_aware: bool,
     pub auto_summary_prompt: String,
-    pub ignored_platforms: String,
-    pub included_platforms: String,
+    pub ignored_platforms: Vec<String>,
+    pub included_platforms: Vec<String>,
     pub mic_active_threshold: f64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub current_llm_provider: Option<String>,
@@ -89,13 +89,13 @@ impl Default for AppConfig {
             telemetry_consent: true,
             cloud_sync_enabled: true,
             ai_language: "en".to_string(),
-            spoken_languages: "[]".to_string(),
-            personalization_dictionary_terms: "[]".to_string(),
+            spoken_languages: Vec::new(),
+            personalization_dictionary_terms: Vec::new(),
             custom_summary_instructions: String::new(),
             custom_summary_instructions_token_aware: false,
             auto_summary_prompt: String::new(),
-            ignored_platforms: "[]".to_string(),
-            included_platforms: "[]".to_string(),
+            ignored_platforms: Vec::new(),
+            included_platforms: Vec::new(),
             mic_active_threshold: 15.0,
             current_llm_provider: None,
             current_llm_model: None,
@@ -196,6 +196,7 @@ mod tests {
             .set_values(values(&[
                 ("theme", json!("dark")),
                 ("mic_active_threshold", json!(30)),
+                ("spoken_languages", json!(["en", "ko"])),
                 ("current_llm_provider", json!("openai")),
                 (
                     "ai_providers",
@@ -209,6 +210,7 @@ mod tests {
         assert_eq!(reloaded.snapshot(), state.snapshot());
         assert_eq!(reloaded.snapshot().theme, "dark");
         assert_eq!(reloaded.snapshot().mic_active_threshold, 30.0);
+        assert_eq!(reloaded.snapshot().spoken_languages, vec!["en", "ko"]);
         assert_eq!(
             reloaded.snapshot().current_llm_provider.as_deref(),
             Some("openai")

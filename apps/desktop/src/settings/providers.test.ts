@@ -4,8 +4,8 @@ import { createElement, type ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  execute: vi.fn(),
-  useLiveQuery: vi.fn(),
+  getConfig: vi.fn(),
+  setConfigValues: vi.fn(),
   getSecret: vi.fn(async () => ({
     status: "ok",
     data: null as string | null,
@@ -17,10 +17,13 @@ const mocks = vi.hoisted(() => ({
       { status: "ok"; data: null } | { status: "error"; error: string }
     >
   >(async () => ({ status: "ok", data: null })),
-  executeTransaction: vi.fn(
-    (_statements: Array<{ sql: string; params: unknown[] }>) =>
-      Promise.resolve([1]),
-  ),
+}));
+
+vi.mock("@hypr/plugin-settings", () => ({
+  commands: {
+    getConfig: mocks.getConfig,
+    setConfigValues: mocks.setConfigValues,
+  },
 }));
 
 vi.mock("@hypr/plugin-store2", () => ({
@@ -32,32 +35,30 @@ vi.mock("@hypr/plugin-store2", () => ({
   },
 }));
 
-vi.mock("~/db", () => ({
-  executeTransaction: mocks.executeTransaction,
-  liveQueryClient: { execute: mocks.execute },
-  useLiveQuery: mocks.useLiveQuery,
-}));
-
-vi.mock("~/db/write-queue", () => ({
-  enqueueDatabaseWrite: (_key: string, operation: () => Promise<unknown>) =>
-    operation(),
-}));
-
 import {
   getStoredAiProvider,
   isKeychainAccessError,
   loadSecureAiProviderApiKeys,
-  migratePlaintextAiProviderApiKeys,
   parseAiProviders,
   repairKeychainAccess,
   setAiProvider,
   useAiProvidersState,
 } from "./providers";
 
-describe("SQLite AI providers", () => {
+import { resetConfigStoreForTests } from "~/shared/config/store";
+
+function configWithProviders(
+  aiProviders: Record<string, { type: string; base_url: string }>,
+) {
+  return { status: "ok", data: { ai_providers: aiProviders } };
+}
+
+describe("config-backed AI providers", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.executeTransaction.mockResolvedValue([1]);
+    resetConfigStoreForTests();
+    mocks.getConfig.mockResolvedValue(configWithProviders({}));
+    mocks.setConfigValues.mockResolvedValue({ status: "ok", data: null });
     mocks.getSecret.mockResolvedValue({ status: "ok", data: null });
     mocks.setSecret.mockResolvedValue({ status: "ok", data: null });
     mocks.deleteSecret.mockResolvedValue({ status: "ok", data: null });
@@ -65,24 +66,18 @@ describe("SQLite AI providers", () => {
       status: "ok",
       data: null,
     });
-    mocks.useLiveQuery.mockReturnValue({ data: [], isLoading: false });
   });
 
   it("waits for secure provider keys before reporting provider state as ready", async () => {
     let resolveSecret!: (value: { status: "ok"; data: string | null }) => void;
-    mocks.useLiveQuery.mockReturnValue({
-      data: [
-        {
-          id: "ai_provider:stt:deepgram",
-          value_json: JSON.stringify({
-            type: "stt",
-            base_url: "https://api.deepgram.com/v1",
-            api_key: "",
-          }),
+    mocks.getConfig.mockResolvedValue(
+      configWithProviders({
+        "stt:deepgram": {
+          type: "stt",
+          base_url: "https://api.deepgram.com/v1",
         },
-      ],
-      isLoading: false,
-    });
+      }),
+    );
     mocks.getSecret.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
@@ -110,129 +105,80 @@ describe("SQLite AI providers", () => {
     );
   });
 
-  it("uses direct provider rows over imported legacy configuration", () => {
+  it("returns only entries of the requested type with sane row ids", () => {
     const providers = parseAiProviders(
-      [
-        {
-          id: "legacy_settings_document",
-          value_json: JSON.stringify({
-            ai: {
-              llm: {
-                openai: {
-                  base_url: "https://legacy.example",
-                  api_key: "legacy-key",
-                },
-              },
-            },
-          }),
-        },
-        {
-          id: "ai_provider:llm:openai",
-          value_json: JSON.stringify({
-            type: "llm",
-            base_url: "https://direct.example",
-            api_key: "direct-key",
-          }),
-        },
-      ],
+      {
+        "llm:openai": { type: "llm", base_url: "https://direct.example" },
+        "stt:deepgram": { type: "stt", base_url: "https://stt.example" },
+        "llm:": { type: "llm", base_url: "https://nameless.example" },
+        "llm:mismatched": { type: "stt", base_url: "https://wrong.example" },
+      },
       "llm",
     );
 
-    expect(providers["llm:openai"]).toEqual({
-      type: "llm",
-      base_url: "https://direct.example",
-      api_key: "direct-key",
-    });
-  });
-
-  it("promotes legacy provider fields on the first partial write", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
-        id: "legacy_settings_document",
-        value_json: JSON.stringify({
-          ai: {
-            stt: {
-              deepgram: {
-                base_url: "https://legacy.example",
-                api_key: "legacy-key",
-              },
-            },
-          },
-        }),
+    expect(providers).toEqual({
+      "llm:openai": {
+        type: "llm",
+        base_url: "https://direct.example",
+        api_key: "",
       },
-    ]);
-
-    await setAiProvider("stt", "deepgram", { api_key: "new-key" });
-
-    const statement = mocks.executeTransaction.mock.calls[0][0].find(
-      (candidate) => candidate.sql.includes("INSERT INTO app_settings"),
-    )!;
-    expect(statement.sql).toContain("INSERT INTO app_settings");
-    expect(statement.params[0]).toBe("ai_provider:stt:deepgram");
-    expect(JSON.parse(String(statement.params[1]))).toEqual({
-      type: "stt",
-      base_url: "https://legacy.example",
-      api_key: "",
     });
-    expect(mocks.setSecret).toHaveBeenCalledWith(
-      "ai-provider-api-keys",
-      "stt:deepgram",
-      "new-key",
-    );
   });
 
-  it("retries partial writes without dropping a concurrent field", async () => {
-    mocks.execute
-      .mockResolvedValueOnce([
-        {
-          id: "ai_provider:llm:openai",
-          value_json: JSON.stringify({
-            type: "llm",
-            base_url: "https://old.example",
-            api_key: "old-key",
-          }),
-        },
-      ])
-      .mockResolvedValueOnce([
-        {
-          id: "ai_provider:llm:openai",
-          value_json: JSON.stringify({
-            type: "llm",
-            base_url: "https://concurrent.example",
-            api_key: "old-key",
-          }),
-        },
-      ]);
-    mocks.executeTransaction
-      .mockResolvedValueOnce([0])
-      .mockResolvedValueOnce([1]);
+  it("merges a partial write with the stored entry and other providers", async () => {
+    mocks.getConfig.mockResolvedValue(
+      configWithProviders({
+        "llm:openai": { type: "llm", base_url: "https://old.example" },
+        "stt:deepgram": { type: "stt", base_url: "https://stt.example" },
+      }),
+    );
 
     await setAiProvider("llm", "openai", { api_key: "new-key" });
 
-    const statement = mocks.executeTransaction.mock.calls[1][0][0];
-    expect(JSON.parse(String(statement.params[0]))).toEqual({
-      type: "llm",
-      base_url: "https://concurrent.example",
-      api_key: "",
+    expect(mocks.setSecret).toHaveBeenCalledWith(
+      "ai-provider-api-keys",
+      "llm:openai",
+      "new-key",
+    );
+    expect(mocks.setConfigValues).toHaveBeenCalledWith({
+      ai_providers: {
+        "llm:openai": { type: "llm", base_url: "https://old.example" },
+        "stt:deepgram": { type: "stt", base_url: "https://stt.example" },
+      },
     });
   });
 
-  it("restores secure storage when the SQLite write never commits", async () => {
-    mocks.execute.mockResolvedValue([
-      {
-        id: "ai_provider:llm:openai",
-        value_json: JSON.stringify({
-          type: "llm",
-          base_url: "https://old.example",
-          api_key: "",
-        }),
+  it("creates a new provider entry on the first write", async () => {
+    await setAiProvider("stt", "deepgram", {
+      base_url: "https://api.deepgram.com/v1",
+    });
+
+    expect(mocks.setConfigValues).toHaveBeenCalledWith({
+      ai_providers: {
+        "stt:deepgram": {
+          type: "stt",
+          base_url: "https://api.deepgram.com/v1",
+        },
       },
-    ]);
-    mocks.executeTransaction.mockResolvedValue([0]);
+    });
+    // No API key was provided or previously stored, so nothing is written to
+    // the keychain.
+    expect(mocks.setSecret).not.toHaveBeenCalled();
+    expect(mocks.deleteSecret).toHaveBeenCalledWith(
+      "ai-provider-api-keys",
+      "stt:deepgram",
+    );
+  });
+
+  it("restores secure storage when the config write fails", async () => {
+    mocks.setConfigValues.mockResolvedValue({
+      status: "error",
+      error: "config locked",
+    });
 
     await expect(
       setAiProvider("llm", "openai", { api_key: "new-key" }),
-    ).rejects.toThrow("changed too frequently");
+    ).rejects.toThrow("config locked");
 
     expect(mocks.setSecret).toHaveBeenCalledWith(
       "ai-provider-api-keys",
@@ -259,20 +205,17 @@ describe("SQLite AI providers", () => {
       "stt:deepgram",
     );
     expect(mocks.setSecret).not.toHaveBeenCalled();
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("loads one stored provider with its secure API key", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
-        id: "ai_provider:llm:anthropic",
-        value_json: JSON.stringify({
+    mocks.getConfig.mockResolvedValue(
+      configWithProviders({
+        "llm:anthropic": {
           type: "llm",
           base_url: "https://api.anthropic.com/v1",
-          api_key: "",
-        }),
-      },
-    ]);
+        },
+      }),
+    );
     mocks.getSecret.mockResolvedValueOnce({
       status: "ok",
       data: "anthropic-key",
@@ -283,6 +226,10 @@ describe("SQLite AI providers", () => {
       base_url: "https://api.anthropic.com/v1",
       api_key: "anthropic-key",
     });
+  });
+
+  it("returns undefined for a provider that was never configured", async () => {
+    await expect(getStoredAiProvider("llm", "openai")).resolves.toBeUndefined();
   });
 
   it("repairs macOS Keychain access through the secure store", async () => {
@@ -310,145 +257,5 @@ describe("SQLite AI providers", () => {
     expect(
       isKeychainAccessError(new Error("Platform failure: missing entitlement")),
     ).toBe(false);
-  });
-
-  it("keeps the plaintext key when secure storage rejects migration", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
-        id: "ai_provider:stt:deepgram",
-        value_json: JSON.stringify({
-          type: "stt",
-          base_url: "https://api.deepgram.com/v1",
-          api_key: "deepgram-key",
-        }),
-      },
-    ]);
-    mocks.setSecret.mockRejectedValueOnce(new Error("keychain unavailable"));
-
-    await expect(migratePlaintextAiProviderApiKeys()).rejects.toThrow(
-      "keychain unavailable",
-    );
-
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
-  });
-
-  it("securely deletes migrated values and truncates the SQLite WAL", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
-        id: "ai_provider:stt:deepgram",
-        value_json: JSON.stringify({
-          type: "stt",
-          base_url: "https://api.deepgram.com/v1",
-          api_key: "deepgram-key",
-        }),
-      },
-    ]);
-
-    await migratePlaintextAiProviderApiKeys();
-
-    const statements = mocks.executeTransaction.mock.calls[0][0];
-    expect(statements[0].sql).toContain("PRAGMA secure_delete = ON");
-    expect(mocks.execute).toHaveBeenLastCalledWith(
-      "PRAGMA wal_checkpoint(TRUNCATE)",
-    );
-  });
-
-  it("redacts reintroduced legacy keys without replacing an existing secret", async () => {
-    mocks.getSecret.mockResolvedValue({
-      status: "ok",
-      data: "current-secure-key",
-    });
-    mocks.execute.mockResolvedValueOnce([
-      {
-        id: "legacy_settings_document",
-        value_json: JSON.stringify({
-          ai: {
-            stt: {
-              deepgram: {
-                base_url: "https://legacy.example",
-                api_key: "stale-legacy-key",
-              },
-            },
-          },
-        }),
-      },
-      {
-        id: "ai_provider:stt:deepgram",
-        value_json: JSON.stringify({
-          type: "stt",
-          base_url: "https://direct.example",
-          api_key: "",
-        }),
-      },
-    ]);
-
-    await migratePlaintextAiProviderApiKeys();
-
-    expect(mocks.setSecret).not.toHaveBeenCalled();
-    const legacyUpdate = mocks.executeTransaction.mock.calls[0][0].find(
-      (candidate) =>
-        candidate.sql.includes("UPDATE app_settings") &&
-        candidate.params.includes("legacy_settings_document"),
-    )!;
-    expect(String(legacyUpdate.params[0])).not.toContain("stale-legacy-key");
-  });
-
-  it("redacts stale direct keys without replacing an existing secret", async () => {
-    mocks.getSecret.mockResolvedValue({
-      status: "ok",
-      data: "current-secure-key",
-    });
-    mocks.execute.mockResolvedValueOnce([
-      {
-        id: "ai_provider:stt:deepgram",
-        value_json: JSON.stringify({
-          type: "stt",
-          base_url: "https://direct.example",
-          api_key: "stale-direct-key",
-        }),
-      },
-    ]);
-
-    await migratePlaintextAiProviderApiKeys();
-
-    expect(mocks.setSecret).not.toHaveBeenCalled();
-    const directUpdate = mocks.executeTransaction.mock.calls[0][0].find(
-      (candidate) => candidate.params.includes("ai_provider:stt:deepgram"),
-    )!;
-    expect(String(directUpdate.params[0])).not.toContain("stale-direct-key");
-  });
-
-  it("refreshes legacy settings before migrating the next provider type", async () => {
-    const legacySettings = (llmKey: string, sttKey: string) => ({
-      id: "legacy_settings_document",
-      value_json: JSON.stringify({
-        ai: {
-          llm: {
-            openai: {
-              base_url: "https://api.openai.com/v1",
-              api_key: llmKey,
-            },
-          },
-          stt: {
-            deepgram: {
-              base_url: "https://api.deepgram.com/v1",
-              api_key: sttKey,
-            },
-          },
-        },
-      }),
-    });
-    mocks.execute
-      .mockResolvedValueOnce([legacySettings("llm-key", "stt-key")])
-      .mockResolvedValueOnce([legacySettings("", "stt-key")]);
-
-    await migratePlaintextAiProviderApiKeys();
-
-    const sttStatements = mocks.executeTransaction.mock.calls[1][0];
-    const legacyUpdate = sttStatements.find((candidate) =>
-      candidate.params.includes("legacy_settings_document"),
-    )!;
-    expect(String(legacyUpdate.params[0])).not.toContain("llm-key");
-    expect(String(legacyUpdate.params[0])).not.toContain("stt-key");
   });
 });

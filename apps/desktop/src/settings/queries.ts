@@ -4,62 +4,40 @@ import { useCallback } from "react";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as detectCommands } from "@hypr/plugin-detect";
 import { commands as localSttCommands } from "@hypr/plugin-local-stt";
-import { commands as templateCommands } from "@hypr/plugin-template";
+import type { JsonValue } from "@hypr/plugin-settings";
 import { commands as trayCommands } from "@hypr/plugin-tray";
 import { commands as windowsCommands } from "@hypr/plugin-windows";
 
-import { executeTransaction, liveQueryClient, useLiveQuery } from "~/db";
-import { enqueueDatabaseWrite } from "~/db/write-queue";
-import { normalizeAudioRetention } from "~/services/audio-retention-policy";
-import {
-  LEGACY_MAIN_VALUES_ID,
-  LEGACY_SETTINGS_ID,
-} from "~/settings/legacy-snapshots";
 import {
   SETTING_DEFINITIONS,
   type SettingKey,
   type SettingValue,
   type SettingValues,
 } from "~/settings/schema";
-import { isConfiguredSttModel, isFmtrLocalSttModel } from "~/stt/capabilities";
 import {
-  getDefaultSttModel,
-  normalizeStoredSttModel,
-} from "~/stt/model-selection";
+  ARRAY_SETTING_KEYS,
+  fetchStoredSettingValues,
+  type StoredSettingValues,
+  useConfigStoreState,
+  writeConfigValues,
+} from "~/shared/config/store";
+import { isConfiguredSttModel, isFmtrLocalSttModel } from "~/stt/capabilities";
+import { getDefaultSttModel } from "~/stt/model-selection";
 
-type AppSettingRow = { id: string; value_json: string };
-
-export type StoredSettingValues = {
-  values: SettingValues;
-  hasValues: Set<SettingKey>;
-};
+export type { StoredSettingValues } from "~/shared/config/store";
 
 const EMPTY_STORED_SETTINGS: StoredSettingValues = {
   values: {},
   hasValues: new Set(),
 };
-const JSON_ARRAY_KEYS = new Set<SettingKey>([
-  "spoken_languages",
-  "personalization_dictionary_terms",
-  "ignored_platforms",
-  "included_platforms",
-]);
-const LEGACY_SUMMARY_TEMPLATE_TOKEN = /\{\{\s*template\s*\}\}/g;
-const LEGACY_DEFAULT_SUMMARY_INSTRUCTION =
-  "Use the selected summary template for the summary structure and section headings.";
-const MIGRATED_SUMMARY_INSTRUCTIONS_HEADER = `# Custom Summary Instructions
 
-For structure, formatting, tone, and emphasis, these instructions take precedence over the Format Requirements. They do not override the requirements to stay accurate, use only the provided source material, and return only the summary.`;
-
-export function useStoredSettingValuesQuery() {
-  return useLiveQuery<AppSettingRow, StoredSettingValues>({
-    sql: `
-      SELECT id, value_json
-      FROM app_settings
-      ORDER BY id
-    `,
-    mapRows: parseSettingRows,
-  });
+export function useStoredSettingValuesQuery(): {
+  data: StoredSettingValues | undefined;
+  isLoading: boolean;
+  error: Error | null;
+} {
+  const { snapshot, isLoading, error } = useConfigStoreState();
+  return { data: snapshot?.settings, isLoading, error };
 }
 
 export function useStoredSettingValues(): StoredSettingValues {
@@ -85,11 +63,8 @@ export function useStoredSettingValue<K extends SettingKey>(
   };
 }
 
-export async function getStoredSettingValues(): Promise<StoredSettingValues> {
-  const rows = await liveQueryClient.execute<AppSettingRow>(
-    `SELECT id, value_json FROM app_settings ORDER BY id`,
-  );
-  return parseSettingRows(rows);
+export function getStoredSettingValues(): Promise<StoredSettingValues> {
+  return fetchStoredSettingValues();
 }
 
 export async function initializeApplicationSettings(): Promise<void> {
@@ -115,58 +90,12 @@ export async function initializeApplicationSettings(): Promise<void> {
     }
   }
 
-  const migratedAutoPrompt = await migrateLegacyAutoSummaryPrompt(stored);
-  if (migratedAutoPrompt !== null) {
-    updates.auto_summary_prompt = migratedAutoPrompt;
-  }
-
   if (Object.keys(updates).length > 0) {
     await setSettingValues(updates);
   }
   const current =
     Object.keys(updates).length > 0 ? await getStoredSettingValues() : stored;
   applySettingSideEffects(current.values);
-}
-
-async function migrateLegacyAutoSummaryPrompt(
-  stored: StoredSettingValues,
-): Promise<string | null> {
-  if (
-    stored.hasValues.has("auto_summary_prompt") ||
-    !stored.hasValues.has("custom_summary_instructions")
-  ) {
-    return null;
-  }
-
-  const legacyInstructions = cleanLegacySummaryInstructions(
-    stored.values.custom_summary_instructions ?? "",
-  );
-  if (!legacyInstructions) {
-    return null;
-  }
-
-  try {
-    const sourceResult =
-      await templateCommands.getTemplateSource("enhanceSystem");
-    if (sourceResult.status === "error" || !sourceResult.data.trim()) {
-      return null;
-    }
-
-    return `${sourceResult.data.trimEnd()}\n\n${MIGRATED_SUMMARY_INSTRUCTIONS_HEADER}\n\n${escapeJinjaOpeners(legacyInstructions)}`;
-  } catch {
-    return null;
-  }
-}
-
-function cleanLegacySummaryInstructions(value: string): string {
-  return value
-    .replace(LEGACY_SUMMARY_TEMPLATE_TOKEN, "")
-    .replace(LEGACY_DEFAULT_SUMMARY_INSTRUCTION, "")
-    .trim();
-}
-
-function escapeJinjaOpeners(value: string): string {
-  return value.replace(/\{\{|\{%|\{#/g, (opener) => `{{ "${opener}" }}`);
 }
 
 export function setSettingValue<K extends SettingKey>(
@@ -176,30 +105,34 @@ export function setSettingValue<K extends SettingKey>(
   return setSettingValues({ [key]: value } as SettingValues);
 }
 
-export function setSettingValues(values: SettingValues): Promise<void> {
-  return enqueueDatabaseWrite("app-settings", () =>
-    persistSettingValues(values),
-  );
+export async function setSettingValues(values: SettingValues): Promise<void> {
+  const payload: Partial<{ [key in string]: JsonValue }> = {};
+  for (const [key, value] of Object.entries(values)) {
+    payload[key] = toConfigJsonValue(key as SettingKey, value);
+  }
+
+  if (Object.keys(payload).length > 0) {
+    await writeConfigValues(payload);
+  }
+  applySettingSideEffects(values);
 }
 
-export function updateSettingValue<K extends SettingKey>(
+export async function updateSettingValue<K extends SettingKey>(
   key: K,
   update: (current: SettingValue<K> | undefined) => SettingValue<K>,
 ): Promise<SettingValue<K>> {
-  return enqueueDatabaseWrite("app-settings", async () => {
-    const stored = await getStoredSettingValues();
-    const definition = SETTING_DEFINITIONS[key];
-    const fallback =
-      "default" in definition
-        ? (definition.default as SettingValue<K>)
-        : undefined;
-    const current = stored.hasValues.has(key)
-      ? (stored.values[key] as unknown as SettingValue<K>)
-      : fallback;
-    const next = update(current);
-    await persistSettingValues({ [key]: next } as SettingValues);
-    return next;
-  });
+  const stored = await getStoredSettingValues();
+  const definition = SETTING_DEFINITIONS[key];
+  const fallback =
+    "default" in definition
+      ? (definition.default as SettingValue<K>)
+      : undefined;
+  const current = stored.hasValues.has(key)
+    ? (stored.values[key] as unknown as SettingValue<K>)
+    : fallback;
+  const next = update(current);
+  await setSettingValues({ [key]: next } as SettingValues);
+  return next;
 }
 
 export function useSetSettingValue<K extends SettingKey>(key: K) {
@@ -221,166 +154,21 @@ export function useSetSettingValues() {
   }, []);
 }
 
-export function parseSettingRows(rows: AppSettingRow[]): StoredSettingValues {
-  const directRows = new Map(rows.map((row) => [row.id, row.value_json]));
-  const legacySettings = parseJsonObject(directRows.get(LEGACY_SETTINGS_ID));
-  const legacyMainValues = parseJsonObject(
-    directRows.get(LEGACY_MAIN_VALUES_ID),
-  );
-  const values: SettingValues = {};
-  const hasValues = new Set<SettingKey>();
-
-  for (const key of Object.keys(SETTING_DEFINITIONS) as SettingKey[]) {
-    const directJson = directRows.get(key);
-    const directValue =
-      directJson === undefined ? INVALID : parseJsonValue(directJson);
-    const normalizedDirect = normalizeSettingValue(key, directValue, true);
-    if (normalizedDirect !== INVALID) {
-      setParsedSetting(values, key, normalizedDirect);
-      hasValues.add(key);
-      continue;
-    }
-
-    const legacyValue = readLegacySettingValue(
-      legacySettings,
-      legacyMainValues,
-      key,
-    );
-    const normalizedLegacy = normalizeSettingValue(key, legacyValue, false);
-    if (normalizedLegacy !== INVALID) {
-      setParsedSetting(values, key, normalizedLegacy);
-      hasValues.add(key);
-    }
-  }
-
-  return { values, hasValues };
-}
-
-async function persistSettingValues(values: SettingValues): Promise<void> {
-  const now = new Date().toISOString();
-  const statements = Object.entries(values).map(([key, value]) => ({
-    sql: `
-      INSERT INTO app_settings (id, value_json, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        value_json = excluded.value_json,
-        updated_at = excluded.updated_at
-    `,
-    params: [key, JSON.stringify(value), now],
-  }));
-  if (statements.length > 0) await executeTransaction(statements);
-  applySettingSideEffects(values);
-}
-
-function readLegacySettingValue(
-  settingsDocument: Record<string, unknown>,
-  mainValuesDocument: Record<string, unknown>,
+// config.json stores these keys as real JSON arrays while the setting schema
+// still passes them around as JSON-encoded strings.
+function toConfigJsonValue(
   key: SettingKey,
-): unknown {
-  const definition = SETTING_DEFINITIONS[key];
-  let value = getByPath(settingsDocument, definition.path);
-
-  if (value === undefined && key === "ai_language") {
-    value = getByPath(settingsDocument, ["general", "ai_language"]);
-  } else if (value === undefined && key === "spoken_languages") {
-    value = getByPath(settingsDocument, ["general", "spoken_languages"]);
-  } else if (key === "audio_retention") {
-    value =
-      normalizeAudioRetention(value, undefined) ??
-      normalizeAudioRetention(
-        getByPath(settingsDocument, ["general", "saveAudioAfterMeeting"]),
-        undefined,
-      ) ??
-      normalizeAudioRetention(
-        getByPath(settingsDocument, ["general", "save_recordings"]),
-        undefined,
-      ) ??
-      normalizeAudioRetention(mainValuesDocument.audio_retention, undefined) ??
-      normalizeAudioRetention(mainValuesDocument.save_recordings, undefined);
-  }
-
-  if (value === undefined) value = mainValuesDocument[key];
-
-  if (key === "current_stt_model") {
-    value = normalizeStoredSttModel(
-      (getByPath(settingsDocument, ["ai", "current_stt_provider"]) ??
-        mainValuesDocument.current_stt_provider) as string | undefined,
-      value as string | undefined,
-    );
-  }
-
-  return value;
-}
-
-const INVALID = Symbol("invalid-setting-value");
-
-function normalizeSettingValue(
-  key: SettingKey,
-  value: unknown,
-  direct: boolean,
-): boolean | number | string | typeof INVALID {
-  if (value === INVALID || value === undefined) return INVALID;
-
-  if (key === "audio_retention") {
-    return normalizeAudioRetention(value, undefined) ?? INVALID;
-  }
-
-  if (JSON_ARRAY_KEYS.has(key)) {
-    if (Array.isArray(value)) return JSON.stringify(value);
-    if (typeof value !== "string") return INVALID;
-    try {
-      return Array.isArray(JSON.parse(value)) ? value : INVALID;
-    } catch {
-      if (!direct && value.includes(",")) {
-        return JSON.stringify(
-          value
-            .split(",")
-            .map((entry) => entry.trim())
-            .filter(Boolean),
-        );
-      }
-      return INVALID;
-    }
-  }
-
-  const expectedType = SETTING_DEFINITIONS[key].type;
-  if (expectedType === "boolean" && typeof value === "boolean") return value;
-  if (expectedType === "number" && typeof value === "number") return value;
-  if (expectedType === "string" && typeof value === "string") return value;
-  return INVALID;
-}
-
-function setParsedSetting<K extends SettingKey>(
-  values: SettingValues,
-  key: K,
   value: boolean | number | string,
-): void {
-  (values as Record<string, unknown>)[key] = value as SettingValue<K>;
-}
-
-function getByPath(
-  document: Record<string, unknown>,
-  path: readonly [string, string],
-): unknown {
-  const section = document[path[0]];
-  return section && typeof section === "object"
-    ? (section as Record<string, unknown>)[path[1]]
-    : undefined;
-}
-
-function parseJsonObject(value: string | undefined): Record<string, unknown> {
-  const parsed = parseJsonValue(value);
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
-}
-
-function parseJsonValue(value: string | undefined): unknown {
-  if (value === undefined) return INVALID;
+): JsonValue {
+  if (!ARRAY_SETTING_KEYS.has(key)) return value;
+  if (Array.isArray(value)) return value;
   try {
-    return JSON.parse(value);
+    const parsed: unknown = JSON.parse(String(value));
+    return Array.isArray(parsed)
+      ? parsed.filter((entry): entry is string => typeof entry === "string")
+      : [];
   } catch {
-    return INVALID;
+    return [];
   }
 }
 
@@ -447,18 +235,7 @@ async function syncLocalSttServer(): Promise<void> {
 
   if (provider === "fmtr" && model && !isConfiguredSttModel(provider, model)) {
     model = "";
-    await executeTransaction([
-      {
-        sql: `
-          INSERT INTO app_settings (id, value_json, updated_at)
-          VALUES ('current_stt_model', ?, ?)
-          ON CONFLICT(id) DO UPDATE SET
-            value_json = excluded.value_json,
-            updated_at = excluded.updated_at
-        `,
-        params: [JSON.stringify(model), new Date().toISOString()],
-      },
-    ]);
+    await writeConfigValues({ current_stt_model: model });
   }
 
   if (isFmtrLocalSttModel(provider, model)) {
@@ -483,7 +260,7 @@ async function syncAnalyticsSettingProperties(): Promise<void> {
 
 function parseStringArray(value: string): string[] {
   try {
-    const parsed = JSON.parse(value);
+    const parsed: unknown = JSON.parse(value);
     return Array.isArray(parsed)
       ? parsed.filter((entry): entry is string => typeof entry === "string")
       : [];

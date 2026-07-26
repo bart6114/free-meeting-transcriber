@@ -30,11 +30,10 @@ import { routeTree } from "./routeTree.gen";
 import { EventListeners } from "./services/event-listeners";
 import { TaskManager } from "./services/task-manager";
 import { useRemoteSessionDeletionUndoListener } from "./session/hooks/useDeleteSession";
-import { refreshLegacySettingsSnapshots } from "./settings/legacy-snapshots";
-import { migratePlaintextAiProviderApiKeys } from "./settings/providers";
 import { initializeApplicationSettings } from "./settings/queries";
 import { initializeAppExitFlush } from "./shared/app-exit";
 import { useConfigValue } from "./shared/config";
+import { initConfigStore } from "./shared/config/store";
 import { ErrorComponent, NotFoundComponent } from "./shared/control";
 import { bootstrapThemeFromSettings } from "./shared/theme/apply";
 import { AppThemeProvider } from "./shared/theme/provider";
@@ -122,15 +121,12 @@ async function enableReactScanInDev() {
 }
 
 async function renderApp() {
+  void initConfigStore().catch((error) => {
+    console.error("Failed to initialize the config store", error);
+  });
   if (isMainWindow) {
-    await refreshLegacySettingsSnapshots().catch((error) => {
-      console.error("Failed to refresh legacy settings snapshots", error);
-    });
     await initializeApplicationSettings().catch((error) => {
       console.error("Failed to initialize application settings", error);
-    });
-    await migratePlaintextAiProviderApiKeys().catch((error) => {
-      console.error("Failed to migrate AI provider credentials", error);
     });
   }
   await Promise.all([bootstrapThemeFromSettings(), enableReactScanInDev()]);

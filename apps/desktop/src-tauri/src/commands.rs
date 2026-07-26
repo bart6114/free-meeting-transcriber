@@ -76,14 +76,6 @@ pub async fn complete_app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_tinybase_values<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-) -> Result<Option<String>, String> {
-    app.get_tinybase_values()
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn get_pinned_tabs<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Option<String>, String> {
