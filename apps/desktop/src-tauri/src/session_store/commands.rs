@@ -5,8 +5,8 @@ use tauri::{AppHandle, Manager};
 use hypr_fs_format::TranscriptWithData;
 
 use super::{
-    EnhancedDoc, EnhancedDocPatch, RebuildReport, SessionMeta, SessionMetaPatch, SessionStore,
-    TaskInput, TaskItem, TemplateInput, TemplateItem, TranscriptDelta,
+    EnhancedDoc, EnhancedDocPatch, RebuildReport, SessionListEntry, SessionMeta, SessionMetaPatch,
+    SessionRecord, SessionStore, TaskInput, TaskItem, TemplateInput, TemplateItem, TranscriptDelta,
 };
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
@@ -298,6 +298,96 @@ pub async fn session_rebuild_index<R: tauri::Runtime>(
         .rebuild_index()
         .await
         .map_err(|e| e.to_string())
+}
+
+// -- index queries (Phase E1): synchronous reads of the in-memory vault index; the
+// frontend pairs them with the coalesced `index-changed` event to replace the SQL
+// live queries. Semantics per command live on the matching `SessionStore` method.
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_get<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<Option<SessionRecord>, String> {
+    Ok(store(&app)?.session_get(&session_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_list<R: tauri::Runtime>(
+    app: AppHandle<R>,
+) -> Result<Vec<SessionListEntry>, String> {
+    Ok(store(&app)?.session_list())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_ids<R: tauri::Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
+    Ok(store(&app)?.session_ids())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_is_empty<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<bool, String> {
+    Ok(store(&app)?.session_is_empty(&session_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_has_transcript<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<bool, String> {
+    Ok(store(&app)?.session_has_transcript(&session_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_enhanced_docs<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<Vec<EnhancedDoc>, String> {
+    Ok(store(&app)?.session_enhanced_docs(&session_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn enhanced_doc_get<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    doc_id: String,
+) -> Result<Option<EnhancedDoc>, String> {
+    Ok(store(&app)?.enhanced_doc_get(&doc_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_transcripts<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<Vec<TranscriptWithData>, String> {
+    Ok(store(&app)?.session_transcripts(&session_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn transcript_get<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    transcript_id: String,
+) -> Result<Option<TranscriptWithData>, String> {
+    Ok(store(&app)?.transcript_get(&transcript_id))
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_find_by_tracking_id<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    tracking_id: String,
+) -> Result<Option<SessionMeta>, String> {
+    Ok(store(&app)?.session_find_by_tracking_id(&tracking_id))
 }
 
 #[tauri::command]

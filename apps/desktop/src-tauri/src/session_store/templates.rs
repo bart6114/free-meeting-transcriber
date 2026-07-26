@@ -225,6 +225,9 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))??;
 
+        self.index_remove_template(id);
+        self.notify_index_changed(super::IndexEntity::Templates, vec![id.to_string()]);
+
         let is_default = default_template_seeds()?.iter().any(|seed| seed.id == id);
         if is_default {
             let mut file = self.read_deleted_defaults().await?;
@@ -274,7 +277,12 @@ impl SessionStore {
     async fn write_template_file(&self, item: &TemplateItem) -> Result<(), StoreError> {
         let bytes =
             serde_json::to_vec_pretty(item).map_err(|e| StoreError::Serialize(e.to_string()))?;
-        self.write_file(paths::template_path(&item.id), bytes).await
+        self.write_file(paths::template_path(&item.id), bytes)
+            .await?;
+
+        self.index_upsert_template(item);
+        self.notify_index_changed(super::IndexEntity::Templates, vec![item.id.clone()]);
+        Ok(())
     }
 
     async fn read_deleted_defaults(&self) -> Result<DeletedDefaultsFile, StoreError> {

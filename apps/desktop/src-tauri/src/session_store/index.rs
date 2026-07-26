@@ -1,0 +1,1501 @@
+//! In-memory vault index + `index-changed` event bus (Phase E1).
+//!
+//! The index is a typed, RwLock'd mirror of the vault files -- sessions
+//! (`_meta.json` + `_memo.md`), documents (legacy `<kind>.md` + `enhanced/<uuid>.md`),
+//! transcripts (`transcript.json`), tasks (`tasks.json`) and templates
+//! (`templates/<id>.json`) -- built at startup by `rebuild_index` and kept current by:
+//!
+//! 1. **Write-through**: every store write updates the index synchronously right after
+//!    the file write lands (before the SQL dual-write, which stays for the search
+//!    projection until Phase F), then pushes a change onto the bus.
+//! 2. **Rescans**: `rebuild_index` / `refresh_session` (startup, focus rescan,
+//!    `vault_watch` external-edit ingestion) re-derive the affected slice of the index
+//!    from the files and notify only what actually changed (`PartialEq` diff -- the
+//!    in-memory equivalent of rebuild's change-guarded SQL upserts).
+//!
+//! The bus coalesces changes for ~10ms (mirroring `hypr-db-reactive`'s dispatcher:
+//! receive one change, sleep `COALESCE_WINDOW`, drain everything else that arrived)
+//! and emits one `index-changed { entity, ids }` Tauri event per entity to all
+//! webviews. Granularity is table-level: `entity` names which map changed, `ids` are
+//! session ids (docs/transcripts/tasks carry their owning session id; templates carry
+//! template ids; the vault-root tasks file uses the reserved empty-string id).
+//!
+//! Corruption must never look like deletion (same invariant as `rebuild.rs`): a file
+//! that fails to read/parse during a rescan leaves the existing index entry untouched;
+//! only a confirmed-absent file removes one.
+
+use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
+
+use serde::{Deserialize, Serialize};
+
+use super::{EnhancedDoc, SessionMeta, SessionStore, StoreError, TaskItem, TemplateItem, paths};
+use hypr_fs_format::TranscriptWithData;
+
+/// Which index map changed. Serialized as the lowercase strings the frontend matches
+/// on in the `index-changed` payload.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, specta::Type)]
+#[serde(rename_all = "lowercase")]
+pub enum IndexEntity {
+    Sessions,
+    Docs,
+    Transcripts,
+    Tasks,
+    Templates,
+}
+
+/// Emitted (coalesced) to every webview as the `index-changed` event.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+pub struct IndexChanged {
+    pub entity: IndexEntity,
+    pub ids: Vec<String>,
+}
+
+/// `meta` + note markdown for one session; the unit of the `sessions` map. The note
+/// rides here (not in `docs`) because every consumer of the note also wants the meta
+/// (`useSession`'s join), and `_memo.md` shares the session's identity, not a doc id.
+#[derive(Debug, Clone, PartialEq)]
+pub struct SessionEntry {
+    pub meta: SessionMeta,
+    pub note_markdown: Option<String>,
+}
+
+/// What `session_get` returns: the file-canonical equivalent of the old
+/// `SESSION_SELECT_SQL` (sessions row + COALESCE'd note document join). The note is
+/// always `_memo.md`'s content -- the SQL fallback's legacy bare-id row is a
+/// permanently-empty placeholder, so preferring the file loses nothing.
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+pub struct SessionRecord {
+    pub meta: SessionMeta,
+    pub note_markdown: Option<String>,
+}
+
+/// One `session_list` entry: full meta plus the derived flags list consumers need
+/// (timeline grouping wants `event`/`folder` off the meta; audio retention wants
+/// `has_transcript_words` without a per-session round-trip).
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+pub struct SessionListEntry {
+    pub meta: SessionMeta,
+    pub has_transcript_words: bool,
+}
+
+/// Key for the vault-root `tasks.json` in the tasks map (sessions can never claim it:
+/// folder names are non-empty path segments).
+pub(super) const VAULT_TASKS_KEY: &str = "";
+
+/// The in-memory mirror of the vault. Maps are kept independent (mirroring the three
+/// SQL index tables plus tasks/templates) rather than nested under one session struct,
+/// so a ghost session's transcripts can exist without a meta exactly like the SQL
+/// write path allows (`recording_into_unknown_session_still_persists`). Empty
+/// collections are normalized to absent keys so `PartialEq` diffs stay meaningful.
+#[derive(Debug, Default, Clone)]
+pub struct VaultIndex {
+    pub sessions: HashMap<String, SessionEntry>,
+    /// Session id -> every document: legacy single-slot `<kind>.md` files (normalized
+    /// to `EnhancedDoc` with the SQL row id shape `<session>:<kind>`, empty metadata)
+    /// plus `enhanced/<uuid>.md` docs.
+    pub docs: HashMap<String, Vec<EnhancedDoc>>,
+    pub transcripts: HashMap<String, Vec<TranscriptWithData>>,
+    /// Session id (or `VAULT_TASKS_KEY`) -> that file's tasks.
+    pub tasks: HashMap<String, Vec<TaskItem>>,
+    pub templates: HashMap<String, TemplateItem>,
+}
+
+pub(super) type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
+pub(super) type IndexChangeReceiver =
+    tokio::sync::mpsc::UnboundedReceiver<(IndexEntity, Vec<String>)>;
+
+// -- queries ---------------------------------------------------------------------
+
+impl SessionStore {
+    /// Old `useSession`/`useSessionSummary` semantics: the session's meta plus
+    /// `_memo.md` markdown (the COALESCE(store_note, legacy_note) join collapses to
+    /// the file -- see `SessionRecord`'s doc). `None` for unknown/ghost sessions.
+    pub fn session_get(&self, session_id: &str) -> Option<SessionRecord> {
+        let index = self.index.read().unwrap();
+        index.sessions.get(session_id).map(|entry| SessionRecord {
+            meta: entry.meta.clone(),
+            note_markdown: entry.note_markdown.clone(),
+        })
+    }
+
+    /// Every indexed session, ordered by `(created_at, id)` ascending -- the timeline
+    /// query's ordering; list consumers that want newest-first (summaries, snapshot
+    /// ids) reverse it. Ghost sessions (content without `_meta.json`) are absent,
+    /// like the SQL `sessions` table.
+    pub fn session_list(&self) -> Vec<SessionListEntry> {
+        let index = self.index.read().unwrap();
+        let mut entries: Vec<SessionListEntry> = index
+            .sessions
+            .values()
+            .map(|entry| SessionListEntry {
+                meta: entry.meta.clone(),
+                has_transcript_words: has_transcript_words(&index, &entry.meta.id),
+            })
+            .collect();
+        entries.sort_by(|a, b| {
+            (a.meta.created_at.as_str(), a.meta.id.as_str())
+                .cmp(&(b.meta.created_at.as_str(), b.meta.id.as_str()))
+        });
+        entries
+    }
+
+    /// Old `loadActiveSessionIds` semantics: ids ordered by `created_at` DESC, id ASC.
+    pub fn session_ids(&self) -> Vec<String> {
+        let index = self.index.read().unwrap();
+        let mut metas: Vec<(&str, &str)> = index
+            .sessions
+            .values()
+            .map(|entry| (entry.meta.created_at.as_str(), entry.meta.id.as_str()))
+            .collect();
+        metas.sort_by(|a, b| b.0.cmp(a.0).then(a.1.cmp(b.1)));
+        metas.into_iter().map(|(_, id)| id.to_string()).collect()
+    }
+
+    /// Old `useSessionHasTranscript` semantics: any transcript with at least one word.
+    /// The SQL tombstone filter (`deleted_at IS NULL`) has no file counterpart -- the
+    /// file's soft-delete shape is "words emptied", which this check already excludes.
+    pub fn session_has_transcript(&self, session_id: &str) -> bool {
+        let index = self.index.read().unwrap();
+        has_transcript_words(&index, session_id)
+    }
+
+    /// Old `useEnhancedNoteRecords` semantics: docs with kind `summary` /
+    /// `template_output` (which includes legacy single-slot `summary.md` files, same
+    /// as the SQL `kind IN (...)` matched their rows), ordered `(sort_order, id)`.
+    /// The tombstone filter is inherent: deleted docs have no file, hence no entry.
+    pub fn session_enhanced_docs(&self, session_id: &str) -> Vec<EnhancedDoc> {
+        let index = self.index.read().unwrap();
+        let mut docs: Vec<EnhancedDoc> = index
+            .docs
+            .get(session_id)
+            .map(|docs| {
+                docs.iter()
+                    .filter(|doc| hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str()))
+                    .cloned()
+                    .collect()
+            })
+            .unwrap_or_default();
+        docs.sort_by(|a, b| a.sort_order.cmp(&b.sort_order).then(a.id.cmp(&b.id)));
+        docs
+    }
+
+    /// Old `useEnhancedNote` semantics: one doc looked up by doc id alone (the
+    /// frontend doesn't know the session at that call site), same kind filter.
+    pub fn enhanced_doc_get(&self, doc_id: &str) -> Option<EnhancedDoc> {
+        let index = self.index.read().unwrap();
+        index
+            .docs
+            .values()
+            .flatten()
+            .find(|doc| {
+                doc.id == doc_id && hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str())
+            })
+            .cloned()
+    }
+
+    /// Old `useSessionTranscripts` semantics: full transcripts ordered
+    /// `(started_at, id)`. Everything in `transcript.json` is live -- see
+    /// `session_has_transcript`'s note on the file's lack of a tombstone.
+    pub fn session_transcripts(&self, session_id: &str) -> Vec<TranscriptWithData> {
+        let index = self.index.read().unwrap();
+        let mut transcripts = index
+            .transcripts
+            .get(session_id)
+            .cloned()
+            .unwrap_or_default();
+        transcripts.sort_by(|a, b| {
+            a.started_at
+                .partial_cmp(&b.started_at)
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then_with(|| a.id.cmp(&b.id))
+        });
+        transcripts
+    }
+
+    /// Old `useTranscript` / `mutateTranscript`-read semantics: one transcript by id.
+    pub fn transcript_get(&self, transcript_id: &str) -> Option<TranscriptWithData> {
+        let index = self.index.read().unwrap();
+        index
+            .transcripts
+            .values()
+            .flatten()
+            .find(|t| t.id == transcript_id)
+            .cloned()
+    }
+
+    /// Old `isSessionEmpty` semantics, translated to file truth: unknown session is
+    /// empty; a non-empty title with no event marks it non-empty (event-created
+    /// sessions get auto titles, so title alone doesn't count when an event exists);
+    /// note content counts after trimming (the editor's `&nbsp;` placeholder doesn't);
+    /// otherwise empty iff no transcripts, no summary/template_output docs and no tags
+    /// (`_meta.json` tags stand in for the SQL `session_tags` table).
+    pub fn session_is_empty(&self, session_id: &str) -> bool {
+        let index = self.index.read().unwrap();
+        let Some(entry) = index.sessions.get(session_id) else {
+            return true;
+        };
+
+        if !entry.meta.title.trim().is_empty() && entry.meta.event.is_none() {
+            return false;
+        }
+        if let Some(note) = &entry.note_markdown {
+            let trimmed = note.trim();
+            if !trimmed.is_empty() && trimmed != "&nbsp;" {
+                return false;
+            }
+        }
+
+        let transcript_count = index
+            .transcripts
+            .get(session_id)
+            .map(Vec::len)
+            .unwrap_or_default();
+        let enhanced_count = index
+            .docs
+            .get(session_id)
+            .map(|docs| {
+                docs.iter()
+                    .filter(|doc| hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str()))
+                    .count()
+            })
+            .unwrap_or_default();
+
+        transcript_count == 0 && enhanced_count == 0 && entry.meta.tags.is_empty()
+    }
+
+    /// Old welcome-note lookup semantics: the first session (by `created_at`, id)
+    /// whose event envelope carries this `tracking_id`.
+    pub fn session_find_by_tracking_id(&self, tracking_id: &str) -> Option<SessionMeta> {
+        let index = self.index.read().unwrap();
+        let mut matches: Vec<&SessionEntry> = index
+            .sessions
+            .values()
+            .filter(|entry| {
+                entry
+                    .meta
+                    .event
+                    .as_ref()
+                    .and_then(|event| event.get("tracking_id"))
+                    .and_then(|value| value.as_str())
+                    == Some(tracking_id)
+            })
+            .collect();
+        matches.sort_by(|a, b| {
+            (a.meta.created_at.as_str(), a.meta.id.as_str())
+                .cmp(&(b.meta.created_at.as_str(), b.meta.id.as_str()))
+        });
+        matches.first().map(|entry| entry.meta.clone())
+    }
+}
+
+fn has_transcript_words(index: &VaultIndex, session_id: &str) -> bool {
+    index
+        .transcripts
+        .get(session_id)
+        .is_some_and(|transcripts| transcripts.iter().any(|t| !t.words.is_empty()))
+}
+
+// -- write-through mutations ------------------------------------------------------
+
+impl SessionStore {
+    /// Push a change onto the bus. Infallible by design: the receiver lives inside
+    /// this store until the dispatcher takes it, so the channel can't be closed while
+    /// writes happen; a store without a spawned dispatcher (tests) just accumulates.
+    pub(super) fn notify_index_changed(&self, entity: IndexEntity, ids: Vec<String>) {
+        if ids.is_empty() {
+            return;
+        }
+        let _ = self.index_changes_tx.send((entity, ids));
+    }
+
+    fn notify_many(&self, changes: Vec<(IndexEntity, String)>) {
+        let mut grouped: HashMap<IndexEntity, Vec<String>> = HashMap::new();
+        for (entity, id) in changes {
+            let ids = grouped.entry(entity).or_default();
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        for (entity, ids) in grouped {
+            self.notify_index_changed(entity, ids);
+        }
+    }
+
+    pub(super) fn index_upsert_meta(&self, meta: &SessionMeta) {
+        let mut index = self.index.write().unwrap();
+        match index.sessions.get_mut(&meta.id) {
+            Some(entry) => entry.meta = meta.clone(),
+            None => {
+                index.sessions.insert(
+                    meta.id.clone(),
+                    SessionEntry {
+                        meta: meta.clone(),
+                        note_markdown: None,
+                    },
+                );
+            }
+        }
+    }
+
+    /// No-op for a session without a meta entry: a bare note write into an unknown
+    /// session leaves it a ghost, same as the SQL index only gaining a `sessions` row
+    /// via `write_meta`/rebuild. The next rescan reconciles either way.
+    pub(super) fn index_set_note(&self, session_id: &str, markdown: Option<String>) {
+        let mut index = self.index.write().unwrap();
+        if let Some(entry) = index.sessions.get_mut(session_id) {
+            entry.note_markdown = markdown;
+        }
+    }
+
+    pub(super) fn index_upsert_doc(&self, doc: &EnhancedDoc) {
+        let mut index = self.index.write().unwrap();
+        let docs = index.docs.entry(doc.session_id.clone()).or_default();
+        match docs.iter_mut().find(|existing| existing.id == doc.id) {
+            Some(existing) => *existing = doc.clone(),
+            None => docs.push(doc.clone()),
+        }
+    }
+
+    pub(super) fn index_remove_doc(&self, session_id: &str, doc_id: &str) {
+        let mut index = self.index.write().unwrap();
+        if let Some(docs) = index.docs.get_mut(session_id) {
+            docs.retain(|doc| doc.id != doc_id);
+            if docs.is_empty() {
+                index.docs.remove(session_id);
+            }
+        }
+    }
+
+    pub(super) fn index_set_transcripts(
+        &self,
+        session_id: &str,
+        transcripts: Vec<TranscriptWithData>,
+    ) {
+        let mut index = self.index.write().unwrap();
+        if transcripts.is_empty() {
+            index.transcripts.remove(session_id);
+        } else {
+            index
+                .transcripts
+                .insert(session_id.to_string(), transcripts);
+        }
+    }
+
+    pub(super) fn index_set_tasks(&self, key: &str, tasks: Vec<TaskItem>) {
+        let mut index = self.index.write().unwrap();
+        if tasks.is_empty() {
+            index.tasks.remove(key);
+        } else {
+            index.tasks.insert(key.to_string(), tasks);
+        }
+    }
+
+    pub(super) fn index_upsert_template(&self, template: &TemplateItem) {
+        let mut index = self.index.write().unwrap();
+        index
+            .templates
+            .insert(template.id.clone(), template.clone());
+    }
+
+    pub(super) fn index_remove_template(&self, template_id: &str) {
+        let mut index = self.index.write().unwrap();
+        index.templates.remove(template_id);
+    }
+
+    /// Removes every trace of a session (delete path). Returns which entities
+    /// actually held something, so the caller only notifies what changed.
+    pub(super) fn index_remove_session(&self, session_id: &str) -> Vec<(IndexEntity, String)> {
+        let mut index = self.index.write().unwrap();
+        let mut changes = Vec::new();
+        if index.sessions.remove(session_id).is_some() {
+            changes.push((IndexEntity::Sessions, session_id.to_string()));
+        }
+        if index.docs.remove(session_id).is_some() {
+            changes.push((IndexEntity::Docs, session_id.to_string()));
+        }
+        if index.transcripts.remove(session_id).is_some() {
+            changes.push((IndexEntity::Transcripts, session_id.to_string()));
+        }
+        if index.tasks.remove(session_id).is_some() {
+            changes.push((IndexEntity::Tasks, session_id.to_string()));
+        }
+        changes
+    }
+
+    pub(super) fn index_remove_session_and_notify(&self, session_id: &str) {
+        let changes = self.index_remove_session(session_id);
+        self.notify_many(changes);
+    }
+}
+
+// -- rescans (file -> index reconciliation) ---------------------------------------
+
+impl SessionStore {
+    /// Re-derive one session's slice of the index from its files and notify only the
+    /// entities whose value actually changed. Per-artifact read/parse failures keep
+    /// the existing entry (corruption never looks like deletion); a confirmed-missing
+    /// `_meta.json` removes the session everywhere, mirroring `refresh_one`'s
+    /// `delete_session_index_tx`.
+    pub(super) async fn index_refresh_session(&self, session_id: &str) -> Result<(), StoreError> {
+        let meta = match self.read_meta(session_id).await {
+            Ok(meta) => Some(meta),
+            Err(_) => None, // unreadable/corrupt: keep the old entry
+        };
+        if let Some(None) = meta {
+            self.index_remove_session_and_notify(session_id);
+            return Ok(());
+        }
+
+        let note = self.read_note(session_id).await.ok();
+        let docs = self.scan_index_docs(session_id).await;
+        let transcripts = match self.read_transcript_json(session_id).await {
+            Ok(file) => Some(file.transcripts),
+            Err(_) => None,
+        };
+        let tasks = self
+            .read_index_tasks(paths::session_tasks_path(session_id))
+            .await;
+
+        let mut changes = Vec::new();
+        {
+            let mut index = self.index.write().unwrap();
+
+            if let Some(Some(new_meta)) = meta {
+                let old = index.sessions.get(session_id);
+                let note_markdown = match note {
+                    Some(note) => note,
+                    None => old.and_then(|entry| entry.note_markdown.clone()),
+                };
+                let entry = SessionEntry {
+                    meta: new_meta,
+                    note_markdown,
+                };
+                if old != Some(&entry) {
+                    index.sessions.insert(session_id.to_string(), entry);
+                    changes.push((IndexEntity::Sessions, session_id.to_string()));
+                }
+            } else if let Some(note) = note {
+                // Meta unreadable (kept as-is) but the note read fine: still refresh it.
+                if let Some(entry) = index.sessions.get_mut(session_id) {
+                    if entry.note_markdown != note {
+                        entry.note_markdown = note;
+                        changes.push((IndexEntity::Sessions, session_id.to_string()));
+                    }
+                }
+            }
+
+            if let Some(new_docs) = docs {
+                if apply_map_value(&mut index.docs, session_id, new_docs) {
+                    changes.push((IndexEntity::Docs, session_id.to_string()));
+                }
+            }
+            if let Some(new_transcripts) = transcripts {
+                if apply_map_value(&mut index.transcripts, session_id, new_transcripts) {
+                    changes.push((IndexEntity::Transcripts, session_id.to_string()));
+                }
+            }
+            if let Some(new_tasks) = tasks {
+                if apply_map_value(&mut index.tasks, session_id, new_tasks) {
+                    changes.push((IndexEntity::Tasks, session_id.to_string()));
+                }
+            }
+        }
+
+        self.notify_many(changes);
+        Ok(())
+    }
+
+    /// Full reconcile: every session folder, the vault-root tasks file and the
+    /// templates folder. Sessions that vanished from disk are removed (their folder
+    /// scan succeeded and came back without them -- same certainty rebuild's prune
+    /// requires). Runs at startup and on every focus rescan, so the change-diffing
+    /// inside `index_refresh_session` is what keeps those passes quiet.
+    pub(super) async fn index_rebuild(&self) -> Result<(), StoreError> {
+        let folder_ids = self.scan_session_ids().await?;
+
+        for id in &folder_ids {
+            self.index_refresh_session(id).await?;
+        }
+
+        let present: HashSet<&str> = folder_ids.iter().map(String::as_str).collect();
+        let stale: Vec<String> = {
+            let index = self.index.read().unwrap();
+            index
+                .sessions
+                .keys()
+                .chain(index.docs.keys())
+                .chain(index.transcripts.keys())
+                .chain(index.tasks.keys())
+                .filter(|id| *id != VAULT_TASKS_KEY && !present.contains(id.as_str()))
+                .cloned()
+                .collect::<HashSet<String>>()
+                .into_iter()
+                .collect()
+        };
+        for id in stale {
+            self.index_remove_session_and_notify(&id);
+        }
+
+        if let Some(tasks) = self.read_index_tasks(paths::vault_tasks_path()).await {
+            let changed = {
+                let mut index = self.index.write().unwrap();
+                apply_map_value(&mut index.tasks, VAULT_TASKS_KEY, tasks)
+            };
+            if changed {
+                self.notify_index_changed(IndexEntity::Tasks, vec![VAULT_TASKS_KEY.to_string()]);
+            }
+        }
+
+        self.index_refresh_templates().await;
+        Ok(())
+    }
+
+    /// Reload the templates map from `templates/*.json` (via `list_templates`, which
+    /// already skips unparseable/dot files) and notify changed template ids -- also
+    /// the `vault_watch` entry point for external `templates/**` edits.
+    pub(crate) async fn index_refresh_templates(&self) {
+        let templates = match self.list_templates().await {
+            Ok(templates) => templates,
+            Err(error) => {
+                tracing::warn!(%error, "index: failed to rescan templates; keeping current entries");
+                return;
+            }
+        };
+
+        let new_map: HashMap<String, TemplateItem> = templates
+            .into_iter()
+            .map(|template| (template.id.clone(), template))
+            .collect();
+
+        let changed_ids: Vec<String> = {
+            let mut index = self.index.write().unwrap();
+            let mut changed: Vec<String> = index
+                .templates
+                .keys()
+                .chain(new_map.keys())
+                .filter(|id| index.templates.get(*id) != new_map.get(*id))
+                .cloned()
+                .collect::<HashSet<String>>()
+                .into_iter()
+                .collect();
+            changed.sort();
+            index.templates = new_map;
+            changed
+        };
+        self.notify_index_changed(IndexEntity::Templates, changed_ids);
+    }
+
+    /// Every document for one session, or `None` when a directory listing failed
+    /// (keep the old vec -- can't tell "gone" from "unlistable"). Per-file failures
+    /// keep that file's existing entry by id, mirroring `refresh_one`'s
+    /// keep-unparseable-rows rule.
+    async fn scan_index_docs(&self, session_id: &str) -> Option<Vec<EnhancedDoc>> {
+        let legacy = self.scan_document_files(session_id).await.ok()?;
+        let enhanced = self.scan_enhanced_doc_files(session_id).await.ok()?;
+
+        let previous: HashMap<String, EnhancedDoc> = {
+            let index = self.index.read().unwrap();
+            index
+                .docs
+                .get(session_id)
+                .map(|docs| {
+                    docs.iter()
+                        .map(|doc| (doc.id.clone(), doc.clone()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+
+        let mut docs = Vec::new();
+        for (kind, content) in legacy {
+            let doc_id = format!("{session_id}:{kind}");
+            match content {
+                Ok(markdown) => docs.push(legacy_doc(session_id, &kind, markdown)),
+                Err(_) => {
+                    if let Some(old) = previous.get(&doc_id) {
+                        docs.push(old.clone());
+                    }
+                }
+            }
+        }
+        for (doc_id, parsed) in enhanced {
+            match parsed {
+                Ok(doc) => docs.push(doc),
+                Err(_) => {
+                    if let Some(old) = previous.get(&doc_id) {
+                        docs.push(old.clone());
+                    }
+                }
+            }
+        }
+        Some(docs)
+    }
+
+    /// `None` on read/parse failure (keep the old entry); a missing file is an empty
+    /// list (remove the entry -- "no tasks" is a real state).
+    async fn read_index_tasks(&self, relative: std::path::PathBuf) -> Option<Vec<TaskItem>> {
+        let path = self.vault_base.join(relative);
+        tokio::task::spawn_blocking(move || -> Option<Vec<TaskItem>> {
+            let bytes = match std::fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Some(Vec::new()),
+                Err(_) => return None,
+            };
+            serde_json::from_slice::<hypr_vault_read::TasksFile>(&bytes)
+                .map(|file| file.tasks)
+                .ok()
+        })
+        .await
+        .ok()
+        .flatten()
+    }
+}
+
+/// A legacy `<kind>.md` document normalized into the shared doc shape, keeping the
+/// SQL row's id convention (`<session>:<kind>`) so doc ids stay stable across the
+/// index cutover.
+pub(super) fn legacy_doc(session_id: &str, kind: &str, markdown: String) -> EnhancedDoc {
+    EnhancedDoc {
+        id: format!("{session_id}:{kind}"),
+        session_id: session_id.to_string(),
+        kind: kind.to_string(),
+        title: String::new(),
+        template_id: String::new(),
+        sort_order: 0,
+        markdown,
+    }
+}
+
+/// Replace `map[key]` with `value` (empty -> absent), returning whether anything
+/// observable changed.
+fn apply_map_value<V: PartialEq>(
+    map: &mut HashMap<String, Vec<V>>,
+    key: &str,
+    value: Vec<V>,
+) -> bool {
+    let old = map.get(key);
+    if value.is_empty() {
+        if old.is_none() {
+            return false;
+        }
+        map.remove(key);
+        true
+    } else {
+        if old == Some(&value) {
+            return false;
+        }
+        map.insert(key.to_string(), value);
+        true
+    }
+}
+
+// -- event bus --------------------------------------------------------------------
+
+/// How long the dispatcher waits after the first change before draining and emitting
+/// -- mirrors `hypr-db-reactive`'s dispatcher (receive, `sleep(10ms)`, drain, refresh),
+/// which is the coalescing the SQL live queries had.
+pub(crate) const COALESCE_WINDOW: std::time::Duration = std::time::Duration::from_millis(10);
+
+/// Stable emission order so bursts serialize deterministically (and tests can assert
+/// exact sequences).
+const ENTITY_ORDER: [IndexEntity; 5] = [
+    IndexEntity::Sessions,
+    IndexEntity::Docs,
+    IndexEntity::Transcripts,
+    IndexEntity::Tasks,
+    IndexEntity::Templates,
+];
+
+/// One coalesced flush: group a drained batch by entity, dedupe ids preserving
+/// first-seen order, one `IndexChanged` per entity.
+fn coalesce(batch: Vec<(IndexEntity, Vec<String>)>) -> Vec<IndexChanged> {
+    let mut grouped: HashMap<IndexEntity, Vec<String>> = HashMap::new();
+    for (entity, ids) in batch {
+        let seen = grouped.entry(entity).or_default();
+        for id in ids {
+            if !seen.contains(&id) {
+                seen.push(id);
+            }
+        }
+    }
+    ENTITY_ORDER
+        .into_iter()
+        .filter_map(|entity| {
+            grouped
+                .remove(&entity)
+                .map(|ids| IndexChanged { entity, ids })
+        })
+        .collect()
+}
+
+/// The dispatcher loop, generic over the emit sink for testability: block on the
+/// first change, wait `COALESCE_WINDOW`, drain whatever else arrived, emit one event
+/// per entity. Ends when the store (all senders) is dropped.
+pub(crate) async fn run_index_change_dispatcher(
+    mut rx: IndexChangeReceiver,
+    emit: impl Fn(IndexChanged),
+) {
+    while let Some(first) = rx.recv().await {
+        tokio::time::sleep(COALESCE_WINDOW).await;
+        let mut batch = vec![first];
+        while let Ok(next) = rx.try_recv() {
+            batch.push(next);
+        }
+        for event in coalesce(batch) {
+            emit(event);
+        }
+    }
+}
+
+/// Wire the managed store's change stream to the `index-changed` Tauri event
+/// (emitted app-wide, i.e. to every webview). Same startup shape as
+/// `vault_watch::spawn`; call once from `lib.rs`'s setup after the store is managed.
+pub fn spawn_dispatcher(app: tauri::AppHandle) {
+    use tauri::Manager;
+
+    let Some(store) = app
+        .try_state::<Arc<SessionStore>>()
+        .map(|state| state.inner().clone())
+    else {
+        tracing::error!(
+            "index events: session store is not managed; index-changed emission is disabled"
+        );
+        return;
+    };
+
+    let Some(rx) = store.take_index_change_receiver() else {
+        tracing::error!("index events: dispatcher already spawned");
+        return;
+    };
+
+    tauri::async_runtime::spawn(async move {
+        run_index_change_dispatcher(rx, move |event| {
+            use tauri_specta::Event;
+            if let Err(error) = event.emit(&app) {
+                tracing::warn!(%error, "index events: failed to emit index-changed");
+            }
+        })
+        .await;
+    });
+}
+
+impl SessionStore {
+    /// Hand the receiving end to the dispatcher (once). `None` when already taken.
+    pub fn take_index_change_receiver(&self) -> Option<IndexChangeReceiver> {
+        self.index_changes_rx.lock().unwrap().take()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::super::content::SessionMeta;
+    use super::*;
+
+    fn meta(id: &str, title: &str) -> SessionMeta {
+        SessionMeta {
+            id: id.to_string(),
+            title: title.to_string(),
+            started_at: None,
+            ended_at: None,
+            created_at: "2026-07-24T00:00:00Z".to_string(),
+            tags: vec![],
+            event: None,
+            folder: None,
+        }
+    }
+
+    fn word(id: &str, text: &str) -> hypr_fs_format::TranscriptWord {
+        hypr_fs_format::TranscriptWord {
+            id: Some(id.to_string()),
+            text: text.to_string(),
+            start_ms: 0.0,
+            end_ms: 0.0,
+            channel: 0.0,
+            speaker: None,
+            metadata: None,
+        }
+    }
+
+    fn transcript(
+        id: &str,
+        started_at: f64,
+        words: Vec<hypr_fs_format::TranscriptWord>,
+    ) -> TranscriptWithData {
+        TranscriptWithData {
+            id: id.to_string(),
+            user_id: String::new(),
+            created_at: "2026-07-24T00:00:00Z".to_string(),
+            session_id: String::new(),
+            started_at,
+            ended_at: None,
+            memo_md: String::new(),
+            words,
+            speaker_hints: vec![],
+        }
+    }
+
+    fn enhanced_doc(session_id: &str, doc_id: &str, sort_order: i32) -> EnhancedDoc {
+        EnhancedDoc {
+            id: doc_id.to_string(),
+            session_id: session_id.to_string(),
+            kind: "template_output".to_string(),
+            title: "Customer review".to_string(),
+            template_id: "template-1".to_string(),
+            sort_order,
+            markdown: "# Review".to_string(),
+        }
+    }
+
+    async fn test_store() -> (SessionStore, tempfile::TempDir) {
+        let temp = tempfile::tempdir().unwrap();
+        let vault = temp.path().to_path_buf();
+        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
+        hypr_db_app::prepare_schema(&db).await.unwrap();
+        let store = SessionStore::new(vault, db.pool().clone());
+        (store, temp)
+    }
+
+    fn drain_changes(store: &SessionStore) -> Vec<(IndexEntity, Vec<String>)> {
+        let mut rx = store
+            .take_index_change_receiver()
+            .expect("receiver taken once per test");
+        let mut changes = Vec::new();
+        while let Ok(change) = rx.try_recv() {
+            changes.push(change);
+        }
+        // put it back for a later drain in the same test
+        *store.index_changes_rx.lock().unwrap() = Some(rx);
+        changes
+    }
+
+    fn changed_entities(store: &SessionStore) -> HashSet<IndexEntity> {
+        drain_changes(store)
+            .into_iter()
+            .map(|(entity, _)| entity)
+            .collect()
+    }
+
+    // -- startup build from a hand-seeded vault --
+
+    #[tokio::test]
+    async fn rebuild_builds_the_full_index_from_a_seeded_vault() {
+        let (store, vault) = test_store().await;
+        let dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(dir.join("enhanced")).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::to_vec_pretty(&meta("s1", "Planning")).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(dir.join("_memo.md"), "# notes").unwrap();
+        std::fs::write(dir.join("summary.md"), "legacy summary body").unwrap();
+        std::fs::write(
+            dir.join("enhanced/doc-1.md"),
+            hypr_vault_read::render_enhanced_file(&enhanced_doc("s1", "doc-1", 2)).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("transcript.json"),
+            serde_json::to_vec_pretty(&hypr_fs_format::TranscriptJson {
+                transcripts: vec![transcript("t1", 100.0, vec![word("w0", "hello")])],
+            })
+            .unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            dir.join("tasks.json"),
+            serde_json::json!({
+                "tasks": [{
+                    "id": "task-1",
+                    "source_type": "session_raw_note",
+                    "source_id": "s1",
+                    "source_order": 0,
+                    "status": "todo",
+                    "text": "Ship it",
+                    "body": [],
+                    "created_at": "2026-07-01T00:00:00Z",
+                    "updated_at": "2026-07-01T00:00:00Z",
+                }],
+            })
+            .to_string(),
+        )
+        .unwrap();
+        store
+            .upsert_template(super::super::TemplateInput {
+                id: "t-1".to_string(),
+                title: "Template".to_string(),
+                description: String::new(),
+                pinned: false,
+                pin_order: None,
+                category: None,
+                icon: serde_json::json!({}),
+                targets: None,
+                sections: serde_json::json!([]),
+            })
+            .await
+            .unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let record = store.session_get("s1").unwrap();
+        assert_eq!(record.meta.title, "Planning");
+        assert_eq!(record.note_markdown.as_deref(), Some("# notes"));
+
+        let docs = store.session_enhanced_docs("s1");
+        assert_eq!(
+            docs.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(),
+            vec!["s1:summary", "doc-1"],
+            "legacy summary.md (sort_order 0) sorts before the enhanced doc (sort_order 2)"
+        );
+        assert_eq!(docs[0].markdown, "legacy summary body");
+
+        assert!(store.session_has_transcript("s1"));
+        assert_eq!(store.session_transcripts("s1")[0].words[0].text, "hello");
+        assert_eq!(store.transcript_get("t1").unwrap().id, "t1");
+
+        let index = store.index.read().unwrap();
+        assert_eq!(index.tasks.get("s1").unwrap()[0].text, "Ship it");
+        assert_eq!(index.templates.get("t-1").unwrap().title, "Template");
+    }
+
+    #[tokio::test]
+    async fn rebuild_removes_index_entries_for_vanished_sessions() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store.write_note("s1", "note").await.unwrap();
+        assert!(store.session_get("s1").is_some());
+
+        std::fs::remove_dir_all(vault.path().join("sessions/s1")).unwrap();
+        store.rebuild_index().await.unwrap();
+
+        assert!(store.session_get("s1").is_none());
+        assert!(store.session_list().is_empty());
+    }
+
+    /// A second rebuild over unchanged files must not notify anything -- the
+    /// in-memory analogue of rebuild's change-guarded SQL upserts, load-bearing
+    /// because focus rescans run `rebuild_index` repeatedly.
+    #[tokio::test]
+    async fn rebuild_of_unchanged_files_notifies_nothing() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store.write_note("s1", "note").await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1", 0))
+            .await
+            .unwrap();
+        store.rebuild_index().await.unwrap();
+        drain_changes(&store);
+
+        store.rebuild_index().await.unwrap();
+        assert_eq!(drain_changes(&store), vec![]);
+    }
+
+    // -- write-through --
+
+    #[tokio::test]
+    async fn writes_update_the_index_without_a_rebuild() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "Live")).await.unwrap();
+        store.write_note("s1", "# memo").await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1", 1))
+            .await
+            .unwrap();
+        store
+            .write_document("s1", "summary", "legacy")
+            .await
+            .unwrap();
+        store
+            .write_transcript("s1", transcript("t1", 5.0, vec![word("w0", "hi")]))
+            .await
+            .unwrap();
+        store
+            .replace_tasks(
+                "session_raw_note",
+                "s1",
+                vec![super::super::TaskInput {
+                    id: "task-1".to_string(),
+                    source_order: 0,
+                    status: "todo".to_string(),
+                    text: "Do".to_string(),
+                    body: serde_json::json!([]),
+                    due_at: String::new(),
+                }],
+            )
+            .await
+            .unwrap();
+
+        let record = store.session_get("s1").unwrap();
+        assert_eq!(record.meta.title, "Live");
+        assert_eq!(record.note_markdown.as_deref(), Some("# memo"));
+        assert_eq!(store.session_enhanced_docs("s1").len(), 2);
+        assert!(store.session_has_transcript("s1"));
+        assert_eq!(store.session_transcripts("s1").len(), 1);
+        {
+            let index = store.index.read().unwrap();
+            assert_eq!(index.tasks.get("s1").unwrap().len(), 1);
+        }
+
+        let entities = changed_entities(&store);
+        for entity in [
+            IndexEntity::Sessions,
+            IndexEntity::Docs,
+            IndexEntity::Transcripts,
+            IndexEntity::Tasks,
+        ] {
+            assert!(entities.contains(&entity), "missing {entity:?}");
+        }
+    }
+
+    #[tokio::test]
+    async fn delete_session_clears_every_map_and_notifies() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_transcript("s1", transcript("t1", 0.0, vec![word("w0", "hi")]))
+            .await
+            .unwrap();
+        drain_changes(&store);
+
+        store.delete_session("s1").await.unwrap();
+
+        assert!(store.session_get("s1").is_none());
+        assert!(store.session_transcripts("s1").is_empty());
+        let entities = changed_entities(&store);
+        assert!(entities.contains(&IndexEntity::Sessions));
+        assert!(entities.contains(&IndexEntity::Transcripts));
+    }
+
+    #[tokio::test]
+    async fn template_writes_update_the_index_and_notify() {
+        let (store, _vault) = test_store().await;
+        store
+            .upsert_template(super::super::TemplateInput {
+                id: "t-1".to_string(),
+                title: "Mine".to_string(),
+                description: String::new(),
+                pinned: false,
+                pin_order: None,
+                category: None,
+                icon: serde_json::json!({}),
+                targets: None,
+                sections: serde_json::json!([]),
+            })
+            .await
+            .unwrap();
+        {
+            let index = store.index.read().unwrap();
+            assert_eq!(index.templates.get("t-1").unwrap().title, "Mine");
+        }
+
+        store.delete_template("t-1").await.unwrap();
+        {
+            let index = store.index.read().unwrap();
+            assert!(!index.templates.contains_key("t-1"));
+        }
+        assert!(changed_entities(&store).contains(&IndexEntity::Templates));
+    }
+
+    // -- command semantics --
+
+    #[tokio::test]
+    async fn session_get_falls_back_to_none_note_when_memo_file_is_absent() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "No note yet")).await.unwrap();
+        let record = store.session_get("s1").unwrap();
+        assert_eq!(record.note_markdown, None);
+
+        store.write_note("s1", "now present").await.unwrap();
+        assert_eq!(
+            store.session_get("s1").unwrap().note_markdown.as_deref(),
+            Some("now present"),
+            "the store-written note (the old COALESCE's first branch) must win"
+        );
+    }
+
+    #[tokio::test]
+    async fn session_list_and_ids_are_ordered_like_the_old_queries() {
+        let (store, _vault) = test_store().await;
+        let mut a = meta("s-b", "B");
+        a.created_at = "2026-07-02T00:00:00Z".to_string();
+        let mut b = meta("s-a", "A");
+        b.created_at = "2026-07-01T00:00:00Z".to_string();
+        let mut c = meta("s-c", "C");
+        c.created_at = "2026-07-02T00:00:00Z".to_string();
+        for m in [&a, &b, &c] {
+            store.write_meta(m).await.unwrap();
+        }
+
+        let listed: Vec<String> = store
+            .session_list()
+            .into_iter()
+            .map(|entry| entry.meta.id)
+            .collect();
+        assert_eq!(
+            listed,
+            vec!["s-a", "s-b", "s-c"],
+            "session_list orders by (created_at, id) ascending like the timeline query"
+        );
+
+        assert_eq!(
+            store.session_ids(),
+            vec!["s-b", "s-c", "s-a"],
+            "session_ids orders by created_at DESC then id ASC like loadActiveSessionIds"
+        );
+    }
+
+    #[tokio::test]
+    async fn session_has_transcript_requires_words_like_json_array_length() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_transcript("s1", transcript("t1", 0.0, vec![]))
+            .await
+            .unwrap();
+        assert!(
+            !store.session_has_transcript("s1"),
+            "a zero-word transcript (the file-level soft-delete shape) must not count"
+        );
+
+        store
+            .write_transcript("s1", transcript("t1", 0.0, vec![word("w0", "hi")]))
+            .await
+            .unwrap();
+        assert!(store.session_has_transcript("s1"));
+
+        let entry = &store.session_list()[0];
+        assert!(entry.has_transcript_words);
+    }
+
+    #[tokio::test]
+    async fn enhanced_docs_are_kind_filtered_and_ordered_by_sort_order_then_id() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-b", 1))
+            .await
+            .unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-a", 1))
+            .await
+            .unwrap();
+        store
+            .write_enhanced_doc(&{
+                let mut doc = enhanced_doc("s1", "doc-z", 0);
+                doc.kind = "summary".to_string();
+                doc
+            })
+            .await
+            .unwrap();
+        // a legacy doc with a non-enhanced kind must be excluded, like the SQL kind filter
+        store
+            .write_document("s1", "minutes", "not enhanced")
+            .await
+            .unwrap();
+
+        let docs = store.session_enhanced_docs("s1");
+        assert_eq!(
+            docs.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(),
+            vec!["doc-z", "doc-a", "doc-b"]
+        );
+
+        assert_eq!(store.enhanced_doc_get("doc-a").unwrap().session_id, "s1");
+        assert!(store.enhanced_doc_get("s1:minutes").is_none());
+    }
+
+    #[tokio::test]
+    async fn deleted_enhanced_doc_disappears_from_queries() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1", 0))
+            .await
+            .unwrap();
+        store.delete_enhanced_doc("s1", "doc-1").await.unwrap();
+
+        assert!(store.session_enhanced_docs("s1").is_empty());
+        assert!(store.enhanced_doc_get("doc-1").is_none());
+    }
+
+    #[tokio::test]
+    async fn session_transcripts_are_ordered_by_started_at_then_id() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_transcript("s1", transcript("t-late", 200.0, vec![word("w0", "b")]))
+            .await
+            .unwrap();
+        store
+            .write_transcript("s1", transcript("t-early", 100.0, vec![word("w1", "a")]))
+            .await
+            .unwrap();
+
+        let ids: Vec<String> = store
+            .session_transcripts("s1")
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(ids, vec!["t-early", "t-late"]);
+    }
+
+    #[tokio::test]
+    async fn session_is_empty_matches_the_old_sql_semantics() {
+        let (store, _vault) = test_store().await;
+        assert!(store.session_is_empty("ghost"), "unknown session is empty");
+
+        store.write_meta(&meta("s1", "")).await.unwrap();
+        assert!(
+            store.session_is_empty("s1"),
+            "untitled contentless session is empty"
+        );
+
+        store.write_note("s1", "  &nbsp;  ").await.unwrap();
+        assert!(
+            store.session_is_empty("s1"),
+            "the editor's &nbsp; placeholder is not content"
+        );
+
+        store.write_note("s1", "real words").await.unwrap();
+        assert!(!store.session_is_empty("s1"));
+        store.write_note("s1", "").await.unwrap();
+
+        // A bare title makes it non-empty...
+        store
+            .update_meta(
+                "s1",
+                super::super::SessionMetaPatch {
+                    title: Some("Titled".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!store.session_is_empty("s1"));
+
+        // ...but a title alongside an event does not (event-created sessions get
+        // auto titles), matching `row.title.trim() && !row.event_json`.
+        store
+            .update_meta(
+                "s1",
+                super::super::SessionMetaPatch {
+                    event: Some(serde_json::json!({"tracking_id": "evt"})),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(store.session_is_empty("s1"));
+
+        // tags count as content (session_tags stand-in)
+        store
+            .update_meta(
+                "s1",
+                super::super::SessionMetaPatch {
+                    tags: Some(vec!["q3".to_string()]),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!store.session_is_empty("s1"));
+    }
+
+    #[tokio::test]
+    async fn session_find_by_tracking_id_picks_the_oldest_match() {
+        let (store, _vault) = test_store().await;
+        let mut newer = meta("s-new", "Newer");
+        newer.created_at = "2026-07-02T00:00:00Z".to_string();
+        newer.event = Some(serde_json::json!({"tracking_id": "evt-1"}));
+        let mut older = meta("s-old", "Older");
+        older.created_at = "2026-07-01T00:00:00Z".to_string();
+        older.event = Some(serde_json::json!({"tracking_id": "evt-1"}));
+        let mut other = meta("s-other", "Other");
+        other.event = Some(serde_json::json!({"tracking_id": "evt-2"}));
+        for m in [&newer, &older, &other] {
+            store.write_meta(m).await.unwrap();
+        }
+
+        assert_eq!(
+            store.session_find_by_tracking_id("evt-1").unwrap().id,
+            "s-old"
+        );
+        assert_eq!(store.session_find_by_tracking_id("missing"), None);
+    }
+
+    // -- external-edit refresh (vault_watch path) --
+
+    #[tokio::test]
+    async fn refresh_session_ingests_an_external_edit_and_notifies() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "Original")).await.unwrap();
+        drain_changes(&store);
+
+        std::fs::write(
+            vault.path().join("sessions/s1/_meta.json"),
+            serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(vault.path().join("sessions/s1/_memo.md"), "external note").unwrap();
+
+        store.refresh_session("s1").await.unwrap();
+
+        let record = store.session_get("s1").unwrap();
+        assert_eq!(record.meta.title, "Edited outside");
+        assert_eq!(record.note_markdown.as_deref(), Some("external note"));
+        let changes = drain_changes(&store);
+        assert!(changes.iter().any(
+            |(entity, ids)| *entity == IndexEntity::Sessions && ids.contains(&"s1".to_string())
+        ));
+    }
+
+    #[tokio::test]
+    async fn refresh_session_with_deleted_meta_removes_the_session() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store.write_note("s1", "keep the file").await.unwrap();
+        std::fs::remove_file(vault.path().join("sessions/s1/_meta.json")).unwrap();
+
+        store.refresh_session("s1").await.unwrap();
+
+        assert!(store.session_get("s1").is_none());
+        assert!(
+            vault.path().join("sessions/s1/_memo.md").is_file(),
+            "index refresh must never touch files"
+        );
+    }
+
+    /// Corruption never looks like deletion: a meta that stops parsing keeps the old
+    /// index entry (same invariant as rebuild's SQL half).
+    #[tokio::test]
+    async fn refresh_session_keeps_the_old_entry_for_a_corrupt_meta() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "Original")).await.unwrap();
+        std::fs::write(vault.path().join("sessions/s1/_meta.json"), "{ not json").unwrap();
+
+        let _ = store.refresh_session("s1").await;
+
+        assert_eq!(store.session_get("s1").unwrap().meta.title, "Original");
+    }
+
+    #[tokio::test]
+    async fn index_refresh_templates_ingests_external_template_edits() {
+        let (store, vault) = test_store().await;
+        std::fs::create_dir_all(vault.path().join("templates")).unwrap();
+        std::fs::write(
+            vault.path().join("templates/hand-made.json"),
+            serde_json::json!({ "id": "hand-made", "title": "Dropped in" }).to_string(),
+        )
+        .unwrap();
+
+        store.index_refresh_templates().await;
+
+        {
+            let index = store.index.read().unwrap();
+            assert_eq!(
+                index.templates.get("hand-made").unwrap().title,
+                "Dropped in"
+            );
+        }
+        let changes = drain_changes(&store);
+        assert_eq!(
+            changes,
+            vec![(IndexEntity::Templates, vec!["hand-made".to_string()])]
+        );
+    }
+
+    // -- coalescing --
+
+    #[tokio::test]
+    async fn dispatcher_coalesces_a_burst_into_one_event_per_entity() {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let emitted = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = emitted.clone();
+        let handle = tokio::spawn(run_index_change_dispatcher(rx, move |event| {
+            sink.lock().unwrap().push(event);
+        }));
+
+        tx.send((IndexEntity::Sessions, vec!["s1".to_string()]))
+            .unwrap();
+        tx.send((
+            IndexEntity::Sessions,
+            vec!["s2".to_string(), "s1".to_string()],
+        ))
+        .unwrap();
+        tx.send((IndexEntity::Docs, vec!["s1".to_string()]))
+            .unwrap();
+        drop(tx);
+        handle.await.unwrap();
+
+        let events = emitted.lock().unwrap().clone();
+        assert_eq!(
+            events,
+            vec![
+                IndexChanged {
+                    entity: IndexEntity::Sessions,
+                    ids: vec!["s1".to_string(), "s2".to_string()],
+                },
+                IndexChanged {
+                    entity: IndexEntity::Docs,
+                    ids: vec!["s1".to_string()],
+                },
+            ],
+            "three sends within the window collapse to one event per entity, ids deduped"
+        );
+    }
+
+    #[tokio::test]
+    async fn dispatcher_emits_again_for_changes_after_a_flush() {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        let emitted = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = emitted.clone();
+        let handle = tokio::spawn(run_index_change_dispatcher(rx, move |event| {
+            sink.lock().unwrap().push(event);
+        }));
+
+        tx.send((IndexEntity::Sessions, vec!["s1".to_string()]))
+            .unwrap();
+        // let the first window elapse and flush before the second change arrives
+        tokio::time::sleep(COALESCE_WINDOW * 5).await;
+        assert_eq!(emitted.lock().unwrap().len(), 1);
+
+        tx.send((IndexEntity::Sessions, vec!["s2".to_string()]))
+            .unwrap();
+        drop(tx);
+        handle.await.unwrap();
+
+        let events = emitted.lock().unwrap().clone();
+        assert_eq!(
+            events.len(),
+            2,
+            "a change after the flush gets its own event"
+        );
+        assert_eq!(events[1].ids, vec!["s2".to_string()]);
+    }
+
+    #[test]
+    fn index_changed_serializes_with_lowercase_entity_names() {
+        let payload = serde_json::to_value(IndexChanged {
+            entity: IndexEntity::Sessions,
+            ids: vec!["s1".to_string()],
+        })
+        .unwrap();
+        assert_eq!(
+            payload,
+            serde_json::json!({ "entity": "sessions", "ids": ["s1"] })
+        );
+        for (entity, expected) in [
+            (IndexEntity::Sessions, "sessions"),
+            (IndexEntity::Docs, "docs"),
+            (IndexEntity::Transcripts, "transcripts"),
+            (IndexEntity::Tasks, "tasks"),
+            (IndexEntity::Templates, "templates"),
+        ] {
+            assert_eq!(
+                serde_json::to_value(entity).unwrap(),
+                serde_json::json!(expected)
+            );
+        }
+    }
+}

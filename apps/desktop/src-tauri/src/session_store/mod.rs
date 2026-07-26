@@ -7,6 +7,7 @@ pub mod audio;
 pub mod commands;
 pub mod content;
 pub mod enhanced;
+pub mod index;
 pub mod journal;
 pub mod migrate;
 pub mod paths;
@@ -17,6 +18,7 @@ pub mod transcript;
 
 pub use content::{SessionMeta, SessionMetaPatch};
 pub use enhanced::{EnhancedDoc, EnhancedDocPatch};
+pub use index::{IndexChanged, IndexEntity, SessionListEntry, SessionRecord};
 pub use rebuild::RebuildReport;
 pub use tasks::{TaskInput, TaskItem};
 pub use templates::{TemplateInput, TemplateItem};
@@ -30,6 +32,13 @@ pub struct SessionStore {
     write_lock: Arc<tokio::sync::Mutex<()>>, // single store-wide lock; can become per-path if contention matters
     // one live buffer per actively-recording session; guards the debounced-flush lifecycle
     live: Arc<tokio::sync::Mutex<HashMap<String, transcript::LiveTranscriptBuffer>>>,
+    /// In-memory vault index (Phase E1); see `index.rs`'s module doc.
+    index: Arc<std::sync::RwLock<index::VaultIndex>>,
+    /// Producer half of the `index-changed` bus; every write-through/rescan change
+    /// lands here and the coalescing dispatcher (`index::spawn_dispatcher`) emits.
+    index_changes_tx: index::IndexChangeSender,
+    /// Held until the dispatcher takes it via `take_index_change_receiver`.
+    index_changes_rx: Arc<std::sync::Mutex<Option<index::IndexChangeReceiver>>>,
 }
 
 #[derive(Debug)]
@@ -73,12 +82,16 @@ impl From<hypr_vault_read::Error> for StoreError {
 
 impl SessionStore {
     pub fn new(vault_base: PathBuf, pool: SqlitePool) -> Self {
+        let (index_changes_tx, index_changes_rx) = tokio::sync::mpsc::unbounded_channel();
         Self {
             vault_base,
             pool,
             journal: Arc::new(journal::WriteJournal::new()),
             write_lock: Arc::new(tokio::sync::Mutex::new(())),
             live: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
+            index: Arc::new(std::sync::RwLock::new(index::VaultIndex::default())),
+            index_changes_tx,
+            index_changes_rx: Arc::new(std::sync::Mutex::new(Some(index_changes_rx))),
         }
     }
 

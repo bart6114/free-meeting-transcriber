@@ -176,6 +176,9 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))??;
 
+        self.index_remove_doc(session_id, doc_id);
+        self.notify_index_changed(super::IndexEntity::Docs, vec![session_id.to_string()]);
+
         sqlx::query("DELETE FROM session_documents WHERE id = ? AND session_id = ?")
             .bind(doc_id)
             .bind(session_id)
@@ -193,6 +196,8 @@ impl SessionStore {
             rendered.into_bytes(),
         )
         .await?;
+        self.index_upsert_doc(doc);
+        self.notify_index_changed(super::IndexEntity::Docs, vec![doc.session_id.clone()]);
         self.upsert_enhanced_doc_row(doc).await
     }
 

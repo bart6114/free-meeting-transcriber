@@ -285,6 +285,13 @@ impl SessionStore {
         self.write_file(paths::transcript_path(session_id), bytes)
             .await?;
 
+        // The file was just re-derived whole, so the index gets the same full list.
+        self.index_set_transcripts(session_id, file.transcripts.clone());
+        self.notify_index_changed(
+            super::IndexEntity::Transcripts,
+            vec![session_id.to_string()],
+        );
+
         sqlx::query(
             "INSERT INTO transcripts (id, session_id, started_at_ms, memo, words_json, speaker_hints_json, updated_at)
              VALUES (?, ?, ?, '', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))

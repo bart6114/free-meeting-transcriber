@@ -37,6 +37,11 @@ impl SessionStore {
         self.write_file(paths::meta_path(&meta.id), meta_json)
             .await?;
 
+        // Index write-through directly after the file write (file truth) -- the SQL
+        // dual-write below can still fail without leaving the index behind the file.
+        self.index_upsert_meta(meta);
+        self.notify_index_changed(super::IndexEntity::Sessions, vec![meta.id.clone()]);
+
         let pool = self.pool();
         let id = meta.id.clone();
         let title = meta.title.clone();
@@ -152,6 +157,9 @@ impl SessionStore {
         let note_bytes = markdown.as_bytes().to_vec();
         self.write_file(paths::note_path(id), note_bytes).await?;
 
+        self.index_set_note(id, Some(markdown.to_string()));
+        self.notify_index_changed(super::IndexEntity::Sessions, vec![id.to_string()]);
+
         let pool = self.pool();
         let id = id.to_string();
         let markdown = markdown.to_string();
@@ -203,6 +211,9 @@ impl SessionStore {
         self.write_file(paths::document_path(id, kind), doc_bytes)
             .await?;
 
+        self.index_upsert_doc(&super::index::legacy_doc(id, kind, markdown.to_string()));
+        self.notify_index_changed(super::IndexEntity::Docs, vec![id.to_string()]);
+
         let pool = self.pool();
         let id = id.to_string();
         let kind = kind.to_string();
@@ -239,6 +250,10 @@ impl SessionStore {
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
+
+        // The folder is confirmed gone (trashed) -- clear every index map before the
+        // SQL deletes, same file-first ordering as the writes.
+        self.index_remove_session_and_notify(id);
 
         // Delete from database in a single transaction
         let pool = self.pool();

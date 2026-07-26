@@ -10,13 +10,13 @@ where
     Ok(Option::<T>::deserialize(deserializer)?.unwrap_or_default())
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Type)]
 pub struct TranscriptJson {
     #[serde(default, deserialize_with = "null_or_default")]
     pub transcripts: Vec<TranscriptWithData>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Type)]
 pub struct TranscriptWithData {
     pub id: String,
     #[serde(default, deserialize_with = "null_or_default")]
@@ -36,7 +36,7 @@ pub struct TranscriptWithData {
     pub speaker_hints: Vec<TranscriptSpeakerHint>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Type)]
 pub struct TranscriptWord {
     #[serde(default)]
     pub id: Option<String>,
@@ -50,7 +50,7 @@ pub struct TranscriptWord {
     pub metadata: Option<Map<String, Value>>,
 }
 
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, Type)]
 pub struct TranscriptSpeakerHint {
     #[serde(default)]
     pub id: Option<String>,

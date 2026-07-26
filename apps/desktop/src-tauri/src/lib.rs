@@ -402,6 +402,10 @@ pub async fn main() {
             }
 
             search_index::spawn(app_handle.clone(), db.clone());
+            // Coalescing `index-changed` emitter for the in-memory vault index
+            // (Phase E1). Needs the store managed; changes queued before this point
+            // (startup rebuild) simply flush as the dispatcher's first batch.
+            session_store::index::spawn_dispatcher(app_handle.clone());
             // Spawned last, after the session-store block above has finished its
             // startup `rebuild_index` pass: an external edit's refresh only needs to
             // account for vault state from here on, since everything the vault held at
@@ -608,7 +612,18 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::session_store_audio::<tauri::Wry>,
             session_store::commands::session_list_audio::<tauri::Wry>,
             session_store::commands::session_delete_audio::<tauri::Wry>,
+            session_store::commands::session_get::<tauri::Wry>,
+            session_store::commands::session_list::<tauri::Wry>,
+            session_store::commands::session_ids::<tauri::Wry>,
+            session_store::commands::session_is_empty::<tauri::Wry>,
+            session_store::commands::session_has_transcript::<tauri::Wry>,
+            session_store::commands::session_enhanced_docs::<tauri::Wry>,
+            session_store::commands::enhanced_doc_get::<tauri::Wry>,
+            session_store::commands::session_transcripts::<tauri::Wry>,
+            session_store::commands::transcript_get::<tauri::Wry>,
+            session_store::commands::session_find_by_tracking_id::<tauri::Wry>,
         ])
+        .events(tauri_specta::collect_events![session_store::IndexChanged])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }
 

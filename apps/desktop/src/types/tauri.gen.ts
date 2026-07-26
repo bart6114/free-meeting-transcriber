@@ -470,9 +470,133 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async sessionGet(
+    sessionId: string,
+  ): Promise<Result<SessionRecord | null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("session_get", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async sessionList(): Promise<Result<SessionListEntry[], string>> {
+    try {
+      return { status: "ok", data: await TAURI_INVOKE("session_list") };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async sessionIds(): Promise<Result<string[], string>> {
+    try {
+      return { status: "ok", data: await TAURI_INVOKE("session_ids") };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async sessionIsEmpty(sessionId: string): Promise<Result<boolean, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("session_is_empty", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async sessionHasTranscript(
+    sessionId: string,
+  ): Promise<Result<boolean, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("session_has_transcript", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async sessionEnhancedDocs(
+    sessionId: string,
+  ): Promise<Result<EnhancedDoc[], string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("session_enhanced_docs", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async enhancedDocGet(
+    docId: string,
+  ): Promise<Result<EnhancedDoc | null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("enhanced_doc_get", { docId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async sessionTranscripts(
+    sessionId: string,
+  ): Promise<Result<TranscriptWithData[], string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("session_transcripts", { sessionId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async transcriptGet(
+    transcriptId: string,
+  ): Promise<Result<TranscriptWithData | null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("transcript_get", { transcriptId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async sessionFindByTrackingId(
+    trackingId: string,
+  ): Promise<Result<SessionMeta | null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("session_find_by_tracking_id", { trackingId }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
 };
 
 /** user-defined events **/
+
+export const events = __makeEvents__<{
+  indexChanged: IndexChanged;
+}>({
+  indexChanged: "index-changed",
+});
 
 /** user-defined constants **/
 
@@ -527,6 +651,20 @@ export type EnhancedDocPatch = {
   expected_title?: string | null;
   expected_markdown?: string | null;
 };
+/**
+ * Emitted (coalesced) to every webview as the `index-changed` event.
+ */
+export type IndexChanged = { entity: IndexEntity; ids: string[] };
+/**
+ * Which index map changed. Serialized as the lowercase strings the frontend matches
+ * on in the `index-changed` payload.
+ */
+export type IndexEntity =
+  | "sessions"
+  | "docs"
+  | "transcripts"
+  | "tasks"
+  | "templates";
 export type JsonValue =
   | null
   | boolean
@@ -554,6 +692,15 @@ export type RebuildReport = {
    */
   ghost_sessions: string[];
   errors: string[];
+};
+/**
+ * One `session_list` entry: full meta plus the derived flags list consumers need
+ * (timeline grouping wants `event`/`folder` off the meta; audio retention wants
+ * `has_transcript_words` without a per-session round-trip).
+ */
+export type SessionListEntry = {
+  meta: SessionMeta;
+  has_transcript_words: boolean;
 };
 export type SessionMeta = {
   id: string;
@@ -583,6 +730,13 @@ export type SessionMetaPatch = {
   event?: JsonValue | null;
   folder?: string | null;
 };
+/**
+ * What `session_get` returns: the file-canonical equivalent of the old
+ * `SESSION_SELECT_SQL` (sessions row + COALESCE'd note document join). The note is
+ * always `_memo.md`'s content -- the SQL fallback's legacy bare-id row is a
+ * permanently-empty placeholder, so preferring the file loses nothing.
+ */
+export type SessionRecord = { meta: SessionMeta; note_markdown: string | null };
 /**
  * What the frontend sends on a write: source coordinates come from the command arguments,
  * timestamps and `assignee` are managed store-side (preserved from the existing entry when

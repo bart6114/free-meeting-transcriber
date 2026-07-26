@@ -43,6 +43,14 @@ impl SessionStore {
             .collect();
         self.delete_session_index_tx(&stale).await?;
 
+        // Phase E1: the in-memory index reconciles from the same files. Kept separate
+        // from the SQL half above (which stays for the search projection until Phase F)
+        // and non-fatal -- a failed in-memory pass must not fail the SQL rebuild the
+        // startup path depends on; the next rescan converges it.
+        if let Err(error) = self.index_rebuild().await {
+            tracing::warn!(%error, "in-memory index rebuild failed; will converge on the next rescan");
+        }
+
         Ok(report)
     }
 
@@ -55,7 +63,14 @@ impl SessionStore {
     /// double-applying anything.
     pub async fn refresh_session(&self, session_id: &str) -> Result<(), StoreError> {
         let mut report = RebuildReport::default();
-        if let Some(first_error) = self.refresh_one(session_id, &mut report).await? {
+        let first_error = self.refresh_one(session_id, &mut report).await?;
+
+        // In-memory index half (Phase E1); same non-fatal contract as rebuild_index's.
+        if let Err(error) = self.index_refresh_session(session_id).await {
+            tracing::warn!(%error, session_id, "in-memory index refresh failed; will converge on the next rescan");
+        }
+
+        if let Some(first_error) = first_error {
             // Propagate the original variant (Io/Db/Serialize) rather than relabeling every
             // per-artifact failure as Serialize -- callers may want to distinguish, e.g., a
             // transient permission error (Io, worth retrying) from real corruption.
@@ -213,7 +228,7 @@ impl SessionStore {
 
     // -- filesystem reads (read-only; never writes to the vault) --
 
-    async fn scan_session_ids(&self) -> Result<Vec<String>, StoreError> {
+    pub(super) async fn scan_session_ids(&self) -> Result<Vec<String>, StoreError> {
         let dir = self.vault_base.join(paths::sessions_root());
         tokio::task::spawn_blocking(move || -> Result<Vec<String>, StoreError> {
             let mut ids = Vec::new();
@@ -247,7 +262,7 @@ impl SessionStore {
     /// failures are carried in the inner `Result` (unparseable -> caller logs, leaves the row
     /// alone); an `Err` here means the directory itself couldn't be listed, which the caller
     /// must not treat as "zero files" (that would look like every document vanished).
-    async fn scan_document_files(
+    pub(super) async fn scan_document_files(
         &self,
         id: &str,
     ) -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
@@ -315,7 +330,7 @@ impl SessionStore {
     /// "unparseable" for "gone"); an outer `Err` means the directory listing itself
     /// failed and the caller must not prune. A missing `enhanced/` dir is simply "no
     /// docs" -- most sessions never get one.
-    async fn scan_enhanced_doc_files(
+    pub(super) async fn scan_enhanced_doc_files(
         &self,
         id: &str,
     ) -> Result<Vec<(String, Result<super::EnhancedDoc, StoreError>)>, StoreError> {

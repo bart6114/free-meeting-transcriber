@@ -39,6 +39,15 @@ impl TaskScope {
             TaskScope::Vault => paths::vault_tasks_path(),
         }
     }
+
+    /// This scope's key in the in-memory index's tasks map (and the id carried by the
+    /// `index-changed` tasks event).
+    fn index_key(&self) -> &str {
+        match self {
+            TaskScope::Session(id) => id,
+            TaskScope::Vault => super::index::VAULT_TASKS_KEY,
+        }
+    }
 }
 
 fn now_iso() -> String {
@@ -334,7 +343,14 @@ impl SessionStore {
         };
         let bytes =
             serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Serialize(e.to_string()))?;
-        self.write_file(scope.relative_path(), bytes).await
+        self.write_file(scope.relative_path(), bytes).await?;
+
+        self.index_set_tasks(scope.index_key(), tasks.to_vec());
+        self.notify_index_changed(
+            super::IndexEntity::Tasks,
+            vec![scope.index_key().to_string()],
+        );
+        Ok(())
     }
 
     /// Every `tasks.json` that exists: one per session that has tasks, plus the vault-root

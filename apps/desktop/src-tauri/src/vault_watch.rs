@@ -103,6 +103,9 @@ const COALESCE_WINDOW: Duration = Duration::from_secs(2);
 pub enum WatchAction {
     Ignore,
     Refresh(String),
+    /// An external edit under `templates/` -- rescans the in-memory templates index
+    /// (Phase E1; templates have no SQL half to refresh).
+    RefreshTemplates,
 }
 
 /// Pure routing decision: given a vault-relative path and whether its
@@ -127,10 +130,21 @@ pub fn classify_event(relative: &str, journal_match: bool) -> WatchAction {
         return WatchAction::Ignore;
     }
 
+    if is_templates_path(relative) {
+        return WatchAction::RefreshTemplates;
+    }
+
     match session_id_for_relative_path(relative) {
         Some(id) => WatchAction::Refresh(id),
         None => WatchAction::Ignore,
     }
+}
+
+/// Any change under `templates/` (including `.deleted-defaults.json` -- a tombstone
+/// edit changes which defaults exist) rescans the whole templates index; the map is
+/// small enough that per-file granularity isn't worth the bookkeeping.
+fn is_templates_path(relative: &str) -> bool {
+    relative == "templates" || relative.starts_with("templates/")
 }
 
 /// Extracts `<id>` from a `sessions/<id>` or `sessions/<id>/...` relative
@@ -216,15 +230,25 @@ fn is_ignored_relative_path(relative: &str) -> bool {
 /// need a refresh. Factored out from `run` so it's directly testable
 /// against a real `SessionStore` (see the `real_journal_end_to_end` tests
 /// below) without needing a live FSEvents stream.
-async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> HashSet<String> {
-    let mut ids = HashSet::new();
+async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> RefreshPlan {
+    let mut plan = RefreshPlan::default();
     for relative in changed {
         let journal_match = store.journal_matches_current_file(relative);
-        if let WatchAction::Refresh(id) = classify_event(relative, journal_match) {
-            ids.insert(id);
+        match classify_event(relative, journal_match) {
+            WatchAction::Refresh(id) => {
+                plan.session_ids.insert(id);
+            }
+            WatchAction::RefreshTemplates => plan.templates = true,
+            WatchAction::Ignore => {}
         }
     }
-    ids
+    plan
+}
+
+#[derive(Debug, Default, PartialEq)]
+struct RefreshPlan {
+    session_ids: HashSet<String>,
+    templates: bool,
 }
 
 /// Refreshes every id in `ids`, one at a time. A failure on one session is
@@ -246,8 +270,12 @@ async fn refresh_ids(store: &SessionStore, ids: HashSet<String>) {
 }
 
 async fn handle_batch(store: &SessionStore, changed: &HashSet<String>) {
-    let ids = ids_to_refresh(store, changed).await;
-    refresh_ids(store, ids).await;
+    let plan = ids_to_refresh(store, changed).await;
+    refresh_ids(store, plan.session_ids).await;
+    if plan.templates {
+        store.index_refresh_templates().await;
+        tracing::info!("vault watch: refreshed templates index from external change");
+    }
 }
 
 pub fn spawn(app: AppHandle) {
@@ -369,6 +397,28 @@ mod tests {
         ));
     }
 
+    /// Phase E1: external edits under `templates/` refresh the in-memory templates
+    /// index. Own writes still win, and trashed template files stay ignored.
+    #[test]
+    fn template_paths_refresh_templates_unless_own_write_or_trash() {
+        assert!(matches!(
+            classify_event("templates/t-1.json", false),
+            WatchAction::RefreshTemplates
+        ));
+        assert!(matches!(
+            classify_event("templates/.deleted-defaults.json", false),
+            WatchAction::RefreshTemplates
+        ));
+        assert!(matches!(
+            classify_event("templates/t-1.json", true),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event(".trash/2026-07-26/templates/t-1.json", false),
+            WatchAction::Ignore
+        ));
+    }
+
     #[test]
     fn bare_sessions_root_is_ignored() {
         assert!(matches!(
@@ -462,7 +512,7 @@ mod tests {
 
         // Simulate the FileChanged event vault_watch would receive for its own note write.
         let changed = HashSet::from(["sessions/s1/_memo.md".to_string()]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert!(
             ids.is_empty(),
@@ -483,7 +533,7 @@ mod tests {
         .unwrap();
 
         let changed = HashSet::from(["sessions/s1/_meta.json".to_string()]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
     }
@@ -496,7 +546,7 @@ mod tests {
         std::fs::remove_file(vault.path().join("sessions/s1/_meta.json")).unwrap();
 
         let changed = HashSet::from(["sessions/s1/_meta.json".to_string()]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
 
         handle_batch(&store, &changed).await;
@@ -528,7 +578,7 @@ mod tests {
             "sessions/s1/_meta.json".to_string(),
             "sessions/s1/other.md".to_string(),
         ]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
     }
