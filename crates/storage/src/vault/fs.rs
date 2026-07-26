@@ -11,6 +11,7 @@ const VAULT_DIRECTORIES: &[&str] = &[
     "prompts",
     "search_index",
     "plugins",
+    "templates",
 ];
 
 const VAULT_FILES: &[&str] = &[

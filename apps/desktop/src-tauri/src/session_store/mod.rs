@@ -12,12 +12,14 @@ pub mod migrate;
 pub mod paths;
 pub mod rebuild;
 pub mod tasks;
+pub mod templates;
 pub mod transcript;
 
 pub use content::{SessionMeta, SessionMetaPatch};
 pub use enhanced::{EnhancedDoc, EnhancedDocPatch};
 pub use rebuild::RebuildReport;
 pub use tasks::{TaskInput, TaskItem};
+pub use templates::{TemplateInput, TemplateItem};
 pub use transcript::TranscriptDelta;
 
 #[derive(Debug, Clone)]

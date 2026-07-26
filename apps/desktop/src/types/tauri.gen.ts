@@ -231,6 +231,44 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async templateList(): Promise<Result<TemplateItem[], string>> {
+    try {
+      return { status: "ok", data: await TAURI_INVOKE("template_list") };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async templateGet(id: string): Promise<Result<TemplateItem | null, string>> {
+    try {
+      return { status: "ok", data: await TAURI_INVOKE("template_get", { id }) };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async templateUpsert(template: TemplateInput): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("template_upsert", { template }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
+  async templateDelete(id: string): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("template_delete", { id }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async sessionListTasks(
     sourceType: string,
     sourceId: string,
@@ -592,6 +630,39 @@ export type TaskItem = {
   assignee?: string;
   created_at: string;
   updated_at: string;
+};
+/**
+ * What the frontend sends on a write: timestamps are managed store-side (`created_at`
+ * survives for a template that already exists).
+ */
+export type TemplateInput = {
+  id: string;
+  title: string;
+  description: string;
+  pinned: boolean;
+  pin_order?: number | null;
+  category?: string | null;
+  icon: JsonValue;
+  targets?: JsonValue | null;
+  sections: JsonValue;
+};
+/**
+ * One summary template, file-canonical at `templates/<id>.json`. Mirrors the live columns
+ * of the legacy `templates` table; `icon`/`targets`/`sections` are stored as real JSON
+ * (the old `icon_json`/`targets_json`/`sections_json` columns held them stringified).
+ */
+export type TemplateItem = {
+  id: string;
+  title?: string;
+  description?: string;
+  pinned?: boolean;
+  pin_order?: number | null;
+  category?: string | null;
+  icon?: JsonValue;
+  targets?: JsonValue | null;
+  sections?: JsonValue;
+  created_at?: string;
+  updated_at?: string;
 };
 export type TranscriptDelta = {
   transcript_id: string;

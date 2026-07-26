@@ -367,6 +367,22 @@ pub async fn main() {
                                 tracing::error!("startup session index rebuild failed: {}", e);
                             }
                         }
+
+                        // Re-seed any bundled default template whose file is missing
+                        // (and isn't tombstoned in `.deleted-defaults.json`). This is
+                        // the file-side replacement for the retired SQL seed migration
+                        // and `repair_missing_core_tables` guarantee. `block_on`: the
+                        // template pickers must not come up against an empty folder on
+                        // first boot.
+                        match hypr_tauri_utils::block_on(store.seed_default_templates()) {
+                            Ok(seeded) if seeded > 0 => {
+                                tracing::info!(seeded, "seeded missing default templates");
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                tracing::error!("default template seeding failed: {}", e);
+                            }
+                        }
                     }
                     Err(e) => {
                         tracing::error!("failed to resolve vault_base for session_store: {}", e);
@@ -575,6 +591,10 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::session_write_enhanced_doc::<tauri::Wry>,
             session_store::commands::session_update_enhanced_doc::<tauri::Wry>,
             session_store::commands::session_delete_enhanced_doc::<tauri::Wry>,
+            session_store::commands::template_list::<tauri::Wry>,
+            session_store::commands::template_get::<tauri::Wry>,
+            session_store::commands::template_upsert::<tauri::Wry>,
+            session_store::commands::template_delete::<tauri::Wry>,
             session_store::commands::session_list_tasks::<tauri::Wry>,
             session_store::commands::session_replace_tasks::<tauri::Wry>,
             session_store::commands::session_remove_tasks::<tauri::Wry>,
