@@ -18,8 +18,8 @@
 |-------|--------|---------|-------|
 | Plan spot-verify | done | — | claims hold; drift notes below |
 | A — meeting-chat total drop | done (Linux gates green) | fa11943, 9513f62, c01de0b | awaiting owner macOS verify |
-| B — dead DB weight | in progress | — | |
-| C — config.json | scouted | — | ground truth verified; task split C1→C2→C3 strict |
+| B — dead DB weight | done | 40276b7 | last-ever SQL migration added (20260726120000_drop_dead_tables) |
+| C — config.json | C1 in progress | — | split C1 (Rust service, in plugins/settings) → C2 (migration) → C3 (FE rewiring); C4 split-brain folded into C1 |
 | D — file homes + exodus | pending | — | |
 | E — reactivity core | pending | — | |
 | F — search on files | pending | — | |
