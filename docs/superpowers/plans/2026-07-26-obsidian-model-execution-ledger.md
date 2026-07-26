@@ -88,6 +88,22 @@ Parity confidence: high on read paths.
 6. Reseed can clobber an edited default template (`is_file()` false negative on stat failure);
    `app.db` retirement can orphan the WAL; read-modify-write lost updates across windows.
 
+### Known residuals after the fix pass (f90d448) — deliberate, flagged not hidden
+
+- **Trash is "zero per editing session", not literally zero.** The journal is in-memory, so
+  the first store write to a given file after an app restart has no journal entry and trashes
+  one copy of the pre-existing content. Bounded at one per file per run, and it is the safe
+  direction (a backup of the pre-session state), but it is not nothing — persisting the
+  journal across runs would remove it.
+- **`templates.rs::upsert_template`** still uses the unlocked read-modify-write pattern that
+  FIX 6 removed elsewhere. Low risk (single-user UI action, identical writes short-circuit),
+  but it is a real remaining instance; threading the guard needs `clear_deleted_default` and
+  `write_template_file` variants too.
+- **`delete_session` residual race.** A transcript flush already past its snapshot and mid-I/O
+  when the delete lands can still recreate the folder. The debounce-timer case — the one the
+  review described and the one that actually happens — is fully closed; closing the rest needs
+  a tombstone/generation scheme.
+
 ### Accepted / deferred (not defects to fix now)
 
 - `applyGeneratedSessionTitle` lost transaction atomicity — inherent to dropping the
