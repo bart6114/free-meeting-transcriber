@@ -83,7 +83,7 @@ import {
   updateSession,
 } from "./queries";
 
-describe("session SQLite operations", () => {
+describe("session store operations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();

@@ -87,7 +87,7 @@ describe("audio retention", () => {
     expect(sessionAudioExpired("not-a-date", "oneDay", now)).toBe(false);
   });
 
-  test("deletes only expired inactive SQLite sessions", async () => {
+  test("deletes only expired inactive sessions", async () => {
     mockCleanupRows([
       {
         id: "expired",

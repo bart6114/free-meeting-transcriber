@@ -176,7 +176,7 @@ describe("EnhancerService", () => {
     expect(mocks.loadSessionContentSnapshot).not.toHaveBeenCalled();
   });
 
-  it("creates the SQLite summary before starting generation", async () => {
+  it("creates the stored summary before starting generation", async () => {
     const ai = createMockAITaskStore();
     const service = new EnhancerService(createDeps({ aiTaskStore: ai.store }));
 

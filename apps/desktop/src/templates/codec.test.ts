@@ -9,7 +9,7 @@ import {
 import { DEFAULT_TEMPLATE_ICON } from "./template-icon";
 
 describe("parseStoredTemplateSections", () => {
-  it("parses canonical JSON text from SQLite", () => {
+  it("parses canonical JSON text from stored JSON", () => {
     expect(
       parseStoredTemplateSections(
         '[{"title":"Updates","description":"What changed"}]',
@@ -18,7 +18,7 @@ describe("parseStoredTemplateSections", () => {
     ).toEqual([{ title: "Updates", description: "What changed" }]);
   });
 
-  it("normalizes legacy string arrays from SQLite", () => {
+  it("normalizes legacy string arrays from stored JSON", () => {
     expect(
       parseStoredTemplateSections('["Updates","Feedback"]', "template-1"),
     ).toEqual([
@@ -33,7 +33,7 @@ describe("parseStoredTemplateSections", () => {
     ).toEqual([{ title: "Updates", description: "" }]);
   });
 
-  it("preserves blank draft sections from SQLite", () => {
+  it("preserves blank draft sections from stored JSON", () => {
     expect(
       parseStoredTemplateSections(
         '[{"title":"","description":""}]',
@@ -42,7 +42,7 @@ describe("parseStoredTemplateSections", () => {
     ).toEqual([{ title: "", description: "" }]);
   });
 
-  it("preserves described draft sections with blank titles from SQLite", () => {
+  it("preserves described draft sections with blank titles from stored JSON", () => {
     expect(
       parseStoredTemplateSections(
         '[{"title":"","description":"Capture decisions"}]',

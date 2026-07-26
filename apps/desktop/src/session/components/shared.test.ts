@@ -114,7 +114,7 @@ describe("useCurrentNoteHasContent", () => {
     hoisted.enhancedContent = "";
   });
 
-  it("reads raw note content from SQLite", () => {
+  it("reads raw note content from the store", () => {
     hoisted.rawMd = "Meeting notes";
 
     const { result } = renderHook(() =>
@@ -124,7 +124,7 @@ describe("useCurrentNoteHasContent", () => {
     expect(result.current).toBe(true);
   });
 
-  it("reads enhanced note content from SQLite", () => {
+  it("reads enhanced note content from the store", () => {
     hoisted.enhancedContent = "Summary";
 
     const { result } = renderHook(() =>
@@ -137,7 +137,7 @@ describe("useCurrentNoteHasContent", () => {
     expect(result.current).toBe(true);
   });
 
-  it("reads transcript presence from SQLite", () => {
+  it("reads transcript presence from the store", () => {
     hoisted.hasTranscript = true;
 
     const { result } = renderHook(() =>
@@ -330,10 +330,10 @@ describe("computeCurrentNoteTab", () => {
       const result = computeCurrentNoteTab(
         { type: "enhanced", id: "legacy-summary" },
         false,
-        ["sqlite-summary"],
+        ["stored-summary"],
       );
 
-      expect(result).toEqual({ type: "enhanced", id: "sqlite-summary" });
+      expect(result).toEqual({ type: "enhanced", id: "stored-summary" });
     });
   });
 });

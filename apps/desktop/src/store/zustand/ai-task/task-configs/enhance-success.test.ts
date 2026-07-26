@@ -219,7 +219,7 @@ describe("enhanceSuccess.onSuccess", () => {
     ).toBeLessThanOrEqual(MIN_SUMMARY_CHARACTERS);
   });
 
-  it("does not claim success when the guarded SQLite write fails", async () => {
+  it("does not claim success when the guarded store write fails", async () => {
     mocks.persistGeneratedEnhancedNote.mockRejectedValueOnce(
       new Error("stale summary"),
     );

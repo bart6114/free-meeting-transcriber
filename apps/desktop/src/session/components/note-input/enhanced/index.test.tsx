@@ -192,7 +192,7 @@ describe("Enhanced", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("keeps the completed stream visible until SQLite content arrives", () => {
+  it("keeps the completed stream visible until stored content arrives", () => {
     hoisted.enhanceTask = {
       status: "success",
       error: undefined,
@@ -385,7 +385,7 @@ describe("Enhanced", () => {
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("waits for SQLite hydration and mounts the editor with stored content", () => {
+  it("waits for store hydration and mounts the editor with stored content", () => {
     hoisted.noteExists = false;
     const view = render(
       <Enhanced sessionId="session-1" enhancedNoteId="note-1" />,
