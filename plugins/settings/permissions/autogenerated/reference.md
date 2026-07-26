@@ -14,6 +14,8 @@ Default permissions for the plugin
 - `allow-path`
 - `allow-load`
 - `allow-save`
+- `allow-get-config`
+- `allow-set-config-values`
 
 ## Permission Table
 
@@ -46,6 +48,32 @@ Enables the copy_vault command without any pre-configured scope.
 <td>
 
 Denies the copy_vault command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`settings:allow-get-config`
+
+</td>
+<td>
+
+Enables the get_config command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`settings:deny-get-config`
+
+</td>
+<td>
+
+Denies the get_config command without any pre-configured scope.
 
 </td>
 </tr>
@@ -228,6 +256,32 @@ Enables the save command without any pre-configured scope.
 <td>
 
 Denies the save command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`settings:allow-set-config-values`
+
+</td>
+<td>
+
+Enables the set_config_values command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`settings:deny-set-config-values`
+
+</td>
+<td>
+
+Denies the set_config_values command without any pre-configured scope.
 
 </td>
 </tr>

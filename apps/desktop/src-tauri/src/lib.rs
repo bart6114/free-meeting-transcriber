@@ -411,6 +411,7 @@ pub async fn main() {
             use tauri_plugin_store2::Store2PluginExt;
 
             let _ = app.settings().reset();
+            let _ = app.settings().reset_config();
             let _ = app.store2().reset();
             let _ = app.set_onboarding_needed(true);
 

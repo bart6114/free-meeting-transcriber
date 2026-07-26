@@ -4,9 +4,14 @@ use crate::global::compute_vault_config_path;
 
 pub const VAULT_PATH_KEY: &str = "vault_path";
 pub const SETTINGS_FILENAME: &str = "settings.json";
+pub const CONFIG_FILENAME: &str = "config.json";
 
 pub fn compute_settings_path(base: &Path) -> PathBuf {
     base.join(SETTINGS_FILENAME)
+}
+
+pub fn compute_config_path(base: &Path) -> PathBuf {
+    base.join(CONFIG_FILENAME)
 }
 const VAULT_BASE_ENV_VAR: &str = "FMTR_VAULT_BASE";
 

@@ -9,6 +9,8 @@ const COMMANDS: &[&str] = &[
     "path",
     "load",
     "save",
+    "get_config",
+    "set_config_values",
 ];
 
 fn main() {

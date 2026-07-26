@@ -10,6 +10,8 @@ pub enum Error {
     Json(#[from] serde_json::Error),
     #[error(transparent)]
     Storage(#[from] hypr_storage::Error),
+    #[error(transparent)]
+    Tauri(#[from] tauri::Error),
 }
 
 impl Serialize for Error {

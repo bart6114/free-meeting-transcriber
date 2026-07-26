@@ -307,6 +307,18 @@
           "markdownDescription": "Denies the copy_vault command without any pre-configured scope."
         },
         {
+          "description": "Enables the get_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-get-config",
+          "markdownDescription": "Enables the get_config command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the get_config command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-get-config",
+          "markdownDescription": "Denies the get_config command without any pre-configured scope."
+        },
+        {
           "description": "Enables the global_base command without any pre-configured scope.",
           "type": "string",
           "const": "allow-global-base",
@@ -391,6 +403,18 @@
           "markdownDescription": "Denies the save command without any pre-configured scope."
         },
         {
+          "description": "Enables the set_config_values command without any pre-configured scope.",
+          "type": "string",
+          "const": "allow-set-config-values",
+          "markdownDescription": "Enables the set_config_values command without any pre-configured scope."
+        },
+        {
+          "description": "Denies the set_config_values command without any pre-configured scope.",
+          "type": "string",
+          "const": "deny-set-config-values",
+          "markdownDescription": "Denies the set_config_values command without any pre-configured scope."
+        },
+        {
           "description": "Enables the set_vault_base command without any pre-configured scope.",
           "type": "string",
           "const": "allow-set-vault-base",
@@ -415,10 +439,10 @@
           "markdownDescription": "Denies the vault_base command without any pre-configured scope."
         },
         {
-          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-global-base`\n- `allow-vault-base`\n- `allow-copy-vault`\n- `allow-move-vault`\n- `allow-set-vault-base`\n- `allow-is-empty-or-missing-dir`\n- `allow-obsidian-vaults`\n- `allow-path`\n- `allow-load`\n- `allow-save`",
+          "description": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-global-base`\n- `allow-vault-base`\n- `allow-copy-vault`\n- `allow-move-vault`\n- `allow-set-vault-base`\n- `allow-is-empty-or-missing-dir`\n- `allow-obsidian-vaults`\n- `allow-path`\n- `allow-load`\n- `allow-save`\n- `allow-get-config`\n- `allow-set-config-values`",
           "type": "string",
           "const": "default",
-          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-global-base`\n- `allow-vault-base`\n- `allow-copy-vault`\n- `allow-move-vault`\n- `allow-set-vault-base`\n- `allow-is-empty-or-missing-dir`\n- `allow-obsidian-vaults`\n- `allow-path`\n- `allow-load`\n- `allow-save`"
+          "markdownDescription": "Default permissions for the plugin\n#### This default permission set includes:\n\n- `allow-global-base`\n- `allow-vault-base`\n- `allow-copy-vault`\n- `allow-move-vault`\n- `allow-set-vault-base`\n- `allow-is-empty-or-missing-dir`\n- `allow-obsidian-vaults`\n- `allow-path`\n- `allow-load`\n- `allow-save`\n- `allow-get-config`\n- `allow-set-config-values`"
         }
       ]
     }

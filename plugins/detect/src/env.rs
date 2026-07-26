@@ -37,21 +37,12 @@ impl<R: Runtime> Env for TauriEnv<R> {
     }
 
     fn is_detect_enabled(&self) -> bool {
-        read_detect_enabled_settings(&self.app_handle).unwrap_or(true)
+        use tauri_plugin_settings::SettingsPluginExt;
+
+        // Missing config.json (or a missing key) falls back to the AppConfig
+        // default of `true` — same as the old settings.json reader.
+        self.app_handle.settings().config().notification_detect
     }
-}
-
-fn read_detect_enabled_settings<R: Runtime>(app_handle: &AppHandle<R>) -> Option<bool> {
-    use tauri_plugin_settings::SettingsPluginExt;
-
-    let path = app_handle.settings().settings_path().ok()?;
-    let content = std::fs::read_to_string(path.as_str()).ok()?;
-    let settings: serde_json::Value = serde_json::from_str(&content).ok()?;
-
-    settings
-        .get("notification")
-        .and_then(|n| n.get("detect"))
-        .and_then(|d| d.as_bool())
 }
 
 #[cfg(any(test, feature = "test-support"))]
