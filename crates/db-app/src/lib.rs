@@ -209,6 +209,11 @@ pub const APP_MIGRATION_STEPS: &[hypr_db_migrate::MigrationStep] = &[
         scope: hypr_db_migrate::MigrationScope::Plain,
         sql: include_str!("../migrations/20260725120000_drop_sync_machinery.sql"),
     },
+    hypr_db_migrate::MigrationStep {
+        id: "20260726120000_drop_dead_tables",
+        scope: hypr_db_migrate::MigrationScope::Plain,
+        sql: include_str!("../migrations/20260726120000_drop_dead_tables.sql"),
+    },
 ];
 
 /// No migration step opts into `MigrationScope::CloudsyncAlter` anymore —
@@ -402,10 +407,6 @@ mod tests {
                 "_sqlx_migrations",
                 "action_items",
                 "app_settings",
-                "chat_groups",
-                "chat_messages",
-                "daily_notes",
-                "entity_mentions",
                 "search_index_dirty",
                 "search_index_state",
                 "session_documents",

@@ -4,43 +4,6 @@
 /** user-defined commands **/
 
 export const commands = {
-  async listMeetings(
-    input: ListMeetingsInput,
-  ): Promise<Result<MeetingPage, string>> {
-    try {
-      return {
-        status: "ok",
-        data: await TAURI_INVOKE("plugin:db|list_meetings", { input }),
-      };
-    } catch (e) {
-      if (e instanceof Error) throw e;
-      else return { status: "error", error: e as any };
-    }
-  },
-  async getMeeting(input: GetMeetingInput): Promise<Result<Meeting, string>> {
-    try {
-      return {
-        status: "ok",
-        data: await TAURI_INVOKE("plugin:db|get_meeting", { input }),
-      };
-    } catch (e) {
-      if (e instanceof Error) throw e;
-      else return { status: "error", error: e as any };
-    }
-  },
-  async getMeetingTranscript(
-    input: GetMeetingTranscriptInput,
-  ): Promise<Result<TranscriptPage, string>> {
-    try {
-      return {
-        status: "ok",
-        data: await TAURI_INVOKE("plugin:db|get_meeting_transcript", { input }),
-      };
-    } catch (e) {
-      if (e instanceof Error) throw e;
-      else return { status: "error", error: e as any };
-    }
-  },
   async execute(
     sql: string,
     params: JsonValue[],
@@ -127,36 +90,13 @@ export const commands = {
 
 /** user-defined types **/
 
-export type ActionItem = {
-  id: string;
-  assignee_human_id: string;
-  status: string;
-  text: string;
-  due_at: string;
-  completed_at: string | null;
-};
 export type DependencyAnalysis =
   | { kind: "reactive"; data: { targets: DependencyTarget[] } }
   | { kind: "non_reactive"; data: { reason: string } };
 export type DependencyTarget =
   | { kind: "table"; data: string }
   | { kind: "virtual_table"; data: string };
-export type Document = {
-  id: string;
-  kind: string;
-  template_id: string;
-  title: string;
-  markdown: string;
-  sort_order: number;
-  updated_at: string;
-};
 export type ExecuteProxyResult = { rows: JsonValue[] };
-export type GetMeetingInput = { meeting_id: string };
-export type GetMeetingTranscriptInput = {
-  meeting_id: string;
-  offset: number | null;
-  limit: number | null;
-};
 export type JsonValue =
   | null
   | boolean
@@ -164,47 +104,6 @@ export type JsonValue =
   | string
   | JsonValue[]
   | Partial<{ [key in string]: JsonValue }>;
-export type ListMeetingsInput = {
-  query: string | null;
-  limit: number | null;
-  offset: number | null;
-};
-export type Meeting = {
-  id: string;
-  title: string;
-  kind: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  started_at: string;
-  ended_at: string;
-  timezone: string;
-  language: string;
-  note: Document | null;
-  summaries: Document[];
-  action_items: ActionItem[];
-};
-export type MeetingListItem = {
-  id: string;
-  title: string;
-  kind: string;
-  status: string;
-  created_at: string;
-  updated_at: string;
-  started_at: string;
-  ended_at: string;
-};
-export type MeetingPage = {
-  meetings: MeetingListItem[];
-  pagination: Pagination;
-};
-export type Pagination = {
-  offset: number;
-  limit: number;
-  returned: number;
-  total: number | null;
-  next_offset: number | null;
-};
 export type QueryEvent =
   | { event: "result"; data: JsonValue[] }
   | { event: "error"; data: string };
@@ -217,12 +116,6 @@ export type TransactionStatement = {
   sql: string;
   params: JsonValue[];
   expectedRowsAffected?: number | null;
-};
-export type TranscriptPage = {
-  meeting_id: string;
-  text: string;
-  words: JsonValue[];
-  pagination: Pagination;
 };
 
 /** tauri-specta globals **/

@@ -60,9 +60,6 @@ vi.mock("@hypr/plugin-db", () => ({
   execute: vi.fn().mockResolvedValue([]),
   executeProxy: vi.fn().mockResolvedValue({ rows: [] }),
   executeTransaction: vi.fn().mockResolvedValue([]),
-  getMeeting: vi.fn(),
-  getMeetingTranscript: vi.fn(),
-  listMeetings: vi.fn(),
   subscribe: vi.fn().mockResolvedValue(() => Promise.resolve()),
 }));
 

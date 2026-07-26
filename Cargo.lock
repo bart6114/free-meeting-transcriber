@@ -3868,23 +3868,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "db-cli"
-version = "0.1.0"
-dependencies = [
- "clap",
- "db-app",
- "db-core",
- "db-migrate",
- "dirs 6.0.0",
- "serde",
- "serde_json",
- "sqlx",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
-]
-
-[[package]]
 name = "db-core"
 version = "0.1.0"
 dependencies = [
@@ -16403,7 +16386,6 @@ dependencies = [
 name = "tauri-plugin-db"
 version = "0.1.0"
 dependencies = [
- "agent-access",
  "anyhow",
  "chrono",
  "db-app",

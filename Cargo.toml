@@ -61,7 +61,6 @@ hypr-cursor = { path = "crates/cursor", package = "cursor" }
 hypr-data = { path = "crates/data", package = "data" }
 hypr-db-app = { path = "crates/db-app", package = "db-app" }
 hypr-db-change = { path = "crates/db-change", package = "db-change" }
-hypr-db-cli = { path = "crates/db-cli", package = "db-cli" }
 hypr-db-core = { path = "crates/db-core", package = "db-core" }
 hypr-db-execute = { path = "crates/db-execute", package = "db-execute" }
 hypr-db-migrate = { path = "crates/db-migrate", package = "db-migrate" }

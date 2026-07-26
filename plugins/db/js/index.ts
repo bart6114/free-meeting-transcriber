@@ -1,28 +1,6 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
-import type {
-  GetMeetingInput,
-  GetMeetingTranscriptInput as GeneratedGetMeetingTranscriptInput,
-  ListMeetingsInput as GeneratedListMeetingsInput,
-  Meeting,
-  MeetingPage,
-  SubscriptionRegistration,
-  TranscriptPage,
-} from "./bindings.gen";
-
-export type {
-  GetMeetingInput,
-  Meeting,
-  MeetingPage,
-  TranscriptPage,
-} from "./bindings.gen";
-
-export type ListMeetingsInput = Partial<GeneratedListMeetingsInput>;
-export type GetMeetingTranscriptInput = Pick<
-  GeneratedGetMeetingTranscriptInput,
-  "meeting_id"
-> &
-  Partial<Omit<GeneratedGetMeetingTranscriptInput, "meeting_id">>;
+import type { SubscriptionRegistration } from "./bindings.gen";
 
 export type TransactionStatement = {
   sql: string;
@@ -33,22 +11,6 @@ export type TransactionStatement = {
 export type QueryEvent<T = Record<string, unknown>> =
   | { event: "result"; data: T[] }
   | { event: "error"; data: string };
-
-export async function listMeetings(
-  input: ListMeetingsInput,
-): Promise<MeetingPage> {
-  return invoke("plugin:db|list_meetings", { input });
-}
-
-export async function getMeeting(input: GetMeetingInput): Promise<Meeting> {
-  return invoke("plugin:db|get_meeting", { input });
-}
-
-export async function getMeetingTranscript(
-  input: GetMeetingTranscriptInput,
-): Promise<TranscriptPage> {
-  return invoke("plugin:db|get_meeting_transcript", { input });
-}
 
 // Generic query path: returns named object rows for app-level SQL consumers.
 export async function execute<T = Record<string, unknown>>(

@@ -4,9 +4,6 @@ permissions = [
   "allow-execute",
   "allow-execute-proxy",
   "allow-execute-transaction",
-  "allow-list-meetings",
-  "allow-get-meeting",
-  "allow-get-meeting-transcript",
   "allow-subscribe",
   "allow-unsubscribe",
 ]
