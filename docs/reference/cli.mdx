@@ -6,16 +6,16 @@ description: "Commands and global options available in the Free Meeting Transcri
 ## Global syntax
 
 ```text
-fmtr [--base DIR] [--db-path FILE] [--json] <command>
+fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 ```
 
 | Option | Environment variable | Behavior |
 | --- | --- | --- |
-| `--base DIR` | `FMTR_BASE` | Use `DIR/app.db`. |
-| `--db-path FILE` | `FMTR_DB_PATH` | Use an explicit SQLite file. |
+| `--base DIR` | `FMTR_BASE` | Use `DIR` as the vault directory. |
+| `--vault-path DIR` | `FMTR_VAULT_PATH` | Use an explicit vault directory. |
 | `--json` | — | Emit a versioned JSON response or machine-readable JSON error. |
 
-`--db-path` takes precedence over `--base`. Without either option, the CLI uses Free Meeting Transcriber's platform application-data directory.
+`--vault-path` takes precedence over `--base`. Without either option, the CLI uses Free Meeting Transcriber's platform application-data directory, following the `vault_path` redirect in its `global.json` when the vault has been relocated.
 
 ## Meeting commands
 
@@ -46,7 +46,7 @@ Pagination includes `offset`, `limit`, `returned`, optional `total`, and optiona
 fmtr --json doctor
 ```
 
-Checks the resolved database path, read-only access, and required schema without changing data.
+Checks the resolved vault path and read access to its sessions without changing data.
 It exits with status 0 when `ready` is true and status 1 when `ready` is false.
 
 ## MCP command

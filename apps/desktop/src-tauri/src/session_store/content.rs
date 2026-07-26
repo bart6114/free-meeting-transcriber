@@ -4,21 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{SessionStore, StoreError, paths};
 
-#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
-pub struct SessionMeta {
-    pub id: String,
-    pub title: String,
-    pub started_at: Option<String>,
-    pub ended_at: Option<String>,
-    pub created_at: String,
-    pub tags: Vec<String>,
-    /// Opaque calendar-event envelope (the sessions row's `event_json`). The store never
-    /// inspects its interior -- it round-trips whatever JSON the frontend hands it.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event: Option<serde_json::Value>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub folder: Option<String>,
-}
+// The `_meta.json` schema is shared with the read-only vault consumers (fmtr CLI/MCP);
+// the type lives in `hypr-vault-read` so both sides parse the same shape.
+pub use hypr_vault_read::SessionMeta;
 
 /// Partial update for `_meta.json`: `None` means "leave as-is", so callers can patch a single
 /// field without knowing the rest. There is deliberately no way to clear a field back to

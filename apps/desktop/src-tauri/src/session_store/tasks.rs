@@ -5,34 +5,9 @@ use serde::{Deserialize, Serialize};
 
 use super::{SessionStore, StoreError, paths};
 
-/// One action item, file-canonical in `sessions/<session_id>/tasks.json` (or the vault-root
-/// `tasks.json` for a source that cannot be tied to a session). Mirrors the live columns of
-/// the legacy `action_items` table minus ownership (`owner_user_id`/`created_by`/
-/// `updated_by`, dropped per plan decision D10) and minus `deleted_at` -- deletion removes
-/// the entry and the list is rewritten atomically.
-#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
-pub struct TaskItem {
-    pub id: String,
-    /// "session_raw_note" (source_id is the session id) or "enhanced_note" (source_id is
-    /// the enhanced doc id). Stored verbatim for any other value.
-    pub source_type: String,
-    pub source_id: String,
-    pub source_order: i32,
-    /// "todo" | "in_progress" | "done". Stored verbatim; the frontend validates on read.
-    pub status: String,
-    /// Plain-text preview of the first paragraph, kept alongside the body like the old
-    /// `text` column so the file is greppable.
-    pub text: String,
-    /// The TipTap `JSONContent[]` body, stored as real JSON (the old `body_json` column
-    /// held it stringified).
-    pub body: serde_json::Value,
-    #[serde(default)]
-    pub due_at: String,
-    #[serde(default)]
-    pub assignee: String,
-    pub created_at: String,
-    pub updated_at: String,
-}
+// The `tasks.json` schema is shared with the read-only vault consumers (fmtr CLI/MCP);
+// the types live in `hypr-vault-read` so both sides parse the same shape.
+pub use hypr_vault_read::{TaskItem, TasksFile};
 
 /// What the frontend sends on a write: source coordinates come from the command arguments,
 /// timestamps and `assignee` are managed store-side (preserved from the existing entry when
@@ -46,12 +21,6 @@ pub struct TaskInput {
     pub body: serde_json::Value,
     #[serde(default)]
     pub due_at: String,
-}
-
-#[derive(Serialize, Deserialize, Debug, Default)]
-struct TasksFile {
-    #[serde(default)]
-    tasks: Vec<TaskItem>,
 }
 
 /// Which `tasks.json` a source's tasks live in. Both production source types are

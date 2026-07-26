@@ -3,9 +3,9 @@ pub enum Error {
     #[error("{0} not found")]
     NotFound(String),
     #[error(
-        "Free Meeting Transcriber database not found at {0}; start Free Meeting Transcriber once or pass --db-path"
+        "Free Meeting Transcriber vault not found at {0}; start Free Meeting Transcriber once or pass --vault-path"
     )]
-    DatabaseNotFound(std::path::PathBuf),
+    VaultNotFound(std::path::PathBuf),
     #[error("output file already exists at {0}; pass --force to overwrite it")]
     OutputExists(std::path::PathBuf),
     #[error("{action} failed: {reason}")]
@@ -21,9 +21,7 @@ impl From<hypr_agent_access::Error> for Error {
     fn from(error: hypr_agent_access::Error) -> Self {
         match error {
             hypr_agent_access::Error::NotFound(what) => Self::NotFound(what),
-            hypr_agent_access::Error::Database { action, source } => {
-                Self::operation(action, source.to_string())
-            }
+            hypr_agent_access::Error::Vault { action, reason } => Self::operation(action, reason),
         }
     }
 }
@@ -39,7 +37,7 @@ impl Error {
     pub fn exit_code(&self) -> u8 {
         match self {
             Self::NotFound(_) => 2,
-            Self::DatabaseNotFound(_) => 3,
+            Self::VaultNotFound(_) => 3,
             Self::OutputExists(_) => 4,
             Self::Operation { .. } => 1,
         }
@@ -48,7 +46,7 @@ impl Error {
     pub fn code(&self) -> &'static str {
         match self {
             Self::NotFound(_) => "not_found",
-            Self::DatabaseNotFound(_) => "database_not_found",
+            Self::VaultNotFound(_) => "vault_not_found",
             Self::OutputExists(_) => "output_exists",
             Self::Operation { .. } => "operation_failed",
         }

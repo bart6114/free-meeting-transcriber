@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use rmcp::handler::server::wrapper::Parameters;
@@ -13,7 +14,7 @@ use hypr_agent_access as access;
 
 #[derive(Clone)]
 struct FmtrMcpServer {
-    db: Arc<hypr_db_core::Db>,
+    vault: Arc<PathBuf>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -29,8 +30,10 @@ enum ResourceRequest {
 }
 
 impl FmtrMcpServer {
-    fn new(db: Arc<hypr_db_core::Db>) -> Self {
-        Self { db }
+    fn new(vault: PathBuf) -> Self {
+        Self {
+            vault: Arc::new(vault),
+        }
     }
 }
 
@@ -49,7 +52,7 @@ impl FmtrMcpServer {
         &self,
         Parameters(input): Parameters<access::ListMeetingsInput>,
     ) -> std::result::Result<CallToolResult, McpError> {
-        let page = access::list_meetings(self.db.pool(), input)
+        let page = access::list_meetings(&self.vault, input)
             .await
             .map_err(command_error)?;
         structured(&page)
@@ -68,7 +71,7 @@ impl FmtrMcpServer {
         &self,
         Parameters(input): Parameters<access::GetMeetingInput>,
     ) -> std::result::Result<CallToolResult, McpError> {
-        let meeting = access::get_meeting(self.db.pool(), input)
+        let meeting = access::get_meeting(&self.vault, input)
             .await
             .map_err(command_error)?;
         structured(&meeting)
@@ -87,7 +90,7 @@ impl FmtrMcpServer {
         &self,
         Parameters(input): Parameters<access::GetMeetingTranscriptInput>,
     ) -> std::result::Result<CallToolResult, McpError> {
-        let page = access::get_meeting_transcript(self.db.pool(), input)
+        let page = access::get_meeting_transcript(&self.vault, input)
             .await
             .map_err(command_error)?;
         structured(&page)
@@ -130,7 +133,7 @@ impl ServerHandler for FmtrMcpServer {
             .transpose()?
             .unwrap_or(0);
         let page = access::list_meetings(
-            self.db.pool(),
+            &self.vault,
             access::ListMeetingsInput {
                 query: None,
                 limit: Some(access::DEFAULT_LIST_LIMIT),
@@ -197,7 +200,7 @@ impl ServerHandler for FmtrMcpServer {
         let contents = match request {
             ResourceRequest::Meeting { meeting_id } => {
                 let meeting =
-                    access::get_meeting(self.db.pool(), access::GetMeetingInput { meeting_id })
+                    access::get_meeting(&self.vault, access::GetMeetingInput { meeting_id })
                         .await
                         .map_err(command_error)?;
                 ResourceContents::text(meeting.to_markdown(), params.uri)
@@ -209,7 +212,7 @@ impl ServerHandler for FmtrMcpServer {
                 limit,
             } => {
                 let page = access::get_meeting_transcript(
-                    self.db.pool(),
+                    &self.vault,
                     access::GetMeetingTranscriptInput {
                         meeting_id,
                         offset: Some(offset),
@@ -226,8 +229,8 @@ impl ServerHandler for FmtrMcpServer {
     }
 }
 
-pub async fn serve(db: Arc<hypr_db_core::Db>) -> crate::Result<()> {
-    let running = FmtrMcpServer::new(db)
+pub async fn serve(vault: PathBuf) -> crate::Result<()> {
+    let running = FmtrMcpServer::new(vault)
         .serve(rmcp::transport::stdio())
         .await
         .map_err(|error| Error::operation("start MCP server", error.to_string()))?;
@@ -315,6 +318,26 @@ mod tests {
     use super::*;
     use serde_json::Value;
 
+    fn seed_vault_with_meeting() -> tempfile::TempDir {
+        let vault = tempfile::tempdir().unwrap();
+        let dir = vault.path().join("sessions/meeting-1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::json!({
+                "id": "meeting-1",
+                "title": "Planning",
+                "started_at": "2026-07-13",
+                "ended_at": null,
+                "created_at": "2026-07-13T00:00:00Z",
+                "tags": [],
+            })
+            .to_string(),
+        )
+        .unwrap();
+        vault
+    }
+
     #[test]
     fn parses_supported_resource_uris_and_bounds_transcript_limit() {
         assert_eq!(
@@ -336,8 +359,8 @@ mod tests {
 
     #[tokio::test]
     async fn server_advertises_tools_and_resources() {
-        let db = Arc::new(hypr_db_core::Db::connect_memory_plain().await.unwrap());
-        let info = FmtrMcpServer::new(db).get_info();
+        let vault = tempfile::tempdir().unwrap();
+        let info = FmtrMcpServer::new(vault.path().to_path_buf()).get_info();
         assert!(info.capabilities.tools.is_some());
         assert!(info.capabilities.resources.is_some());
         let instructions = info.instructions.unwrap();
@@ -348,15 +371,8 @@ mod tests {
 
     #[tokio::test]
     async fn list_tool_returns_structured_meeting_data() {
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        sqlx::query(
-            "INSERT INTO sessions (id, title, started_at) VALUES ('meeting-1', 'Planning', '2026-07-13')",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
-        let server = FmtrMcpServer::new(Arc::new(db));
+        let vault = seed_vault_with_meeting();
+        let server = FmtrMcpServer::new(vault.path().to_path_buf());
 
         let result = server
             .list_meetings(Parameters(access::ListMeetingsInput {
@@ -376,16 +392,9 @@ mod tests {
 
     #[tokio::test]
     async fn client_server_handshake_lists_tools_and_resources() {
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        sqlx::query(
-            "INSERT INTO sessions (id, title, started_at) VALUES ('meeting-1', 'Planning', '2026-07-13')",
-        )
-        .execute(db.pool())
-        .await
-        .unwrap();
+        let vault = seed_vault_with_meeting();
         let (server_transport, client_transport) = tokio::io::duplex(64 * 1024);
-        let server = FmtrMcpServer::new(Arc::new(db));
+        let server = FmtrMcpServer::new(vault.path().to_path_buf());
         let info = server.get_info();
         let server_handle = tokio::spawn(async move { server.serve(server_transport).await });
 

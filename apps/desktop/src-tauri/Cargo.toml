@@ -84,7 +84,6 @@ hypr-audio-actual = { workspace = true }
 hypr-audio-mock = { workspace = true, optional = true }
 hypr-db-app = { workspace = true }
 hypr-db-core = { workspace = true }
-hypr-frontmatter = { workspace = true }
 hypr-fs-format = { workspace = true }
 hypr-fs-sync-core = { workspace = true }
 hypr-host = { workspace = true }
@@ -92,6 +91,7 @@ hypr-storage = { workspace = true }
 hypr-supervisor = { workspace = true }
 hypr-tauri-utils = { workspace = true }
 hypr-tiptap = { workspace = true }
+hypr-vault-read = { workspace = true }
 
 sha2 = { workspace = true }
 

@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::cli::{DocumentKind, ExportFormat, MeetingCommand};
 use crate::{Result, output};
 use hypr_agent_access::{
@@ -5,7 +7,7 @@ use hypr_agent_access::{
     get_meeting, get_meeting_export, get_meeting_transcript, list_meetings,
 };
 
-pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> Result<()> {
+pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()> {
     match command {
         MeetingCommand::List {
             query,
@@ -13,7 +15,7 @@ pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> 
             offset,
         } => {
             let page = list_meetings(
-                db.pool(),
+                vault,
                 ListMeetingsInput {
                     query,
                     limit: Some(limit),
@@ -30,7 +32,7 @@ pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> 
             Ok(())
         }
         MeetingCommand::Get { id } => {
-            let meeting = get_meeting(db.pool(), GetMeetingInput { meeting_id: id }).await?;
+            let meeting = get_meeting(vault, GetMeetingInput { meeting_id: id }).await?;
             let rendered = if json {
                 output::json("meetings.get", &meeting, None)?
             } else {
@@ -41,7 +43,7 @@ pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> 
         }
         MeetingCommand::Note { id, kind } => {
             let meeting = get_meeting(
-                db.pool(),
+                vault,
                 GetMeetingInput {
                     meeting_id: id.clone(),
                 },
@@ -84,7 +86,7 @@ pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> 
         }
         MeetingCommand::Transcript { id, limit, offset } => {
             let page = get_meeting_transcript(
-                db.pool(),
+                vault,
                 GetMeetingTranscriptInput {
                     meeting_id: id,
                     offset: Some(offset),
@@ -111,7 +113,7 @@ pub async fn run(db: &hypr_db_core::Db, command: MeetingCommand, json: bool) -> 
             output: path,
             force,
         } => {
-            let meeting = get_meeting_export(db.pool(), id).await?;
+            let meeting = get_meeting_export(vault, id).await?;
             let content = match (format, json) {
                 (ExportFormat::Markdown, false) => meeting.to_markdown(),
                 (ExportFormat::Json, false) => output::raw_json(&meeting)?,

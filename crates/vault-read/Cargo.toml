@@ -1,19 +1,17 @@
 [package]
-name = "agent-access"
+name = "vault-read"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-hypr-vault-read = { workspace = true }
+hypr-frontmatter = { workspace = true }
+hypr-fs-format = { workspace = true }
 
-chrono = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 specta = { workspace = true, features = ["derive", "serde_json"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt"] }
 
 [dev-dependencies]
 tempfile = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt"] }

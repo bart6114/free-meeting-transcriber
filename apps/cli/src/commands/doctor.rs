@@ -2,26 +2,26 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-use crate::{Args, Result, db, output};
+use crate::{Args, Result, output, vault};
 
 #[derive(Debug, Serialize)]
 struct DoctorReport {
     cli_version: &'static str,
     ready: bool,
-    database: DatabaseReport,
+    vault: VaultReport,
 }
 
 #[derive(Debug, Serialize)]
-struct DatabaseReport {
+struct VaultReport {
     path: PathBuf,
     exists: bool,
-    opened_read_only: bool,
-    schema_ready: bool,
+    is_directory: bool,
+    sessions: Option<usize>,
     error: Option<String>,
 }
 
-pub async fn run(args: &Args, json: bool) -> Result<bool> {
-    let report = inspect(args).await?;
+pub fn run(args: &Args, json: bool) -> Result<bool> {
+    let report = inspect(args)?;
     let rendered = if json {
         output::json("doctor", &report, None)?
     } else {
@@ -31,50 +31,34 @@ pub async fn run(args: &Args, json: bool) -> Result<bool> {
     Ok(report.ready)
 }
 
-async fn inspect(args: &Args) -> Result<DoctorReport> {
-    let path = db::resolve_path(args)?;
+fn inspect(args: &Args) -> Result<DoctorReport> {
+    let path = vault::resolve_path(args)?;
     let exists = path.exists();
-    let mut database = DatabaseReport {
+    let mut report = VaultReport {
         path: path.clone(),
         exists,
-        opened_read_only: false,
-        schema_ready: false,
+        is_directory: false,
+        sessions: None,
         error: None,
     };
 
     if !exists {
-        database.error = Some("database file does not exist".to_string());
-    } else if !path.is_file() {
-        database.error = Some("database path is not a file".to_string());
+        report.error = Some("vault directory does not exist".to_string());
+    } else if !path.is_dir() {
+        report.error = Some("vault path is not a directory".to_string());
     } else {
-        match hypr_db_core::Db::connect_local_read_only(&path).await {
-            Ok(connection) => {
-                database.opened_read_only = true;
-                match schema_check(&connection).await {
-                    Ok(()) => database.schema_ready = true,
-                    Err(error) => database.error = Some(error),
-                }
-            }
-            Err(error) => database.error = Some(format!("open database failed: {error}")),
+        report.is_directory = true;
+        match hypr_vault_read::meta::list_session_metas(&path) {
+            Ok(metas) => report.sessions = Some(metas.len()),
+            Err(error) => report.error = Some(format!("vault scan failed: {error}")),
         }
     }
 
     Ok(DoctorReport {
         cli_version: env!("CARGO_PKG_VERSION"),
-        ready: database.opened_read_only && database.schema_ready,
-        database,
+        ready: report.is_directory && report.sessions.is_some(),
+        vault: report,
     })
-}
-
-async fn schema_check(db: &hypr_db_core::Db) -> std::result::Result<(), String> {
-    tokio::try_join!(
-        hypr_db_app::get_session(db.pool(), "__fmtr_doctor__"),
-        hypr_db_app::list_session_documents(db.pool(), "__fmtr_doctor__"),
-        hypr_db_app::list_session_transcripts(db.pool(), "__fmtr_doctor__"),
-        hypr_db_app::list_session_action_items(db.pool(), "__fmtr_doctor__"),
-    )
-    .map(|_| ())
-    .map_err(|error| format!("schema check failed: {error}"))
 }
 
 fn render(report: &DoctorReport) -> String {
@@ -82,15 +66,14 @@ fn render(report: &DoctorReport) -> String {
     let mut lines = vec![
         format!("fmtr CLI {}", report.cli_version),
         format!("Ready: {}", status(report.ready)),
-        format!("Database: {}", report.database.path.display()),
-        format!("Exists: {}", status(report.database.exists)),
-        format!(
-            "Opened read-only: {}",
-            status(report.database.opened_read_only)
-        ),
-        format!("Schema ready: {}", status(report.database.schema_ready)),
+        format!("Vault: {}", report.vault.path.display()),
+        format!("Exists: {}", status(report.vault.exists)),
+        format!("Directory: {}", status(report.vault.is_directory)),
     ];
-    if let Some(error) = &report.database.error {
+    if let Some(sessions) = report.vault.sessions {
+        lines.push(format!("Sessions: {sessions}"));
+    }
+    if let Some(error) = &report.vault.error {
         lines.push(format!("Issue: {error}"));
     }
     lines.join("\n")
@@ -105,38 +88,65 @@ mod tests {
     fn args(path: PathBuf) -> Args {
         Args {
             base: None,
-            db_path: Some(path),
+            vault_path: Some(path),
             json: true,
             command: Command::Doctor,
         }
     }
 
-    #[tokio::test]
-    async fn reports_missing_database_as_not_ready() {
+    #[test]
+    fn reports_missing_vault_as_not_ready() {
         let dir = tempfile::tempdir().unwrap();
-        let report = inspect(&args(dir.path().join("missing.db"))).await.unwrap();
+        let report = inspect(&args(dir.path().join("missing-vault"))).unwrap();
 
         assert!(!report.ready);
-        assert!(!report.database.exists);
+        assert!(!report.vault.exists);
         assert_eq!(
-            report.database.error.as_deref(),
-            Some("database file does not exist")
+            report.vault.error.as_deref(),
+            Some("vault directory does not exist")
         );
     }
 
-    #[tokio::test]
-    async fn reports_current_schema_as_ready_over_read_only_connection() {
+    #[test]
+    fn reports_a_vault_file_path_as_not_ready() {
         let dir = tempfile::tempdir().unwrap();
-        let path = dir.path().join("app.db");
-        let db = hypr_db_core::Db::connect_local_plain(&path).await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        db.pool().close().await;
+        let path = dir.path().join("vault");
+        std::fs::write(&path, "not a directory").unwrap();
+        let report = inspect(&args(path)).unwrap();
 
-        let report = inspect(&args(path)).await.unwrap();
+        assert!(!report.ready);
+        assert!(report.vault.exists);
+        assert!(!report.vault.is_directory);
+        assert_eq!(
+            report.vault.error.as_deref(),
+            Some("vault path is not a directory")
+        );
+    }
+
+    #[test]
+    fn reports_a_scannable_vault_as_ready() {
+        let dir = tempfile::tempdir().unwrap();
+        let session_dir = dir.path().join("sessions/meeting-1");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        std::fs::write(
+            session_dir.join("_meta.json"),
+            serde_json::json!({
+                "id": "meeting-1",
+                "title": "Planning",
+                "started_at": null,
+                "ended_at": null,
+                "created_at": "2026-07-13T00:00:00Z",
+                "tags": [],
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let report = inspect(&args(dir.path().to_path_buf())).unwrap();
 
         assert!(report.ready);
-        assert!(report.database.opened_read_only);
-        assert!(report.database.schema_ready);
-        assert!(report.database.error.is_none());
+        assert!(report.vault.is_directory);
+        assert_eq!(report.vault.sessions, Some(1));
+        assert!(report.vault.error.is_none());
     }
 }

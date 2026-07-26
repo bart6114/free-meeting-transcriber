@@ -13,7 +13,7 @@ Use Free Meeting Transcriber's read-only data surfaces. Prefer the MCP server wh
 2. Otherwise, check `fmtr --version` and use CLI commands with `--json`.
 3. If neither surface is available, direct the user to [setup](references/setup.md). Do not install software unless the user asks.
 
-Never query or modify Free Meeting Transcriber's SQLite database directly. The CLI and MCP server own compatibility with the application schema.
+Never crawl or modify Free Meeting Transcriber's vault files directly. The CLI and MCP server own compatibility with the application's file formats.
 
 ## Find the right meeting
 

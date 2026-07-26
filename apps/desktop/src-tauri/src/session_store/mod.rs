@@ -62,6 +62,15 @@ impl From<sqlx::Error> for StoreError {
     }
 }
 
+impl From<hypr_vault_read::Error> for StoreError {
+    fn from(err: hypr_vault_read::Error) -> Self {
+        match err {
+            hypr_vault_read::Error::Io(msg) => StoreError::Io(msg),
+            hypr_vault_read::Error::Parse(msg) => StoreError::Serialize(msg),
+        }
+    }
+}
+
 impl SessionStore {
     pub fn new(vault_base: PathBuf, pool: SqlitePool) -> Self {
         Self {
@@ -142,58 +151,9 @@ fn sha256(bytes: &[u8]) -> String {
         })
 }
 
-/// `write_note`/`write_document` never write a frontmatter block -- `_memo.md` and every
-/// other `sessions/<id>/<kind>.md` file are meant to hold raw markdown only. A file can still
-/// gain a leading frontmatter block from outside those writers: an external edit, or -- until
-/// Task 13 removed it -- the legacy `vault_export` DB-to-vault mirror, which always wrapped a
-/// `session_documents` row's body in one on export, and which (before this function existed)
-/// could nest a wrapper on top of an already-wrapped file, boot/focus after boot/focus. Those
-/// wrapped files still exist in real vaults, so the strip stays load-bearing.
-///
-/// Strips repeatedly, one layer per loop iteration, so a file carrying two or more nested
-/// exporter wrappers (the shape that specific bug left behind) converges to the true inner
-/// content in a single call rather than only losing its outermost layer and leaving stale
-/// wrapper content indexed forever.
-///
-/// Each layer is only stripped if it's *recognizable as the exporter's own wrapping* -- its
-/// frontmatter has an `id` and/or `position` key, the keys the legacy exporter's
-/// `render_session_document` always wrote (see `crates/fs-sync-core/src/export.rs`). A block
-/// that parses as well-formed frontmatter but has neither key is treated as genuine user
-/// content (some other note/document convention, not this app's own wrapper) and the function
-/// stops and returns everything from that point on, untouched. This is what makes it safe
-/// against eating real user text that happens to open with a valid-looking `---` block: only
-/// an unambiguous, exporter-shaped wrapper is ever removed, never guessed at by shape alone.
-///
-/// A file with no frontmatter at all (the overwhelmingly common case) round-trips through this
-/// unchanged -- `ParsedDocument::from_str` returns the original string verbatim when it
-/// doesn't start with a `---` delimiter. A file that starts with `---` but doesn't parse as a
-/// well-formed frontmatter block (no closing delimiter, or invalid YAML -- which includes a
-/// legitimate note that just happens to open with a horizontal rule) is likewise left
-/// completely untouched.
-fn strip_leading_frontmatter(content: String) -> String {
-    use std::str::FromStr;
-
-    let mut current = content;
-    loop {
-        let parsed = match hypr_fs_sync_core::frontmatter::ParsedDocument::from_str(&current) {
-            Ok(parsed) => parsed,
-            Err(_) => return current,
-        };
-        if !is_exporter_wrapper(&parsed.frontmatter) {
-            return current;
-        }
-        current = parsed.content;
-    }
-}
-
-/// The specific, narrow signal that a parsed leading frontmatter block is the legacy
-/// exporter's own wrapping rather than arbitrary user/third-party frontmatter:
-/// `render_session_document` always wrote an `id` key, and always wrote a `position` key (see
-/// `crates/fs-sync-core/src/export.rs`'s `render_session_document`). Either one present is
-/// enough to treat the block as this app's own wrapper.
-fn is_exporter_wrapper(frontmatter: &HashMap<String, serde_json::Value>) -> bool {
-    frontmatter.contains_key("id") || frontmatter.contains_key("position")
-}
+// The legacy-exporter frontmatter strip is shared with the read-only vault consumers
+// (fmtr CLI/MCP); see `hypr_vault_read::strip_leading_frontmatter` for the full rationale.
+pub(crate) use hypr_vault_read::strip_leading_frontmatter;
 
 #[cfg(test)]
 mod tests {

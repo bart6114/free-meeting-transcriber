@@ -29,9 +29,9 @@ fmtr meetings export MEETING_ID --format json --output meeting.json
 
 Export refuses to replace an existing file. Pass `--force` only after the user explicitly approves overwriting that exact path.
 
-Global database overrides:
+Global vault overrides:
 
 ```bash
-fmtr --db-path /path/to/app.db --json meetings list
-fmtr --base /path/to/fmtr-data --json meetings list
+fmtr --vault-path /path/to/vault --json meetings list
+fmtr --base /path/to/vault --json meetings list
 ```

@@ -12,10 +12,10 @@ expression: canonicalize_json(contract)
       "value_name": "DIR"
     },
     {
-      "flags": "--db-path",
+      "flags": "--vault-path",
       "is_flag": false,
       "required": false,
-      "value_name": "FILE"
+      "value_name": "DIR"
     },
     {
       "flags": "--json",
@@ -40,7 +40,7 @@ expression: canonicalize_json(contract)
   ],
   "subcommands": [
     {
-      "about": "Check the local CLI and database connection without changing data",
+      "about": "Check the local CLI and vault access without changing data",
       "name": "fmtr doctor",
       "options": [
         {
@@ -243,5 +243,5 @@ expression: canonicalize_json(contract)
       "synopsis": "fmtr mcp [-h]"
     }
   ],
-  "synopsis": "fmtr [--base] [--db-path] [--json] [-h] [-V] <command>"
+  "synopsis": "fmtr [--base] [--vault-path] [--json] [-h] [-V] <command>"
 }

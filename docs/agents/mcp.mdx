@@ -22,14 +22,14 @@ Use this generic MCP configuration:
 
 If `fmtr` is not on the client's `PATH`, use the executable's absolute path as `command`. Restart the client after changing its configuration.
 
-For a custom database path:
+For a custom vault path:
 
 ```json
 {
   "mcpServers": {
     "fmtr": {
       "command": "fmtr",
-      "args": ["--db-path", "/path/to/app.db", "mcp"]
+      "args": ["--vault-path", "/path/to/vault", "mcp"]
     }
   }
 }

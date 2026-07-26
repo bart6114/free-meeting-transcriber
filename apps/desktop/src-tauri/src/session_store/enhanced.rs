@@ -1,27 +1,10 @@
-use std::str::FromStr;
-
 use serde::{Deserialize, Serialize};
 
 use super::{SessionStore, StoreError, paths};
 
-pub const ENHANCED_KINDS: [&str; 2] = ["summary", "template_output"];
-
-/// One AI-generated document (`summary` or `template_output`), file-canonical at
-/// `sessions/<session_id>/enhanced/<id>.md`. `id` is the same UUID the `session_documents`
-/// index row uses, and the frontmatter carries every metadata column that row mirrors --
-/// there is deliberately no sidecar file.
-#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
-pub struct EnhancedDoc {
-    pub id: String,
-    pub session_id: String,
-    /// "summary" (no template) or "template_output".
-    pub kind: String,
-    pub title: String,
-    pub template_id: String,
-    pub sort_order: i32,
-    /// Body only -- never includes the frontmatter block.
-    pub markdown: String,
-}
+// The `enhanced/<id>.md` schema (type, frontmatter parse/render) is shared with the
+// read-only vault consumers (fmtr CLI/MCP) and lives in `hypr-vault-read`.
+pub use hypr_vault_read::{ENHANCED_KINDS, EnhancedDoc};
 
 /// Partial update for an existing enhanced doc: `None` means "leave as-is". The `expected_*`
 /// fields are compare-and-swap guards against the *current file content* -- a mismatch
@@ -45,78 +28,19 @@ pub struct EnhancedDocPatch {
     pub expected_markdown: Option<String>,
 }
 
-/// The typed frontmatter schema for `enhanced/<id>.md`. Every field defaults so a
-/// hand-created or partially-written file still parses (missing kind falls back to
-/// "summary" below); unknown keys are ignored by serde. `hypr_frontmatter::Document`'s
-/// renderer sorts keys, so the on-disk bytes are deterministic for identical content.
-#[derive(Serialize, Deserialize, Debug)]
-struct EnhancedFrontmatter {
-    #[serde(default)]
-    kind: String,
-    #[serde(default)]
-    title: String,
-    #[serde(default)]
-    template_id: String,
-    #[serde(default)]
-    sort_order: i32,
-}
-
 pub(super) fn render_enhanced_file(doc: &EnhancedDoc) -> Result<String, StoreError> {
-    let frontmatter = EnhancedFrontmatter {
-        kind: doc.kind.clone(),
-        title: doc.title.clone(),
-        template_id: doc.template_id.clone(),
-        sort_order: doc.sort_order,
-    };
-    hypr_frontmatter::Document::new(frontmatter, &doc.markdown)
-        .render()
-        .map_err(|e| StoreError::Serialize(format!("failed to render enhanced doc: {e}")))
+    hypr_vault_read::render_enhanced_file(doc).map_err(Into::into)
 }
 
-/// Inverse of `render_enhanced_file`. A file with no frontmatter at all (an external
-/// drop-in) is accepted as a plain summary; a file whose frontmatter is present but
-/// malformed is an error -- rebuild treats that like any other unparseable artifact
-/// (log, leave the existing index row alone). An unknown `kind` degrades to "summary"
-/// rather than erroring so a hand-edited value can't make the document vanish.
+/// See `hypr_vault_read::parse_enhanced_file`: a file with no frontmatter is accepted as a
+/// plain summary, malformed frontmatter is an error -- rebuild treats that like any other
+/// unparseable artifact (log, leave the existing index row alone).
 pub(super) fn parse_enhanced_file(
     id: &str,
     session_id: &str,
     raw: &str,
 ) -> Result<EnhancedDoc, StoreError> {
-    let (frontmatter, markdown) =
-        match hypr_frontmatter::Document::<EnhancedFrontmatter>::from_str(raw) {
-            Ok(doc) => (doc.frontmatter, doc.content),
-            Err(hypr_frontmatter::Error::MissingOpeningDelimiter) => (
-                EnhancedFrontmatter {
-                    kind: String::new(),
-                    title: String::new(),
-                    template_id: String::new(),
-                    sort_order: 0,
-                },
-                raw.to_string(),
-            ),
-            Err(e) => {
-                return Err(StoreError::Serialize(format!(
-                    "failed to parse enhanced doc frontmatter: {e}"
-                )));
-            }
-        };
-
-    let kind = if ENHANCED_KINDS.contains(&frontmatter.kind.as_str()) {
-        frontmatter.kind
-    } else {
-        "summary".to_string()
-    };
-
-    Ok(EnhancedDoc {
-        id: id.to_string(),
-        session_id: session_id.to_string(),
-        kind,
-        title: frontmatter.title,
-        template_id: frontmatter.template_id,
-        sort_order: frontmatter.sort_order,
-        markdown,
-    })
+    hypr_vault_read::parse_enhanced_file(id, session_id, raw).map_err(Into::into)
 }
 
 impl SessionStore {
