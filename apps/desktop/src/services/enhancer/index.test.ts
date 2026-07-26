@@ -457,7 +457,6 @@ describe("EnhancerService", () => {
       expect(mocks.updateSummaryDocumentTitleIfCurrent).toHaveBeenCalledWith({
         sessionId: "session-1",
         noteId: "note-1",
-        templateId: "template-1",
         currentTitle: "Summary",
         nextTitle: "One-on-one",
       }),

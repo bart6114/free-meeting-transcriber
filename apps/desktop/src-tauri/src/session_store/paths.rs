@@ -20,6 +20,14 @@ pub fn document_path(id: &str, kind: &str) -> PathBuf {
     session_dir(id).join(format!("{}.md", kind))
 }
 
+pub fn enhanced_dir(id: &str) -> PathBuf {
+    session_dir(id).join("enhanced")
+}
+
+pub fn enhanced_doc_path(id: &str, doc_id: &str) -> PathBuf {
+    enhanced_dir(id).join(format!("{}.md", doc_id))
+}
+
 pub fn transcript_path(id: &str) -> PathBuf {
     session_dir(id).join("transcript.json")
 }
@@ -41,6 +49,11 @@ mod tests {
         assert_eq!(
             document_path("s1", "notes"),
             PathBuf::from("sessions/s1/notes.md")
+        );
+        assert_eq!(enhanced_dir("s1"), PathBuf::from("sessions/s1/enhanced"));
+        assert_eq!(
+            enhanced_doc_path("s1", "doc-1"),
+            PathBuf::from("sessions/s1/enhanced/doc-1.md")
         );
         assert_eq!(
             transcript_path("s1"),

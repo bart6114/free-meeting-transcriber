@@ -1,8 +1,6 @@
 import type { LanguageModel } from "ai";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { json2md } from "@hypr/editor/markdown";
-
 import type { TaskConfig } from ".";
 import { enhanceSuccess } from "./enhance-success";
 
@@ -13,12 +11,6 @@ const mocks = vi.hoisted(() => ({
   loadSessionContentSnapshot: vi.fn(),
   persistGeneratedEnhancedNote: vi.fn().mockResolvedValue(undefined),
   persistGeneratedTitle: vi.fn().mockResolvedValue(true),
-  executeTransaction: vi.fn().mockResolvedValue([1]),
-  sessionWriteDocument: vi.fn(
-    (): Promise<
-      { status: "ok"; data: null } | { status: "error"; error: string }
-    > => Promise.resolve({ status: "ok", data: null }),
-  ),
 }));
 
 vi.mock("~/session/content-queries", () => ({
@@ -27,16 +19,6 @@ vi.mock("~/session/content-queries", () => ({
 
 vi.mock("~/session/content-mutations", () => ({
   persistGeneratedEnhancedNote: mocks.persistGeneratedEnhancedNote,
-}));
-
-vi.mock("~/db", () => ({
-  executeTransaction: mocks.executeTransaction,
-}));
-
-vi.mock("~/types/tauri.gen", () => ({
-  commands: {
-    sessionWriteDocument: mocks.sessionWriteDocument,
-  },
 }));
 
 vi.mock("./title-success", async (importOriginal) => ({
@@ -64,9 +46,9 @@ function createSnapshot(title = "") {
       {
         id: "note-1",
         title: "",
-        markdown: "",
+        markdown: "old content",
         content: "old content",
-        contentFormat: "markdown",
+        contentFormat: "md",
         templateId: "",
         position: 0,
       },
@@ -122,11 +104,9 @@ describe("enhanceSuccess.onSuccess", () => {
     mocks.loadSessionContentSnapshot.mockResolvedValue(createSnapshot());
     mocks.persistGeneratedEnhancedNote.mockResolvedValue(undefined);
     mocks.persistGeneratedTitle.mockResolvedValue(true);
-    mocks.executeTransaction.mockResolvedValue([1]);
-    mocks.sessionWriteDocument.mockResolvedValue({ status: "ok", data: null });
   });
 
-  it("persists generated content and tags through one guarded SQLite write", async () => {
+  it("persists generated content and tags through one guarded store write", async () => {
     const params = createParams({
       text: "# Summary\n\nDiscussed #Launch.",
       transformedArgs: {
@@ -137,20 +117,21 @@ describe("enhanceSuccess.onSuccess", () => {
 
     await enhanceSuccess.onSuccess?.(params);
 
+    // Markdown-based since D-3: the store CASes on the doc file's current markdown, and
+    // there is no separate single-slot `summary.md` mirror or shadow-row cleanup anymore.
     expect(mocks.persistGeneratedEnhancedNote).toHaveBeenCalledWith({
       sessionId: "session-1",
       ownerUserId: "user-1",
       note: {
         id: "note-1",
-        currentContent: "old content",
-        currentContentFormat: "markdown",
-        nextContent: expect.any(String),
+        currentMarkdown: "old content",
+        nextMarkdown: expect.any(String),
       },
       tagNames: ["launch", "prep"],
     });
-    const content =
-      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextContent;
-    expect(json2md(JSON.parse(content)).trim()).toBe(
+    const markdown =
+      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextMarkdown;
+    expect(markdown.trim()).toBe(
       "# Summary\n\nDiscussed #Launch.\n\n#launch #prep",
     );
   });
@@ -172,11 +153,9 @@ describe("enhanceSuccess.onSuccess", () => {
     expect(mocks.persistGeneratedEnhancedNote).toHaveBeenCalledBefore(
       mocks.persistGeneratedTitle,
     );
-    const content =
-      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextContent;
-    expect(json2md(JSON.parse(content)).trim()).toBe(
-      "# Generated title\n\n# Summary\n\n- Point",
-    );
+    const markdown =
+      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextMarkdown;
+    expect(markdown.trim()).toBe("# Generated title\n\n# Summary\n\n- Point");
     expect(mocks.persistGeneratedTitle).toHaveBeenCalledWith({
       text: "Generated title",
       args: { sessionId: "session-1" },
@@ -193,11 +172,9 @@ describe("enhanceSuccess.onSuccess", () => {
 
     expect(params.startTask).not.toHaveBeenCalled();
     expect(mocks.persistGeneratedTitle).not.toHaveBeenCalled();
-    const content =
-      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextContent;
-    expect(json2md(JSON.parse(content)).trim()).toBe(
-      "# Existing title\n\n# Summary\n\n- Point",
-    );
+    const markdown =
+      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextMarkdown;
+    expect(markdown.trim()).toBe("# Existing title\n\n# Summary\n\n- Point");
   });
 
   it("persists a short summary and tags within the transcript length and section cap", async () => {
@@ -231,9 +208,8 @@ describe("enhanceSuccess.onSuccess", () => {
       }),
     );
 
-    const content =
-      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextContent;
-    const markdown = json2md(JSON.parse(content)).trim();
+    const markdown =
+      mocks.persistGeneratedEnhancedNote.mock.calls[0][0].note.nextMarkdown.trim();
     expect(markdown).toContain("# First");
     expect(markdown).toContain("# Second");
     expect(markdown).not.toContain("# Third");

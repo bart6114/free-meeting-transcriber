@@ -326,24 +326,32 @@ export function updateEnhancedNoteContent(
   sessionTitle?: string,
 ): Promise<void> {
   return enqueueDatabaseWrite(`session:${sessionId}`, async () => {
-    const now = new Date().toISOString();
-    const statements: Array<{ sql: string; params: unknown[] }> = [
-      {
-        sql: `
-          UPDATE session_documents
-          SET body = ?, body_format = 'prosemirror_json', updated_at = ?
-          WHERE id = ?
-            AND kind IN ('summary', 'template_output')
-            AND deleted_at IS NULL
-        `,
-        params: [content, now, enhancedNoteId],
-      },
-    ];
+    // The file home is markdown-canonical; the editor hands us prosemirror JSON. Content
+    // that doesn't parse is already markdown (defensive -- the enhanced editor always
+    // serializes JSON today).
+    let markdown = content;
+    try {
+      markdown = json2md(JSON.parse(content));
+    } catch {
+      // keep `content` as-is
+    }
 
-    await executeTransaction(statements);
+    // File-first: `enhanced/<doc-id>.md` is canonical, and the store's dual-write keeps
+    // the `session_documents` row (still read by Phase-E-pending live queries and search)
+    // in sync -- a raw UPDATE here would leave the file stale for the next rebuild.
+    const docWrite = await commands.sessionUpdateEnhancedDoc(
+      sessionId,
+      enhancedNoteId,
+      { markdown },
+    );
+    if (docWrite.status === "error") {
+      throw new Error(
+        `Failed to update summary ${enhancedNoteId}: ${docWrite.error}`,
+      );
+    }
 
-    // Session title is store-canonical (`_meta.json`), so it must not ride the SQL
-    // transaction above -- the store's dual-write updates the sessions row itself.
+    // Session title is store-canonical (`_meta.json`), so it rides its own store call --
+    // the store's dual-write updates the sessions row itself.
     if (sessionTitle !== undefined) {
       const result = await commands.sessionUpdateMeta(sessionId, {
         title: sessionTitle,
@@ -357,21 +365,23 @@ export function updateEnhancedNoteContent(
   });
 }
 
-export function deleteEnhancedNote(enhancedNoteId: string): Promise<void> {
+export function deleteEnhancedNote(
+  enhancedNoteId: string,
+  sessionId: string,
+): Promise<void> {
   return enqueueDatabaseWrite(`enhanced-note:${enhancedNoteId}`, async () => {
-    const now = new Date().toISOString();
-    await executeTransaction([
-      {
-        sql: `
-          UPDATE session_documents
-          SET deleted_at = ?, updated_at = ?
-          WHERE id = ?
-            AND kind IN ('summary', 'template_output')
-            AND deleted_at IS NULL
-        `,
-        params: [now, now, enhancedNoteId],
-      },
-    ]);
+    // The store moves `enhanced/<doc-id>.md` to `.trash/` (hand-recoverable) and
+    // hard-deletes the index row -- no tombstone, since no undo path exists for enhanced
+    // notes and rebuild prunes file-less rows anyway.
+    const result = await commands.sessionDeleteEnhancedDoc(
+      sessionId,
+      enhancedNoteId,
+    );
+    if (result.status === "error") {
+      throw new Error(
+        `Failed to delete summary ${enhancedNoteId}: ${result.error}`,
+      );
+    }
   });
 }
 

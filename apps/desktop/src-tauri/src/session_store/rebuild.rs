@@ -12,7 +12,7 @@ use super::{SessionStore, StoreError, paths};
 pub struct RebuildReport {
     pub sessions: usize,
     /// Upserted `session_documents` rows this pass -- every `<kind>.md` file including the
-    /// note (`_memo.md`), not just the note.
+    /// note (`_memo.md`) and every `enhanced/<doc_id>.md` doc, not just the note.
     pub notes: usize,
     pub transcripts: usize,
     /// Folder ids that have at least one recognized content file (a `<kind>.md` document or
@@ -123,12 +123,15 @@ impl SessionStore {
 
         // "note" is always protected here: either just upserted above, deliberately left
         // alone after a parse error, or already deleted -- in the last case there's no row
-        // left to prune anyway, so including it unconditionally is harmless.
-        let mut keep_kinds = vec!["note".to_string()];
+        // left to prune anyway, so including it unconditionally is harmless. Rows whose
+        // *file* fails to parse are also kept (their id lands in `keep_doc_ids` before the
+        // content match): corruption must never look like deletion.
+        let mut keep_doc_ids = vec![format!("{id}:note")];
+        let mut document_scans_succeeded = true;
         match self.scan_document_files(id).await {
             Ok(doc_files) => {
                 for (kind, content) in doc_files {
-                    keep_kinds.push(kind.clone());
+                    keep_doc_ids.push(format!("{id}:{kind}"));
                     match content {
                         Ok(body) => {
                             self.upsert_document_row(id, &kind, &body).await?;
@@ -142,14 +145,47 @@ impl SessionStore {
                         ),
                     }
                 }
-                self.prune_document_rows(id, &keep_kinds).await?;
             }
             Err(e) => {
                 // Couldn't even list the directory -- treat like any other unparseable file:
                 // log it, touch nothing. Pruning here would risk mistaking "can't tell" for
                 // "definitely gone".
+                document_scans_succeeded = false;
                 record_error(&mut report.errors, &mut first_error, id, e);
             }
+        }
+
+        match self.scan_enhanced_doc_files(id).await {
+            Ok(enhanced_files) => {
+                for (doc_id, parsed) in enhanced_files {
+                    keep_doc_ids.push(doc_id.clone());
+                    match parsed {
+                        Ok(doc) => {
+                            self.upsert_enhanced_doc_row(&doc).await?;
+                            report.notes += 1;
+                        }
+                        Err(e) => record_error(
+                            &mut report.errors,
+                            &mut first_error,
+                            &format!("{id}: enhanced/{doc_id}.md"),
+                            e,
+                        ),
+                    }
+                }
+            }
+            Err(e) => {
+                document_scans_succeeded = false;
+                record_error(&mut report.errors, &mut first_error, id, e);
+            }
+        }
+
+        // Only prune when *both* directory listings succeeded: a stale row is only
+        // provably stale once every place its file could live has been enumerated.
+        // Index-only rows with no file home (pre-cutover UUID summaries -- the owner's
+        // no-migration directive leaves them behind deliberately) are pruned here, same
+        // as before this task.
+        if document_scans_succeeded {
+            self.prune_document_rows(id, &keep_doc_ids).await?;
         }
 
         match self.read_transcript_json(id).await {
@@ -264,6 +300,69 @@ impl SessionStore {
                         .map(super::strip_leading_frontmatter)
                         .map_err(|e| StoreError::Io(format!("failed to read {stem}.md: {e}")));
                     out.push((stem.to_string(), content));
+                }
+                Ok(out)
+            },
+        )
+        .await
+        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
+    }
+
+    /// Lists every `<doc_id>.md` under `sessions/<id>/enhanced/` and parses each file's
+    /// frontmatter+body into an `EnhancedDoc`. Same error contract as
+    /// `scan_document_files`: per-file failures ride the inner `Result` (caller logs and
+    /// keeps the row -- the doc id is still reported so pruning never mistakes
+    /// "unparseable" for "gone"); an outer `Err` means the directory listing itself
+    /// failed and the caller must not prune. A missing `enhanced/` dir is simply "no
+    /// docs" -- most sessions never get one.
+    async fn scan_enhanced_doc_files(
+        &self,
+        id: &str,
+    ) -> Result<Vec<(String, Result<super::EnhancedDoc, StoreError>)>, StoreError> {
+        let dir = self.vault_base.join(paths::enhanced_dir(id));
+        let session_id = id.to_string();
+        tokio::task::spawn_blocking(
+            move || -> Result<Vec<(String, Result<super::EnhancedDoc, StoreError>)>, StoreError> {
+                let mut out = Vec::new();
+                let entries = match std::fs::read_dir(&dir) {
+                    Ok(entries) => entries,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
+                    Err(e) => {
+                        return Err(StoreError::Io(format!(
+                            "failed to read enhanced docs directory: {e}"
+                        )));
+                    }
+                };
+                for entry in entries {
+                    let entry = entry
+                        .map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                        continue;
+                    }
+                    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                        continue;
+                    };
+                    // Same hygiene rules as scan_document_files: hidden files (crashed
+                    // atomic-write `.tmp-*` leftovers) and retired conflict backups are
+                    // never live documents.
+                    if stem.starts_with('.') {
+                        continue;
+                    }
+                    if stem.contains(".conflict-") {
+                        continue;
+                    }
+                    let parsed = std::fs::read_to_string(&path)
+                        .map_err(|e| {
+                            StoreError::Io(format!("failed to read enhanced/{stem}.md: {e}"))
+                        })
+                        .and_then(|raw| {
+                            super::enhanced::parse_enhanced_file(stem, &session_id, &raw)
+                        });
+                    out.push((stem.to_string(), parsed));
                 }
                 Ok(out)
             },
@@ -421,12 +520,12 @@ impl SessionStore {
         Ok(())
     }
 
-    /// Deletes `session_documents` rows for `id` whose kind isn't in `keep_kinds` -- the files
-    /// backing them are confirmed gone (the directory scan that produced `keep_kinds` did
-    /// succeed), so per mirror honesty their index rows go too.
-    async fn prune_document_rows(&self, id: &str, keep_kinds: &[String]) -> Result<(), StoreError> {
-        let keep_ids: Vec<String> = keep_kinds.iter().map(|k| format!("{id}:{k}")).collect();
-        prune_rows_not_in(self.pool(), "session_documents", id, &keep_ids).await
+    /// Deletes `session_documents` rows for `id` whose row id isn't in `keep_ids`
+    /// (`<id>:<kind>` for single-slot documents, the bare doc UUID for `enhanced/` docs) --
+    /// the files backing them are confirmed gone (every directory scan that fed `keep_ids`
+    /// did succeed), so per mirror honesty their index rows go too.
+    async fn prune_document_rows(&self, id: &str, keep_ids: &[String]) -> Result<(), StoreError> {
+        prune_rows_not_in(self.pool(), "session_documents", id, keep_ids).await
     }
 
     async fn prune_transcript_rows(&self, id: &str, keep_ids: &[String]) -> Result<(), StoreError> {
@@ -949,6 +1048,176 @@ mod tests {
                 .await
                 .unwrap();
         assert_eq!(kinds, vec!["note".to_string()]);
+    }
+
+    fn enhanced_doc(session_id: &str, doc_id: &str) -> crate::session_store::EnhancedDoc {
+        crate::session_store::EnhancedDoc {
+            id: doc_id.to_string(),
+            session_id: session_id.to_string(),
+            kind: "template_output".to_string(),
+            title: "Customer review".to_string(),
+            template_id: "template-1".to_string(),
+            sort_order: 2,
+            markdown: "# Review\n\n- Point".to_string(),
+        }
+    }
+
+    /// The whole point of the file home: after a full index wipe, every metadata column
+    /// (title/template_id/sort_order/kind) comes back from the frontmatter alone.
+    #[tokio::test]
+    async fn rebuild_restores_enhanced_doc_metadata_from_frontmatter() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        sqlx::query("DELETE FROM session_documents")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let (kind, template_id, title, sort_order, body): (String, String, String, i64, String) =
+            sqlx::query_as(
+                "SELECT kind, template_id, title, sort_order, body
+                 FROM session_documents WHERE id='doc-1' AND session_id='s1'",
+            )
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(kind, "template_output");
+        assert_eq!(template_id, "template-1");
+        assert_eq!(title, "Customer review");
+        assert_eq!(sort_order, 2);
+        assert_eq!(body, "# Review\n\n- Point");
+    }
+
+    /// The change-guard no-op property must hold for enhanced docs too: an unchanged
+    /// `enhanced/<doc>.md` must not requeue search reindexing on the automatic
+    /// startup/focus rebuild passes.
+    #[tokio::test]
+    async fn rebuild_of_unchanged_enhanced_doc_does_not_requeue_search_reindexing() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+        store.rebuild_index().await.unwrap();
+
+        sqlx::query("DELETE FROM search_index_dirty")
+            .execute(store.pool())
+            .await
+            .unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(dirty, 0);
+    }
+
+    #[tokio::test]
+    async fn rebuild_prunes_enhanced_doc_row_whose_file_is_gone() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        std::fs::remove_file(vault.path().join("sessions/s1/enhanced/doc-1.md")).unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_documents WHERE id='doc-1'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(n, 0);
+    }
+
+    /// Corruption must never look like deletion: an `enhanced/<doc>.md` whose frontmatter
+    /// no longer parses is logged, and its existing index row survives the pass -- both
+    /// the upsert skip and the prune must respect it.
+    #[tokio::test]
+    async fn rebuild_unparseable_enhanced_doc_leaves_existing_row_and_logs_error() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        std::fs::write(
+            vault.path().join("sessions/s1/enhanced/doc-1.md"),
+            "---\ntitle: [unclosed\n---\n\nbody",
+        )
+        .unwrap();
+
+        let report = store.rebuild_index().await.unwrap();
+
+        let title: String =
+            sqlx::query_scalar("SELECT title FROM session_documents WHERE id='doc-1'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            title, "Customer review",
+            "existing row must survive a corrupt file"
+        );
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|e| e.contains("enhanced/doc-1.md")),
+            "the corrupt doc must be reported: {:?}",
+            report.errors
+        );
+    }
+
+    /// Pre-cutover UUID summary rows never had a file home, and the owner's no-migration
+    /// directive means they never get one -- rebuild prunes them exactly as it did before
+    /// this task (this test pins that preserved behavior rather than introducing it).
+    #[tokio::test]
+    async fn rebuild_still_prunes_legacy_index_only_uuid_rows_without_files() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        sqlx::query(
+            "INSERT INTO session_documents (id, session_id, kind, body_format, body)
+             VALUES ('legacy-uuid', 's1', 'summary', 'prosemirror_json', '{}')",
+        )
+        .execute(store.pool())
+        .await
+        .unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let legacy: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM session_documents WHERE id='legacy-uuid'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(legacy, 0, "index-only rows without files stay pruned");
+        let file_backed: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM session_documents WHERE id='doc-1'")
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(
+            file_backed, 1,
+            "file-backed docs must survive the same prune"
+        );
     }
 
     #[tokio::test]

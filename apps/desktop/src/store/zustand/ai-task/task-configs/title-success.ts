@@ -1,5 +1,3 @@
-import { md2json, parseJsonContent } from "@hypr/editor/markdown";
-
 import type { TaskConfig } from ".";
 
 import {
@@ -7,10 +5,7 @@ import {
   type SessionDocumentContentUpdate,
 } from "~/session/content-mutations";
 import { loadSessionContentSnapshot } from "~/session/content-queries";
-import {
-  ensureFirstLineTitle,
-  ensureMarkdownFirstLineTitle,
-} from "~/session/title-content";
+import { ensureMarkdownFirstLineTitle } from "~/session/title-content";
 import { hasLiveSessionTitleDraft } from "~/store/zustand/live-title";
 import { commands } from "~/types/tauri.gen";
 
@@ -57,16 +52,16 @@ export async function persistGeneratedTitle({
     return false;
   }
 
+  // Markdown-based since D-3: the CAS runs against the doc file's markdown body, so the
+  // update carries the snapshot's markdown (what the file held when we read it) and the
+  // markdown-stamped result.
   const documents: SessionDocumentContentUpdate[] = snapshot.enhancedNotes
-    .filter((note) => note.content.trim())
-    .map((note) =>
-      createTitledDocumentUpdate(
-        note.id,
-        note.content,
-        note.contentFormat,
-        trimmed,
-      ),
-    );
+    .filter((note) => note.markdown.trim())
+    .map((note) => ({
+      id: note.id,
+      currentMarkdown: note.markdown,
+      nextMarkdown: ensureMarkdownFirstLineTitle(note.markdown, trimmed),
+    }));
 
   await applyGeneratedSessionTitle({
     sessionId: args.sessionId,
@@ -118,26 +113,6 @@ async function applyGeneratedNoteTitle(
   if (result.status === "error") {
     console.error("[title] failed to write titled note", result.error);
   }
-}
-
-function createTitledDocumentUpdate(
-  id: string,
-  content: string,
-  contentFormat: string,
-  title: string,
-): SessionDocumentContentUpdate {
-  // "markdown" is the legacy-import sentinel; "md" is what the session store
-  // (session_write_note/session_write_document, Tasks 5-8/9) writes -- both need md2json.
-  const parsed =
-    contentFormat === "markdown" || contentFormat === "md"
-      ? md2json(content)
-      : parseJsonContent(content);
-  return {
-    id,
-    currentContent: content,
-    currentContentFormat: contentFormat,
-    nextContent: JSON.stringify(ensureFirstLineTitle(parsed, title)),
-  };
 }
 
 export function getPersistableGeneratedTitle(text: string): string {

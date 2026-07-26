@@ -341,6 +341,26 @@ mod tests {
 
     // -- additional routing coverage --
 
+    /// Enhanced docs live one level deeper (`sessions/<id>/enhanced/<doc>.md`), but
+    /// session-id extraction only looks at the first two segments -- a nested external
+    /// edit must still refresh its session, and a deleted doc's trash destination must
+    /// stay ignored like all `.trash/` paths.
+    #[test]
+    fn nested_enhanced_doc_paths_refresh_their_session() {
+        assert!(matches!(
+            classify_event("sessions/s1/enhanced/doc-1.md", false),
+            WatchAction::Refresh(id) if id == "s1"
+        ));
+        assert!(matches!(
+            classify_event(".trash/2026-07-26/sessions/s1/enhanced/doc-1.md", false),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event("sessions/s1/enhanced/.tmp-1234-5678-doc-1.md", false),
+            WatchAction::Ignore
+        ));
+    }
+
     #[test]
     fn bare_session_folder_path_refreshes() {
         assert!(matches!(

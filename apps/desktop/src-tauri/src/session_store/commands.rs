@@ -4,7 +4,10 @@ use tauri::{AppHandle, Manager};
 
 use hypr_fs_format::TranscriptWithData;
 
-use super::{RebuildReport, SessionMeta, SessionMetaPatch, SessionStore, TranscriptDelta};
+use super::{
+    EnhancedDoc, EnhancedDocPatch, RebuildReport, SessionMeta, SessionMetaPatch, SessionStore,
+    TranscriptDelta,
+};
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
 /// `SessionStore` method, map `StoreError` to `String` for the IPC boundary. `SessionStore` is
@@ -78,6 +81,45 @@ pub async fn session_write_document<R: tauri::Runtime>(
 ) -> Result<(), String> {
     store(&app)?
         .write_document(&session_id, &kind, &markdown)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_write_enhanced_doc<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    doc: EnhancedDoc,
+) -> Result<(), String> {
+    store(&app)?
+        .write_enhanced_doc(&doc)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_update_enhanced_doc<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+    doc_id: String,
+    patch: EnhancedDocPatch,
+) -> Result<(), String> {
+    store(&app)?
+        .update_enhanced_doc(&session_id, &doc_id, patch)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_delete_enhanced_doc<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+    doc_id: String,
+) -> Result<(), String> {
+    store(&app)?
+        .delete_enhanced_doc(&session_id, &doc_id)
         .await
         .map_err(|e| e.to_string())
 }

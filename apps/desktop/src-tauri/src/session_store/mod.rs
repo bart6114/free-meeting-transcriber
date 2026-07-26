@@ -6,6 +6,7 @@ use std::sync::Arc;
 pub mod audio;
 pub mod commands;
 pub mod content;
+pub mod enhanced;
 pub mod journal;
 pub mod migrate;
 pub mod paths;
@@ -13,6 +14,7 @@ pub mod rebuild;
 pub mod transcript;
 
 pub use content::{SessionMeta, SessionMetaPatch};
+pub use enhanced::{EnhancedDoc, EnhancedDocPatch};
 pub use rebuild::RebuildReport;
 pub use transcript::TranscriptDelta;
 
@@ -31,6 +33,10 @@ pub enum StoreError {
     Io(String),
     Db(String),
     Serialize(String),
+    /// A compare-and-swap guard didn't match current file content. Stringifies with a
+    /// stable `conflict:` prefix so the frontend can tell a benign CAS miss apart from a
+    /// real failure across the IPC string boundary.
+    Conflict(String),
 }
 
 impl std::fmt::Display for StoreError {
@@ -39,6 +45,7 @@ impl std::fmt::Display for StoreError {
             StoreError::Io(msg) => write!(f, "I/O error: {}", msg),
             StoreError::Db(msg) => write!(f, "Database error: {}", msg),
             StoreError::Serialize(msg) => write!(f, "Serialization error: {}", msg),
+            StoreError::Conflict(msg) => write!(f, "conflict: {}", msg),
         }
     }
 }

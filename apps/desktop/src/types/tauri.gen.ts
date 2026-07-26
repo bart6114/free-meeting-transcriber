@@ -135,6 +135,30 @@ async sessionWriteDocument(sessionId: string, kind: string, markdown: string) : 
     else return { status: "error", error: e  as any };
 }
 },
+async sessionWriteEnhancedDoc(doc: EnhancedDoc) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_write_enhanced_doc", { doc }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionUpdateEnhancedDoc(sessionId: string, docId: string, patch: EnhancedDocPatch) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_update_enhanced_doc", { sessionId, docId, patch }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionDeleteEnhancedDoc(sessionId: string, docId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_delete_enhanced_doc", { sessionId, docId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async sessionAppendTranscript(sessionId: string, delta: TranscriptDelta) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_append_transcript", { sessionId, delta }) };
@@ -221,6 +245,22 @@ async sessionDeleteAudio(sessionId: string, filename: string) : Promise<Result<n
 
 export type EmbeddedCliState = "installed" | "missing" | "conflict" | "unsupported" | "resource_missing"
 export type EmbeddedCliStatus = { supported: boolean; commandName: string; installPath: string; state: EmbeddedCliState; details: string | null }
+export type EnhancedDoc = { id: string; session_id: string;
+/**
+ * "summary" (no template) or "template_output".
+ */
+kind: string; title: string; template_id: string; sort_order: number;
+/**
+ * Body only -- never includes the frontmatter block.
+ */
+markdown: string }
+/**
+ * Partial update for an existing enhanced doc: `None` means "leave as-is". The `expected_*`
+ * fields are compare-and-swap guards against the *current file content* -- a mismatch
+ * returns `StoreError::Conflict` and changes nothing, which is the store-level equivalent
+ * of the SQL era's `expectedRowsAffected`/`WHERE title = ?` rejections.
+ */
+export type EnhancedDocPatch = { kind?: string | null; title?: string | null; template_id?: string | null; sort_order?: number | null; markdown?: string | null; expected_title?: string | null; expected_markdown?: string | null }
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
  * Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect rows *upserted* this
@@ -231,7 +271,7 @@ export type JsonValue = null | boolean | number | string | JsonValue[] | Partial
 export type RebuildReport = { sessions: number; 
 /**
  * Upserted `session_documents` rows this pass -- every `<kind>.md` file including the
- * note (`_memo.md`), not just the note.
+ * note (`_memo.md`) and every `enhanced/<doc_id>.md` doc, not just the note.
  */
 notes: number; transcripts: number; 
 /**

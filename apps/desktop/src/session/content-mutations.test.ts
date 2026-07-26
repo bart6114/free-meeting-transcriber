@@ -18,6 +18,11 @@ const mocks = vi.hoisted(() => ({
       { status: "ok"; data: null } | { status: "error"; error: string }
     > => Promise.resolve({ status: "ok", data: null }),
   ),
+  sessionUpdateEnhancedDoc: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
 }));
 
 vi.mock("~/db", () => ({
@@ -28,6 +33,7 @@ vi.mock("~/db", () => ({
 vi.mock("~/types/tauri.gen", () => ({
   commands: {
     sessionUpdateMeta: mocks.sessionUpdateMeta,
+    sessionUpdateEnhancedDoc: mocks.sessionUpdateEnhancedDoc,
   },
 }));
 
@@ -36,13 +42,17 @@ import {
   persistGeneratedEnhancedNote,
 } from "./content-mutations";
 
-describe("session content SQLite corrections", () => {
+describe("session content corrections", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.sessionUpdateMeta.mockResolvedValue({ status: "ok", data: null });
+    mocks.sessionUpdateEnhancedDoc.mockResolvedValue({
+      status: "ok",
+      data: null,
+    });
   });
 
-  it("saves generated content and deterministic tag rows atomically", async () => {
+  it("saves generated content through the store CAS, then deterministic tag rows", async () => {
     mocks.execute.mockResolvedValueOnce([
       { tag_id: "launch" },
       { tag_id: "prep" },
@@ -53,25 +63,54 @@ describe("session content SQLite corrections", () => {
       ownerUserId: "user-1",
       note: {
         id: "summary-1",
-        currentContent: "old summary",
-        currentContentFormat: "markdown",
-        nextContent: '{"type":"doc"}',
+        currentMarkdown: "old summary",
+        nextMarkdown: "# New summary",
       },
       tagNames: ["launch", "launch", "prep"],
     });
 
+    // The doc body goes file-first through the store, guarded by the file's current
+    // markdown -- never a raw session_documents UPDATE.
+    expect(mocks.sessionUpdateEnhancedDoc).toHaveBeenCalledWith(
+      "session-1",
+      "summary-1",
+      {
+        markdown: "# New summary",
+        expected_markdown: "old summary",
+      },
+    );
+
     const statements = mocks.executeTransaction.mock.calls[0][0];
-    expect(statements).toHaveLength(5);
-    expect(statements[0]).toMatchObject({ expectedRowsAffected: 1 });
-    expect(statements[0].sql).toContain("AND body = ?");
-    expect(statements[0].sql).toContain("EXISTS");
-    expect(statements[1].sql).toContain("INSERT INTO tags");
-    expect(statements[1].params[0]).toBe("launch");
-    expect(statements[2].sql).toContain("INSERT INTO session_tags");
-    expect(statements[2].params[0]).toBe("session-1:launch");
+    expect(statements).toHaveLength(4);
+    expect(statements[0].sql).toContain("INSERT INTO tags");
+    expect(statements[0].params[0]).toBe("launch");
+    expect(statements[1].sql).toContain("INSERT INTO session_tags");
+    expect(statements[1].params[0]).toBe("session-1:launch");
     expect(
       statements.every((statement) => statement.expectedRowsAffected === 1),
     ).toBe(true);
+  });
+
+  it("rejects (and skips the tag writes) when the store CAS finds a stale summary", async () => {
+    mocks.sessionUpdateEnhancedDoc.mockResolvedValueOnce({
+      status: "error",
+      error: "conflict: enhanced doc summary-1 body changed since it was read",
+    });
+
+    await expect(
+      persistGeneratedEnhancedNote({
+        sessionId: "session-1",
+        ownerUserId: "user-1",
+        note: {
+          id: "summary-1",
+          currentMarkdown: "stale summary",
+          nextMarkdown: "# New summary",
+        },
+        tagNames: ["launch"],
+      }),
+    ).rejects.toThrow("conflict");
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
+    expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });
 
   it("dual-writes the full SQL tag set into session meta after the tag upserts", async () => {
@@ -88,9 +127,8 @@ describe("session content SQLite corrections", () => {
       ownerUserId: "user-1",
       note: {
         id: "summary-1",
-        currentContent: "old summary",
-        currentContentFormat: "markdown",
-        nextContent: '{"type":"doc"}',
+        currentMarkdown: "old summary",
+        nextMarkdown: "# New summary",
       },
       tagNames: ["launch", "prep"],
     });
@@ -117,28 +155,27 @@ describe("session content SQLite corrections", () => {
         ownerUserId: "user-1",
         note: {
           id: "summary-1",
-          currentContent: "old summary",
-          currentContentFormat: "markdown",
-          nextContent: '{"type":"doc"}',
+          currentMarkdown: "old summary",
+          nextMarkdown: "# New summary",
         },
         tagNames: ["launch"],
       }),
     ).resolves.toBeUndefined();
   });
 
-  it("skips the meta tag write entirely when generation produced no tags", async () => {
+  it("skips the tag transaction and meta tag write entirely when generation produced no tags", async () => {
     await persistGeneratedEnhancedNote({
       sessionId: "session-1",
       ownerUserId: "user-1",
       note: {
         id: "summary-1",
-        currentContent: "old summary",
-        currentContentFormat: "markdown",
-        nextContent: '{"type":"doc"}',
+        currentMarkdown: "old summary",
+        nextMarkdown: "# New summary",
       },
       tagNames: [],
     });
 
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
     expect(mocks.execute).not.toHaveBeenCalled();
     expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });
@@ -153,23 +190,24 @@ describe("session content SQLite corrections", () => {
       documents: [
         {
           id: "summary-1",
-          currentContent: "old summary",
-          currentContentFormat: "markdown",
-          nextContent: '{"type":"doc"}',
+          currentMarkdown: "old summary",
+          nextMarkdown: "# Planning\n\nold summary",
         },
       ],
     });
 
-    const statements = mocks.executeTransaction.mock.calls[0][0];
-    expect(statements).toHaveLength(1);
-    expect(statements[0].sql).toContain("AND body = ?");
-    expect(statements[0]).toMatchObject({ expectedRowsAffected: 1 });
-    // The raw note is stamped separately, file-first (title-success.ts's
-    // applyGeneratedNoteTitle) -- this SQL path must never target it.
-    expect(statements[0].sql).not.toContain("'note'");
-    expect(statements[0].sql).toContain(
-      "kind IN ('summary', 'template_output')",
+    // Each summary is stamped file-first through the store's markdown CAS -- never raw
+    // session_documents SQL, and never the raw note (which title-success stamps
+    // separately through session_read_note/session_write_note).
+    expect(mocks.sessionUpdateEnhancedDoc).toHaveBeenCalledWith(
+      "session-1",
+      "summary-1",
+      {
+        markdown: "# Planning\n\nold summary",
+        expected_markdown: "old summary",
+      },
     );
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
     // The title itself is store-canonical, never a raw `UPDATE sessions`.
     expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
       title: "Planning",
@@ -188,15 +226,16 @@ describe("session content SQLite corrections", () => {
       }),
     ).rejects.toThrow("title changed while generating");
 
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
+    expect(mocks.sessionUpdateEnhancedDoc).not.toHaveBeenCalled();
     expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });
 
   it("rolls back the generated title when any enhanced-note document guard is stale", async () => {
     mocks.execute.mockResolvedValueOnce([{ title: "" }]);
-    mocks.executeTransaction.mockRejectedValueOnce(
-      new Error("expected 1 row affected"),
-    );
+    mocks.sessionUpdateEnhancedDoc.mockResolvedValueOnce({
+      status: "error",
+      error: "conflict: enhanced doc summary-1 body changed since it was read",
+    });
 
     await expect(
       applyGeneratedSessionTitle({
@@ -206,13 +245,12 @@ describe("session content SQLite corrections", () => {
         documents: [
           {
             id: "summary-1",
-            currentContent: "old summary",
-            currentContentFormat: "markdown",
-            nextContent: '{"type":"doc"}',
+            currentMarkdown: "old summary",
+            nextMarkdown: "# Planning\n\nold summary",
           },
         ],
       }),
-    ).rejects.toThrow("expected 1 row affected");
+    ).rejects.toThrow("conflict");
 
     expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });

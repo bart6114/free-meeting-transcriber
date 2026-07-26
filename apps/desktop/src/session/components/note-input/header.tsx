@@ -1336,12 +1336,14 @@ export function Header({
                               handleTabChange(previousView);
                             }
 
-                            void deleteEnhancedNote(view.id).catch((error) => {
-                              console.error(
-                                "[session-header] failed to remove summary",
-                                error,
-                              );
-                            });
+                            void deleteEnhancedNote(view.id, sessionId).catch(
+                              (error) => {
+                                console.error(
+                                  "[session-header] failed to remove summary",
+                                  error,
+                                );
+                              },
+                            );
                           }
                         : undefined
                     }

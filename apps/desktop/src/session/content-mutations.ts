@@ -3,11 +3,13 @@ import { enqueueDatabaseWrite } from "~/db/write-queue";
 import { DEFAULT_USER_ID } from "~/shared/utils";
 import { commands } from "~/types/tauri.gen";
 
+// Markdown-based since D-3: `enhanced/<doc-id>.md` is the doc's canonical home, so the
+// compare-and-swap runs against the file's markdown body (the store rejects with a
+// "conflict:" error when `currentMarkdown` is stale), not against the SQL row.
 export type SessionDocumentContentUpdate = {
   id: string;
-  currentContent: string;
-  currentContentFormat: string;
-  nextContent: string;
+  currentMarkdown: string;
+  nextMarkdown: string;
 };
 
 export function persistGeneratedEnhancedNote({
@@ -25,38 +27,30 @@ export function persistGeneratedEnhancedNote({
     const now = new Date().toISOString();
     const userId = ownerUserId.trim() || DEFAULT_USER_ID;
     const normalizedTagNames = [...new Set(tagNames)].filter(Boolean);
+
+    // File-first with the same staleness contract the old guarded UPDATE had: a stale
+    // `currentMarkdown` (reset/regenerate replaced the summary meanwhile) rejects and
+    // nothing below runs. A missing doc file (session or doc deleted) rejects too,
+    // replacing the old `expectedRowsAffected`/`EXISTS(sessions)` guards.
+    const docWrite = await commands.sessionUpdateEnhancedDoc(
+      sessionId,
+      note.id,
+      {
+        markdown: note.nextMarkdown,
+        expected_markdown: note.currentMarkdown,
+      },
+    );
+    if (docWrite.status === "error") {
+      throw new Error(
+        `Failed to persist generated summary ${note.id}: ${docWrite.error}`,
+      );
+    }
+
     const statements: Array<{
       sql: string;
       params: unknown[];
       expectedRowsAffected: number;
-    }> = [
-      {
-        sql: `
-          UPDATE session_documents
-          SET body = ?, body_format = 'prosemirror_json', updated_at = ?
-          WHERE id = ?
-            AND session_id = ?
-            AND kind IN ('summary', 'template_output')
-            AND body = ?
-            AND body_format = ?
-            AND deleted_at IS NULL
-            AND EXISTS (
-              SELECT 1 FROM sessions
-              WHERE sessions.id = ?
-            )
-        `,
-        params: [
-          note.nextContent,
-          now,
-          note.id,
-          sessionId,
-          note.currentContent,
-          note.currentContentFormat,
-          sessionId,
-        ],
-        expectedRowsAffected: 1,
-      },
-    ];
+    }> = [];
 
     for (const tagName of normalizedTagNames) {
       statements.push(
@@ -100,7 +94,9 @@ export function persistGeneratedEnhancedNote({
       );
     }
 
-    await executeTransaction(statements);
+    if (statements.length > 0) {
+      await executeTransaction(statements);
+    }
 
     // Dual-write the session's full tag set into `_meta.json` (file-canonical). The
     // tag/session_tags upserts above are additive, so the resulting set is whatever SQL now
@@ -146,8 +142,6 @@ export function applyGeneratedSessionTitle({
   documents: SessionDocumentContentUpdate[];
 }): Promise<void> {
   return enqueueDatabaseWrite(`session:${sessionId}`, async () => {
-    const now = new Date().toISOString();
-
     // Same compare-and-swap the old single-transaction title UPDATE gave us, kept honest by
     // the write queue: everything that mutates this session's title serializes through the
     // `session:<id>` queue key, so check-then-write can't interleave with a user edit. A
@@ -162,40 +156,23 @@ export function applyGeneratedSessionTitle({
       );
     }
 
-    const statements: Array<{
-      sql: string;
-      params: unknown[];
-      expectedRowsAffected: number;
-    }> = [];
-
+    // Documents first: a stale document guard (the store's "conflict:" CAS rejection, the
+    // file-era equivalent of the old expectedRowsAffected rollback) throws here and the
+    // store-canonical title write below never happens.
     for (const document of documents) {
-      statements.push({
-        sql: `
-          UPDATE session_documents
-          SET body = ?, body_format = 'prosemirror_json', updated_at = ?
-          WHERE id = ?
-            AND session_id = ?
-            AND kind IN ('summary', 'template_output')
-            AND body = ?
-            AND body_format = ?
-            AND deleted_at IS NULL
-        `,
-        params: [
-          document.nextContent,
-          now,
-          document.id,
-          sessionId,
-          document.currentContent,
-          document.currentContentFormat,
-        ],
-        expectedRowsAffected: 1,
-      });
-    }
-
-    // Documents first: a stale document guard throws here and the store-canonical title
-    // write below never happens, matching the old transaction's all-or-nothing rollback.
-    if (statements.length > 0) {
-      await executeTransaction(statements);
+      const docWrite = await commands.sessionUpdateEnhancedDoc(
+        sessionId,
+        document.id,
+        {
+          markdown: document.nextMarkdown,
+          expected_markdown: document.currentMarkdown,
+        },
+      );
+      if (docWrite.status === "error") {
+        throw new Error(
+          `Failed to stamp title into summary ${document.id}: ${docWrite.error}`,
+        );
+      }
     }
 
     // Title last, through the store (file-first + SQL dual-write): `_meta.json` is canonical

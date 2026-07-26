@@ -32,6 +32,16 @@ const mocks = vi.hoisted(() => ({
       { status: "ok"; data: boolean } | { status: "error"; error: string }
     > => Promise.resolve({ status: "ok", data: true }),
   ),
+  sessionUpdateEnhancedDoc: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
+  sessionDeleteEnhancedDoc: vi.fn(
+    (): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
   waitForPendingSoftDelete: vi.fn(() => Promise.resolve()),
 }));
 
@@ -63,6 +73,8 @@ vi.mock("~/types/tauri.gen", () => ({
     sessionWriteNote: mocks.sessionWriteNote,
     sessionDelete: mocks.sessionDelete,
     sessionRestore: mocks.sessionRestore,
+    sessionUpdateEnhancedDoc: mocks.sessionUpdateEnhancedDoc,
+    sessionDeleteEnhancedDoc: mocks.sessionDeleteEnhancedDoc,
   },
 }));
 
@@ -181,61 +193,74 @@ describe("session SQLite operations", () => {
     expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
-  it("commits enhanced note content via SQL and the derived session title via the store", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1]);
-
+  it("commits enhanced note content through the store as markdown, plus the derived title", async () => {
     await updateEnhancedNoteContent(
       "enhanced-note-1",
       "session-1",
-      '{"type":"doc"}',
+      JSON.stringify({
+        type: "doc",
+        content: [
+          { type: "paragraph", content: [{ type: "text", text: "Hi" }] },
+        ],
+      }),
       "Edited title",
     );
 
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements).toHaveLength(1);
-    expect(statements[0].sql).toContain("UPDATE session_documents");
-    expect(statements[0].params).toContain("enhanced-note-1");
-    expect(statements[0].params).toContain('{"type":"doc"}');
+    // The doc body is file-canonical (`enhanced/<doc-id>.md`), so the editor's
+    // prosemirror JSON is converted to markdown and written through the store -- never a
+    // raw `UPDATE session_documents`.
+    expect(mocks.sessionUpdateEnhancedDoc).toHaveBeenCalledWith(
+      "session-1",
+      "enhanced-note-1",
+      { markdown: "Hi" },
+    );
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
     expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
       title: "Edited title",
     });
   });
 
   it("does not touch session meta when no derived title accompanies the note content", async () => {
-    mocks.executeTransaction.mockResolvedValueOnce([1]);
-
     await updateEnhancedNoteContent(
       "enhanced-note-1",
       "session-1",
       '{"type":"doc"}',
     );
 
+    expect(mocks.sessionUpdateEnhancedDoc).toHaveBeenCalled();
     expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });
 
-  it("soft-deletes an enhanced note instead of removing its data", async () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-07-10T12:00:00.000Z"));
-    mocks.executeTransaction.mockResolvedValueOnce([1]);
+  it("throws when the store rejects the enhanced note update", async () => {
+    mocks.sessionUpdateEnhancedDoc.mockResolvedValueOnce({
+      status: "error",
+      error: "enhanced doc enhanced-note-1 in session session-1 has no file",
+    });
 
-    await deleteEnhancedNote("enhanced-note-1");
+    await expect(
+      updateEnhancedNoteContent("enhanced-note-1", "session-1", "# md"),
+    ).rejects.toThrow("has no file");
+  });
 
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements).toHaveLength(1);
-    expect(statements[0].sql).toContain("UPDATE session_documents");
-    expect(statements[0].sql).toContain("deleted_at IS NULL");
-    expect(statements[0].sql).not.toContain("DELETE FROM");
-    expect(statements[0].params).toEqual([
-      "2026-07-10T12:00:00.000Z",
-      "2026-07-10T12:00:00.000Z",
+  it("deletes an enhanced note through the store (file to trash, row hard-deleted)", async () => {
+    await deleteEnhancedNote("enhanced-note-1", "session-1");
+
+    expect(mocks.sessionDeleteEnhancedDoc).toHaveBeenCalledWith(
+      "session-1",
       "enhanced-note-1",
-    ]);
+    );
+    expect(mocks.executeTransaction).not.toHaveBeenCalled();
+  });
+
+  it("throws when the store rejects the enhanced note delete", async () => {
+    mocks.sessionDeleteEnhancedDoc.mockResolvedValueOnce({
+      status: "error",
+      error: "boom",
+    });
+
+    await expect(
+      deleteEnhancedNote("enhanced-note-1", "session-1"),
+    ).rejects.toThrow("boom");
   });
 
   it("deletes the session through the store, capturing its title first for the undo toast", async () => {
