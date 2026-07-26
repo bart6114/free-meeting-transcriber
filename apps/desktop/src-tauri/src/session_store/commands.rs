@@ -267,6 +267,19 @@ pub async fn session_write_transcript<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn session_replace_transcripts<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+    transcript: TranscriptWithData,
+) -> Result<(), String> {
+    store(&app)?
+        .replace_session_transcripts(&session_id, transcript)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn session_delete<R: tauri::Runtime>(
     app: AppHandle<R>,
     session_id: String,

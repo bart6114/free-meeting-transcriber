@@ -238,6 +238,81 @@ impl SessionStore {
         .await
     }
 
+    /// Supersede primitive (E3): the incoming transcript REPLACES the session's whole
+    /// transcript set (batch re-run / re-transcription path -- the old frontend
+    /// tombstone-others UPDATE). The file is the truth, so superseded transcripts must
+    /// leave `transcript.json`: the previous file moves to `.trash/<date>/sessions/<id>/`
+    /// (hand-recoverable, same policy as enhanced-doc deletes) whenever it holds anything
+    /// besides the incoming transcript id, then the file is rewritten to just the incoming
+    /// transcript. Superseded SQL rows are hard-deleted (not tombstoned): rebuild prunes
+    /// rows without file backing anyway (`prune_transcript_rows`), so a `deleted_at` marker
+    /// would only survive until the next startup/focus rescan.
+    ///
+    /// Clears the session's whole live buffer first (not just a matching transcript_id,
+    /// unlike `write_transcript`): every buffered transcript is superseded by definition,
+    /// and a pending debounced flush must not resurrect one afterward.
+    pub async fn replace_session_transcripts(
+        &self,
+        session_id: &str,
+        t: TranscriptWithData,
+    ) -> Result<(), StoreError> {
+        {
+            let mut live = self.live.lock().await;
+            if let Some(buffer) = live.get_mut(session_id) {
+                buffer.words.clear();
+                buffer.hints.clear();
+                buffer.dirty = false;
+            }
+        }
+
+        let previous = self.read_transcript_json(session_id).await?;
+        let loses_content = previous
+            .transcripts
+            .iter()
+            .any(|existing| existing.id != t.id);
+        if loses_content {
+            let vault_base = self.vault_base.clone();
+            let relative = paths::transcript_path(session_id);
+            tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
+                let abs = vault_base.join(relative);
+                hypr_fs_sync_core::export::move_to_trash(&vault_base, &abs)
+                    .map(|_| ())
+                    .map_err(|e| {
+                        StoreError::Io(format!(
+                            "failed to move superseded transcripts to trash: {e}"
+                        ))
+                    })
+            })
+            .await
+            .map_err(|e| StoreError::Io(format!("task join error: {e}")))??;
+        }
+
+        let transcript_id = t.id.clone();
+        let started_at_ms = t.started_at;
+
+        // The file is now absent (trashed) or already holds only this transcript, so
+        // persist_transcript's read-merge-write lands a file with exactly one entry --
+        // and its index_set_transcripts/notify covers the removals too, since the index
+        // gets the full (single-entry) list.
+        self.persist_transcript(
+            session_id,
+            &transcript_id,
+            started_at_ms,
+            t.words,
+            t.speaker_hints,
+        )
+        .await?;
+
+        sqlx::query("DELETE FROM transcripts WHERE session_id = ? AND id != ?")
+            .bind(session_id)
+            .bind(&transcript_id)
+            .execute(self.pool())
+            .await
+            .map_err(|e| StoreError::Db(e.to_string()))?;
+
+        Ok(())
+    }
+
     async fn persist_transcript(
         &self,
         session_id: &str,
@@ -903,6 +978,194 @@ mod tests {
             .map(|w| w["text"].as_str().unwrap())
             .collect();
         assert_eq!(t2_texts, vec!["new-words"]);
+    }
+
+    fn batch(id: &str, word_texts: &[&str]) -> TranscriptWithData {
+        TranscriptWithData {
+            id: id.to_string(),
+            user_id: String::new(),
+            created_at: "2026-07-24T00:00:00Z".to_string(),
+            session_id: "s1".to_string(),
+            started_at: 500.0,
+            ended_at: None,
+            memo_md: String::new(),
+            words: word_texts
+                .iter()
+                .enumerate()
+                .map(|(i, w)| word(&format!("b{i}"), w))
+                .collect(),
+            speaker_hints: vec![],
+        }
+    }
+
+    // -- replace_session_transcripts (E3 supersede primitive) --
+
+    #[tokio::test]
+    async fn replace_supersedes_every_other_transcript_in_file_and_index_and_sql() {
+        let (store, vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t-old-1", &["one"]))
+            .await
+            .unwrap();
+        store
+            .write_transcript("s1", batch("t-old-2", &["two"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t-new", &["fresh"]))
+            .await
+            .unwrap();
+
+        // File truth: only the new transcript remains.
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let transcripts = json["transcripts"].as_array().unwrap();
+        assert_eq!(transcripts.len(), 1);
+        assert_eq!(transcripts[0]["id"], "t-new");
+
+        // Index queries agree with the file.
+        let indexed: Vec<String> = store
+            .session_transcripts("s1")
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(indexed, vec!["t-new"]);
+        assert!(store.transcript_get("t-old-1").is_none());
+
+        // SQL rows: superseded rows are hard-deleted, matching rebuild's prune.
+        let ids: Vec<String> =
+            sqlx::query_scalar("SELECT id FROM transcripts WHERE session_id='s1' ORDER BY id")
+                .fetch_all(store.pool())
+                .await
+                .unwrap();
+        assert_eq!(ids, vec!["t-new"]);
+    }
+
+    #[tokio::test]
+    async fn replace_moves_the_previous_file_to_trash_for_recovery() {
+        let (store, vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t-old", &["recoverable"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t-new", &["fresh"]))
+            .await
+            .unwrap();
+
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let trashed = vault
+            .path()
+            .join(".trash")
+            .join(date)
+            .join("sessions/s1/transcript.json");
+        assert!(
+            trashed.is_file(),
+            "superseded file must be hand-recoverable"
+        );
+        let json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&trashed).unwrap()).unwrap();
+        assert_eq!(json["transcripts"][0]["id"], "t-old");
+        assert_eq!(json["transcripts"][0]["words"][0]["text"], "recoverable");
+    }
+
+    #[tokio::test]
+    async fn replace_of_the_same_single_transcript_does_not_trash() {
+        let (store, vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t1", &["v1"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t1", &["v2"]))
+            .await
+            .unwrap();
+
+        assert!(
+            !vault.path().join(".trash").exists(),
+            "overwriting the only transcript in place is a plain write, not a supersede"
+        );
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json["transcripts"][0]["words"][0]["text"], "v2");
+    }
+
+    #[tokio::test]
+    async fn replace_into_a_session_without_transcripts_behaves_like_a_plain_write() {
+        let (store, vault) = test_store().await;
+        store
+            .replace_session_transcripts("s1", batch("t1", &["first"]))
+            .await
+            .unwrap();
+
+        assert!(vault.path().join("sessions/s1/transcript.json").is_file());
+        assert!(!vault.path().join(".trash").exists());
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(n, 1);
+    }
+
+    #[tokio::test]
+    async fn replace_emits_a_transcripts_index_event() {
+        let (store, _vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t-old", &["one"]))
+            .await
+            .unwrap();
+        // drain what the setup writes emitted
+        let mut rx = store.take_index_change_receiver().unwrap();
+        while rx.try_recv().is_ok() {}
+
+        store
+            .replace_session_transcripts("s1", batch("t-new", &["fresh"]))
+            .await
+            .unwrap();
+
+        let mut saw_transcripts_change = false;
+        while let Ok((entity, ids)) = rx.try_recv() {
+            if entity == super::super::IndexEntity::Transcripts && ids.contains(&"s1".to_string()) {
+                saw_transcripts_change = true;
+            }
+        }
+        assert!(saw_transcripts_change);
+    }
+
+    /// A dirty live buffer for a *different* transcript is superseded content too -- a
+    /// pending debounced flush must not fire afterward and resurrect it next to (or on
+    /// top of) the replacement.
+    #[tokio::test]
+    async fn replace_clears_a_dirty_live_buffer_for_another_transcript() {
+        let (store, vault) = test_store().await;
+        store
+            .append_transcript("s1", delta_with_words(&["buffered"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t-batch", &["replacement"]))
+            .await
+            .unwrap();
+
+        // let the pending debounce timer from the append fire
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let transcripts = json["transcripts"].as_array().unwrap();
+        assert_eq!(transcripts.len(), 1);
+        assert_eq!(transcripts[0]["id"], "t-batch");
+        assert_eq!(transcripts[0]["words"][0]["text"], "replacement");
     }
 
     #[test]

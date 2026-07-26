@@ -392,6 +392,23 @@ export const commands = {
       else return { status: "error", error: e as any };
     }
   },
+  async sessionReplaceTranscripts(
+    sessionId: string,
+    transcript: TranscriptWithData,
+  ): Promise<Result<null, string>> {
+    try {
+      return {
+        status: "ok",
+        data: await TAURI_INVOKE("session_replace_transcripts", {
+          sessionId,
+          transcript,
+        }),
+      };
+    } catch (e) {
+      if (e instanceof Error) throw e;
+      else return { status: "error", error: e as any };
+    }
+  },
   async sessionDelete(sessionId: string): Promise<Result<null, string>> {
     try {
       return {
@@ -753,9 +770,9 @@ export type TaskInput = {
 /**
  * One action item, file-canonical in `sessions/<session_id>/tasks.json` (or the vault-root
  * `tasks.json` for a source that cannot be tied to a session). Mirrors the live columns of
- * the legacy `action_items` table minus ownership (`owner_user_id`/`created_by`/
- * `updated_by`, dropped per plan decision D10) and minus `deleted_at` -- deletion removes
- * the entry and the list is rewritten atomically.
+ * the legacy `action_items` table minus the ownership columns (dropped per plan decision
+ * D10) and minus `deleted_at` -- deletion removes the entry and the list is rewritten
+ * atomically.
  */
 export type TaskItem = {
   id: string;

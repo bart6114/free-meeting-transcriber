@@ -6,9 +6,9 @@ use crate::{Error, Result, paths};
 
 /// One action item, file-canonical in `sessions/<session_id>/tasks.json` (or the vault-root
 /// `tasks.json` for a source that cannot be tied to a session). Mirrors the live columns of
-/// the legacy `action_items` table minus ownership (`owner_user_id`/`created_by`/
-/// `updated_by`, dropped per plan decision D10) and minus `deleted_at` -- deletion removes
-/// the entry and the list is rewritten atomically.
+/// the legacy `action_items` table minus the ownership columns (dropped per plan decision
+/// D10) and minus `deleted_at` -- deletion removes the entry and the list is rewritten
+/// atomically.
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
 pub struct TaskItem {
     pub id: String,

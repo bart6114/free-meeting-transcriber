@@ -6,11 +6,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TranscriptWithData } from "~/types/tauri.gen";
 
 const mocks = vi.hoisted(() => ({
-  execute: vi.fn(),
-  executeTransaction: vi.fn(
-    (_statements: Array<{ sql: string; params: unknown[] }>) =>
-      Promise.resolve([1]),
-  ),
   sessionWriteTranscript: vi.fn(
     (
       _sessionId: string,
@@ -35,11 +30,14 @@ const mocks = vi.hoisted(() => ({
       | { status: "error"; error: string }
     > => Promise.resolve({ status: "ok", data: null }),
   ),
-}));
-
-vi.mock("~/db", () => ({
-  executeTransaction: mocks.executeTransaction,
-  liveQueryClient: { execute: mocks.execute },
+  sessionReplaceTranscripts: vi.fn(
+    (
+      _sessionId: string,
+      _transcript: TranscriptWithData,
+    ): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
 }));
 
 vi.mock("~/types/tauri.gen", () => ({
@@ -47,6 +45,7 @@ vi.mock("~/types/tauri.gen", () => ({
     sessionWriteTranscript: mocks.sessionWriteTranscript,
     sessionTranscripts: mocks.sessionTranscripts,
     transcriptGet: mocks.transcriptGet,
+    sessionReplaceTranscripts: mocks.sessionReplaceTranscripts,
   },
   events: {
     indexChanged: {
@@ -86,6 +85,10 @@ describe("transcript queries", () => {
     });
     mocks.sessionTranscripts.mockResolvedValue({ status: "ok", data: [] });
     mocks.transcriptGet.mockResolvedValue({ status: "ok", data: null });
+    mocks.sessionReplaceTranscripts.mockResolvedValue({
+      status: "ok",
+      data: null,
+    });
   });
 
   it("maps store transcripts into renderer records", async () => {
@@ -218,7 +221,7 @@ describe("transcript queries", () => {
     );
   });
 
-  it("tombstones old session transcripts via the index before writing the replacement", async () => {
+  it("replaces the session's whole transcript set through the supersede primitive", async () => {
     await createTranscript({
       id: "transcript-new",
       sessionId: "session-1",
@@ -228,30 +231,48 @@ describe("transcript queries", () => {
       replaceSession: true,
     });
 
-    const statements = mocks.executeTransaction.mock.calls[0]?.[0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements).toHaveLength(1);
-    expect(statements[0]?.sql).toContain("UPDATE transcripts");
-    expect(statements[0]?.sql).toContain("deleted_at IS NULL");
-    expect(mocks.sessionWriteTranscript).toHaveBeenCalledWith(
+    expect(mocks.sessionReplaceTranscripts).toHaveBeenCalledWith(
       "session-1",
-      expect.objectContaining({ id: "transcript-new" }),
+      expect.objectContaining({
+        id: "transcript-new",
+        session_id: "session-1",
+        started_at: 1000,
+      }),
     );
+    expect(mocks.sessionWriteTranscript).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a supersede failure instead of swallowing it", async () => {
+    mocks.sessionReplaceTranscripts.mockResolvedValue({
+      status: "error",
+      error: "disk gone",
+    });
+
+    await expect(
+      createTranscript({
+        id: "transcript-new",
+        sessionId: "session-1",
+        ownerUserId: "user-1",
+        createdAt: "2026-07-10T12:00:00.000Z",
+        startedAt: 1000,
+        replaceSession: true,
+      }),
+    ).rejects.toThrow("disk gone");
   });
 
   it("appends words onto the current transcript and writes the merged result", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
+    mocks.transcriptGet.mockResolvedValueOnce({
+      status: "ok",
+      data: {
+        id: "transcript-1",
         session_id: "session-1",
-        started_at_ms: 1000,
-        words_json: JSON.stringify([
+        started_at: 1000,
+        words: [
           { id: "word-1", text: "Hello", start_ms: 0, end_ms: 500, channel: 0 },
-        ]),
-        speaker_hints_json: "[]",
+        ],
+        speaker_hints: [],
       },
-    ]);
+    });
 
     await appendTranscriptWordsAndHints(
       "transcript-1",
@@ -269,33 +290,28 @@ describe("transcript queries", () => {
     ]);
   });
 
-  it("refuses to overwrite malformed transcript JSON", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
-        session_id: "session-1",
-        started_at_ms: 1000,
-        words_json: "not-json",
-        speaker_hints_json: "[]",
-      },
-    ]);
+  it("refuses to mutate a transcript that no longer exists", async () => {
+    mocks.transcriptGet.mockResolvedValueOnce({ status: "ok", data: null });
 
     await expect(
       appendTranscriptWordsAndHints("transcript-1", [], []),
-    ).rejects.toThrow("invalid words data");
+    ).rejects.toThrow("does not exist");
     expect(mocks.sessionWriteTranscript).not.toHaveBeenCalled();
   });
 
   it("persists a plain-string speaker label through the store", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
+    mocks.transcriptGet.mockResolvedValueOnce({
+      status: "ok",
+      data: {
+        id: "transcript-1",
         session_id: "session-1",
-        started_at_ms: 1000,
-        words_json: JSON.stringify([
+        started_at: 1000,
+        words: [
           { id: "word-1", text: "Hello", start_ms: 0, end_ms: 500, channel: 1 },
-        ]),
-        speaker_hints_json: "[]",
+        ],
+        speaker_hints: [],
       },
-    ]);
+    });
 
     await assignTranscriptSpeaker({
       transcriptId: "transcript-1",

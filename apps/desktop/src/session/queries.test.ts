@@ -2,10 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   analyticsEventFireAndForget: vi.fn(() => Promise.resolve()),
-  execute: vi.fn(),
-  executeTransaction: vi.fn(
-    (_statements: Array<{ sql: string; params: unknown[] }>) =>
-      Promise.resolve([1]),
+  sessionGet: vi.fn(
+    (): Promise<
+      | { status: "ok"; data: Record<string, unknown> | null }
+      | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
+  sessionIsEmpty: vi.fn(
+    (): Promise<
+      { status: "ok"; data: boolean } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: true }),
   ),
   sessionWriteMeta: vi.fn(
     (): Promise<
@@ -57,17 +63,14 @@ vi.mock("@hypr/plugin-fs-sync", () => ({
   },
 }));
 
-vi.mock("~/db", () => ({
-  executeTransaction: mocks.executeTransaction,
-  liveQueryClient: { execute: mocks.execute },
-}));
-
 vi.mock("~/session/pending-soft-deletes", () => ({
   waitForPendingSoftDelete: mocks.waitForPendingSoftDelete,
 }));
 
 vi.mock("~/types/tauri.gen", () => ({
   commands: {
+    sessionGet: mocks.sessionGet,
+    sessionIsEmpty: mocks.sessionIsEmpty,
     sessionWriteMeta: mocks.sessionWriteMeta,
     sessionUpdateMeta: mocks.sessionUpdateMeta,
     sessionWriteNote: mocks.sessionWriteNote,
@@ -92,6 +95,8 @@ describe("session SQLite operations", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();
+    mocks.sessionGet.mockResolvedValue({ status: "ok", data: null });
+    mocks.sessionIsEmpty.mockResolvedValue({ status: "ok", data: true });
     mocks.sessionWriteMeta.mockResolvedValue({ status: "ok", data: null });
     mocks.sessionUpdateMeta.mockResolvedValue({ status: "ok", data: null });
     mocks.sessionWriteNote.mockResolvedValue({ status: "ok", data: null });
@@ -106,9 +111,6 @@ describe("session SQLite operations", () => {
     expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
       title: "Updated title",
     });
-    // No `UPDATE sessions` here: the store's dual-write owns the SQL mirror, and a raw
-    // UPDATE would leave `_meta.json` stale (the next rebuild would revert the title).
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("maps folder/event changes onto the store patch shape", async () => {
@@ -136,7 +138,6 @@ describe("session SQLite operations", () => {
 
   it("is a no-op when there is nothing to change", async () => {
     await updateSession("session-1", {});
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
     expect(mocks.sessionUpdateMeta).not.toHaveBeenCalled();
   });
 
@@ -160,15 +161,6 @@ describe("session SQLite operations", () => {
       }),
     );
 
-    // Bookkeeping placeholder (always-empty body) only.
-    const statements = mocks.executeTransaction.mock.calls[0][0] as Array<{
-      sql: string;
-      params: unknown[];
-    }>;
-    expect(statements).toHaveLength(1);
-    expect(statements[0].sql).toContain("session_documents");
-    expect(statements[0].params).toContain("");
-
     // Real content lands in the file-canonical store as markdown, not SQL.
     expect(mocks.sessionWriteNote).toHaveBeenCalledWith(
       expect.any(String),
@@ -190,7 +182,7 @@ describe("session SQLite operations", () => {
     });
 
     await expect(createSession("Untitled")).rejects.toThrow("disk full");
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
+    expect(mocks.sessionWriteNote).not.toHaveBeenCalled();
   });
 
   it("commits enhanced note content through the store as markdown, plus the derived title", async () => {
@@ -214,7 +206,6 @@ describe("session SQLite operations", () => {
       "enhanced-note-1",
       { markdown: "Hi" },
     );
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
     expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
       title: "Edited title",
     });
@@ -249,7 +240,6 @@ describe("session SQLite operations", () => {
       "session-1",
       "enhanced-note-1",
     );
-    expect(mocks.executeTransaction).not.toHaveBeenCalled();
   });
 
   it("throws when the store rejects the enhanced note delete", async () => {
@@ -266,9 +256,13 @@ describe("session SQLite operations", () => {
   it("deletes the session through the store, capturing its title first for the undo toast", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-07-10T12:00:00.000Z"));
-    mocks.execute.mockResolvedValueOnce([
-      { id: "session-1", title: "Planning" },
-    ]);
+    mocks.sessionGet.mockResolvedValueOnce({
+      status: "ok",
+      data: {
+        meta: { id: "session-1", title: "Planning" },
+        note_markdown: null,
+      },
+    });
 
     const deleted = await softDeleteSession("session-1");
 
@@ -281,16 +275,20 @@ describe("session SQLite operations", () => {
   });
 
   it("does not call session_delete when the session no longer exists", async () => {
-    mocks.execute.mockResolvedValueOnce([]);
+    mocks.sessionGet.mockResolvedValueOnce({ status: "ok", data: null });
 
     await expect(softDeleteSession("session-1")).resolves.toBeNull();
     expect(mocks.sessionDelete).not.toHaveBeenCalled();
   });
 
   it("throws (does not swallow) a genuine session_delete command failure", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      { id: "session-1", title: "Planning" },
-    ]);
+    mocks.sessionGet.mockResolvedValueOnce({
+      status: "ok",
+      data: {
+        meta: { id: "session-1", title: "Planning" },
+        note_markdown: null,
+      },
+    });
     mocks.sessionDelete.mockResolvedValueOnce({
       status: "error",
       error: "boom",
@@ -302,46 +300,24 @@ describe("session SQLite operations", () => {
     await expect(softDeleteSession("session-1")).rejects.toThrow("boom");
   });
 
-  it("recognizes a blank SQLite session", async () => {
-    mocks.execute.mockResolvedValueOnce([
-      {
-        title: "",
-        event_json: "",
-        note_body: JSON.stringify({
-          type: "doc",
-          content: [{ type: "paragraph" }],
-        }),
-        note_body_format: "prosemirror_json",
-        transcript_count: 0,
-        enhanced_note_count: 0,
-        tag_count: 0,
-      },
-    ]);
-
+  // The emptiness semantics themselves (title/event interplay, &nbsp; placeholder,
+  // transcript/doc/tag counts) are covered by the Rust store's session_is_empty tests;
+  // the frontend is a passthrough now.
+  it("delegates emptiness to the store command", async () => {
+    mocks.sessionIsEmpty.mockResolvedValueOnce({ status: "ok", data: true });
     await expect(isSessionEmpty("session-1")).resolves.toBe(true);
+    expect(mocks.sessionIsEmpty).toHaveBeenCalledWith("session-1");
+
+    mocks.sessionIsEmpty.mockResolvedValueOnce({ status: "ok", data: false });
+    await expect(isSessionEmpty("session-1")).resolves.toBe(false);
   });
 
-  it.each([
-    ["title", { title: "Named note", event_json: "" }],
-    ["note body", { note_body: "Written content" }],
-    ["transcript", { transcript_count: 1 }],
-    ["enhanced note", { enhanced_note_count: 1 }],
-    ["tag", { tag_count: 1 }],
-  ])("keeps a session with %s data", async (_label, overrides) => {
-    mocks.execute.mockResolvedValueOnce([
-      {
-        title: "",
-        event_json: "event",
-        note_body: "",
-        note_body_format: "prosemirror_json",
-        transcript_count: 0,
-        enhanced_note_count: 0,
-        tag_count: 0,
-        ...overrides,
-      },
-    ]);
-
-    await expect(isSessionEmpty("session-1")).resolves.toBe(false);
+  it("throws when the emptiness command fails", async () => {
+    mocks.sessionIsEmpty.mockResolvedValueOnce({
+      status: "error",
+      error: "store gone",
+    });
+    await expect(isSessionEmpty("session-1")).rejects.toThrow("store gone");
   });
 
   it("waits for a pending delete to settle, then restores through the store", async () => {

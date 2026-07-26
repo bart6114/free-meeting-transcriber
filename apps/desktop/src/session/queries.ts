@@ -5,7 +5,6 @@ import { json2md, md2json } from "@hypr/editor/markdown";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 
-import { executeTransaction, liveQueryClient } from "~/db";
 import { enqueueDatabaseWrite } from "~/db/write-queue";
 import { waitForPendingSoftDelete } from "~/session/pending-soft-deletes";
 import { useIndexQuery } from "~/shared/index-query";
@@ -17,17 +16,6 @@ import {
   type SessionMetaPatch,
   type SessionRecord as StoreSessionRecord,
 } from "~/types/tauri.gen";
-
-type SessionDeleteSqlRow = { id: string; title: string };
-type SessionEmptySqlRow = {
-  title: string;
-  event_json: string;
-  note_body: string;
-  note_body_format: string;
-  transcript_count: number;
-  enhanced_note_count: number;
-  tag_count: number;
-};
 
 export type SessionRecord = {
   id: string;
@@ -268,7 +256,7 @@ export function updateEnhancedNoteContent(
 
     // File-first: `enhanced/<doc-id>.md` is canonical, and the store's dual-write keeps
     // the `session_documents` row (still read by Phase-E-pending live queries and search)
-    // in sync -- a raw UPDATE here would leave the file stale for the next rebuild.
+    // in sync -- a raw SQL update here would leave the file stale for the next rebuild.
     const docWrite = await commands.sessionUpdateEnhancedDoc(
       sessionId,
       enhancedNoteId,
@@ -317,7 +305,7 @@ export function deleteEnhancedNote(
 
 // File-first: `_meta.json` is canonical for session meta, so every change goes through the
 // store's `session_update_meta` (read-modify-write of the file, then the SQL dual-write) --
-// a raw `UPDATE sessions` here would leave the file stale and the next rebuild would revert
+// a raw sessions-table update here would leave the file stale and the next rebuild would revert
 // the change to the old file value.
 export function updateSession(
   sessionId: string,
@@ -369,13 +357,12 @@ export async function createSession(
     );
   }
 
-  // Bookkeeping placeholder only: always an empty body. Canonical-id-vs-fallback reads
-  // (SESSION_SELECT_SQL above, useKeywords.ts, isSessionEmpty below) COALESCE onto a
-  // store-written "<id>:note" row when this bare-id row is empty, so this just keeps a
-  // row present for the join -- real note content lives only in the file-canonical store
-  // from here on (sessionWriteNote below), never in this row's body.
-  await executeTransaction([createEmptyNoteStatement(sessionId, now, "")]);
-
+  // No SQL placeholder note row anymore: every reader that COALESCE'd onto the old
+  // bare-id `session_documents` row (session reads, isSessionEmpty, the content
+  // snapshot) now reads the file-backed index, where "no note yet" is simply an
+  // absent `_memo.md`. Rebuild pruned the file-less placeholder row on every
+  // startup/focus rescan anyway, and it shadowed the real `<id>:note` row in the
+  // search projection's note lookup -- nothing depends on it.
   if (initial?.raw_md) {
     let markdown = "";
     try {
@@ -405,18 +392,19 @@ export async function softDeleteSession(
   sessionId: string,
   tombstone = new Date().toISOString(),
 ): Promise<DeletedSessionData | null> {
-  // Read title before deleting: session_delete removes the index row outright (no
-  // tombstone column left to read back from), so anything the undo toast needs to
-  // display has to be captured up front.
-  const [session] = await liveQueryClient.execute<SessionDeleteSqlRow>(
-    `SELECT id, title FROM sessions WHERE id = ? LIMIT 1`,
-    [sessionId],
-  );
+  // Read title before deleting: session_delete removes the index entry outright (nothing
+  // left to read back from), so anything the undo toast needs to display has to be
+  // captured up front.
+  const preRead = await commands.sessionGet(sessionId);
+  if (preRead.status === "error") {
+    throw new Error(`session_get failed: ${preRead.error}`);
+  }
+  const session = preRead.data;
   if (!session) return null;
 
   const result = await commands.sessionDelete(sessionId);
   if (result.status === "error") {
-    // Distinct from "already deleted" (the pre-check SELECT above returning no rows, which is
+    // Distinct from "already deleted" (the pre-read above finding no session, which is
     // benign and returns null): the session existed and the store call itself failed. Throw so
     // useDeleteSession's existing catch rolls back the optimistic UI and shows an error toast --
     // a genuine command error must never look identical to a no-op idempotent delete.
@@ -424,75 +412,20 @@ export async function softDeleteSession(
   }
 
   return {
-    session: { id: session.id, title: session.title },
+    session: { id: session.meta.id, title: session.meta.title },
     tombstone,
     deletedAt: Date.now(),
   };
 }
 
+// The emptiness semantics (title-without-event, note content after trimming, transcript/
+// enhanced-doc/tag counts) live on the Rust side now -- see `SessionStore::session_is_empty`.
 export async function isSessionEmpty(sessionId: string): Promise<boolean> {
-  const [row] = await liveQueryClient.execute<SessionEmptySqlRow>(
-    `
-      SELECT
-        sessions.title,
-        sessions.event_json,
-        COALESCE(note.body, '') AS note_body,
-        COALESCE(note.body_format, '') AS note_body_format,
-        (
-          SELECT COUNT(*)
-          FROM transcripts
-          WHERE session_id = sessions.id AND deleted_at IS NULL
-        ) AS transcript_count,
-        (
-          SELECT COUNT(*)
-          FROM session_documents
-          WHERE session_id = sessions.id
-            AND kind IN ('summary', 'template_output')
-            AND deleted_at IS NULL
-        ) AS enhanced_note_count,
-        (
-          SELECT COUNT(*)
-          FROM session_tags
-          WHERE session_id = sessions.id AND deleted_at IS NULL
-        ) AS tag_count
-      FROM sessions
-      LEFT JOIN session_documents AS note
-        ON note.id = COALESCE(
-          (
-            SELECT store_note.id
-            FROM session_documents AS store_note
-            WHERE store_note.id = sessions.id || ':note'
-              AND store_note.session_id = sessions.id
-              AND store_note.kind = 'note'
-              AND store_note.deleted_at IS NULL
-            LIMIT 1
-          ),
-          (
-            SELECT legacy_note.id
-            FROM session_documents AS legacy_note
-            WHERE legacy_note.id = sessions.id
-              AND legacy_note.session_id = sessions.id
-              AND legacy_note.kind = 'note'
-              AND legacy_note.deleted_at IS NULL
-            LIMIT 1
-          )
-        )
-        AND note.deleted_at IS NULL
-      WHERE sessions.id = ?
-      LIMIT 1
-    `,
-    [sessionId],
-  );
-
-  if (!row) return true;
-  if (row.title.trim() && !row.event_json) return false;
-  if (hasNoteContent(row.note_body, row.note_body_format)) return false;
-
-  return (
-    Number(row.transcript_count) === 0 &&
-    Number(row.enhanced_note_count) === 0 &&
-    Number(row.tag_count) === 0
-  );
+  const result = await commands.sessionIsEmpty(sessionId);
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
+  return result.data;
 }
 
 export async function restoreDeletedSession(
@@ -538,38 +471,6 @@ export async function finalizeSessionDeletion(
       error,
     });
   }
-}
-
-function createEmptyNoteStatement(sessionId: string, now: string, body = "") {
-  return {
-    sql: `
-      INSERT INTO session_documents (
-        id, session_id, kind, body_format, body, created_by,
-        updated_by, updated_at, deleted_at
-      )
-      SELECT ?, id, 'note', 'prosemirror_json', ?,
-        owner_user_id, owner_user_id, ?, NULL
-      FROM sessions
-      WHERE id = ?
-    `,
-    params: [sessionId, body, now, sessionId],
-  };
-}
-
-function hasNoteContent(body: string, format: string): boolean {
-  if (!body) return false;
-
-  let markdown = body;
-  if (format === "prosemirror_json") {
-    try {
-      markdown = json2md(JSON.parse(body));
-    } catch {
-      markdown = body;
-    }
-  }
-
-  markdown = markdown.trim();
-  return Boolean(markdown && markdown !== "&nbsp;");
 }
 
 function mapSessionRecord(record: StoreSessionRecord): SessionRecord {

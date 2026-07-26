@@ -606,6 +606,7 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::session_append_transcript::<tauri::Wry>,
             session_store::commands::session_flush_transcript::<tauri::Wry>,
             session_store::commands::session_write_transcript::<tauri::Wry>,
+            session_store::commands::session_replace_transcripts::<tauri::Wry>,
             session_store::commands::session_delete::<tauri::Wry>,
             session_store::commands::session_restore::<tauri::Wry>,
             session_store::commands::session_rebuild_index::<tauri::Wry>,
