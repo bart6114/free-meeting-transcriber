@@ -32,6 +32,14 @@ pub fn transcript_path(id: &str) -> PathBuf {
     session_dir(id).join("transcript.json")
 }
 
+pub fn session_tasks_path(id: &str) -> PathBuf {
+    session_dir(id).join("tasks.json")
+}
+
+pub fn vault_tasks_path() -> PathBuf {
+    PathBuf::from("tasks.json")
+}
+
 pub fn audio_dir(id: &str) -> PathBuf {
     session_dir(id).join("audio")
 }
@@ -59,6 +67,11 @@ mod tests {
             transcript_path("s1"),
             PathBuf::from("sessions/s1/transcript.json")
         );
+        assert_eq!(
+            session_tasks_path("s1"),
+            PathBuf::from("sessions/s1/tasks.json")
+        );
+        assert_eq!(vault_tasks_path(), PathBuf::from("tasks.json"));
         assert_eq!(audio_dir("s1"), PathBuf::from("sessions/s1/audio"));
     }
 }

@@ -230,6 +230,38 @@ async sessionDeleteAudio(sessionId: string, filename: string) : Promise<Result<n
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+async sessionListTasks(sourceType: string, sourceId: string) : Promise<Result<TaskItem[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_list_tasks", { sourceType, sourceId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionReplaceTasks(sourceType: string, sourceId: string, tasks: TaskInput[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_replace_tasks", { sourceType, sourceId, tasks }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionRemoveTasks(sourceType: string, sourceId: string, taskIds: string[]) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_remove_tasks", { sourceType, sourceId, taskIds }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionMoveTasks(taskIds: string[], sourceType: string, sourceId: string, insertionOrder: number) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_move_tasks", { taskIds, sourceType, sourceId, insertionOrder }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -292,7 +324,19 @@ event?: JsonValue | null; folder?: string | null }
  */
 export type SessionMetaPatch = { title?: string | null; started_at?: string | null; ended_at?: string | null; created_at?: string | null; tags?: string[] | null; event?: JsonValue | null; folder?: string | null }
 export type TranscriptDelta = { transcript_id: string; new_words: TranscriptWord[]; replaced_ids: string[]; new_hints: TranscriptSpeakerHint[]; started_at_ms: number }
-export type TranscriptSpeakerHint = { id?: string | null; word_id: string; type: string; value?: JsonValue }
+/**
+ * One action item as stored in `tasks.json` -- the file mirror of what used to be an
+ * `action_items` row, minus ownership columns (dropped per plan decision D10) and minus
+ * `deleted_at` (deletion removes the entry; the list is rewritten atomically).
+ */
+export type TaskItem = { id: string; source_type: string; source_id: string; source_order: number; status: string; text: string; body: JsonValue; due_at?: string; assignee?: string; created_at: string; updated_at: string }
+/**
+ * What the frontend sends on a write: source coordinates come from the command arguments,
+ * timestamps and `assignee` are managed store-side (preserved from the existing entry when
+ * the task already exists).
+ */
+export type TaskInput = { id: string; source_order: number; status: string; text: string; body: JsonValue; due_at?: string }
+export type TranscriptSpeakerHint ={ id?: string | null; word_id: string; type: string; value?: JsonValue }
 export type TranscriptWithData = { id: string; user_id?: string; created_at?: string; session_id: string; started_at?: number; ended_at?: number | null; memo_md?: string; words?: TranscriptWord[]; speaker_hints?: TranscriptSpeakerHint[] }
 export type TranscriptWord = { id?: string | null; text: string; start_ms: number; end_ms: number; channel: number; speaker?: string | null; metadata?: Partial<{ [key in string]: JsonValue }> | null }
 

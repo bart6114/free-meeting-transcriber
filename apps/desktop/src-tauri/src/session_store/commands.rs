@@ -6,7 +6,7 @@ use hypr_fs_format::TranscriptWithData;
 
 use super::{
     EnhancedDoc, EnhancedDocPatch, RebuildReport, SessionMeta, SessionMetaPatch, SessionStore,
-    TranscriptDelta,
+    TaskInput, TaskItem, TranscriptDelta,
 };
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
@@ -120,6 +120,62 @@ pub async fn session_delete_enhanced_doc<R: tauri::Runtime>(
 ) -> Result<(), String> {
     store(&app)?
         .delete_enhanced_doc(&session_id, &doc_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_list_tasks<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    source_type: String,
+    source_id: String,
+) -> Result<Vec<TaskItem>, String> {
+    store(&app)?
+        .list_tasks(&source_type, &source_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_replace_tasks<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    source_type: String,
+    source_id: String,
+    tasks: Vec<TaskInput>,
+) -> Result<(), String> {
+    store(&app)?
+        .replace_tasks(&source_type, &source_id, tasks)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_remove_tasks<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    source_type: String,
+    source_id: String,
+    task_ids: Vec<String>,
+) -> Result<(), String> {
+    store(&app)?
+        .remove_tasks(&source_type, &source_id, task_ids)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_move_tasks<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    task_ids: Vec<String>,
+    source_type: String,
+    source_id: String,
+    insertion_order: i32,
+) -> Result<(), String> {
+    store(&app)?
+        .move_tasks(task_ids, &source_type, &source_id, insertion_order)
         .await
         .map_err(|e| e.to_string())
 }
