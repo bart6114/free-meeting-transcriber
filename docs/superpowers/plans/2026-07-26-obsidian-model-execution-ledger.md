@@ -39,7 +39,7 @@ completely finished."
 | E — reactivity core | DONE | 7671fdd (E1), 4208775 (E2), d95e043 (E3) | VaultIndex + 10ms coalesced index-changed bus + 10 typed commands; all 14 FE subscription sites ported; owner-user deleted (D10). Transcript finding: deleted_at was SQL-only transient bookkeeping — file truth has no tombstones (soft-delete zeroes words); supersede becomes store primitive in E3. FE baseline now 1150/167. | D-1 fixed title-revert bug; D-3 found rebuild already pruned index-only UUID rows (shadow hack papered over it) — preserved for legacy rows; enhanced docs = YAML frontmatter via hypr-frontmatter; deletion = .trash move + hard row delete (no undo path existed); store-level CAS with "conflict:" typed errors (store-errors.ts). NOTE: any `cargo test -p desktop --lib` run on Linux prettier-relayouts tauri.gen.ts — checkout + hand-apply. |
 | F — search on files | DONE | d66240a | Rust-side bus taps; DirtyQueue reproduces generation semantics (race test ported); projection_version now a file in disposable search_index/; PROJECTION_VERSION→5. E3 findings: empty-note placeholder deleted (was shadowing note content in search); tag tables dead; supersede = session_replace_transcripts. |
 | G — FE/db decoupling | DONE | 5d33c7b | packages/db{,-react,-tauri,-runtime}, plugins/db JS, src/db deleted; write-queue → shared/; db plugin unregistered; only Rust crates left for H. |
-| H — SQLite deletion | in progress | — | exodus gate waived by owner (fresh start); app.db renamed to .pre-files-backup on boot (in place — app-data is also the DEFAULT vault base, so the watcher ignore is generalized, not deleted) |
+| H — SQLite deletion | DONE | af16a7e | ~19.4k lines deleted; 8 crates + plugins/db gone; sqlx out of the workspace; app.db retired in place to .pre-files-backup* (both candidate dirs swept, never clobbered, never fails startup). Watcher ignore generalized (app-data doubles as default vault base). chmod-as-root test finally fixed (unreadability now injected via EISDIR, not chmod) → **176/176 desktop tests pass, zero known failures**. Extra finds: a live sqlx query in a vault_watch test cargo check never compiled; macOS cloudsync framework bundling that would have broken `tauri build`; bitrise.yml for a nonexistent apps/mobile. |
 
 ### H scope call needing owner sign-off before merge
 
@@ -64,9 +64,47 @@ Items that require macOS and/or the real vault; commands to be filled in as phas
   - NOTE: the two `export_types` tests will prettier-relayout `plugins/{detect,template}/js/bindings.gen.ts` on some machines — if `git diff` shows wholesale relayout afterwards, `git checkout -- plugins/detect/js/bindings.gen.ts plugins/template/js/bindings.gen.ts` (semantic content is already correct).
   - Optional: `pnpm -F @hypr/desktop tauri:dev` smoke — start/stop a recording; no disclosure toast/setting anywhere; Settings → General shows telemetry toggle but no "Post recording disclosure" row.
 - [ ] Phase C: settings UI round-trip across two windows; theme change without restart; dock-icon toggle applied post-restart.
-- [ ] Phase D: exodus run against real vault WITH pre-backup of `app.db*` + vault copy.
 - [ ] Phase E: multi-window reactivity check (title edit in main → float window updates).
-- [ ] Phase H: Obsidian-model verification ritual (plan §9) + cold-boot timing.
+
+### CRITICAL — macOS-only build risk (cannot be verified on Linux)
+
+- [ ] **`pnpm -F @hypr/desktop tauri:build` on macOS.** Phase H deleted the
+  `frameworks` arrays from `tauri.conf.json` + `tauri.conf.macos-intel.json`
+  that bundled `crates/cloudsync/vendor/…/cloudsync.dylib`. Keeping them would
+  have broken the build outright (the path is gone), but *removing* them is only
+  verifiable by actually building on macOS. If the app launches and records, the
+  framework was genuinely only needed by the deleted cloudsync stack.
+
+### First-boot data safety (do this on a COPY of the real vault first)
+
+- [ ] **Back up before first launch**: copy the whole vault dir AND
+  `app.db*` out of the app-data folder. The exodus was cancelled by owner
+  directive — DB-resident data (custom templates, action items, UUID summaries,
+  event/folder/tags, settings, provider config) does NOT carry over.
+- [ ] Launch once, then confirm `app.db` is now `app.db.pre-files-backup`
+  (plus `-wal`/`-shm`) and that the app started normally. Nothing is deleted —
+  the rename is in place and reversible by renaming back.
+- [ ] Re-add AI providers once (keychain API keys survive; provider config rows
+  did not). Confirm enhance/summarize works end to end.
+
+### Obsidian-model verification ritual (plan §9)
+
+- [ ] Cold-boot timing on the real vault (index build is now a full FS scan —
+  compare against the old SQLite boot).
+- [ ] Edit `_memo.md` in Obsidian/an external editor while the app is running →
+  the note updates in-app without a restart, and search finds the new text.
+- [ ] Create a session, record, enhance, add action items, then verify every
+  artifact is a readable file under `sessions/<id>/`.
+- [ ] Delete an enhanced doc and a transcript → confirm the prior content is
+  recoverable from `.trash/<date>/`.
+- [ ] `fmtr --vault-path <vault> doctor` and `fmtr meetings list` against the
+  real vault (the CLI no longer takes `--db-path`).
+
+### Scope decision needing sign-off
+
+- [ ] **`crates/mobile-bridge` was deleted** (see the H scope call above). Confirm
+  mobile is not a surface you intend to revive, or say so and I'll restore it
+  from git history.
 
 ## Phase D task split (scouted 2026-07-26, no-exodus variant)
 
