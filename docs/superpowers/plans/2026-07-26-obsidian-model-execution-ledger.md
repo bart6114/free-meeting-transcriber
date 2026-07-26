@@ -35,7 +35,7 @@ completely finished."
 | A — meeting-chat total drop | done (Linux gates green) | fa11943, 9513f62, c01de0b | awaiting owner macOS verify |
 | B — dead DB weight | done | 40276b7 | last-ever SQL migration added (20260726120000_drop_dead_tables) |
 | C — config.json | done | ed21619 (C1), 9a4c910 (C3; C2 cancelled) | config.json = real JSON arrays, FE boundary stringifies; provider ids deterministic (keychain survives re-add); hasValues heuristic = differs-from-default (residual edge: explicit-default value ≡ unset, only surfaces via boot init). plugins/settings legacy load/save commands now FE-orphaned → delete in H sweep. plugins/importer tinybase-shaped output still live — own follow-up, out of scope. Owner-machine check pending: 2-window settings round-trip, theme, dock toggle. |
-| D — file homes (no exodus) | D-1 in progress | — | order D-1 → D-3 → D-2 → D-4 → D-5 |
+| D — file homes (no exodus) | D-1, D-3 done; D-2 in progress | 966214b (D-1), aba1625 (D-3) | D-1 fixed title-revert bug; D-3 found rebuild already pruned index-only UUID rows (shadow hack papered over it) — preserved for legacy rows; enhanced docs = YAML frontmatter via hypr-frontmatter; deletion = .trash move + hard row delete (no undo path existed); store-level CAS with "conflict:" typed errors (store-errors.ts). NOTE: any `cargo test -p desktop --lib` run on Linux prettier-relayouts tauri.gen.ts — checkout + hand-apply. |
 | E — reactivity core | pending | — | |
 | F — search on files | pending | — | |
 | G — FE/db decoupling | pending | — | |
