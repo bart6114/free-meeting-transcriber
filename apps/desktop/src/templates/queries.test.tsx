@@ -17,6 +17,11 @@ vi.mock("~/types/tauri.gen", () => ({
     templateUpsert: mocks.templateUpsert,
     templateDelete: mocks.templateDelete,
   },
+  events: {
+    indexChanged: {
+      listen: vi.fn().mockResolvedValue(() => {}),
+    },
+  },
 }));
 
 import {

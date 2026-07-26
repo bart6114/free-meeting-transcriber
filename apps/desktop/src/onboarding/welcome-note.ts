@@ -1,7 +1,6 @@
 import { md2json } from "@hypr/editor/markdown";
 import type { SessionEvent } from "@hypr/store";
 
-import { liveQueryClient } from "~/db";
 import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
 import { createSession } from "~/session/queries";
 import { DEFAULT_USER_ID } from "~/shared/utils";
@@ -46,28 +45,15 @@ export function takePendingWelcomeSession(): string | null {
 }
 
 async function findOrCreateWelcomeSession(): Promise<string> {
-  // The lookup itself may stay SQL until Phase E; the mutation below must not -- session meta
-  // (including the event envelope) is `_meta.json`-canonical, so the stale-meeting-link clear
-  // is a read-modify-write through the store command, never a raw SQL json_set.
-  const rows = await liveQueryClient.execute<{
-    id: string;
-    event_json: string;
-  }>(
-    `
-      SELECT id, event_json
-      FROM sessions
-      WHERE CASE
-          WHEN json_valid(event_json)
-          THEN json_extract(event_json, '$.tracking_id')
-        END = ?
-      ORDER BY created_at, id
-      LIMIT 1
-    `,
-    [WELCOME_NOTE_TRACKING_ID],
+  const result = await commands.sessionFindByTrackingId(
+    WELCOME_NOTE_TRACKING_ID,
   );
-  if (rows[0]) {
-    await clearStaleMeetingLink(rows[0].id, rows[0].event_json);
-    return rows[0].id;
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
+  if (result.data) {
+    await clearStaleMeetingLink(result.data.id, result.data.event);
+    return result.data.id;
   }
 
   const now = new Date().toISOString();
@@ -95,15 +81,16 @@ async function findOrCreateWelcomeSession(): Promise<string> {
  */
 async function clearStaleMeetingLink(
   sessionId: string,
-  eventJson: string,
+  rawEvent: unknown,
 ): Promise<void> {
   try {
-    const event: Partial<SessionEvent> = JSON.parse(eventJson);
+    const event = rawEvent as Partial<SessionEvent> | null | undefined;
     if (!event || typeof event !== "object" || !event.meeting_link) {
       return;
     }
-    event.meeting_link = "";
-    const result = await commands.sessionUpdateMeta(sessionId, { event });
+    const result = await commands.sessionUpdateMeta(sessionId, {
+      event: { ...event, meeting_link: "" },
+    });
     if (result.status === "error") {
       console.error(
         "[welcome-note] failed to clear stale meeting link",

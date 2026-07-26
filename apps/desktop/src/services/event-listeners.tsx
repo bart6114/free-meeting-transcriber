@@ -7,12 +7,13 @@ import {
 } from "@hypr/plugin-updater2";
 import { getCurrentWebviewWindowLabel } from "@hypr/plugin-windows";
 
-import { liveQueryClient } from "~/db";
 import { createSession } from "~/session/queries";
 import { setSettingValue } from "~/settings/queries";
 import { useConfigValue, useConfigValues } from "~/shared/config";
 import { useLatestRef } from "~/shared/hooks/useLatestRef";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
+import { subscribeIndexChanged } from "~/shared/index-query";
+import { DEFAULT_USER_ID } from "~/shared/utils";
 import { listenerStore } from "~/store/zustand/listener/instance";
 import { useTabs } from "~/store/zustand/tabs";
 import { parseAutoStopEndedNotificationKey } from "~/stt/auto-stop-notification";
@@ -21,17 +22,7 @@ import {
   getLiveTranscriptionConfig,
   getTranscriptionLanguages,
 } from "~/stt/capabilities";
-
-type CaptureIdentitySqlRow = {
-  session_id: string;
-  owner_user_id: string;
-};
-
-const CAPTURE_IDENTITY_SQL = `
-  SELECT session.id AS session_id, session.owner_user_id
-  FROM sessions AS session
-  ORDER BY session.id
-`;
+import { commands } from "~/types/tauri.gen";
 
 const LIVE_CAPTURE_CONFIG_DEBOUNCE_MS = 750;
 
@@ -139,10 +130,8 @@ function LiveCaptureConfigSyncReady({
   useMountEffect(() => {
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     let lastSignature: string | null = null;
-    let rows: CaptureIdentitySqlRow[] = [];
+    let sessionIds = new Set<string>();
     let hasSnapshot = false;
-    let cancelled = false;
-    let unsubscribeDatabase: (() => Promise<void>) | null = null;
 
     const pushConfig = async () => {
       if (!hasSnapshot) {
@@ -168,12 +157,13 @@ function LiveCaptureConfigSyncReady({
         return;
       }
 
-      const session = rows.find((row) => row.session_id === live.sessionId);
       const nextConfig = {
         session_id: live.sessionId,
         languages: liveConfig.languages,
         participant_human_ids: [],
-        self_human_id: session?.owner_user_id || null,
+        // The owner concept died with the workspaces removal (D10); the indexed
+        // session's existence is all that's left to check.
+        self_human_id: sessionIds.has(live.sessionId) ? DEFAULT_USER_ID : null,
       };
       const signature = createCaptureConfigSignature(nextConfig);
       if (signature === lastSignature) {
@@ -199,42 +189,32 @@ function LiveCaptureConfigSyncReady({
       }, LIVE_CAPTURE_CONFIG_DEBOUNCE_MS);
     };
 
+    const refreshSessionIds = async () => {
+      const result = await commands.sessionIds();
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+      sessionIds = new Set(result.data);
+      hasSnapshot = true;
+      schedulePush();
+    };
+
+    const handleRefreshError = (error: unknown) => {
+      console.error("[listener] failed to read live capture identities", error);
+    };
+
     const unsubscribeListener = listenerStore.subscribe(schedulePush);
-    void liveQueryClient
-      .subscribe<CaptureIdentitySqlRow>(CAPTURE_IDENTITY_SQL, [], {
-        onData: (nextRows) => {
-          rows = nextRows;
-          hasSnapshot = true;
-          schedulePush();
-        },
-        onError: (error) => {
-          console.error(
-            "[listener] failed to read live capture identities",
-            error,
-          );
-        },
-      })
-      .then((unsubscribe) => {
-        if (cancelled) {
-          void unsubscribe();
-        } else {
-          unsubscribeDatabase = unsubscribe;
-        }
-      })
-      .catch((error) => {
-        console.error(
-          "[listener] failed to subscribe to live capture identities",
-          error,
-        );
-      });
+    const unsubscribeIndex = subscribeIndexChanged("sessions", () => {
+      void refreshSessionIds().catch(handleRefreshError);
+    });
+    void refreshSessionIds().catch(handleRefreshError);
 
     return () => {
-      cancelled = true;
       if (timeoutId) {
         clearTimeout(timeoutId);
       }
       unsubscribeListener();
-      void unsubscribeDatabase?.();
+      unsubscribeIndex();
     };
   });
 

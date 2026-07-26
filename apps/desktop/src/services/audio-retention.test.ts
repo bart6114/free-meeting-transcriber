@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   cleanupDeletedSessionAudio: vi.fn(),
   deleteLocalSessionAudio: vi.fn(),
-  execute: vi.fn(),
+  sessionList: vi.fn(),
+  sessionHasTranscript: vi.fn(),
   getSessionMode: vi.fn(),
   live: { loading: false, sessionId: null as string | null },
 }));
@@ -13,8 +14,11 @@ vi.mock("~/session/attachments", () => ({
   deleteLocalSessionAudio: mocks.deleteLocalSessionAudio,
 }));
 
-vi.mock("~/db", () => ({
-  liveQueryClient: { execute: mocks.execute },
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionList: mocks.sessionList,
+    sessionHasTranscript: mocks.sessionHasTranscript,
+  },
 }));
 
 vi.mock("~/store/zustand/listener/instance", () => ({
@@ -36,7 +40,13 @@ import {
 function mockCleanupRows(
   sessions: Array<{ id: string; created_at: string; has_words: number }>,
 ) {
-  mocks.execute.mockResolvedValue(sessions);
+  mocks.sessionList.mockResolvedValue({
+    status: "ok",
+    data: sessions.map((session) => ({
+      meta: { id: session.id, created_at: session.created_at },
+      has_transcript_words: session.has_words === 1,
+    })),
+  });
 }
 
 describe("audio retention", () => {
@@ -45,6 +55,7 @@ describe("audio retention", () => {
     mocks.cleanupDeletedSessionAudio.mockResolvedValue(true);
     mocks.deleteLocalSessionAudio.mockResolvedValue(true);
     mocks.getSessionMode.mockReturnValue("inactive");
+    mocks.sessionHasTranscript.mockResolvedValue({ status: "ok", data: false });
     mocks.live.loading = false;
     mocks.live.sessionId = null;
     mockCleanupRows([]);
@@ -135,7 +146,10 @@ describe("audio retention", () => {
   });
 
   test("deletes processed audio immediately when retention is none", async () => {
-    mocks.execute.mockResolvedValueOnce([{ has_words: 1 }]);
+    mocks.sessionHasTranscript.mockResolvedValueOnce({
+      status: "ok",
+      data: true,
+    });
 
     await expect(
       deleteProcessedAudioForRetention("none", "processed"),
@@ -147,7 +161,10 @@ describe("audio retention", () => {
   });
 
   test("keeps unprocessed audio when retention is none", async () => {
-    mocks.execute.mockResolvedValueOnce([{ has_words: 0 }]);
+    mocks.sessionHasTranscript.mockResolvedValueOnce({
+      status: "ok",
+      data: false,
+    });
 
     await expect(
       deleteProcessedAudioForRetention("none", "unprocessed"),
@@ -159,7 +176,7 @@ describe("audio retention", () => {
     await expect(
       deleteProcessedAudioForRetention("oneDay", "processed"),
     ).resolves.toBe(false);
-    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.sessionHasTranscript).not.toHaveBeenCalled();
     expect(mocks.deleteLocalSessionAudio).not.toHaveBeenCalled();
   });
 
@@ -168,7 +185,7 @@ describe("audio retention", () => {
   // cleanupLogicallyDeletedAudio in audio-retention.ts.
   test("does not query or delete anything when retention is forever", async () => {
     await expect(cleanupExpiredAudio("forever")).resolves.toEqual([]);
-    expect(mocks.execute).not.toHaveBeenCalled();
+    expect(mocks.sessionList).not.toHaveBeenCalled();
     expect(mocks.deleteLocalSessionAudio).not.toHaveBeenCalled();
   });
 

@@ -160,5 +160,25 @@ vi.mock("./types/tauri.gen", () => ({
     setRecentlyOpenedSessions: vi
       .fn()
       .mockResolvedValue({ status: "ok", data: null }),
+    // Vault index read commands (Phase E): empty-index defaults.
+    sessionGet: vi.fn().mockResolvedValue({ status: "ok", data: null }),
+    sessionList: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
+    sessionIds: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
+    sessionIsEmpty: vi.fn().mockResolvedValue({ status: "ok", data: true }),
+    sessionHasTranscript: vi
+      .fn()
+      .mockResolvedValue({ status: "ok", data: false }),
+    sessionEnhancedDocs: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
+    enhancedDocGet: vi.fn().mockResolvedValue({ status: "ok", data: null }),
+    sessionTranscripts: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
+    transcriptGet: vi.fn().mockResolvedValue({ status: "ok", data: null }),
+    sessionFindByTrackingId: vi
+      .fn()
+      .mockResolvedValue({ status: "ok", data: null }),
+  },
+  events: {
+    indexChanged: {
+      listen: vi.fn().mockResolvedValue(() => {}),
+    },
   },
 }));

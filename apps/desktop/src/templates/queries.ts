@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
 import type { TemplateSection } from "@hypr/store";
@@ -15,6 +15,7 @@ import {
   type TemplateIcon,
 } from "./template-icon";
 
+import { useIndexQuery } from "~/shared/index-query";
 import {
   commands,
   type Result,
@@ -68,7 +69,8 @@ async function listTemplates(): Promise<UserTemplate[]> {
 }
 
 export function useUserTemplates(): UserTemplate[] {
-  const { data = [] } = useQuery({
+  const { data = [] } = useIndexQuery({
+    entity: "templates",
     queryKey: templatesQueryKey,
     queryFn: listTemplates,
   });
@@ -77,7 +79,10 @@ export function useUserTemplates(): UserTemplate[] {
 }
 
 export function useUserTemplate(id: string | null | undefined) {
-  return useQuery({
+  return useIndexQuery({
+    // Template events carry template ids.
+    entity: "templates",
+    ids: id ? [id] : undefined,
     queryKey: [...templatesQueryKey, id ?? ""],
     queryFn: () => getTemplateById(id ?? ""),
     enabled: Boolean(id),

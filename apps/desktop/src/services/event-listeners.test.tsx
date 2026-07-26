@@ -11,7 +11,8 @@ const {
   updaterListenMock,
   maybeEmitUpdatedMock,
   getCurrentWebviewWindowLabelMock,
-  liveQuerySubscribeMock,
+  sessionIdsMock,
+  subscribeIndexChangedMock,
   listenerSubscribeMock,
   useConfigValueMock,
   useConfigValuesMock,
@@ -27,7 +28,8 @@ const {
   updaterListenMock: vi.fn(),
   maybeEmitUpdatedMock: vi.fn(),
   getCurrentWebviewWindowLabelMock: vi.fn(() => "main"),
-  liveQuerySubscribeMock: vi.fn(),
+  sessionIdsMock: vi.fn(),
+  subscribeIndexChangedMock: vi.fn(),
   listenerSubscribeMock: vi.fn(),
   useConfigValueMock: vi.fn((): string[] => []),
   useConfigValuesMock: vi.fn(),
@@ -63,10 +65,14 @@ vi.mock("@hypr/plugin-windows", () => ({
   getCurrentWebviewWindowLabel: getCurrentWebviewWindowLabelMock,
 }));
 
-vi.mock("~/db", () => ({
-  liveQueryClient: {
-    subscribe: liveQuerySubscribeMock,
+vi.mock("~/types/tauri.gen", () => ({
+  commands: {
+    sessionIds: sessionIdsMock,
   },
+}));
+
+vi.mock("~/shared/index-query", () => ({
+  subscribeIndexChanged: subscribeIndexChangedMock,
 }));
 
 vi.mock("~/shared/config", () => ({
@@ -100,7 +106,8 @@ describe("EventListeners notification events", () => {
     updaterListenMock.mockReset();
     maybeEmitUpdatedMock.mockReset();
     getCurrentWebviewWindowLabelMock.mockReset();
-    liveQuerySubscribeMock.mockReset();
+    sessionIdsMock.mockReset();
+    subscribeIndexChangedMock.mockReset();
     listenerSubscribeMock.mockReset();
     useConfigValueMock.mockReset();
     useConfigValuesMock.mockReset();
@@ -116,12 +123,8 @@ describe("EventListeners notification events", () => {
     notificationListenMock.mockResolvedValue(() => {});
     updaterListenMock.mockResolvedValue(() => {});
     createSessionMock.mockResolvedValue("session-new");
-    liveQuerySubscribeMock.mockImplementation(
-      async (_sql, _params, handlers) => {
-        handlers.onData([]);
-        return async () => {};
-      },
-    );
+    sessionIdsMock.mockResolvedValue({ status: "ok", data: [] });
+    subscribeIndexChangedMock.mockReturnValue(() => {});
     listenerSubscribeMock.mockReturnValue(() => {});
     useConfigValueMock.mockReturnValue([]);
     useConfigValuesMock.mockReturnValue({
@@ -206,26 +209,23 @@ describe("EventListeners notification events", () => {
       current_stt_provider: "soniox",
       current_stt_model: "stt-v4",
     });
+    sessionIdsMock.mockResolvedValue({ status: "ok", data: ["session-1"] });
 
     render(<EventListeners />);
 
-    await vi.waitFor(() =>
-      expect(liveQuerySubscribeMock).toHaveBeenCalledTimes(1),
+    await vi.waitFor(() => expect(sessionIdsMock).toHaveBeenCalledTimes(1));
+    expect(subscribeIndexChangedMock).toHaveBeenCalledWith(
+      "sessions",
+      expect.any(Function),
     );
-    const handlers = liveQuerySubscribeMock.mock.calls[0]?.[2];
-    handlers.onData([
-      {
-        session_id: "session-1",
-        owner_user_id: "human-self",
-      },
-    ]);
     await vi.runOnlyPendingTimersAsync();
 
     expect(updateCaptureConfigMock).toHaveBeenCalledWith({
       session_id: "session-1",
       languages: ["ko"],
       participant_human_ids: [],
-      self_human_id: "human-self",
+      // The owner concept died (D10): an indexed session maps to the default user.
+      self_human_id: "00000000-0000-0000-0000-000000000000",
     });
   });
 

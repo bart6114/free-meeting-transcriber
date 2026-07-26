@@ -5,12 +5,18 @@ import { json2md, md2json } from "@hypr/editor/markdown";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 
-import { executeTransaction, liveQueryClient, useLiveQuery } from "~/db";
+import { executeTransaction, liveQueryClient } from "~/db";
 import { enqueueDatabaseWrite } from "~/db/write-queue";
 import { waitForPendingSoftDelete } from "~/session/pending-soft-deletes";
+import { useIndexQuery } from "~/shared/index-query";
 import { DEFAULT_USER_ID, id } from "~/shared/utils";
 import type { DeletedSessionData } from "~/store/zustand/undo-delete";
-import { commands, type SessionMetaPatch } from "~/types/tauri.gen";
+import {
+  commands,
+  type EnhancedDoc,
+  type SessionMetaPatch,
+  type SessionRecord as StoreSessionRecord,
+} from "~/types/tauri.gen";
 
 type SessionDeleteSqlRow = { id: string; title: string };
 type SessionEmptySqlRow = {
@@ -21,37 +27,6 @@ type SessionEmptySqlRow = {
   transcript_count: number;
   enhanced_note_count: number;
   tag_count: number;
-};
-
-type SessionSqlRow = {
-  id: string;
-  owner_user_id: string;
-  created_at: string;
-  folder_path: string;
-  event_json: string;
-  title: string;
-  raw_body: string;
-  raw_body_format: string;
-};
-
-type SessionSummarySqlRow = {
-  id: string;
-  title: string;
-  created_at: string;
-};
-
-type SessionTranscriptStateSqlRow = {
-  has_transcript: boolean | number;
-};
-
-type EnhancedNoteSqlRow = {
-  id: string;
-  session_id: string;
-  title: string;
-  body: string;
-  body_format: string;
-  template_id: string;
-  sort_order: number;
 };
 
 export type SessionRecord = {
@@ -88,57 +63,21 @@ export type EnhancedNoteRecord = {
 const EMPTY_ENHANCED_NOTES: EnhancedNoteRecord[] = [];
 const EMPTY_SESSION_SUMMARIES: SessionSummaryRecord[] = [];
 
-// The store (Tasks 5-8) writes the note row under id "<sessionId>:note", not "<sessionId>"
-// (the pre-store convention). The store-written row must win when both exist: `createSession`
-// now seeds the legacy "<sessionId>" row as a permanently-empty placeholder, so once the note
-// editor saves exclusively through the store, that row never changes again -- preferring it
-// would freeze every read here at "empty" forever instead of showing live content.
-const SESSION_SELECT_SQL = `
-  SELECT
-    sessions.id,
-    sessions.owner_user_id,
-    sessions.created_at,
-    sessions.folder_path,
-    sessions.event_json,
-    sessions.title,
-    COALESCE(note.body, '') AS raw_body,
-    COALESCE(note.body_format, 'prosemirror_json') AS raw_body_format
-  FROM sessions
-  LEFT JOIN session_documents AS note
-    ON note.id = COALESCE(
-      (
-        SELECT store_note.id
-        FROM session_documents AS store_note
-        WHERE store_note.id = sessions.id || ':note'
-          AND store_note.session_id = sessions.id
-          AND store_note.kind = 'note'
-          AND store_note.deleted_at IS NULL
-        LIMIT 1
-      ),
-      (
-        SELECT legacy_note.id
-        FROM session_documents AS legacy_note
-        WHERE legacy_note.id = sessions.id
-          AND legacy_note.session_id = sessions.id
-          AND legacy_note.kind = 'note'
-          AND legacy_note.deleted_at IS NULL
-        LIMIT 1
-      )
-    )
-    AND note.deleted_at IS NULL
-  WHERE sessions.id = ?
-  LIMIT 1
-`;
-
 export function useSession(sessionId: string): SessionRecord | null {
-  const { data = null } = useLiveQuery<SessionSqlRow, SessionRecord | null>({
-    sql: SESSION_SELECT_SQL,
-    params: [sessionId],
-    enabled: Boolean(sessionId),
-    mapRows: (rows) => {
-      const row = rows[0];
-      return row ? mapSessionRow(row) : null;
+  const { data = null } = useIndexQuery({
+    // Session meta rides the "sessions" entity; the note body (`_memo.md`) rides
+    // "docs". Both event kinds carry the session id.
+    entity: ["sessions", "docs"],
+    ids: [sessionId],
+    queryKey: ["session", sessionId],
+    queryFn: async () => {
+      const result = await commands.sessionGet(sessionId);
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+      return result.data ? mapSessionRecord(result.data) : null;
     },
+    enabled: Boolean(sessionId),
   });
   return sessionId ? data : null;
 }
@@ -183,33 +122,48 @@ export function useSessionRawMd(sessionId: string): string | null {
 export function useSessionSummary(
   sessionId: string,
 ): SessionSummaryRecord | null {
-  const { data = null } = useLiveQuery<
-    SessionSummarySqlRow,
-    SessionSummaryRecord | null
-  >({
-    sql: `
-      SELECT id, title, created_at
-      FROM sessions
-      WHERE id = ?
-      LIMIT 1
-    `,
-    params: [sessionId],
+  const { data = null } = useIndexQuery({
+    entity: "sessions",
+    ids: [sessionId],
+    queryKey: ["session-summary", sessionId],
+    queryFn: async () => {
+      const result = await commands.sessionGet(sessionId);
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+      const meta = result.data?.meta;
+      return meta
+        ? { id: meta.id, title: meta.title, created_at: meta.created_at }
+        : null;
+    },
     enabled: Boolean(sessionId),
-    mapRows: (rows) => rows[0] ?? null,
   });
   return sessionId ? data : null;
 }
 
 export function useSessionSummaries(): SessionSummaryRecord[] {
-  const { data = EMPTY_SESSION_SUMMARIES } = useLiveQuery<
-    SessionSummarySqlRow,
-    SessionSummaryRecord[]
-  >({
-    sql: `
-      SELECT id, title, created_at
-      FROM sessions
-      ORDER BY created_at DESC, id
-    `,
+  const { data = EMPTY_SESSION_SUMMARIES } = useIndexQuery({
+    entity: "sessions",
+    queryKey: ["session-summaries"],
+    queryFn: async () => {
+      const result = await commands.sessionList();
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+      // session_list is (created_at, id) ASC; this list has always been
+      // newest-first with id as the ascending tiebreaker.
+      return [...result.data]
+        .sort(
+          (left, right) =>
+            right.meta.created_at.localeCompare(left.meta.created_at) ||
+            left.meta.id.localeCompare(right.meta.id),
+        )
+        .map(({ meta }) => ({
+          id: meta.id,
+          title: meta.title,
+          created_at: meta.created_at,
+        }));
+    },
   });
   return data;
 }
@@ -222,22 +176,19 @@ export function useUpdateSession(sessionId: string) {
 }
 
 export function useSessionHasTranscript(sessionId: string): boolean {
-  const { data = false } = useLiveQuery<SessionTranscriptStateSqlRow, boolean>({
-    sql: `
-      SELECT EXISTS (
-        SELECT 1
-        FROM transcripts
-        WHERE session_id = ?
-          AND deleted_at IS NULL
-          AND CASE
-            WHEN json_valid(words_json) THEN json_array_length(words_json)
-            ELSE 0
-          END > 0
-      ) AS has_transcript
-    `,
-    params: [sessionId],
+  const { data = false } = useIndexQuery({
+    // Transcript events carry the session id.
+    entity: "transcripts",
+    ids: [sessionId],
+    queryKey: ["session-has-transcript", sessionId],
+    queryFn: async () => {
+      const result = await commands.sessionHasTranscript(sessionId);
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+      return result.data;
+    },
     enabled: Boolean(sessionId),
-    mapRows: (rows) => Boolean(rows[0]?.has_transcript),
   });
   return sessionId ? data : false;
 }
@@ -245,28 +196,19 @@ export function useSessionHasTranscript(sessionId: string): boolean {
 export function useEnhancedNoteRecords(
   sessionId: string,
 ): EnhancedNoteRecord[] {
-  const { data = EMPTY_ENHANCED_NOTES } = useLiveQuery<
-    EnhancedNoteSqlRow,
-    EnhancedNoteRecord[]
-  >({
-    sql: `
-      SELECT
-        id,
-        session_id,
-        title,
-        body,
-        body_format,
-        template_id,
-        sort_order
-      FROM session_documents
-      WHERE session_id = ?
-        AND kind IN ('summary', 'template_output')
-        AND deleted_at IS NULL
-      ORDER BY sort_order, id
-    `,
-    params: [sessionId],
+  const { data = EMPTY_ENHANCED_NOTES } = useIndexQuery({
+    // Doc events carry the session id, not the doc id.
+    entity: "docs",
+    ids: [sessionId],
+    queryKey: ["session-enhanced-docs", sessionId],
+    queryFn: async () => {
+      const result = await commands.sessionEnhancedDocs(sessionId);
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+      return result.data.map(mapEnhancedDoc);
+    },
     enabled: Boolean(sessionId),
-    mapRows: (rows) => rows.map(mapEnhancedNoteRow),
   });
   return sessionId ? data : EMPTY_ENHANCED_NOTES;
 }
@@ -274,31 +216,19 @@ export function useEnhancedNoteRecords(
 export function useEnhancedNote(
   enhancedNoteId: string,
 ): EnhancedNoteRecord | null {
-  const { data = null } = useLiveQuery<
-    EnhancedNoteSqlRow,
-    EnhancedNoteRecord | null
-  >({
-    sql: `
-      SELECT
-        id,
-        session_id,
-        title,
-        body,
-        body_format,
-        template_id,
-        sort_order
-      FROM session_documents
-      WHERE id = ?
-        AND kind IN ('summary', 'template_output')
-        AND deleted_at IS NULL
-      LIMIT 1
-    `,
-    params: [enhancedNoteId],
-    enabled: Boolean(enhancedNoteId),
-    mapRows: (rows) => {
-      const row = rows[0];
-      return row ? mapEnhancedNoteRow(row) : null;
+  const { data = null } = useIndexQuery({
+    // Doc events carry session ids and the owning session isn't known here, so
+    // this one stays table-level.
+    entity: "docs",
+    queryKey: ["enhanced-doc", enhancedNoteId],
+    queryFn: async () => {
+      const result = await commands.enhancedDocGet(enhancedNoteId);
+      if (result.status === "error") {
+        throw new Error(result.error);
+      }
+      return result.data ? mapEnhancedDoc(result.data) : null;
     },
+    enabled: Boolean(enhancedNoteId),
   });
   return enhancedNoteId ? data : null;
 }
@@ -642,36 +572,46 @@ function hasNoteContent(body: string, format: string): boolean {
   return Boolean(markdown && markdown !== "&nbsp;");
 }
 
-function mapSessionRow(row: SessionSqlRow): SessionRecord {
-  let rawMd = row.raw_body;
-  // "markdown" is the legacy-import sentinel; "md" is what `session_write_note` (the store,
-  // Tasks 5-8) writes. Both mean "this body is plain markdown, not prosemirror JSON yet".
-  if (
-    rawMd &&
-    (row.raw_body_format === "markdown" || row.raw_body_format === "md")
-  ) {
+function mapSessionRecord(record: StoreSessionRecord): SessionRecord {
+  // `note_markdown` is always markdown (the file-canonical `_memo.md`); consumers
+  // still expect the stringified prosemirror doc the SQL era handed them.
+  let rawMd = record.note_markdown ?? "";
+  if (rawMd) {
     try {
       rawMd = JSON.stringify(md2json(rawMd));
     } catch (error) {
-      console.error("[session] failed to decode imported Markdown", error);
+      console.error("[session] failed to decode note Markdown", error);
     }
   }
 
   return {
-    id: row.id,
-    user_id: row.owner_user_id,
-    created_at: row.created_at,
-    folder_id: row.folder_path,
-    event_json: row.event_json,
-    title: row.title,
+    id: record.meta.id,
+    // The owner concept died with the workspaces removal (D10).
+    user_id: DEFAULT_USER_ID,
+    created_at: record.meta.created_at,
+    folder_id: record.meta.folder ?? "",
+    event_json: stringifyEventJson(record.meta.event),
+    title: record.meta.title,
     raw_md: rawMd,
   };
 }
 
-function mapEnhancedNoteRow(row: EnhancedNoteSqlRow): EnhancedNoteRecord {
-  let content = row.body;
-  // See mapSessionRow's comment: "md" is `session_write_document`'s format sentinel.
-  if (content && (row.body_format === "markdown" || row.body_format === "md")) {
+// The old `event_json` column defaulted to '' -- consumers JSON.parse it behind guards.
+function stringifyEventJson(event: unknown): string {
+  if (event === null || event === undefined) {
+    return "";
+  }
+  try {
+    return JSON.stringify(event);
+  } catch {
+    return "";
+  }
+}
+
+function mapEnhancedDoc(doc: EnhancedDoc): EnhancedNoteRecord {
+  // `markdown` is the file body; consumers expect the stringified prosemirror doc.
+  let content = doc.markdown;
+  if (content) {
     try {
       content = JSON.stringify(md2json(content));
     } catch (error) {
@@ -680,12 +620,12 @@ function mapEnhancedNoteRow(row: EnhancedNoteSqlRow): EnhancedNoteRecord {
   }
 
   return {
-    id: row.id,
-    sessionId: row.session_id,
-    title: row.title,
+    id: doc.id,
+    sessionId: doc.session_id,
+    title: doc.title,
     content,
-    templateId: row.template_id,
-    position: Number(row.sort_order),
+    templateId: doc.template_id,
+    position: Number(doc.sort_order),
   };
 }
 

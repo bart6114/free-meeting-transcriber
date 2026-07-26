@@ -10,10 +10,10 @@ import retextStringify from "retext-stringify";
 import { unified } from "unified";
 import type { VFile } from "vfile";
 
-import { liveQueryClient } from "~/db";
 import { useSession } from "~/session/queries";
 import { useConfigValue } from "~/shared/config";
 import { normalizeKeywordList } from "~/stt/keywords";
+import { commands } from "~/types/tauri.gen";
 
 const MAX_TRANSCRIPTION_HINTS = 50;
 
@@ -33,12 +33,6 @@ export function useKeywords(sessionId: string) {
   );
 }
 
-type KeywordSnapshotSqlRow = {
-  raw_md: string;
-  title: string;
-  event_json: string;
-};
-
 export async function getSessionKeywords({
   sessionId,
   dictionaryTerms,
@@ -46,49 +40,19 @@ export async function getSessionKeywords({
   sessionId: string;
   dictionaryTerms: string[];
 }): Promise<string[]> {
-  // COALESCE mirrors session/queries.ts's SESSION_SELECT_SQL: the store (Tasks 5-8) writes
-  // the note row under id "<sessionId>:note", not "<sessionId>". The store-written row must
-  // win when both exist -- the legacy "<sessionId>" row is now seeded permanently empty by
-  // `createSession`, so preferring it would freeze keyword extraction at "no note" forever.
-  const [snapshot] = await liveQueryClient.execute<KeywordSnapshotSqlRow>(
-    `
-      SELECT
-        COALESCE(note.body, '') AS raw_md,
-        session.title,
-        session.event_json
-      FROM sessions AS session
-      LEFT JOIN session_documents AS note
-        ON note.id = COALESCE(
-          (
-            SELECT store_note.id
-            FROM session_documents AS store_note
-            WHERE store_note.id = session.id || ':note'
-              AND store_note.session_id = session.id
-              AND store_note.kind = 'note'
-              AND store_note.deleted_at IS NULL
-            LIMIT 1
-          ),
-          (
-            SELECT legacy_note.id
-            FROM session_documents AS legacy_note
-            WHERE legacy_note.id = session.id
-              AND legacy_note.session_id = session.id
-              AND legacy_note.kind = 'note'
-              AND legacy_note.deleted_at IS NULL
-            LIMIT 1
-          )
-        )
-        AND note.deleted_at IS NULL
-      WHERE session.id = ?
-      LIMIT 1
-    `,
-    [sessionId],
-  );
+  const result = await commands.sessionGet(sessionId);
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
 
+  const session = result.data;
   return buildKeywords({
-    rawMd: snapshot?.raw_md,
-    title: snapshot?.title,
-    eventJson: snapshot?.event_json,
+    rawMd: session?.note_markdown ?? undefined,
+    title: session?.meta.title,
+    eventJson:
+      session?.meta.event === null || session?.meta.event === undefined
+        ? undefined
+        : JSON.stringify(session.meta.event),
     dictionaryTerms,
   });
 }

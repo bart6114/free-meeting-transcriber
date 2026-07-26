@@ -1,10 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const execute = vi.hoisted(() => vi.fn());
+const sessionGet = vi.hoisted(() => vi.fn());
 
-vi.mock("~/db", () => ({
-  liveQueryClient: { execute },
-  useLiveQuery: vi.fn(() => ({ data: undefined })),
+vi.mock("~/types/tauri.gen", () => ({
+  commands: { sessionGet },
+}));
+
+vi.mock("~/session/queries", () => ({
+  useSession: vi.fn(() => null),
 }));
 
 import {
@@ -20,8 +23,8 @@ import {
 } from "./useKeywords";
 
 beforeEach(() => {
-  execute.mockReset();
-  execute.mockResolvedValue([]);
+  sessionGet.mockReset();
+  sessionGet.mockResolvedValue({ status: "ok", data: null });
 });
 
 describe("extractKeywordsFromMarkdown", () => {
@@ -152,17 +155,21 @@ describe("buildKeywordSourceText", () => {
 
 describe("getSessionKeywords", () => {
   it("builds keywords from the current session snapshot", async () => {
-    execute.mockResolvedValue([
-      {
-        raw_md: "Discuss #Launch and production systems",
-        title: "Erebor sync",
-        event_json: JSON.stringify({
-          title: "OpenWorld review",
-          description: "Airborne Brothers follow-up",
-          location: "Zoom",
-        }),
+    sessionGet.mockResolvedValue({
+      status: "ok",
+      data: {
+        meta: {
+          id: "session-1",
+          title: "Erebor sync",
+          event: {
+            title: "OpenWorld review",
+            description: "Airborne Brothers follow-up",
+            location: "Zoom",
+          },
+        },
+        note_markdown: "Discuss #Launch and production systems",
       },
-    ]);
+    });
 
     await expect(
       getSessionKeywords({
@@ -170,6 +177,7 @@ describe("getSessionKeywords", () => {
         dictionaryTerms: ["Vertex"],
       }),
     ).resolves.toEqual(expect.arrayContaining(["Vertex", "Launch"]));
+    expect(sessionGet).toHaveBeenCalledWith("session-1");
   });
 });
 

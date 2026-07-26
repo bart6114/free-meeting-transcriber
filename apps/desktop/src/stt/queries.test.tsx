@@ -1,4 +1,6 @@
-import { renderHook } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { renderHook, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TranscriptWithData } from "~/types/tauri.gen";
@@ -17,39 +19,39 @@ const mocks = vi.hoisted(() => ({
       { status: "ok"; data: null } | { status: "error"; error: string }
     > => Promise.resolve({ status: "ok", data: null }),
   ),
-  queryOptions: [] as Array<{
-    sql: string;
-    params?: unknown[];
-    enabled?: boolean;
-  }>,
-  transcriptRows: [] as Array<Record<string, unknown>>,
+  sessionTranscripts: vi.fn(
+    (
+      _sessionId: string,
+    ): Promise<
+      | { status: "ok"; data: Array<Record<string, unknown>> }
+      | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: [] }),
+  ),
+  transcriptGet: vi.fn(
+    (
+      _transcriptId: string,
+    ): Promise<
+      | { status: "ok"; data: Record<string, unknown> | null }
+      | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
 }));
 
 vi.mock("~/db", () => ({
   executeTransaction: mocks.executeTransaction,
   liveQueryClient: { execute: mocks.execute },
-  useLiveQuery: (options: {
-    sql: string;
-    params?: unknown[];
-    enabled?: boolean;
-    mapRows?: (rows: Array<Record<string, unknown>>) => unknown;
-  }) => {
-    mocks.queryOptions.push(options);
-
-    return {
-      data:
-        options.enabled === false
-          ? undefined
-          : options.mapRows
-            ? options.mapRows(mocks.transcriptRows)
-            : mocks.transcriptRows,
-    };
-  },
 }));
 
 vi.mock("~/types/tauri.gen", () => ({
   commands: {
     sessionWriteTranscript: mocks.sessionWriteTranscript,
+    sessionTranscripts: mocks.sessionTranscripts,
+    transcriptGet: mocks.transcriptGet,
+  },
+  events: {
+    indexChanged: {
+      listen: vi.fn().mockResolvedValue(() => {}),
+    },
   },
 }));
 
@@ -63,42 +65,60 @@ import {
   useTranscriptLabelContext,
 } from "./queries";
 
+function createWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+
+  return function Wrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+  };
+}
+
 describe("transcript queries", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.queryOptions = [];
-    mocks.transcriptRows = [];
     mocks.sessionWriteTranscript.mockResolvedValue({
       status: "ok",
       data: null,
     });
+    mocks.sessionTranscripts.mockResolvedValue({ status: "ok", data: [] });
+    mocks.transcriptGet.mockResolvedValue({ status: "ok", data: null });
   });
 
-  it("maps canonical transcript JSON into renderer records", () => {
-    mocks.transcriptRows = [
-      {
-        id: "transcript-1",
-        owner_user_id: "user-1",
-        session_id: "session-1",
-        started_at_ms: 1000,
-        ended_at_ms: 2000,
-        words_json: JSON.stringify([
-          {
-            id: "word-1",
-            text: "Hello",
-            start_ms: 0,
-            end_ms: 500,
-            channel: 0,
-          },
-        ]),
-        speaker_hints_json: JSON.stringify([
-          { word_id: "word-1", type: "provider_speaker_index", value: 0 },
-        ]),
-      },
-    ];
+  it("maps store transcripts into renderer records", async () => {
+    mocks.sessionTranscripts.mockResolvedValue({
+      status: "ok",
+      data: [
+        {
+          id: "transcript-1",
+          user_id: "user-1",
+          session_id: "session-1",
+          started_at: 1000,
+          ended_at: 2000,
+          words: [
+            {
+              id: "word-1",
+              text: "Hello",
+              start_ms: 0,
+              end_ms: 500,
+              channel: 0,
+            },
+          ],
+          speaker_hints: [
+            { word_id: "word-1", type: "provider_speaker_index", value: 0 },
+          ],
+        },
+      ],
+    });
 
-    const { result } = renderHook(() => useSessionTranscripts("session-1"));
+    const { result } = renderHook(() => useSessionTranscripts("session-1"), {
+      wrapper: createWrapper(),
+    });
 
+    await waitFor(() => expect(result.current).toHaveLength(1));
     expect(result.current).toEqual([
       expect.objectContaining({
         id: "transcript-1",
@@ -110,24 +130,26 @@ describe("transcript queries", () => {
         speakerHints: [expect.objectContaining({ word_id: "word-1" })],
       }),
     ]);
-    expect(mocks.queryOptions[0]?.sql).toContain("ORDER BY started_at_ms, id");
+    expect(mocks.sessionTranscripts).toHaveBeenCalledWith("session-1");
   });
 
-  it("treats non-array transcript payloads as empty without hiding the row", () => {
-    mocks.transcriptRows = [
-      {
+  it("defaults absent word/hint payloads to empty without hiding the row", async () => {
+    mocks.transcriptGet.mockResolvedValue({
+      status: "ok",
+      data: {
         id: "transcript-1",
-        owner_user_id: "user-1",
+        user_id: "user-1",
         session_id: "session-1",
-        started_at_ms: 1000,
-        ended_at_ms: null,
-        words_json: "{}",
-        speaker_hints_json: "null",
+        started_at: 1000,
+        ended_at: null,
       },
-    ];
+    });
 
-    const { result } = renderHook(() => useTranscript("transcript-1"));
+    const { result } = renderHook(() => useTranscript("transcript-1"), {
+      wrapper: createWrapper(),
+    });
 
+    await waitFor(() => expect(result.current).not.toBeNull());
     expect(result.current).toEqual(
       expect.objectContaining({
         id: "transcript-1",
@@ -136,32 +158,36 @@ describe("transcript queries", () => {
         speakerHints: [],
       }),
     );
+    expect(mocks.transcriptGet).toHaveBeenCalledWith("transcript-1");
   });
 
-  it("resolves speaker labels straight from assigned hint values, not a lookup", () => {
-    mocks.transcriptRows = [
-      {
+  it("resolves speaker labels straight from assigned hint values, not a lookup", async () => {
+    mocks.transcriptGet.mockResolvedValue({
+      status: "ok",
+      data: {
         id: "transcript-1",
-        owner_user_id: "self",
+        user_id: "self",
         session_id: "session-1",
-        started_at_ms: 1000,
-        ended_at_ms: null,
-        words_json: "[]",
-        speaker_hints_json: JSON.stringify([
+        started_at: 1000,
+        ended_at: null,
+        words: [],
+        speaker_hints: [
           {
             id: "hint-1",
             word_id: "word-1",
             type: "speaker_label",
             value: "Alice",
           },
-        ]),
+        ],
       },
-    ];
+    });
 
-    const { result } = renderHook(() =>
-      useTranscriptLabelContext("transcript-1"),
+    const { result } = renderHook(
+      () => useTranscriptLabelContext("transcript-1"),
+      { wrapper: createWrapper() },
     );
 
+    await waitFor(() => expect(result.current).toBeDefined());
     expect(result.current?.getSelfHumanId()).toBe("self");
     expect(result.current?.getHumanName("Alice")).toBe("Alice");
     expect(result.current?.getHumanName("self")).toBeUndefined();
