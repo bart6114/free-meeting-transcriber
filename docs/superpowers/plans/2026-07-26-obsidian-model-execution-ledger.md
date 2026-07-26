@@ -19,7 +19,7 @@
 | Plan spot-verify | done | — | claims hold; drift notes below |
 | A — meeting-chat total drop | done (Linux gates green) | fa11943, 9513f62, c01de0b | awaiting owner macOS verify |
 | B — dead DB weight | done | 40276b7 | last-ever SQL migration added (20260726120000_drop_dead_tables) |
-| C — config.json | C1 in progress | — | split C1 (Rust service, in plugins/settings) → C2 (migration) → C3 (FE rewiring); C4 split-brain folded into C1 |
+| C — config.json | C1 done; C2/C3 pending | ed21619 | C1 = Rust service in plugins/settings + split-brain fix (C4 folded in). Open decision for C2/C3: array-ish keys (spoken_languages, ignored/included_platforms, personalization_dictionary_terms) are JSON-stringified strings today; controller decision = store REAL JSON arrays in config.json (hand-editability, invariant 4), FE adapts in C3 — no config.json exists in the wild yet, so no format break. |
 | D — file homes + exodus | pending | — | |
 | E — reactivity core | pending | — | |
 | F — search on files | pending | — | |
