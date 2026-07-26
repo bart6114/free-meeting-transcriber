@@ -16,8 +16,8 @@
 
 | Phase | Status | Commits | Notes |
 |-------|--------|---------|-------|
-| Plan spot-verify | in progress | — | subagent checking file:line ground truth |
-| A — meeting-chat total drop | pending | — | macOS verification owner-side |
+| Plan spot-verify | done | — | claims hold; drift notes below |
+| A — meeting-chat total drop | in progress (A1+A2) | — | macOS verification owner-side |
 | B — dead DB weight | pending | — | |
 | C — config.json | pending | — | |
 | D — file homes + exodus | pending | — | |
@@ -38,4 +38,9 @@ Items that require macOS and/or the real vault; commands to be filled in as phas
 
 ## Follow-ups / deviations log
 
-(none yet)
+**Spot-verify drift notes (2026-07-26, repo @ 86d5be9):**
+- Settings schema is `apps/desktop/src/settings/schema.ts` (plan said `components/settings/`).
+- Detect mocks live inside `useStartListening.test.ts` (lines ~32/58/79), NOT `test-setup.ts`; test-setup only mocks plugin-db `getMeeting`/`getMeetingTranscript`/`listMeetings` (@63–65, dies in Phase B).
+- `meeting_ax.rs` (exactly 5,408 lines) has 3 `cfg(not(macos))` stubs (lines 295/429/1153); `mod meeting_ax;` is ungated; non-macOS inspect command stub at `plugins/detect/src/commands.rs:77–84` also dies in A3.
+- Phase B extras: update table-list assertion test `crates/db-app/src/lib.rs:~399–417` when dropping the 4 dead tables; remove unused root `Cargo.toml:64` alias `hypr-db-cli`.
+- `pnpm -F desktop typecheck` valid (scope-omission match for `@hypr/desktop`); test runner vitest 4.
