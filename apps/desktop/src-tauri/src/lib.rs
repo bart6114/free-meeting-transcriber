@@ -1,16 +1,15 @@
 mod agents;
 mod appearance;
 mod commands;
-mod db;
 mod embedded_cli;
 mod ext;
+mod legacy_db;
 mod search_index;
 mod session_store;
 mod store;
 mod supervisor;
 mod vault_watch;
 
-use db::open_desktop_db;
 use ext::*;
 use store::*;
 
@@ -158,11 +157,9 @@ pub async fn main() {
     let audio: std::sync::Arc<dyn hypr_audio_actual::AudioProvider> =
         create_audio_provider(&context.config().identifier);
 
-    let db = open_desktop_db(&context.config().identifier).await;
+    legacy_db::retire_app_db(&context.config().identifier);
 
-    let mut builder = tauri_plugin_windows::extend_builder(tauri::Builder::default())
-        .manage(audio)
-        .manage(db.clone());
+    let mut builder = tauri_plugin_windows::extend_builder(tauri::Builder::default()).manage(audio);
 
     // https://docs.crabnebula.dev/plugins/tauri-e2e-tests/#macos-support
     #[cfg(all(target_os = "macos", feature = "automation"))]
@@ -316,32 +313,8 @@ pub async fn main() {
                 use tauri_plugin_settings::SettingsPluginExt;
                 match app_handle.settings().vault_base() {
                     Ok(base) => {
-                        // One-time, marker-gated `transcripts.words_json`
-                        // repair, before this run's `rebuild_index` indexes
-                        // whatever's on disk. `block_on` for the same reason
-                        // `rebuild_index` below is blocked on -- the UI must
-                        // not proceed against unrepaired rows.
-                        match hypr_tauri_utils::block_on(session_store::migrate::run_once(
-                            db.pool(),
-                            base.as_std_path(),
-                        )) {
-                            Ok(report) => {
-                                tracing::info!(
-                                    skipped_marker_present = report.skipped_marker_present,
-                                    repaired_words_json = report.repaired_words_json,
-                                    unparseable_words_json_count =
-                                        report.unparseable_words_json.len(),
-                                    "one-time words_json repair sweep complete"
-                                );
-                            }
-                            Err(e) => {
-                                tracing::error!("one-time words_json repair sweep failed: {}", e);
-                            }
-                        }
-
                         let store = std::sync::Arc::new(session_store::SessionStore::new(
                             base.as_std_path().to_path_buf(),
-                            db.pool().clone(),
                         ));
                         app_handle.manage(store.clone());
 
@@ -644,14 +617,8 @@ mod test {
     #[test]
     fn exit_flush_bounded_drains_dirty_buffer_and_second_call_is_a_noop() {
         let temp = tempfile::tempdir().unwrap();
-        let store = hypr_tauri_utils::block_on(async {
-            let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-            hypr_db_app::prepare_schema(&db).await.unwrap();
-            std::sync::Arc::new(session_store::SessionStore::new(
-                temp.path().to_path_buf(),
-                db.pool().clone(),
-            ))
-        });
+        let store =
+            std::sync::Arc::new(session_store::SessionStore::new(temp.path().to_path_buf()));
 
         hypr_tauri_utils::block_on(store.append_transcript(
             "s1",

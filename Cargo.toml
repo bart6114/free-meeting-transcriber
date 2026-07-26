@@ -55,16 +55,9 @@ hypr-bundle = { path = "crates/bundle", package = "bundle" }
 hypr-chatwoot = { path = "crates/chatwoot", package = "chatwoot" }
 hypr-claude = { path = "crates/claude", package = "claude" }
 hypr-cli-process = { path = "crates/cli-process", package = "cli-process" }
-hypr-cloudsync = { path = "crates/cloudsync", package = "cloudsync" }
 hypr-codex = { path = "crates/codex", package = "codex" }
 hypr-cursor = { path = "crates/cursor", package = "cursor" }
 hypr-data = { path = "crates/data", package = "data" }
-hypr-db-app = { path = "crates/db-app", package = "db-app" }
-hypr-db-change = { path = "crates/db-change", package = "db-change" }
-hypr-db-core = { path = "crates/db-core", package = "db-core" }
-hypr-db-execute = { path = "crates/db-execute", package = "db-execute" }
-hypr-db-migrate = { path = "crates/db-migrate", package = "db-migrate" }
-hypr-db-reactive = { path = "crates/db-reactive", package = "db-reactive" }
 hypr-denoise = { path = "crates/denoise", package = "denoise" }
 hypr-detect = { path = "crates/detect", package = "detect" }
 hypr-device-monitor = { path = "crates/device-monitor", package = "device-monitor" }
@@ -107,7 +100,6 @@ hypr-local-model = { path = "crates/local-model", package = "local-model" }
 hypr-local-stt-core = { path = "crates/local-stt-core", package = "local-stt-core" }
 hypr-local-stt-server = { path = "crates/local-stt-server", package = "local-stt-server" }
 hypr-mac = { path = "crates/mac", package = "mac" }
-hypr-mobile-bridge = { path = "crates/mobile-bridge", package = "mobile-bridge" }
 hypr-model-downloader = { path = "crates/model-downloader", package = "model-downloader" }
 hypr-model-manager = { path = "crates/model-manager", package = "model-manager" }
 hypr-mp3 = { path = "crates/mp3", package = "mp3" }
@@ -189,7 +181,6 @@ tauri-plugin-agent = { path = "plugins/agent" }
 tauri-plugin-analytics = { path = "plugins/analytics" }
 tauri-plugin-audio-priority = { path = "plugins/audio-priority" }
 tauri-plugin-bedrock = { path = "plugins/bedrock" }
-tauri-plugin-db = { path = "plugins/db" }
 tauri-plugin-deeplink2 = { path = "plugins/deeplink2" }
 tauri-plugin-detect = { path = "plugins/detect" }
 tauri-plugin-dictation = { path = "plugins/dictation" }
@@ -397,5 +388,4 @@ xcap = "0.9.3"
 
 rmcp = "1.4"
 rustls = { version = "0.23", default-features = false }
-sqlx = { version = "=0.9.0-alpha.1", default-features = false }
 sysinfo = "0.38"

@@ -690,16 +690,16 @@ export type JsonValue =
   | JsonValue[]
   | Partial<{ [key in string]: JsonValue }>;
 /**
- * Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect rows *upserted* this
- * pass, not the resulting table size. `errors` never aborts the scan -- an unparseable file
- * is logged here and its existing index row is left untouched (see the hard rule in each
- * match arm below: corruption must never look like deletion).
+ * Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect entries *derived
+ * from files* this pass, not the resulting index size. `errors` never aborts the scan --
+ * an unparseable file is logged here and its existing index entry is left untouched (see
+ * the hard rule in each match arm below: corruption must never look like deletion).
  */
 export type RebuildReport = {
   sessions: number;
   /**
-   * Upserted `session_documents` rows this pass -- every `<kind>.md` file including the
-   * note (`_memo.md`) and every `enhanced/<doc_id>.md` doc, not just the note.
+   * Documents read this pass -- every `<kind>.md` file including the note (`_memo.md`)
+   * and every `enhanced/<doc_id>.md` doc, not just the note.
    */
   notes: number;
   transcripts: number;

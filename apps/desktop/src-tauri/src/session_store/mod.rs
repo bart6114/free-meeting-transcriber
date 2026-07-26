@@ -1,4 +1,3 @@
-use sqlx::SqlitePool;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -9,7 +8,6 @@ pub mod content;
 pub mod enhanced;
 pub mod index;
 pub mod journal;
-pub mod migrate;
 pub mod paths;
 pub mod rebuild;
 pub mod tasks;
@@ -27,7 +25,6 @@ pub use transcript::TranscriptDelta;
 #[derive(Debug, Clone)]
 pub struct SessionStore {
     vault_base: PathBuf,
-    pool: SqlitePool,
     journal: Arc<journal::WriteJournal>,
     write_lock: Arc<tokio::sync::Mutex<()>>, // single store-wide lock; can become per-path if contention matters
     // one live buffer per actively-recording session; guards the debounced-flush lifecycle
@@ -47,7 +44,6 @@ pub struct SessionStore {
 #[derive(Debug)]
 pub enum StoreError {
     Io(String),
-    Db(String),
     Serialize(String),
     /// A compare-and-swap guard didn't match current file content. Stringifies with a
     /// stable `conflict:` prefix so the frontend can tell a benign CAS miss apart from a
@@ -59,7 +55,6 @@ impl std::fmt::Display for StoreError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             StoreError::Io(msg) => write!(f, "I/O error: {}", msg),
-            StoreError::Db(msg) => write!(f, "Database error: {}", msg),
             StoreError::Serialize(msg) => write!(f, "Serialization error: {}", msg),
             StoreError::Conflict(msg) => write!(f, "conflict: {}", msg),
         }
@@ -67,12 +62,6 @@ impl std::fmt::Display for StoreError {
 }
 
 impl std::error::Error for StoreError {}
-
-impl From<sqlx::Error> for StoreError {
-    fn from(err: sqlx::Error) -> Self {
-        StoreError::Db(err.to_string())
-    }
-}
 
 impl From<hypr_vault_read::Error> for StoreError {
     fn from(err: hypr_vault_read::Error) -> Self {
@@ -84,11 +73,10 @@ impl From<hypr_vault_read::Error> for StoreError {
 }
 
 impl SessionStore {
-    pub fn new(vault_base: PathBuf, pool: SqlitePool) -> Self {
+    pub fn new(vault_base: PathBuf) -> Self {
         let (index_changes_tx, index_changes_rx) = tokio::sync::mpsc::unbounded_channel();
         Self {
             vault_base,
-            pool,
             journal: Arc::new(journal::WriteJournal::new()),
             write_lock: Arc::new(tokio::sync::Mutex::new(())),
             live: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
@@ -97,10 +85,6 @@ impl SessionStore {
             index_changes_rx: Arc::new(std::sync::Mutex::new(Some(index_changes_rx))),
             index_change_taps: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
-    }
-
-    pub fn pool(&self) -> &SqlitePool {
-        &self.pool
     }
 
     /// Whether the current on-disk bytes at `relative` match the hash this store itself last
@@ -172,13 +156,11 @@ fn sha256(bytes: &[u8]) -> String {
 // (fmtr CLI/MCP); see `hypr_vault_read::strip_leading_frontmatter` for the full rationale.
 pub(crate) use hypr_vault_read::strip_leading_frontmatter;
 
-/// Shared test constructor: a store over `vault` backed by a fresh in-memory DB (the
-/// SQL dual-write half still needs a pool until the SQL side retires).
+/// Shared test constructor: a store over `vault`. Files (plus the in-memory index they
+/// hydrate) are the only store there is.
 #[cfg(test)]
 pub(crate) async fn new_test_store(vault: std::path::PathBuf) -> SessionStore {
-    let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-    hypr_db_app::prepare_schema(&db).await.unwrap();
-    SessionStore::new(vault, db.pool().clone())
+    SessionStore::new(vault)
 }
 
 #[cfg(test)]
@@ -214,10 +196,7 @@ mod tests {
 
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
-        let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(temp.path().to_path_buf());
         (store, temp)
     }
 

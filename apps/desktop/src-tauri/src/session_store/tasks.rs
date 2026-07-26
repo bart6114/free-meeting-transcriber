@@ -246,7 +246,7 @@ impl SessionStore {
 
     /// Map a task source to the file its tasks live in. `session_raw_note` carries the
     /// session id directly; `enhanced_note` carries a doc id, resolved to its session via
-    /// the `session_documents` index first (dual-written on every doc write) and a
+    /// the in-memory docs index first (write-through on every doc write) and a
     /// filesystem scan for `sessions/*/enhanced/<id>.md` as the file-canonical fallback.
     /// An enhanced doc that exists nowhere is an error -- silently picking a file would
     /// strand its tasks once the doc becomes resolvable. Unknown source types get the
@@ -259,13 +259,15 @@ impl SessionStore {
         match source_type {
             "session_raw_note" => Ok(TaskScope::Session(source_id.to_string())),
             "enhanced_note" => {
-                let row: Option<(String,)> =
-                    sqlx::query_as("SELECT session_id FROM session_documents WHERE id = ?")
-                        .bind(source_id)
-                        .fetch_optional(self.pool())
-                        .await
-                        .map_err(|e| StoreError::Db(e.to_string()))?;
-                if let Some((session_id,)) = row {
+                let indexed_session = {
+                    let index = self.index.read().unwrap();
+                    index.docs.iter().find_map(|(session_id, docs)| {
+                        docs.iter()
+                            .any(|doc| doc.id == source_id)
+                            .then(|| session_id.clone())
+                    })
+                };
+                if let Some(session_id) = indexed_session {
                     if !session_id.is_empty() {
                         return Ok(TaskScope::Session(session_id));
                     }
@@ -425,9 +427,7 @@ mod tests {
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 

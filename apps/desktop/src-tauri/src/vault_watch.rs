@@ -166,9 +166,13 @@ fn is_trash_path(relative: &str) -> bool {
     relative == ".trash" || relative.starts_with(".trash/")
 }
 
-/// This app's own SQLite database file(s) -- normally live outside the
-/// vault entirely (`db.rs`'s `desktop_db_dir`), but guarded here too in
-/// case a deployment ever points the db path inside the vault.
+/// The retired SQLite database and its sidecars. The app-data dir that used
+/// to hold `app.db` is also the *default* vault base, so these can genuinely
+/// sit inside the vault. `legacy_db` renames the live names (`app.db`,
+/// `app.db-wal`, `app.db-shm`) to `app.db.pre-files-backup*` at startup, and
+/// a user may restore a backup by hand at any time, so the prefix match
+/// deliberately covers both spellings: neither a not-yet-retired database nor
+/// a restored backup may ever trigger a refresh.
 fn is_app_db_path(relative: &str) -> bool {
     relative
         .split('/')
@@ -437,6 +441,28 @@ mod tests {
             classify_event("app.db-wal", false),
             WatchAction::Ignore
         ));
+        for retired in [
+            "app.db.pre-files-backup",
+            "app.db.pre-files-backup-wal",
+            "app.db.pre-files-backup-shm",
+        ] {
+            assert!(
+                matches!(classify_event(retired, false), WatchAction::Ignore),
+                "{retired} must be ignored"
+            );
+        }
+    }
+
+    /// `migrate.rs`'s one-time-repair marker is gone along with the SQLite
+    /// store it repaired, but the file it wrote still sits at the root of
+    /// every vault that ran it. Top-level non-session files classify as
+    /// `Ignore` by default, so the leftover is inert without a named rule.
+    #[test]
+    fn the_retired_store_migration_marker_is_inert() {
+        assert!(matches!(
+            classify_event(".store-migrated-v1", false),
+            WatchAction::Ignore
+        ));
     }
 
     #[test]
@@ -498,9 +524,7 @@ mod tests {
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 
@@ -551,11 +575,10 @@ mod tests {
 
         handle_batch(&store, &changed).await;
 
-        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(n, 0, "index row must be gone");
+        assert!(
+            store.session_get("s1").is_none(),
+            "index entry must be gone"
+        );
         assert!(
             vault.path().join("sessions/s1/_memo.md").is_file(),
             "the watcher must never touch files -- only the index row is affected"

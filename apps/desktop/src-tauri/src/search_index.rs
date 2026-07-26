@@ -4,20 +4,16 @@
 //! Dirty tracking: `SessionStore::subscribe_index_changes` fans the store's raw
 //! change stream (the same tuples the `index-changed` dispatcher coalesces) into
 //! this worker, which folds sessions/docs/transcripts changes into an in-memory
-//! `DirtyQueue` keyed by session id. The queue reproduces the retired
-//! `search_index_dirty` table's acknowledge-by-generation semantics: a session
-//! re-dirtied while its document is being indexed carries a bumped generation, so
-//! the stale acknowledgement leaves it queued for another pass.
+//! `DirtyQueue` keyed by session id. The queue keeps the retired SQL dirty table's
+//! acknowledge-by-generation semantics: a session re-dirtied while its document is
+//! being indexed carries a bumped generation, so the stale acknowledgement leaves it
+//! queued for another pass.
 //!
-//! Durable state: the retired `search_index_state` row only carried
+//! Durable state: the retired SQL projection row only carried
 //! `projection_version`; that now lives as a `projection_version` file next to the
 //! Tantivy files in the app-data `search_index/` dir (alongside the plugin's own
 //! `schema_version` file). Deleting `search_index/` stays safe: a missing file
 //! reads as version 0 and forces a full rebuild from the vault index.
-//!
-//! Phase H note: the `search_index_dirty`/`search_index_state` tables and their
-//! nine triggers (shipped migrations 20260714120100/120200/120300) are now
-//! unconsumed dead weight; they are deleted in Phase H, not here.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -50,12 +46,11 @@ enum IndexAction {
     Remove(String),
 }
 
-/// In-memory replacement for the `search_index_dirty` table: a FIFO of dirty
-/// session ids (front = oldest mark, like the SQL `ORDER BY queued_at`; re-marking
-/// moves an id to the back, like the trigger's `queued_at = now`) with a
+/// In-memory replacement for the retired SQL dirty-queue table: a FIFO of dirty
+/// session ids (front = oldest mark; re-marking moves an id to the back) with a
 /// per-session generation that bumps on every mark. `acknowledge` only clears an
-/// entry whose generation still matches the one handed out at batch time --
-/// exactly the SQL `DELETE ... WHERE generation = ?`.
+/// entry whose generation still matches the one handed out at batch time, so a
+/// session re-dirtied mid-index stays queued.
 #[derive(Default)]
 struct DirtyQueue {
     inner: Mutex<QueueInner>,
@@ -235,8 +230,8 @@ async fn rebuild<R: tauri::Runtime>(
     index_dir: &Path,
 ) -> WorkerResult<()> {
     // Durably drop to version 0 before touching the index, so a crash mid-rebuild
-    // forces another full rebuild on the next boot (what resetting
-    // `search_index_state.projection_version` used to guarantee).
+    // forces another full rebuild on the next boot (what resetting the retired
+    // SQL projection row's version used to guarantee).
     write_projection_version(index_dir, 0)?;
 
     app.tantivy().reindex(None).await?;

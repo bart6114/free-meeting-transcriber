@@ -1,9 +1,0 @@
-[default]
-description = "Default permissions for the plugin"
-permissions = [
-  "allow-execute",
-  "allow-execute-proxy",
-  "allow-execute-transaction",
-  "allow-subscribe",
-  "allow-unsubscribe",
-]

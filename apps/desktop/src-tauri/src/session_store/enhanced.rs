@@ -44,10 +44,9 @@ pub(super) fn parse_enhanced_file(
 }
 
 impl SessionStore {
-    /// Create-or-replace an enhanced doc: file write first, then the SQL dual-write
-    /// (frontend reads and search stay on `session_documents` until Phases E/F). Requires
-    /// the session's `_meta.json` to exist -- creating a doc must never resurrect a
-    /// session folder that a racing delete just trashed.
+    /// Create-or-replace an enhanced doc: file write first, then the index write-through.
+    /// Requires the session's `_meta.json` to exist -- creating a doc must never resurrect
+    /// a session folder that a racing delete just trashed.
     pub async fn write_enhanced_doc(&self, doc: &EnhancedDoc) -> Result<(), StoreError> {
         validate_kind(&doc.kind)?;
 
@@ -154,9 +153,8 @@ impl SessionStore {
     }
 
     /// File to `.trash/<date>/sessions/<id>/enhanced/<doc>.md` (hand-recoverable, never
-    /// synced), then a hard `DELETE` of the index row. No tombstone: no frontend undo path
-    /// exists for enhanced notes, and rebuild prunes file-less rows anyway -- a
-    /// `deleted_at` marker would only survive until the next startup/focus rescan.
+    /// synced), then the index entry is removed. No tombstone: no frontend undo path
+    /// exists for enhanced notes, and rebuild prunes file-less entries anyway.
     /// Idempotent: deleting a doc that doesn't exist succeeds.
     pub async fn delete_enhanced_doc(
         &self,
@@ -179,13 +177,6 @@ impl SessionStore {
         self.index_remove_doc(session_id, doc_id);
         self.notify_index_changed(super::IndexEntity::Docs, vec![session_id.to_string()]);
 
-        sqlx::query("DELETE FROM session_documents WHERE id = ? AND session_id = ?")
-            .bind(doc_id)
-            .bind(session_id)
-            .execute(self.pool())
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-
         Ok(())
     }
 
@@ -198,49 +189,6 @@ impl SessionStore {
         .await?;
         self.index_upsert_doc(doc);
         self.notify_index_changed(super::IndexEntity::Docs, vec![doc.session_id.clone()]);
-        self.upsert_enhanced_doc_row(doc).await
-    }
-
-    /// Shared by the interactive write path and rebuild. The `WHERE` guard keeps an
-    /// unchanged doc from re-firing `session_documents`' `search_index_dirty` trigger on
-    /// every automatic rebuild/refresh pass (same rationale as `upsert_document_row`).
-    /// `deleted_at = NULL` on a genuine change: a present file is a live document by
-    /// definition (mirror honesty), and the delete path hard-deletes rows anyway.
-    pub(super) async fn upsert_enhanced_doc_row(
-        &self,
-        doc: &EnhancedDoc,
-    ) -> Result<(), StoreError> {
-        sqlx::query(
-            "INSERT INTO session_documents (id, session_id, kind, template_id, title, sort_order, body_format, body, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, 'md', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               session_id = excluded.session_id,
-               kind = excluded.kind,
-               template_id = excluded.template_id,
-               title = excluded.title,
-               sort_order = excluded.sort_order,
-               body_format = excluded.body_format,
-               body = excluded.body,
-               deleted_at = NULL
-             WHERE session_id IS NOT excluded.session_id
-                OR kind IS NOT excluded.kind
-                OR template_id IS NOT excluded.template_id
-                OR title IS NOT excluded.title
-                OR sort_order IS NOT excluded.sort_order
-                OR body_format IS NOT excluded.body_format
-                OR body IS NOT excluded.body
-                OR deleted_at IS NOT NULL",
-        )
-        .bind(&doc.id)
-        .bind(&doc.session_id)
-        .bind(&doc.kind)
-        .bind(&doc.template_id)
-        .bind(&doc.title)
-        .bind(doc.sort_order)
-        .bind(&doc.markdown)
-        .execute(self.pool())
-        .await
-        .map_err(|e| StoreError::Db(e.to_string()))?;
         Ok(())
     }
 }
@@ -288,9 +236,7 @@ mod tests {
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 
@@ -307,26 +253,7 @@ mod tests {
             Some(d.clone())
         );
 
-        let (kind, template_id, title, sort_order, body_format, body): (
-            String,
-            String,
-            String,
-            i64,
-            String,
-            String,
-        ) = sqlx::query_as(
-            "SELECT kind, template_id, title, sort_order, body_format, body
-             FROM session_documents WHERE id='doc-1' AND session_id='s1'",
-        )
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
-        assert_eq!(kind, "template_output");
-        assert_eq!(template_id, "template-1");
-        assert_eq!(title, "Customer review");
-        assert_eq!(sort_order, 3);
-        assert_eq!(body_format, "md");
-        assert_eq!(body, "# Review\n\n- Point");
+        assert_eq!(store.enhanced_doc_get("doc-1"), Some(d));
     }
 
     /// The file itself carries the metadata (frontmatter, no sidecar) and only the body
@@ -394,12 +321,11 @@ mod tests {
         assert_eq!(after.template_id, d.template_id);
         assert_eq!(after.sort_order, d.sort_order);
 
-        let body: String =
-            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='doc-1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(body, "# Replaced", "dual-write must reach the index");
+        assert_eq!(
+            store.enhanced_doc_get("doc-1").unwrap().markdown,
+            "# Replaced",
+            "write-through must reach the index"
+        );
     }
 
     #[tokio::test]
@@ -518,11 +444,10 @@ mod tests {
                 .is_file(),
             "deleted doc must be hand-recoverable from trash"
         );
-        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM session_documents WHERE id='doc-1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(n, 0, "no tombstone: the row is hard-deleted");
+        assert!(
+            store.enhanced_doc_get("doc-1").is_none(),
+            "no tombstone: the index entry is gone"
+        );
     }
 
     #[tokio::test]

@@ -6,16 +6,15 @@
 //! (`templates/<id>.json`) -- built at startup by `rebuild_index` and kept current by:
 //!
 //! 1. **Write-through**: every store write updates the index synchronously right after
-//!    the file write lands (before the SQL dual-write, dead weight until Phase H
-//!    removes it -- the search projection rides this bus since Phase F), then pushes
-//!    a change onto the bus.
+//!    the file write lands (the search projection rides this bus since Phase F), then
+//!    pushes a change onto the bus.
 //! 2. **Rescans**: `rebuild_index` / `refresh_session` (startup, focus rescan,
-//!    `vault_watch` external-edit ingestion) re-derive the affected slice of the index
-//!    from the files and notify only what actually changed (`PartialEq` diff -- the
-//!    in-memory equivalent of rebuild's change-guarded SQL upserts).
+//!    `vault_watch` external-edit ingestion -- see `rebuild.rs`) re-derive the affected
+//!    slice of the index from the files and notify only what actually changed
+//!    (`PartialEq` diff), so repeated rescans over unchanged files stay silent.
 //!
-//! The bus coalesces changes for ~10ms (mirroring `hypr-db-reactive`'s dispatcher:
-//! receive one change, sleep `COALESCE_WINDOW`, drain everything else that arrived)
+//! The bus coalesces changes for ~10ms (receive one change, sleep `COALESCE_WINDOW`,
+//! drain everything else that arrived)
 //! and emits one `index-changed { entity, ids }` Tauri event per entity to all
 //! webviews. Granularity is table-level: `entity` names which map changed, `ids` are
 //! session ids (docs/transcripts/tasks carry their owning session id; templates carry
@@ -30,7 +29,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use super::{EnhancedDoc, SessionMeta, SessionStore, StoreError, TaskItem, TemplateItem, paths};
+use super::{EnhancedDoc, SessionMeta, SessionStore, TaskItem, TemplateItem};
 use hypr_fs_format::TranscriptWithData;
 
 /// Which index map changed. Serialized as the lowercase strings the frontend matches
@@ -84,12 +83,12 @@ pub struct SessionListEntry {
 /// folder names are non-empty path segments).
 pub(super) const VAULT_TASKS_KEY: &str = "";
 
-/// The in-memory mirror of the vault. Maps are kept independent (mirroring the three
-/// SQL index tables plus tasks/templates) rather than nested under one session struct,
-/// so a ghost session's transcripts can exist without a meta exactly like the SQL
-/// write path allows (`recording_into_unknown_session_still_persists`). Empty
+/// The in-memory mirror of the vault. Maps are kept independent rather than nested
+/// under one session struct, so a ghost session's transcripts can exist without a meta
+/// exactly like the write path allows
+/// (`recording_into_unknown_session_still_persists`). Empty
 /// collections are normalized to absent keys so `PartialEq` diffs stay meaningful.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct VaultIndex {
     pub sessions: HashMap<String, SessionEntry>,
     /// Session id -> every document: legacy single-slot `<kind>.md` files (normalized
@@ -332,7 +331,7 @@ impl SessionStore {
         rx
     }
 
-    fn notify_many(&self, changes: Vec<(IndexEntity, String)>) {
+    pub(super) fn notify_many(&self, changes: Vec<(IndexEntity, String)>) {
         let mut grouped: HashMap<IndexEntity, Vec<String>> = HashMap::new();
         for (entity, id) in changes {
             let ids = grouped.entry(entity).or_default();
@@ -453,127 +452,11 @@ impl SessionStore {
 }
 
 // -- rescans (file -> index reconciliation) ---------------------------------------
+//
+// The full rescan entry points (`rebuild_index` / `refresh_session`) live in
+// `rebuild.rs`; the helpers below are what they share with the templates path.
 
 impl SessionStore {
-    /// Re-derive one session's slice of the index from its files and notify only the
-    /// entities whose value actually changed. Per-artifact read/parse failures keep
-    /// the existing entry (corruption never looks like deletion); a confirmed-missing
-    /// `_meta.json` removes the session everywhere, mirroring `refresh_one`'s
-    /// `delete_session_index_tx`.
-    pub(super) async fn index_refresh_session(&self, session_id: &str) -> Result<(), StoreError> {
-        let meta = match self.read_meta(session_id).await {
-            Ok(meta) => Some(meta),
-            Err(_) => None, // unreadable/corrupt: keep the old entry
-        };
-        if let Some(None) = meta {
-            self.index_remove_session_and_notify(session_id);
-            return Ok(());
-        }
-
-        let note = self.read_note(session_id).await.ok();
-        let docs = self.scan_index_docs(session_id).await;
-        let transcripts = match self.read_transcript_json(session_id).await {
-            Ok(file) => Some(file.transcripts),
-            Err(_) => None,
-        };
-        let tasks = self
-            .read_index_tasks(paths::session_tasks_path(session_id))
-            .await;
-
-        let mut changes = Vec::new();
-        {
-            let mut index = self.index.write().unwrap();
-
-            if let Some(Some(new_meta)) = meta {
-                let old = index.sessions.get(session_id);
-                let note_markdown = match note {
-                    Some(note) => note,
-                    None => old.and_then(|entry| entry.note_markdown.clone()),
-                };
-                let entry = SessionEntry {
-                    meta: new_meta,
-                    note_markdown,
-                };
-                if old != Some(&entry) {
-                    index.sessions.insert(session_id.to_string(), entry);
-                    changes.push((IndexEntity::Sessions, session_id.to_string()));
-                }
-            } else if let Some(note) = note {
-                // Meta unreadable (kept as-is) but the note read fine: still refresh it.
-                if let Some(entry) = index.sessions.get_mut(session_id) {
-                    if entry.note_markdown != note {
-                        entry.note_markdown = note;
-                        changes.push((IndexEntity::Sessions, session_id.to_string()));
-                    }
-                }
-            }
-
-            if let Some(new_docs) = docs {
-                if apply_map_value(&mut index.docs, session_id, new_docs) {
-                    changes.push((IndexEntity::Docs, session_id.to_string()));
-                }
-            }
-            if let Some(new_transcripts) = transcripts {
-                if apply_map_value(&mut index.transcripts, session_id, new_transcripts) {
-                    changes.push((IndexEntity::Transcripts, session_id.to_string()));
-                }
-            }
-            if let Some(new_tasks) = tasks {
-                if apply_map_value(&mut index.tasks, session_id, new_tasks) {
-                    changes.push((IndexEntity::Tasks, session_id.to_string()));
-                }
-            }
-        }
-
-        self.notify_many(changes);
-        Ok(())
-    }
-
-    /// Full reconcile: every session folder, the vault-root tasks file and the
-    /// templates folder. Sessions that vanished from disk are removed (their folder
-    /// scan succeeded and came back without them -- same certainty rebuild's prune
-    /// requires). Runs at startup and on every focus rescan, so the change-diffing
-    /// inside `index_refresh_session` is what keeps those passes quiet.
-    pub(super) async fn index_rebuild(&self) -> Result<(), StoreError> {
-        let folder_ids = self.scan_session_ids().await?;
-
-        for id in &folder_ids {
-            self.index_refresh_session(id).await?;
-        }
-
-        let present: HashSet<&str> = folder_ids.iter().map(String::as_str).collect();
-        let stale: Vec<String> = {
-            let index = self.index.read().unwrap();
-            index
-                .sessions
-                .keys()
-                .chain(index.docs.keys())
-                .chain(index.transcripts.keys())
-                .chain(index.tasks.keys())
-                .filter(|id| *id != VAULT_TASKS_KEY && !present.contains(id.as_str()))
-                .cloned()
-                .collect::<HashSet<String>>()
-                .into_iter()
-                .collect()
-        };
-        for id in stale {
-            self.index_remove_session_and_notify(&id);
-        }
-
-        if let Some(tasks) = self.read_index_tasks(paths::vault_tasks_path()).await {
-            let changed = {
-                let mut index = self.index.write().unwrap();
-                apply_map_value(&mut index.tasks, VAULT_TASKS_KEY, tasks)
-            };
-            if changed {
-                self.notify_index_changed(IndexEntity::Tasks, vec![VAULT_TASKS_KEY.to_string()]);
-            }
-        }
-
-        self.index_refresh_templates().await;
-        Ok(())
-    }
-
     /// Reload the templates map from `templates/*.json` (via `list_templates`, which
     /// already skips unparseable/dot files) and notify changed template ids -- also
     /// the `vault_watch` entry point for external `templates/**` edits.
@@ -609,55 +492,12 @@ impl SessionStore {
         self.notify_index_changed(IndexEntity::Templates, changed_ids);
     }
 
-    /// Every document for one session, or `None` when a directory listing failed
-    /// (keep the old vec -- can't tell "gone" from "unlistable"). Per-file failures
-    /// keep that file's existing entry by id, mirroring `refresh_one`'s
-    /// keep-unparseable-rows rule.
-    async fn scan_index_docs(&self, session_id: &str) -> Option<Vec<EnhancedDoc>> {
-        let legacy = self.scan_document_files(session_id).await.ok()?;
-        let enhanced = self.scan_enhanced_doc_files(session_id).await.ok()?;
-
-        let previous: HashMap<String, EnhancedDoc> = {
-            let index = self.index.read().unwrap();
-            index
-                .docs
-                .get(session_id)
-                .map(|docs| {
-                    docs.iter()
-                        .map(|doc| (doc.id.clone(), doc.clone()))
-                        .collect()
-                })
-                .unwrap_or_default()
-        };
-
-        let mut docs = Vec::new();
-        for (kind, content) in legacy {
-            let doc_id = format!("{session_id}:{kind}");
-            match content {
-                Ok(markdown) => docs.push(legacy_doc(session_id, &kind, markdown)),
-                Err(_) => {
-                    if let Some(old) = previous.get(&doc_id) {
-                        docs.push(old.clone());
-                    }
-                }
-            }
-        }
-        for (doc_id, parsed) in enhanced {
-            match parsed {
-                Ok(doc) => docs.push(doc),
-                Err(_) => {
-                    if let Some(old) = previous.get(&doc_id) {
-                        docs.push(old.clone());
-                    }
-                }
-            }
-        }
-        Some(docs)
-    }
-
     /// `None` on read/parse failure (keep the old entry); a missing file is an empty
     /// list (remove the entry -- "no tasks" is a real state).
-    async fn read_index_tasks(&self, relative: std::path::PathBuf) -> Option<Vec<TaskItem>> {
+    pub(super) async fn read_index_tasks(
+        &self,
+        relative: std::path::PathBuf,
+    ) -> Option<Vec<TaskItem>> {
         let path = self.vault_base.join(relative);
         tokio::task::spawn_blocking(move || -> Option<Vec<TaskItem>> {
             let bytes = match std::fs::read(&path) {
@@ -692,7 +532,7 @@ pub(super) fn legacy_doc(session_id: &str, kind: &str, markdown: String) -> Enha
 
 /// Replace `map[key]` with `value` (empty -> absent), returning whether anything
 /// observable changed.
-fn apply_map_value<V: PartialEq>(
+pub(super) fn apply_map_value<V: PartialEq>(
     map: &mut HashMap<String, Vec<V>>,
     key: &str,
     value: Vec<V>,
@@ -716,8 +556,8 @@ fn apply_map_value<V: PartialEq>(
 // -- event bus --------------------------------------------------------------------
 
 /// How long the dispatcher waits after the first change before draining and emitting
-/// -- mirrors `hypr-db-reactive`'s dispatcher (receive, `sleep(10ms)`, drain, refresh),
-/// which is the coalescing the SQL live queries had.
+/// -- receive, `sleep(10ms)`, drain, refresh. Carried over from the retired SQL
+/// live-query dispatcher, whose coalescing window this preserves.
 pub(crate) const COALESCE_WINDOW: std::time::Duration = std::time::Duration::from_millis(10);
 
 /// Stable emission order so bursts serialize deterministically (and tests can assert
@@ -873,9 +713,7 @@ mod tests {
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 
