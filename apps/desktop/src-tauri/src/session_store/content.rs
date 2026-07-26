@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::{SessionStore, StoreError, paths};
+use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
 
 // The `_meta.json` schema is shared with the read-only vault consumers (fmtr CLI/MCP);
 // the type lives in `hypr-vault-read` so both sides parse the same shape.
@@ -31,10 +31,20 @@ pub struct SessionMetaPatch {
 
 impl SessionStore {
     pub async fn write_meta(&self, meta: &SessionMeta) -> Result<(), StoreError> {
+        validate_session_id(&meta.id)?;
+        let guard = self.lock_writes().await;
+        self.write_meta_locked(&guard, meta).await
+    }
+
+    async fn write_meta_locked(
+        &self,
+        guard: &WriteGuard<'_>,
+        meta: &SessionMeta,
+    ) -> Result<(), StoreError> {
         let meta_json =
             serde_json::to_vec_pretty(meta).map_err(|e| StoreError::Serialize(e.to_string()))?;
 
-        self.write_file(paths::meta_path(&meta.id), meta_json)
+        self.write_file_locked(guard, paths::meta_path(&meta.id), meta_json)
             .await?;
 
         // Index write-through directly after the file write (file truth).
@@ -48,7 +58,14 @@ impl SessionStore {
     /// as `write_meta`. Errors (rather than synthesizing a fresh meta) when the session has no
     /// `_meta.json`: every store-created session has one, and inventing one here would let a
     /// title edit racing a delete quietly resurrect the session folder.
+    ///
+    /// The write lock is held across the read *and* the write: two concurrent patches that
+    /// both read the pre-patch meta would otherwise each write a whole file back, and the
+    /// loser's fields would vanish.
     pub async fn update_meta(&self, id: &str, patch: SessionMetaPatch) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+
         let mut meta = self
             .read_meta(id)
             .await?
@@ -86,10 +103,11 @@ impl SessionStore {
             meta.folder = Some(folder);
         }
 
-        self.write_meta(&meta).await
+        self.write_meta_locked(&guard, &meta).await
     }
 
     pub async fn read_meta(&self, id: &str) -> Result<Option<SessionMeta>, StoreError> {
+        validate_session_id(id)?;
         let vault_base = self.vault_base.clone();
         let id = id.to_string();
 
@@ -121,6 +139,7 @@ impl SessionStore {
     }
 
     pub async fn write_note(&self, id: &str, markdown: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
         let note_bytes = markdown.as_bytes().to_vec();
         self.write_file(paths::note_path(id), note_bytes).await?;
 
@@ -131,6 +150,7 @@ impl SessionStore {
     }
 
     pub async fn read_note(&self, id: &str) -> Result<Option<String>, StoreError> {
+        validate_session_id(id)?;
         let vault_base = self.vault_base.clone();
         let id = id.to_string();
 
@@ -156,6 +176,7 @@ impl SessionStore {
         kind: &str,
         markdown: &str,
     ) -> Result<(), StoreError> {
+        validate_session_id(id)?;
         let doc_bytes = markdown.as_bytes().to_vec();
         self.write_file(paths::document_path(id, kind), doc_bytes)
             .await?;
@@ -166,9 +187,28 @@ impl SessionStore {
         Ok(())
     }
 
+    /// Moves the whole `sessions/<id>/` folder to trash (undo-able via `restore_session`).
+    ///
+    /// The id is validated first: `sessions/<id>` for an empty id resolves to `sessions/`
+    /// itself, so an unguarded delete would trash the user's entire session tree in one
+    /// call -- and `restore_session` could not put it back.
     pub async fn delete_session(&self, id: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+
         let vault_base = self.vault_base.clone();
         let id_str = id.to_string();
+
+        // Drop the session's live transcript buffer *before* trashing the folder, and keep
+        // the `live` lock held across the trash. A debounced flush still holding words for
+        // this session would otherwise fire afterwards, and `persist_transcript` ->
+        // `write_file` -> `create_dir_all` would recreate `sessions/<id>/` -- resurrecting a
+        // ghost session and, worse, making `restore_session` fail with ENOTEMPTY because the
+        // destination it renames onto now exists. Any flusher that wakes up during the delete
+        // blocks here, then finds no buffer and no-ops. (Recording into a session with no
+        // `_meta.json` still persists, deliberately: this only drops buffers for a session
+        // that was just deleted.)
+        let mut live = self.live.lock().await;
+        live.remove(id);
 
         // Move folder to trash first (file operation)
         tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
@@ -179,6 +219,8 @@ impl SessionStore {
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
+
+        drop(live);
 
         // The folder is confirmed gone (trashed) -- clear every index map.
         self.index_remove_session_and_notify(id);
@@ -192,6 +234,7 @@ impl SessionStore {
     /// (not an error) when there's nothing to restore, e.g. the toast window already lapsed
     /// past midnight or the session was never deleted.
     pub async fn restore_session(&self, id: &str) -> Result<bool, StoreError> {
+        validate_session_id(id)?;
         let vault_base = self.vault_base.clone();
         let id_owned = id.to_string();
 
@@ -512,6 +555,152 @@ mod tests {
             found_meta,
             "trashed session's _meta.json should exist under .trash/<date>/sessions/s1/"
         );
+    }
+
+    /// `sessions/<id>` for an empty id is `sessions/` itself, so an unguarded delete would
+    /// move the user's ENTIRE session tree to trash in one call -- and `restore_session("")`
+    /// could never bring it back, because it looks for `sessions/` *inside* the trashed
+    /// sessions dir.
+    #[tokio::test]
+    async fn delete_session_with_an_empty_id_is_rejected_and_spares_the_whole_sessions_tree() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "Keep me")).await.unwrap();
+        store.write_meta(&meta("s2", "Me too")).await.unwrap();
+
+        assert!(store.delete_session("").await.is_err());
+
+        assert!(vault.path().join("sessions/s1/_meta.json").is_file());
+        assert!(vault.path().join("sessions/s2/_meta.json").is_file());
+        assert!(!vault.path().join(".trash").exists());
+        assert!(store.session_get("s1").is_some());
+    }
+
+    /// `Path::join` with an absolute path replaces rather than appends, so an absolute id
+    /// escapes the vault entirely -- and `move_to_trash`'s `strip_prefix` fails open on it.
+    #[tokio::test]
+    async fn delete_session_with_an_absolute_id_is_rejected_and_touches_nothing_outside_the_vault()
+    {
+        let (store, vault) = test_store().await;
+        let outside = vault.path().parent().unwrap().join("precious-documents");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("thesis.md"), b"years of work").unwrap();
+
+        let result = store.delete_session(outside.to_str().unwrap()).await;
+
+        assert!(result.is_err());
+        assert!(outside.join("thesis.md").is_file());
+    }
+
+    #[tokio::test]
+    async fn restore_session_rejects_unsafe_ids() {
+        let (store, _vault) = test_store().await;
+        for id in ["", "..", "/tmp"] {
+            assert!(store.restore_session(id).await.is_err(), "{id:?}");
+        }
+    }
+
+    /// REGRESSION (reviewer-found): a debounced transcript flush still in flight when a
+    /// session is deleted used to call `persist_transcript` -> `write_file` ->
+    /// `create_dir_all`, recreating `sessions/<id>/`. That resurrected a ghost session AND
+    /// permanently broke undo, because `restore_session`'s rename onto the (now existing)
+    /// destination fails with ENOTEMPTY.
+    #[tokio::test]
+    async fn delete_session_drops_the_live_buffer_so_a_pending_flush_cannot_resurrect_the_folder() {
+        let (store, vault) = test_store().await;
+        store
+            .write_meta(&meta("s1", "Being deleted"))
+            .await
+            .unwrap();
+        store
+            .write_note("s1", "notes worth restoring")
+            .await
+            .unwrap();
+
+        // A dirty buffer with a debounce timer already armed and never flushed.
+        store
+            .append_transcript(
+                "s1",
+                super::super::TranscriptDelta {
+                    transcript_id: "t1".to_string(),
+                    new_words: vec![hypr_fs_format::TranscriptWord {
+                        id: Some("w0".to_string()),
+                        text: "mid-recording".to_string(),
+                        start_ms: 0.0,
+                        end_ms: 0.0,
+                        channel: 0.0,
+                        speaker: None,
+                        metadata: None,
+                    }],
+                    replaced_ids: vec![],
+                    new_hints: vec![],
+                    started_at_ms: 0.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        store.delete_session("s1").await.unwrap();
+        assert!(!vault.path().join("sessions/s1").exists());
+
+        // Let the armed debounce timer fire well past its deadline.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        assert!(
+            !vault.path().join("sessions/s1").exists(),
+            "a pending flush must not recreate the deleted session folder"
+        );
+
+        let restored = store.restore_session("s1").await.unwrap();
+        assert!(restored, "undo-delete must still work");
+        assert_eq!(
+            std::fs::read_to_string(vault.path().join("sessions/s1/_memo.md")).unwrap(),
+            "notes worth restoring"
+        );
+    }
+
+    /// Two patches of different fields racing each other must both survive: the write lock
+    /// spans the read *and* the write, so neither can compute its new whole-file value from
+    /// bytes the other is about to replace.
+    #[tokio::test]
+    async fn concurrent_update_meta_calls_do_not_lose_each_others_fields() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "Original")).await.unwrap();
+        let store = std::sync::Arc::new(store);
+
+        let a = {
+            let store = store.clone();
+            async move {
+                store
+                    .update_meta(
+                        "s1",
+                        SessionMetaPatch {
+                            title: Some("Renamed".to_string()),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+            }
+        };
+        let b = {
+            let store = store.clone();
+            async move {
+                store
+                    .update_meta(
+                        "s1",
+                        SessionMetaPatch {
+                            tags: Some(vec!["tagged".to_string()]),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+            }
+        };
+        let (ra, rb) = tokio::join!(a, b);
+        ra.unwrap();
+        rb.unwrap();
+
+        let after = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(after.title, "Renamed");
+        assert_eq!(after.tags, vec!["tagged".to_string()]);
     }
 
     #[tokio::test]

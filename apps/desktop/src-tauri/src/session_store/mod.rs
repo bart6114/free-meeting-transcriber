@@ -98,8 +98,33 @@ impl SessionStore {
             .matches_current_file(&self.vault_base, relative)
     }
 
+    /// Takes the store-wide write lock and hands back the guard, so a read-modify-write
+    /// caller can hold it across its own read and the matching `write_file_locked`. Without
+    /// this, `write_file`'s internal lock only spans the write, and two callers computing a
+    /// new whole-file value from the same starting bytes silently drop one of the updates.
+    pub(crate) async fn lock_writes(&self) -> WriteGuard<'_> {
+        self.write_lock.lock().await
+    }
+
     pub async fn write_file(&self, relative: PathBuf, bytes: Vec<u8>) -> Result<(), StoreError> {
-        let _lock = self.write_lock.lock().await;
+        let guard = self.lock_writes().await;
+        self.write_file_locked(&guard, relative, bytes).await
+    }
+
+    /// `write_file` for callers that already hold the write lock (see `lock_writes`). The
+    /// guard is a proof token only -- taking the lock again here would deadlock.
+    pub(crate) async fn write_file_locked(
+        &self,
+        _guard: &WriteGuard<'_>,
+        relative: PathBuf,
+        bytes: Vec<u8>,
+    ) -> Result<(), StoreError> {
+        validate_relative_path(&relative)?;
+
+        let relative_str = relative
+            .to_str()
+            .ok_or_else(|| StoreError::Io("invalid relative path".to_string()))?
+            .to_string();
 
         let abs = self.vault_base.join(&relative);
         let parent = abs
@@ -108,10 +133,15 @@ impl SessionStore {
 
         let parent_path = parent.to_path_buf();
         let abs_path = abs.clone();
+        let vault_base = self.vault_base.clone();
+        let journal = self.journal.clone();
+        let journal_relative = relative_str.clone();
 
         let hash = tokio::task::spawn_blocking(move || {
             std::fs::create_dir_all(&parent_path)
                 .map_err(|e| StoreError::Io(format!("failed to create parent directory: {}", e)))?;
+
+            trash_foreign_bytes(&journal, &vault_base, &abs_path, &journal_relative, &bytes)?;
 
             let tmp_path = hypr_fs_sync_core::export::tmp_sibling_path(&abs_path);
             {
@@ -132,13 +162,102 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
 
-        let relative_str = relative
-            .to_str()
-            .ok_or_else(|| StoreError::Io("invalid relative path".to_string()))?;
-        self.journal.record(relative_str, &hash);
+        self.journal.record(&relative_str, &hash);
 
         Ok(())
     }
+}
+
+/// Proof that the caller holds the store-wide write lock.
+pub(crate) type WriteGuard<'a> = tokio::sync::MutexGuard<'a, ()>;
+
+/// Preserves bytes at `abs` that this store did not write, before they are overwritten.
+///
+/// The vault is the only copy of the user's data and other programs (Obsidian, sync
+/// clients) edit it while the app runs, so an overwrite that destroys content the store
+/// never produced is unrecoverable data loss -- the same reasoning as
+/// `hypr_fs_sync_core::export::write_file_atomic`, applied at this store's primitive so
+/// every writer (note, meta, docs, transcript, tasks, templates) inherits it.
+///
+/// The write journal decides ownership: if the on-disk bytes still hash to what this store
+/// last wrote to this path, this is our own file and the overwrite is silent -- which is the
+/// steady state, so ordinary editing never accumulates trash. Anything else (an external
+/// edit, or a file predating this process, since the journal is in-memory) is trashed first.
+/// Bytes identical to what we are about to write lose nothing, so they are left alone too.
+fn trash_foreign_bytes(
+    journal: &journal::WriteJournal,
+    vault_base: &std::path::Path,
+    abs: &std::path::Path,
+    relative: &str,
+    next: &[u8],
+) -> Result<(), StoreError> {
+    if journal.matches_current_file(vault_base, relative) {
+        return Ok(());
+    }
+
+    match std::fs::read(abs) {
+        Ok(existing) if existing == next => return Ok(()),
+        Ok(_) => {}
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        // Attempt-then-match, and an unreadable existing file is treated as content worth
+        // keeping: trashing is a rename, so it still succeeds where the read did not.
+        Err(_) => {}
+    }
+
+    hypr_fs_sync_core::export::move_to_trash(vault_base, abs)
+        .map(|_| ())
+        .map_err(|e| StoreError::Io(format!("failed to move overwritten file to trash: {e}")))
+}
+
+/// Rejects a vault-relative path that could escape the vault. Guards the id/kind segments
+/// every path helper interpolates (`sessions/<id>/<kind>.md`), so a hostile or empty
+/// segment can't turn a write into a write outside the vault base.
+fn validate_relative_path(relative: &std::path::Path) -> Result<(), StoreError> {
+    use std::path::Component;
+
+    if relative.as_os_str().is_empty() {
+        return Err(StoreError::Io("empty vault-relative path".to_string()));
+    }
+    for component in relative.components() {
+        match component {
+            Component::Normal(segment) if !segment.is_empty() => {}
+            _ => {
+                return Err(StoreError::Io(format!(
+                    "unsafe vault-relative path: {}",
+                    relative.display()
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A session id becomes a directory name directly under `sessions/`, so it must be a single
+/// safe path segment -- same rule (and rationale) as `templates::validate_template_id`. An
+/// empty id would make `sessions/<id>` resolve to `sessions/` itself, which
+/// `delete_session` would then move the user's entire vault of sessions to trash;
+/// an absolute id escapes the vault outright, because `Path::join` with an absolute path
+/// replaces rather than appends.
+pub(crate) fn validate_session_id(id: &str) -> Result<(), StoreError> {
+    validate_path_segment("session id", id)
+}
+
+/// Enhanced doc ids become `enhanced/<id>.md`; same rule as session ids.
+pub(crate) fn validate_doc_id(id: &str) -> Result<(), StoreError> {
+    validate_path_segment("enhanced doc id", id)
+}
+
+fn validate_path_segment(kind: &str, id: &str) -> Result<(), StoreError> {
+    if id.is_empty()
+        || id.starts_with('.')
+        || id.contains('/')
+        || id.contains('\\')
+        || id.contains('\0')
+        || std::path::Path::new(id).is_absolute()
+    {
+        return Err(StoreError::Io(format!("invalid {kind}: {id:?}")));
+    }
+    Ok(())
 }
 
 fn sha256(bytes: &[u8]) -> String {
@@ -240,6 +359,158 @@ mod tests {
                 .journal
                 .matches_current_file(vault, "sessions/s1/_memo.md")
         );
+    }
+
+    fn trash_root(vault: &std::path::Path) -> PathBuf {
+        vault
+            .join(".trash")
+            .join(chrono::Utc::now().format("%Y-%m-%d").to_string())
+    }
+
+    /// The critical fix from whole-branch review, at the store's primitive: the vault is the
+    /// only copy of the user's data and other programs edit it while the app runs, so bytes
+    /// this store did not write must land in `.trash/` before they are overwritten.
+    #[tokio::test]
+    async fn write_file_trashes_externally_edited_bytes_before_overwriting_them() {
+        let (store, temp) = test_store().await;
+        let vault = temp.path();
+        store
+            .write_file(paths::note_path("s1"), b"written by the app".to_vec())
+            .await
+            .unwrap();
+
+        // Another program (Obsidian, a sync client) rewrites the note behind our back.
+        std::fs::write(
+            vault.join("sessions/s1/_memo.md"),
+            b"typed in Obsidian, never seen by the app",
+        )
+        .unwrap();
+
+        store
+            .write_file(paths::note_path("s1"), b"app overwrite".to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(vault.join("sessions/s1/_memo.md")).unwrap(),
+            b"app overwrite"
+        );
+        let trashed = trash_root(vault).join("sessions/s1/_memo.md");
+        assert_eq!(
+            std::fs::read(&trashed).unwrap(),
+            b"typed in Obsidian, never seen by the app",
+            "the external edit must be recoverable from .trash"
+        );
+    }
+
+    /// The journal is in-memory, so a file that predates this process has no entry at all --
+    /// which means it is not ours and must be preserved, not silently replaced.
+    #[tokio::test]
+    async fn write_file_trashes_a_pre_existing_file_this_process_never_wrote() {
+        let (store, temp) = test_store().await;
+        let vault = temp.path();
+        std::fs::create_dir_all(vault.join("sessions/s1")).unwrap();
+        std::fs::write(vault.join("sessions/s1/_memo.md"), b"from a previous run").unwrap();
+
+        store
+            .write_file(paths::note_path("s1"), b"this run".to_vec())
+            .await
+            .unwrap();
+
+        assert_eq!(
+            std::fs::read(trash_root(vault).join("sessions/s1/_memo.md")).unwrap(),
+            b"from a previous run"
+        );
+    }
+
+    /// The other half of the fix, and the one that decides whether it is usable: an
+    /// overwrite of bytes this store itself wrote is silent. Getting this backwards would
+    /// mean a trash file per keystroke, filling the user's disk with copies of their note.
+    #[tokio::test]
+    async fn repeated_normal_writes_create_zero_trash_files() {
+        let (store, temp) = test_store().await;
+        let vault = temp.path();
+
+        for i in 0..25 {
+            store
+                .write_file(
+                    paths::note_path("s1"),
+                    format!("keystroke {i}").into_bytes(),
+                )
+                .await
+                .unwrap();
+            store
+                .write_file(
+                    paths::meta_path("s1"),
+                    format!("{{\"n\":{i}}}").into_bytes(),
+                )
+                .await
+                .unwrap();
+            store
+                .write_file(paths::transcript_path("s1"), format!("[{i}]").into_bytes())
+                .await
+                .unwrap();
+        }
+
+        assert!(
+            !vault.join(".trash").exists(),
+            "normal repeated writes must never produce a trash file"
+        );
+        assert_eq!(
+            std::fs::read(vault.join("sessions/s1/_memo.md")).unwrap(),
+            b"keystroke 24"
+        );
+    }
+
+    /// An external write that happens to produce exactly the bytes we are about to write
+    /// loses nothing, so it is not worth a trash copy either.
+    #[tokio::test]
+    async fn write_file_does_not_trash_byte_identical_existing_content() {
+        let (store, temp) = test_store().await;
+        let vault = temp.path();
+        std::fs::create_dir_all(vault.join("sessions/s1")).unwrap();
+        std::fs::write(vault.join("sessions/s1/_memo.md"), b"same bytes").unwrap();
+
+        store
+            .write_file(paths::note_path("s1"), b"same bytes".to_vec())
+            .await
+            .unwrap();
+
+        assert!(!vault.join(".trash").exists());
+    }
+
+    /// A path segment interpolated from frontend input (here the document `kind`) must not
+    /// be able to walk out of the vault.
+    #[tokio::test]
+    async fn write_file_rejects_a_relative_path_that_escapes_the_vault() {
+        let (store, temp) = test_store().await;
+        let outside = temp.path().parent().unwrap().join("escaped.md");
+
+        let result = store
+            .write_document("s1", "../../../escaped", "pwned")
+            .await;
+
+        assert!(result.is_err());
+        assert!(!outside.exists());
+    }
+
+    #[test]
+    fn session_and_doc_ids_must_be_a_single_safe_path_segment() {
+        for id in [
+            "",
+            ".",
+            "..",
+            "../evil",
+            "a/b",
+            "a\\b",
+            "/Users/me/Documents",
+            ".hidden",
+        ] {
+            assert!(validate_session_id(id).is_err(), "{id:?}");
+            assert!(validate_doc_id(id).is_err(), "{id:?}");
+        }
+        assert!(validate_session_id("01JABCDEF").is_ok());
+        assert!(validate_doc_id("doc-1").is_ok());
     }
 
     #[tokio::test]

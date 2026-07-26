@@ -52,7 +52,11 @@ fn retire_in_dir(dir: &Path) {
         return;
     }
 
-    let mut retired = Vec::new();
+    // The database and its sidecars are retired as one group or not at all. A `-wal` holds
+    // transactions that exist nowhere else until it is checkpointed into the database it
+    // belongs to, so renaming it away from a live `app.db` (because only *its* backup name
+    // was free) would destroy them permanently.
+    let mut moves = Vec::new();
     for (from_suffix, to_suffix) in SUFFIXES {
         let from = dir.join(format!("{DB_FILENAME}{from_suffix}"));
         if !from.is_file() {
@@ -63,10 +67,15 @@ fn retire_in_dir(dir: &Path) {
             tracing::warn!(
                 path = %from.display(),
                 backup = %to.display(),
-                "legacy app.db backup already exists; leaving the database in place"
+                "legacy app.db backup already exists; leaving the database and its sidecars in place"
             );
-            continue;
+            return;
         }
+        moves.push((from, to));
+    }
+
+    let mut retired = Vec::new();
+    for (from, to) in moves {
         match std::fs::rename(&from, &to) {
             Ok(()) => retired.push(to),
             Err(error) => tracing::error!(
@@ -144,6 +153,36 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(dir.path().join("app.db")).unwrap(),
             "new"
+        );
+    }
+
+    /// REGRESSION (reviewer-found): the three renames are one group. With only the main
+    /// backup name taken, the old per-file loop still renamed `app.db-wal` away from the
+    /// live `app.db` it belongs to -- permanently losing every transaction that lived only
+    /// in the WAL, since a detached WAL can never be checkpointed back.
+    #[test]
+    fn an_existing_backup_keeps_the_wal_and_shm_with_their_database() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["app.db", "app.db-wal", "app.db-shm"] {
+            std::fs::write(dir.path().join(name), name).unwrap();
+        }
+        std::fs::write(dir.path().join("app.db.pre-files-backup"), "old").unwrap();
+
+        retire_in_dir(dir.path());
+
+        for name in ["app.db", "app.db-wal", "app.db-shm"] {
+            assert_eq!(
+                std::fs::read_to_string(dir.path().join(name)).unwrap(),
+                name,
+                "{name} must stay next to the database it belongs to"
+            );
+        }
+        assert!(!dir.path().join("app.db.pre-files-backup-wal").exists());
+        assert!(!dir.path().join("app.db.pre-files-backup-shm").exists());
+        assert_eq!(
+            std::fs::read_to_string(dir.path().join("app.db.pre-files-backup")).unwrap(),
+            "old",
+            "the pre-existing backup is never clobbered"
         );
     }
 

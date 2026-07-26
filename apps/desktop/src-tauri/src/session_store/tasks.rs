@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
 
-use super::{SessionStore, StoreError, paths};
+use super::{SessionStore, StoreError, WriteGuard, paths, validate_doc_id, validate_session_id};
 
 // The `tasks.json` schema is shared with the read-only vault consumers (fmtr CLI/MCP);
 // the types live in `hypr-vault-read` so both sides parse the same shape.
@@ -97,6 +97,11 @@ impl SessionStore {
         let scope = self.resolve_task_scope(source_type, source_id).await?;
         self.ensure_task_scope_writable(&scope).await?;
 
+        // One guard across read-modify-write: a `tasks.json` holds every source's tasks, so
+        // two concurrent replaces that each read the same starting file and write a whole new
+        // one back would silently drop the loser's changes.
+        let guard = self.lock_writes().await;
+
         let existing = self.read_tasks_at(&scope).await?;
         let prior_by_id: HashMap<&str, &TaskItem> =
             existing.iter().map(|t| (t.id.as_str(), t)).collect();
@@ -140,7 +145,7 @@ impl SessionStore {
         if next == existing {
             return Ok(());
         }
-        self.write_tasks_at(&scope, &next).await
+        self.write_tasks_at_locked(&guard, &scope, &next).await
     }
 
     /// Remove the listed task ids from one source. Removal is scoped: an id that lives
@@ -156,6 +161,7 @@ impl SessionStore {
             return Ok(());
         }
         let scope = self.resolve_task_scope(source_type, source_id).await?;
+        let guard = self.lock_writes().await;
         let existing = self.read_tasks_at(&scope).await?;
         let ids: std::collections::HashSet<&str> = task_ids.iter().map(|s| s.as_str()).collect();
         let next: Vec<TaskItem> = existing
@@ -170,7 +176,7 @@ impl SessionStore {
         if next == existing {
             return Ok(());
         }
-        self.write_tasks_at(&scope, &next).await
+        self.write_tasks_at_locked(&guard, &scope, &next).await
     }
 
     /// Re-home tasks (found by id anywhere -- any session's `tasks.json` or the vault-root
@@ -198,6 +204,10 @@ impl SessionStore {
                 scopes.push(scope);
             }
         }
+
+        // Same read-modify-write guard as `replace_tasks`, spanning every file this move
+        // touches (a move rewrites both the source and the destination `tasks.json`).
+        let guard = self.lock_writes().await;
 
         let mut files: Vec<(TaskScope, Vec<TaskItem>, bool)> = Vec::new();
         for scope in scopes {
@@ -238,7 +248,7 @@ impl SessionStore {
 
         for (scope, tasks, dirty) in files {
             if dirty {
-                self.write_tasks_at(&scope, &tasks).await?;
+                self.write_tasks_at_locked(&guard, &scope, &tasks).await?;
             }
         }
         Ok(())
@@ -257,8 +267,12 @@ impl SessionStore {
         source_id: &str,
     ) -> Result<TaskScope, StoreError> {
         match source_type {
-            "session_raw_note" => Ok(TaskScope::Session(source_id.to_string())),
+            "session_raw_note" => {
+                validate_session_id(source_id)?;
+                Ok(TaskScope::Session(source_id.to_string()))
+            }
             "enhanced_note" => {
+                validate_doc_id(source_id)?;
                 let indexed_session = {
                     let index = self.index.read().unwrap();
                     index.docs.iter().find_map(|(session_id, docs)| {
@@ -335,8 +349,9 @@ impl SessionStore {
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
     }
 
-    async fn write_tasks_at(
+    async fn write_tasks_at_locked(
         &self,
+        guard: &WriteGuard<'_>,
         scope: &TaskScope,
         tasks: &[TaskItem],
     ) -> Result<(), StoreError> {
@@ -345,7 +360,8 @@ impl SessionStore {
         };
         let bytes =
             serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Serialize(e.to_string()))?;
-        self.write_file(scope.relative_path(), bytes).await?;
+        self.write_file_locked(guard, scope.relative_path(), bytes)
+            .await?;
 
         self.index_set_tasks(scope.index_key(), tasks.to_vec());
         self.notify_index_changed(
@@ -751,6 +767,90 @@ mod tests {
         let raw = std::fs::read(vault.path().join("sessions/s1/tasks.json")).unwrap();
         let parsed: TasksFile = serde_json::from_slice(&raw).unwrap();
         assert_eq!(parsed.tasks.len(), 1);
+    }
+
+    /// Both sources share one `sessions/<id>/tasks.json`, so a replace is a read-modify-write
+    /// of the whole file. With the write lock spanning only the write (not the read), two
+    /// concurrent replaces each start from the same bytes and the loser's tasks vanish.
+    #[tokio::test]
+    async fn concurrent_replaces_of_different_sources_do_not_lose_each_others_tasks() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1")).await.unwrap();
+        store
+            .write_enhanced_doc(&EnhancedDoc {
+                id: "doc-1".to_string(),
+                session_id: "s1".to_string(),
+                kind: "summary".to_string(),
+                title: String::new(),
+                template_id: String::new(),
+                sort_order: 0,
+                markdown: "body".to_string(),
+            })
+            .await
+            .unwrap();
+        let store = std::sync::Arc::new(store);
+
+        let raw = {
+            let store = store.clone();
+            async move {
+                store
+                    .replace_tasks("session_raw_note", "s1", vec![input("t-raw", 0, "Raw")])
+                    .await
+            }
+        };
+        let enhanced = {
+            let store = store.clone();
+            async move {
+                store
+                    .replace_tasks(
+                        "enhanced_note",
+                        "doc-1",
+                        vec![input("t-enh", 0, "Enhanced")],
+                    )
+                    .await
+            }
+        };
+        let (a, b) = tokio::join!(raw, enhanced);
+        a.unwrap();
+        b.unwrap();
+
+        assert_eq!(
+            store
+                .list_tasks("session_raw_note", "s1")
+                .await
+                .unwrap()
+                .len(),
+            1,
+            "the raw note's task must survive the concurrent write"
+        );
+        assert_eq!(
+            store
+                .list_tasks("enhanced_note", "doc-1")
+                .await
+                .unwrap()
+                .len(),
+            1,
+            "the enhanced note's task must survive the concurrent write"
+        );
+    }
+
+    #[tokio::test]
+    async fn task_sources_with_unsafe_ids_are_rejected() {
+        let (store, vault) = test_store().await;
+        for id in ["", "..", "/etc"] {
+            assert!(
+                store
+                    .replace_tasks("session_raw_note", id, vec![input("t-1", 0, "Task")])
+                    .await
+                    .is_err(),
+                "{id:?}"
+            );
+            assert!(
+                store.list_tasks("enhanced_note", id).await.is_err(),
+                "{id:?}"
+            );
+        }
+        assert!(!vault.path().join("sessions").exists());
     }
 
     #[tokio::test]

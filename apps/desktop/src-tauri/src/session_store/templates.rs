@@ -103,6 +103,27 @@ fn validate_template_id(id: &str) -> Result<(), StoreError> {
     Ok(())
 }
 
+/// Whether a bundled default must be left alone rather than (re)seeded, decided from an
+/// attempted read of its file rather than `Path::is_file()`.
+///
+/// `is_file()` collapses every stat failure -- EACCES, EIO, an un-materialized cloud
+/// placeholder -- into "no file here", and seeding then overwrites a template the user
+/// edited with the bundled default. Only `NotFound` genuinely means missing; any other
+/// error means something is there that we could not read, and the vault is the only copy.
+fn seed_is_blocked_by_existing_file(id: &str, read: &std::io::Result<Vec<u8>>) -> bool {
+    match read {
+        Ok(_) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(e) => {
+            tracing::warn!(
+                template_id = id,
+                "cannot read existing default template file; skipping seed rather than risk overwriting it: {e}"
+            );
+            true
+        }
+    }
+}
+
 fn same_content(existing: &TemplateItem, next: &TemplateItem) -> bool {
     existing.title == next.title
         && existing.description == next.description
@@ -251,7 +272,7 @@ impl SessionStore {
                 continue;
             }
             let path = self.vault_base.join(paths::template_path(&seed.id));
-            if path.is_file() {
+            if seed_is_blocked_by_existing_file(&seed.id, &std::fs::read(&path)) {
                 continue;
             }
             let now = now_iso();
@@ -411,6 +432,51 @@ mod tests {
                 .await
                 .unwrap()
                 .is_some()
+        );
+    }
+
+    /// REGRESSION (reviewer-found): the seed pass used `Path::is_file()`, which reports
+    /// `false` for a file it merely failed to stat (EACCES, EIO, an un-materialized cloud
+    /// placeholder) -- and the pass then overwrote the user's edited template with the
+    /// bundled default. Only `NotFound` may mean "missing".
+    #[test]
+    fn only_a_not_found_error_counts_as_a_missing_default() {
+        assert!(seed_is_blocked_by_existing_file("t", &Ok(b"{}".to_vec())));
+        assert!(!seed_is_blocked_by_existing_file(
+            "t",
+            &Err(std::io::Error::from(std::io::ErrorKind::NotFound))
+        ));
+        for kind in [
+            std::io::ErrorKind::PermissionDenied,
+            std::io::ErrorKind::Other,
+            std::io::ErrorKind::InvalidData,
+        ] {
+            assert!(
+                seed_is_blocked_by_existing_file("t", &Err(std::io::Error::from(kind))),
+                "{kind:?} must never be read as 'no file here'"
+            );
+        }
+    }
+
+    /// End to end: a default whose path exists but cannot be read (here a directory, which
+    /// fails with EISDIR rather than NotFound) is skipped and left intact, and the rest of
+    /// the defaults still seed -- the pass must not clobber it, nor abort on it.
+    #[tokio::test]
+    async fn a_default_whose_file_cannot_be_read_is_skipped_and_the_rest_still_seed() {
+        let (store, vault) = test_store().await;
+        let blocked = vault.path().join("templates/default-daily-standup.json");
+        std::fs::create_dir_all(&blocked).unwrap();
+        std::fs::write(blocked.join("marker"), b"user content in the way").unwrap();
+
+        assert_eq!(store.seed_default_templates().await.unwrap(), 16);
+
+        assert!(blocked.is_dir(), "the unreadable path must be left alone");
+        assert!(blocked.join("marker").is_file());
+        assert!(
+            vault
+                .path()
+                .join("templates/default-board-meeting.json")
+                .is_file()
         );
     }
 

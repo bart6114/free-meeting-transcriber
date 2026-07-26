@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use super::{SessionStore, StoreError, paths};
+use super::{SessionStore, StoreError, WriteGuard, paths, validate_doc_id, validate_session_id};
 
 // The `enhanced/<id>.md` schema (type, frontmatter parse/render) is shared with the
 // read-only vault consumers (fmtr CLI/MCP) and lives in `hypr-vault-read`.
@@ -49,6 +49,8 @@ impl SessionStore {
     /// a session folder that a racing delete just trashed.
     pub async fn write_enhanced_doc(&self, doc: &EnhancedDoc) -> Result<(), StoreError> {
         validate_kind(&doc.kind)?;
+        validate_session_id(&doc.session_id)?;
+        validate_doc_id(&doc.id)?;
 
         if self.read_meta(&doc.session_id).await?.is_none() {
             return Err(StoreError::Io(format!(
@@ -69,6 +71,13 @@ impl SessionStore {
         doc_id: &str,
         patch: EnhancedDocPatch,
     ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+        validate_doc_id(doc_id)?;
+
+        // Held across the read-modify-write so a concurrent patch of the same doc can't be
+        // computed from bytes this call is about to replace.
+        let guard = self.lock_writes().await;
+
         let mut doc = self
             .read_enhanced_doc(session_id, doc_id)
             .await?
@@ -121,7 +130,7 @@ impl SessionStore {
             doc.markdown = markdown;
         }
 
-        self.persist_enhanced_doc(&doc).await
+        self.persist_enhanced_doc_locked(&guard, &doc).await
     }
 
     pub async fn read_enhanced_doc(
@@ -129,6 +138,8 @@ impl SessionStore {
         session_id: &str,
         doc_id: &str,
     ) -> Result<Option<EnhancedDoc>, StoreError> {
+        validate_session_id(session_id)?;
+        validate_doc_id(doc_id)?;
         let vault_base = self.vault_base.clone();
         let session_id = session_id.to_string();
         let doc_id = doc_id.to_string();
@@ -161,6 +172,9 @@ impl SessionStore {
         session_id: &str,
         doc_id: &str,
     ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+        validate_doc_id(doc_id)?;
+
         let vault_base = self.vault_base.clone();
         let relative = paths::enhanced_doc_path(session_id, doc_id);
 
@@ -181,8 +195,18 @@ impl SessionStore {
     }
 
     async fn persist_enhanced_doc(&self, doc: &EnhancedDoc) -> Result<(), StoreError> {
+        let guard = self.lock_writes().await;
+        self.persist_enhanced_doc_locked(&guard, doc).await
+    }
+
+    async fn persist_enhanced_doc_locked(
+        &self,
+        guard: &WriteGuard<'_>,
+        doc: &EnhancedDoc,
+    ) -> Result<(), StoreError> {
         let rendered = render_enhanced_file(doc)?;
-        self.write_file(
+        self.write_file_locked(
+            guard,
             paths::enhanced_doc_path(&doc.session_id, &doc.id),
             rendered.into_bytes(),
         )

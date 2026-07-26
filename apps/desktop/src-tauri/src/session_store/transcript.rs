@@ -1,6 +1,6 @@
 use hypr_fs_format::{TranscriptJson, TranscriptSpeakerHint, TranscriptWithData, TranscriptWord};
 
-use super::{SessionStore, StoreError, paths};
+use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
 
 #[derive(serde::Deserialize, specta::Type, Clone)]
 pub struct TranscriptDelta {
@@ -42,6 +42,8 @@ impl SessionStore {
         session_id: &str,
         delta: TranscriptDelta,
     ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+
         if delta.new_words.is_empty() && delta.replaced_ids.is_empty() && delta.new_hints.is_empty()
         {
             // Nothing to buffer, nothing to (re)dirty, nothing to schedule.
@@ -214,6 +216,8 @@ impl SessionStore {
         session_id: &str,
         t: TranscriptWithData,
     ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+
         let transcript_id = t.id.clone();
         let started_at_ms = t.started_at;
 
@@ -254,6 +258,8 @@ impl SessionStore {
         session_id: &str,
         t: TranscriptWithData,
     ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+
         {
             let mut live = self.live.lock().await;
             if let Some(buffer) = live.get_mut(session_id) {
@@ -262,6 +268,10 @@ impl SessionStore {
                 buffer.dirty = false;
             }
         }
+
+        // One guard spans the "what's in the file today" read, the supersede-trash and the
+        // rewrite, so a concurrent transcript write can't slip between them.
+        let guard = self.lock_writes().await;
 
         let previous = self.read_transcript_json(session_id).await?;
         let loses_content = previous
@@ -292,7 +302,8 @@ impl SessionStore {
         // persist_transcript's read-merge-write lands a file with exactly one entry --
         // and its index_set_transcripts/notify covers the removals too, since the index
         // gets the full (single-entry) list.
-        self.persist_transcript(
+        self.persist_transcript_locked(
+            &guard,
             session_id,
             &transcript_id,
             started_at_ms,
@@ -304,6 +315,30 @@ impl SessionStore {
 
     async fn persist_transcript(
         &self,
+        session_id: &str,
+        transcript_id: &str,
+        started_at_ms: f64,
+        words: Vec<TranscriptWord>,
+        hints: Vec<TranscriptSpeakerHint>,
+    ) -> Result<(), StoreError> {
+        // The lock spans the read *and* the write: `transcript.json` holds every transcript
+        // of the session, so two concurrent persists that each read the file and write a
+        // whole new one back would drop the loser's entry entirely.
+        let guard = self.lock_writes().await;
+        self.persist_transcript_locked(
+            &guard,
+            session_id,
+            transcript_id,
+            started_at_ms,
+            words,
+            hints,
+        )
+        .await
+    }
+
+    async fn persist_transcript_locked(
+        &self,
+        guard: &WriteGuard<'_>,
         session_id: &str,
         transcript_id: &str,
         started_at_ms: f64,
@@ -340,7 +375,7 @@ impl SessionStore {
         let bytes =
             serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Serialize(e.to_string()))?;
 
-        self.write_file(paths::transcript_path(session_id), bytes)
+        self.write_file_locked(guard, paths::transcript_path(session_id), bytes)
             .await?;
 
         // The file was just re-derived whole, so the index gets the same full list.
@@ -360,6 +395,7 @@ impl SessionStore {
         &self,
         session_id: &str,
     ) -> Result<TranscriptJson, StoreError> {
+        validate_session_id(session_id)?;
         let vault_base = self.vault_base.clone();
         let relative = paths::transcript_path(session_id);
 
