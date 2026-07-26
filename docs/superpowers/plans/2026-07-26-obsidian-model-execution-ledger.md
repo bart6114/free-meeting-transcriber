@@ -17,7 +17,7 @@
 | Phase | Status | Commits | Notes |
 |-------|--------|---------|-------|
 | Plan spot-verify | done | — | claims hold; drift notes below |
-| A — meeting-chat total drop | in progress (A1+A2) | — | macOS verification owner-side |
+| A — meeting-chat total drop | done (Linux gates green) | fa11943, 9513f62, c01de0b | awaiting owner macOS verify |
 | B — dead DB weight | pending | — | |
 | C — config.json | pending | — | |
 | D — file homes + exodus | pending | — | |
@@ -30,7 +30,11 @@
 
 Items that require macOS and/or the real vault; commands to be filled in as phases land.
 
-- [ ] Phase A: `cargo test -p detect -p tauri-plugin-detect -p template-app -p tauri-plugin-template` on macOS (meeting_ax deletion is cfg(macos); Linux gives no signal).
+- [ ] Phase A (ready now): on macOS, at branch `refactor/obsidian-model-no-db`:
+  - `cargo check -p detect -p tauri-plugin-detect -p template-app -p tauri-plugin-template -p desktop`
+  - `cargo test -p detect -p tauri-plugin-detect -p template-app -p tauri-plugin-template`
+  - NOTE: the two `export_types` tests will prettier-relayout `plugins/{detect,template}/js/bindings.gen.ts` on some machines — if `git diff` shows wholesale relayout afterwards, `git checkout -- plugins/detect/js/bindings.gen.ts plugins/template/js/bindings.gen.ts` (semantic content is already correct).
+  - Optional: `pnpm -F @hypr/desktop tauri:dev` smoke — start/stop a recording; no disclosure toast/setting anywhere; Settings → General shows telemetry toggle but no "Post recording disclosure" row.
 - [ ] Phase C: settings UI round-trip across two windows; theme change without restart; dock-icon toggle applied post-restart.
 - [ ] Phase D: exodus run against real vault WITH pre-backup of `app.db*` + vault copy.
 - [ ] Phase E: multi-window reactivity check (title edit in main → float window updates).
