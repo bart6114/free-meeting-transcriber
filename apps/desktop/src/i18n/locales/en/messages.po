@@ -158,10 +158,6 @@ msgid "Automatically detect when a meeting starts based on microphone activity."
 msgstr "Automatically detect when a meeting starts based on microphone activity."
 
 #: src/settings/general/app-settings.tsx
-msgid "Automatically post a disclosure after listening starts when the active meeting chat supports safe posting. Posting failure does not stop listening. A disclosure does not confirm participant consent."
-msgstr "Automatically post a disclosure after listening starts when the active meeting chat supports safe posting. Posting failure does not stop listening. A disclosure does not confirm participant consent."
-
-#: src/settings/general/app-settings.tsx
 msgid "Automatically stop listening when the meeting app releases the microphone."
 msgstr "Automatically stop listening when the meeting app releases the microphone."
 
@@ -825,10 +821,6 @@ msgstr "Permissions"
 #: src/onboarding/index.tsx
 msgid "Permissions granted"
 msgstr "Permissions granted"
-
-#: src/settings/general/app-settings.tsx
-msgid "Post recording disclosure in meeting chat"
-msgstr "Post recording disclosure in meeting chat"
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Preparing transcript..."
