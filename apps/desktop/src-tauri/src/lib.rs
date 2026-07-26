@@ -346,6 +346,13 @@ pub async fn main() {
                         ));
                         app_handle.manage(store.clone());
 
+                        // The Tantivy search projection rides the store's change
+                        // stream (Phase F). Spawned -- i.e. subscribed -- BEFORE the
+                        // startup rebuild below so edits made while the app was
+                        // closed flow into the search index as rebuild diffs; its
+                        // async worker then waits for the tantivy collection.
+                        search_index::spawn(app_handle.clone(), store.clone());
+
                         // Files are the source of truth, so every startup rebuilds the
                         // sessions/session_documents/transcripts index from what's on disk
                         // before the UI proceeds. `block_on`: the UI must not come up
@@ -401,7 +408,6 @@ pub async fn main() {
                 }
             }
 
-            search_index::spawn(app_handle.clone(), db.clone());
             // Coalescing `index-changed` emitter for the in-memory vault index
             // (Phase E1). Needs the store managed; changes queued before this point
             // (startup rebuild) simply flush as the dispatcher's first batch.

@@ -4146,6 +4146,7 @@ dependencies = [
  "storage",
  "strum 0.28.0",
  "supervisor",
+ "tantivy",
  "tauri",
  "tauri-build",
  "tauri-plugin-agent",

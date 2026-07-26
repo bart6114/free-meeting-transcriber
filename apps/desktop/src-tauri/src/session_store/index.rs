@@ -6,8 +6,9 @@
 //! (`templates/<id>.json`) -- built at startup by `rebuild_index` and kept current by:
 //!
 //! 1. **Write-through**: every store write updates the index synchronously right after
-//!    the file write lands (before the SQL dual-write, which stays for the search
-//!    projection until Phase F), then pushes a change onto the bus.
+//!    the file write lands (before the SQL dual-write, dead weight until Phase H
+//!    removes it -- the search projection rides this bus since Phase F), then pushes
+//!    a change onto the bus.
 //! 2. **Rescans**: `rebuild_index` / `refresh_session` (startup, focus rescan,
 //!    `vault_watch` external-edit ingestion) re-derive the affected slice of the index
 //!    from the files and notify only what actually changed (`PartialEq` diff -- the
@@ -101,8 +102,8 @@ pub struct VaultIndex {
     pub templates: HashMap<String, TemplateItem>,
 }
 
-pub(super) type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
-pub(super) type IndexChangeReceiver =
+pub(crate) type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
+pub(crate) type IndexChangeReceiver =
     tokio::sync::mpsc::UnboundedReceiver<(IndexEntity, Vec<String>)>;
 
 // -- queries ---------------------------------------------------------------------
@@ -138,6 +139,12 @@ impl SessionStore {
                 .cmp(&(b.meta.created_at.as_str(), b.meta.id.as_str()))
         });
         entries
+    }
+
+    /// Number of indexed sessions -- the search projection's consistency-guard
+    /// denominator (was `COUNT(*) FROM sessions`).
+    pub fn session_count(&self) -> usize {
+        self.index.read().unwrap().sessions.len()
     }
 
     /// Old `loadActiveSessionIds` semantics: ids ordered by `created_at` DESC, id ASC.
@@ -302,11 +309,27 @@ impl SessionStore {
     /// Push a change onto the bus. Infallible by design: the receiver lives inside
     /// this store until the dispatcher takes it, so the channel can't be closed while
     /// writes happen; a store without a spawned dispatcher (tests) just accumulates.
+    /// Every tap (`subscribe_index_changes`) gets its own copy; a tap whose receiver
+    /// was dropped is pruned here.
     pub(super) fn notify_index_changed(&self, entity: IndexEntity, ids: Vec<String>) {
         if ids.is_empty() {
             return;
         }
+        self.index_change_taps
+            .lock()
+            .unwrap()
+            .retain(|tap| tap.send((entity, ids.clone())).is_ok());
         let _ = self.index_changes_tx.send((entity, ids));
+    }
+
+    /// Fan out a private copy of the raw change stream (the same tuples the
+    /// `index-changed` dispatcher coalesces). The Tantivy search projection is the
+    /// intended consumer -- subscribe before the startup `rebuild_index` so changes
+    /// found on disk while the app was closed reach the projection too.
+    pub fn subscribe_index_changes(&self) -> IndexChangeReceiver {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
+        self.index_change_taps.lock().unwrap().push(tx);
+        rx
     }
 
     fn notify_many(&self, changes: Vec<(IndexEntity, String)>) {

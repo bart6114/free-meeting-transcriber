@@ -39,6 +39,9 @@ pub struct SessionStore {
     index_changes_tx: index::IndexChangeSender,
     /// Held until the dispatcher takes it via `take_index_change_receiver`.
     index_changes_rx: Arc<std::sync::Mutex<Option<index::IndexChangeReceiver>>>,
+    /// Extra change-stream consumers (`subscribe_index_changes`) -- Phase F: the
+    /// Tantivy search projection rides one of these instead of SQL triggers.
+    index_change_taps: Arc<std::sync::Mutex<Vec<index::IndexChangeSender>>>,
 }
 
 #[derive(Debug)]
@@ -92,6 +95,7 @@ impl SessionStore {
             index: Arc::new(std::sync::RwLock::new(index::VaultIndex::default())),
             index_changes_tx,
             index_changes_rx: Arc::new(std::sync::Mutex::new(Some(index_changes_rx))),
+            index_change_taps: Arc::new(std::sync::Mutex::new(Vec::new())),
         }
     }
 
@@ -167,6 +171,15 @@ fn sha256(bytes: &[u8]) -> String {
 // The legacy-exporter frontmatter strip is shared with the read-only vault consumers
 // (fmtr CLI/MCP); see `hypr_vault_read::strip_leading_frontmatter` for the full rationale.
 pub(crate) use hypr_vault_read::strip_leading_frontmatter;
+
+/// Shared test constructor: a store over `vault` backed by a fresh in-memory DB (the
+/// SQL dual-write half still needs a pool until the SQL side retires).
+#[cfg(test)]
+pub(crate) async fn new_test_store(vault: std::path::PathBuf) -> SessionStore {
+    let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
+    hypr_db_app::prepare_schema(&db).await.unwrap();
+    SessionStore::new(vault, db.pool().clone())
+}
 
 #[cfg(test)]
 mod tests {
