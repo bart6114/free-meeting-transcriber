@@ -172,7 +172,7 @@ describe("useRunBatch", () => {
     );
   });
 
-  test("waits for streamed SQLite persists before retention", async () => {
+  test("waits for streamed persists before retention", async () => {
     let resolveAppend: (() => void) | undefined;
     appendTranscriptWordsAndHintsMock.mockImplementationOnce(
       () =>

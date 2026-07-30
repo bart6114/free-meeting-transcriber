@@ -94,7 +94,7 @@ describe("titleSuccess.onSuccess", () => {
     mocks.sessionWriteNote.mockResolvedValue({ status: "ok", data: null });
   });
 
-  it("persists a trimmed title, the enhanced-note documents via SQL, and the raw note file-first", async () => {
+  it("persists a trimmed title, the enhanced-note documents via the store, and the raw note file-first", async () => {
     await titleSuccess.onSuccess?.(createParams({ text: "  Weekly sync  " }));
 
     expect(mocks.applyGeneratedSessionTitle).toHaveBeenCalledWith({
@@ -104,9 +104,8 @@ describe("titleSuccess.onSuccess", () => {
       documents: [
         expect.objectContaining({
           id: "note-1",
-          currentContent: "# Summary section",
-          currentContentFormat: "markdown",
-          nextContent: expect.stringContaining("Weekly sync"),
+          currentMarkdown: "# Summary section",
+          nextMarkdown: expect.stringContaining("Weekly sync"),
         }),
       ],
     });

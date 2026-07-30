@@ -36,19 +36,19 @@ fmtr --version
 
 ## Connect to local data
 
-By default, the CLI looks for `free-meeting-transcriber/app.db` in your operating system's application-data directory.
+By default, the CLI looks for the `free-meeting-transcriber` vault in your operating system's application-data directory, following the `vault_path` redirect in its `global.json` when the vault has been relocated.
 
-Open the desktop app once before using the CLI. For a custom database location, pass a global option or environment variable:
-
-```bash
-fmtr --db-path /path/to/app.db --json meetings list
-FMTR_DB_PATH=/path/to/app.db fmtr --json meetings list
-```
-
-If you have a Free Meeting Transcriber data directory containing `app.db`, use:
+Open the desktop app once before using the CLI. For a custom vault location, pass a global option or environment variable:
 
 ```bash
-fmtr --base /path/to/fmtr-data --json meetings list
+fmtr --vault-path /path/to/vault --json meetings list
+FMTR_VAULT_PATH=/path/to/vault fmtr --json meetings list
 ```
 
-The CLI opens the database in read-only query mode. It does not create a database or run migrations.
+If you have a Free Meeting Transcriber vault directory, you can equivalently use:
+
+```bash
+fmtr --base /path/to/vault --json meetings list
+```
+
+The CLI reads vault files without modifying them. It does not create a vault or migrate data.

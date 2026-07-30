@@ -2,7 +2,7 @@ import { listen } from "@tauri-apps/api/event";
 
 import { commands as store2Commands } from "@hypr/plugin-store2";
 
-import { flushDatabaseWritesWithin } from "~/db/write-queue";
+import { flushDatabaseWritesWithin } from "~/shared/write-queue";
 import { confirmAllPendingDeletions } from "~/store/zustand/undo-delete";
 import { commands } from "~/types/tauri.gen";
 

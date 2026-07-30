@@ -28,7 +28,6 @@ tauri-plugin-audio-priority = { workspace = true }
 tauri-plugin-autostart = { workspace = true }
 tauri-plugin-bedrock = { workspace = true }
 tauri-plugin-clipboard-manager = { workspace = true }
-tauri-plugin-db = { workspace = true }
 tauri-plugin-deep-link = { workspace = true }
 tauri-plugin-deeplink2 = { workspace = true }
 tauri-plugin-detect = { workspace = true }
@@ -82,8 +81,6 @@ tauri-plugin-windows = { workspace = true }
 
 hypr-audio-actual = { workspace = true }
 hypr-audio-mock = { workspace = true, optional = true }
-hypr-db-app = { workspace = true }
-hypr-db-core = { workspace = true }
 hypr-fs-format = { workspace = true }
 hypr-fs-sync-core = { workspace = true }
 hypr-host = { workspace = true }
@@ -91,6 +88,7 @@ hypr-storage = { workspace = true }
 hypr-supervisor = { workspace = true }
 hypr-tauri-utils = { workspace = true }
 hypr-tiptap = { workspace = true }
+hypr-vault-read = { workspace = true }
 
 sha2 = { workspace = true }
 
@@ -102,7 +100,6 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 specta = { workspace = true }
 specta-typescript = { workspace = true }
-sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 strum = { workspace = true, features = ["derive"] }
 tauri-specta = { workspace = true, features = ["derive", "typescript"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "sync", "time"] }
@@ -119,8 +116,10 @@ tauri-plugin-automation = { version = "0.1", optional = true }
 hypr-intercept = { workspace = true }
 
 [dev-dependencies]
+# Same version as tauri-plugin-tantivy's, so `search_index`'s tests can stand up
+# a real in-RAM collection behind the plugin's `IndexState`.
+tantivy = "0.25"
 # `test` feature only unifies in for test-target builds (resolver v2), not
-# the production binary -- needed for `tauri::test::mock_builder` in
-# `session_store::migrate`'s tests (Task 12).
+# the production binary -- needed for `tauri::test::mock_builder`.
 tauri = { workspace = true, features = ["test"] }
 tempfile = { workspace = true }

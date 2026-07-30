@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::{SessionStore, StoreError, paths};
+use super::{SessionStore, StoreError, paths, validate_session_id};
 
 /// Moves `source` to `dest` (assumed to not yet exist; `dest`'s parent must already exist).
 /// Prefers `rename` (atomic, no data-duplication window); falls back to copy+delete when
@@ -46,6 +46,7 @@ impl SessionStore {
         session_id: &str,
         source_path: &str,
     ) -> Result<String, StoreError> {
+        validate_session_id(session_id)?;
         let vault_base = self.vault_base.clone();
         let session_id = session_id.to_string();
         let source_path = PathBuf::from(source_path);
@@ -77,6 +78,7 @@ impl SessionStore {
     /// Lists audio file names (not full paths) under `sessions/<id>/audio/`, sorted. Missing
     /// directory -> empty list, matching the "nothing recorded yet" state rather than an error.
     pub async fn list_audio(&self, session_id: &str) -> Result<Vec<String>, StoreError> {
+        validate_session_id(session_id)?;
         let vault_base = self.vault_base.clone();
         let session_id = session_id.to_string();
 
@@ -114,6 +116,7 @@ impl SessionStore {
     /// unlike `delete_session`, this is not undo-able, matching the old retention behavior it
     /// replaces). Missing file is a no-op, not an error.
     pub async fn delete_audio(&self, session_id: &str, filename: &str) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
         let vault_base = self.vault_base.clone();
         let session_id = session_id.to_string();
         let filename = filename.to_string();
@@ -153,9 +156,7 @@ mod tests {
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 

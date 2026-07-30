@@ -11,11 +11,13 @@ const VAULT_DIRECTORIES: &[&str] = &[
     "prompts",
     "search_index",
     "plugins",
+    "templates",
 ];
 
 const VAULT_FILES: &[&str] = &[
     "AGENTS.md",
     "settings.json",
+    "config.json",
     "events.json",
     "calendars.json",
     "templates.json",
@@ -101,6 +103,7 @@ mod tests {
         fs::write(src.join("humans").join("person.md"), "human").unwrap();
         fs::write(src.join("events.json"), "events").unwrap();
         fs::write(src.join("settings.json"), "settings").unwrap();
+        fs::write(src.join("config.json"), "config").unwrap();
 
         fs::write(src.join("store.json"), "store").unwrap();
         fs::create_dir_all(src.join("models")).unwrap();
@@ -112,6 +115,7 @@ mod tests {
         assert!(dst.join("humans").join("person.md").exists());
         assert!(dst.join("events.json").exists());
         assert!(dst.join("settings.json").exists());
+        assert!(dst.join("config.json").exists());
 
         assert!(dst.join("store.json").exists());
         assert!(!dst.join("models").exists());

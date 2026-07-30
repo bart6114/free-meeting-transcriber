@@ -1,10 +1,12 @@
 use tauri::Manager;
 
 mod commands;
+mod config;
 mod error;
 mod ext;
 mod state;
 
+pub use config::*;
 pub use error::{Error, Result};
 pub use ext::*;
 pub use hypr_storage::ObsidianVault;
@@ -26,6 +28,8 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::load::<tauri::Wry>,
             commands::save::<tauri::Wry>,
             commands::obsidian_vaults::<tauri::Wry>,
+            commands::get_config::<tauri::Wry>,
+            commands::set_config_values::<tauri::Wry>,
         ])
         .events(tauri_specta::collect_events![])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
@@ -40,8 +44,10 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             specta_builder.mount_events(app);
 
             let startup_vault_base = app.settings().resolve_startup_vault_base().unwrap();
+            let config_state = config::ConfigState::load_or_default(&startup_vault_base);
             let snapshot = state::StartupSnapshot::new(startup_vault_base);
             assert!(app.manage(snapshot));
+            assert!(app.manage(config_state));
             Ok(())
         })
         .build()

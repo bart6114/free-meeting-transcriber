@@ -32,7 +32,7 @@ describe("SettingsApp", () => {
     vi.clearAllMocks();
   });
 
-  it("waits for SQLite settings before constructing the form", () => {
+  it("waits for settings before constructing the form", () => {
     mocks.useStoredSettingValuesQuery.mockReturnValue({
       data: undefined,
       isLoading: true,
@@ -44,7 +44,7 @@ describe("SettingsApp", () => {
     expect(screen.getByLabelText("Loading settings")).toBeTruthy();
   });
 
-  it("constructs the form from the hydrated SQLite values", () => {
+  it("constructs the form from the hydrated config values", () => {
     mocks.useStoredSettingValuesQuery.mockReturnValue({
       data: {
         values: {

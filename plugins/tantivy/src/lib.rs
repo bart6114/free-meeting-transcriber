@@ -15,7 +15,7 @@ use tokio::sync::RwLock;
 pub use error::{Error, Result};
 pub use ext::*;
 pub use schema::build_schema;
-pub use tokenizer::get_tokenizer_name_for_language;
+pub use tokenizer::{get_tokenizer_name_for_language, register_tokenizers};
 
 const PLUGIN_NAME: &str = "tantivy";
 

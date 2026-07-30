@@ -176,7 +176,7 @@ describe("EnhancerService", () => {
     expect(mocks.loadSessionContentSnapshot).not.toHaveBeenCalled();
   });
 
-  it("creates the SQLite summary before starting generation", async () => {
+  it("creates the stored summary before starting generation", async () => {
     const ai = createMockAITaskStore();
     const service = new EnhancerService(createDeps({ aiTaskStore: ai.store }));
 
@@ -457,7 +457,6 @@ describe("EnhancerService", () => {
       expect(mocks.updateSummaryDocumentTitleIfCurrent).toHaveBeenCalledWith({
         sessionId: "session-1",
         noteId: "note-1",
-        templateId: "template-1",
         currentTitle: "Summary",
         nextTitle: "One-on-one",
       }),

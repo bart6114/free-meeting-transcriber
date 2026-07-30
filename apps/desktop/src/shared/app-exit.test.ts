@@ -18,7 +18,7 @@ vi.mock("@hypr/plugin-store2", () => ({
   commands: { save: mocks.save },
 }));
 
-vi.mock("~/db/write-queue", () => ({
+vi.mock("~/shared/write-queue", () => ({
   flushDatabaseWritesWithin: mocks.flushDatabaseWritesWithin,
 }));
 

@@ -19,7 +19,7 @@ mod tests {
 
         assert!(AGENTS_CONTENT.contains("fmtr --json meetings list"));
         assert!(!AGENTS_CONTENT.contains("--base ."));
-        assert!(AGENTS_CONTENT.contains("--db-path ABSOLUTE_APP_DB"));
+        assert!(AGENTS_CONTENT.contains("--vault-path ABSOLUTE_VAULT_DIR"));
         assert!(AGENTS_CONTENT.contains("Do not use `find`,"));
         assert!(AGENTS_CONTENT.contains("direct SQLite queries"));
     }

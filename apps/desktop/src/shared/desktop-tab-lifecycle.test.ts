@@ -115,7 +115,7 @@ describe("desktop tab lifecycle", () => {
       expect(deleteSessionFn).toHaveBeenCalledWith("session-1");
     });
 
-    it("keeps sessions that contain SQLite data", async () => {
+    it("keeps sessions that contain stored data", async () => {
       const invalidateSessionResource = vi.fn();
       const deleteSessionFn = vi.fn();
       const isSessionEmptyFn = vi.fn().mockResolvedValue(false);
@@ -134,7 +134,7 @@ describe("desktop tab lifecycle", () => {
       expect(invalidateSessionResource).not.toHaveBeenCalled();
     });
 
-    it("does not invalidate when the SQLite delete loses a race", async () => {
+    it("does not invalidate when the delete loses a race", async () => {
       const invalidateSessionResource = vi.fn();
       const deleteSessionFn = vi.fn().mockResolvedValue(null);
       const handler = createSessionTabCloseHandler({

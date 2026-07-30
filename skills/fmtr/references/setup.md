@@ -34,6 +34,6 @@ cargo install --locked --path apps/cli
 fmtr --version
 ```
 
-Run the Free Meeting Transcriber desktop app at least once so its local database exists. Homebrew, desktop-bundled, and Windows binary distribution are planned but not yet available.
+Run the Free Meeting Transcriber desktop app at least once so its local vault exists. Homebrew, desktop-bundled, and Windows binary distribution are planned but not yet available.
 
-Use `--db-path FILE` or `FMTR_DB_PATH` only when the database is outside Free Meeting Transcriber's default application-data location.
+Use `--vault-path DIR` or `FMTR_VAULT_PATH` only when the vault is outside Free Meeting Transcriber's default application-data location.

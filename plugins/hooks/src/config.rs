@@ -5,13 +5,7 @@ use hypr_hooks::HooksConfig;
 use crate::error::{Error, Result};
 
 pub async fn load_config<R: tauri::Runtime>(app: &impl tauri::Manager<R>) -> Result<HooksConfig> {
-    let settings = app
-        .settings()
-        .load()
-        .await
-        .map_err(|e| Error::ConfigLoad(e.to_string()))?;
-
-    let Some(hooks_value) = settings.get("hooks").cloned() else {
+    let Some(hooks_value) = app.settings().config().hooks else {
         return Ok(HooksConfig::empty());
     };
 

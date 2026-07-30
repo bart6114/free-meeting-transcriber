@@ -18,7 +18,7 @@ describe("SettingsHydrationBoundary", () => {
     cleanup();
   });
 
-  it("does not mount settings controls before SQLite has hydrated", () => {
+  it("does not mount settings controls before config has hydrated", () => {
     useStoredSettingValuesQuery.mockReturnValue({
       data: undefined,
       isLoading: true,
@@ -35,7 +35,7 @@ describe("SettingsHydrationBoundary", () => {
     expect(screen.queryByText("Notification controls")).toBeNull();
   });
 
-  it("mounts settings controls with the hydrated SQLite snapshot", () => {
+  it("mounts settings controls with the hydrated config snapshot", () => {
     useStoredSettingValuesQuery.mockReturnValue({
       data: { values: { notification_detect: false }, hasValues: new Set() },
       isLoading: false,

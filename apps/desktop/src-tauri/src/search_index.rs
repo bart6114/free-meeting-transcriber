@@ -1,47 +1,135 @@
-use std::sync::Arc;
+//! Tantivy search projection (Phase F): rides the in-memory vault index and its
+//! change bus. No SQL anywhere in this worker.
+//!
+//! Dirty tracking: `SessionStore::subscribe_index_changes` fans the store's raw
+//! change stream (the same tuples the `index-changed` dispatcher coalesces) into
+//! this worker, which folds sessions/docs/transcripts changes into an in-memory
+//! `DirtyQueue` keyed by session id. The queue keeps the retired SQL dirty table's
+//! acknowledge-by-generation semantics: a session re-dirtied while its document is
+//! being indexed carries a bumped generation, so the stale acknowledgement leaves it
+//! queued for another pass.
+//!
+//! Durable state: the retired SQL projection row only carried
+//! `projection_version`; that now lives as a `projection_version` file next to the
+//! Tantivy files in the app-data `search_index/` dir (alongside the plugin's own
+//! `schema_version` file). Deleting `search_index/` stays safe: a missing file
+//! reads as version 0 and forces a full rebuild from the vault index.
+
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use chrono::DateTime;
-use serde_json::{Map, Value};
-use sqlx::{Row, SqlitePool};
-use tauri::AppHandle;
+use serde_json::Value;
 use tauri_plugin_tantivy::{
     SearchDocument, SearchFilters, SearchOptions, SearchRequest, TantivyPluginExt,
 };
 
-// Increment when the SQLite-to-Tantivy document shape changes so existing indexes are rebuilt.
-const PROJECTION_VERSION: i64 = 4;
-const BATCH_SIZE: i64 = 8;
+use crate::session_store::{IndexEntity, SessionStore};
+
+// Increment when the vault-index-to-Tantivy document shape changes so existing
+// indexes are rebuilt. 4 -> 5: the projection's content source moved from SQLite
+// to the in-memory vault index, so one full rebuild re-derives every document.
+const PROJECTION_VERSION: i64 = 5;
+const BATCH_SIZE: usize = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
+/// Must match the tantivy plugin's `CollectionConfig.path` for the default
+/// collection: the version file lives inside the same rebuildable cache dir.
+const INDEX_DIR_NAME: &str = "search_index";
 
 type WorkerResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
-
-#[derive(Debug)]
-struct DirtyEntity {
-    entity_type: String,
-    entity_id: String,
-    generation: i64,
-}
+type ChangeReceiver = tokio::sync::mpsc::UnboundedReceiver<(IndexEntity, Vec<String>)>;
 
 enum IndexAction {
     Upsert(SearchDocument),
     Remove(String),
-    Skip,
 }
 
-pub fn spawn(app: AppHandle, db: Arc<hypr_db_core::Db>) {
+/// In-memory replacement for the retired SQL dirty-queue table: a FIFO of dirty
+/// session ids (front = oldest mark; re-marking moves an id to the back) with a
+/// per-session generation that bumps on every mark. `acknowledge` only clears an
+/// entry whose generation still matches the one handed out at batch time, so a
+/// session re-dirtied mid-index stays queued.
+#[derive(Default)]
+struct DirtyQueue {
+    inner: Mutex<QueueInner>,
+}
+
+#[derive(Default)]
+struct QueueInner {
+    order: Vec<String>,
+    generations: HashMap<String, i64>,
+}
+
+impl DirtyQueue {
+    fn mark(&self, id: &str) {
+        let mut queue = self.inner.lock().unwrap();
+        if let Some(generation) = queue.generations.get_mut(id) {
+            *generation += 1;
+            queue.order.retain(|queued| queued != id);
+        } else {
+            queue.generations.insert(id.to_string(), 1);
+        }
+        queue.order.push(id.to_string());
+    }
+
+    fn batch(&self, limit: usize) -> Vec<(String, i64)> {
+        let queue = self.inner.lock().unwrap();
+        queue
+            .order
+            .iter()
+            .take(limit)
+            .map(|id| (id.clone(), queue.generations[id]))
+            .collect()
+    }
+
+    fn acknowledge(&self, id: &str, generation: i64) {
+        let mut queue = self.inner.lock().unwrap();
+        if queue.generations.get(id) == Some(&generation) {
+            queue.generations.remove(id);
+            queue.order.retain(|queued| queued != id);
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.inner.lock().unwrap().generations.len()
+    }
+}
+
+/// Call after the store is managed but BEFORE the startup `rebuild_index`: the
+/// subscription taken here must observe the rebuild's changes, or edits made while
+/// the app was closed would never reach the search index (the count guard only
+/// catches added/removed sessions, not content edits).
+pub fn spawn(app: tauri::AppHandle, store: Arc<SessionStore>) {
+    use tauri_plugin_settings::SettingsPluginExt;
+
+    let index_dir = match app.settings().global_base() {
+        Ok(base) => base.join(INDEX_DIR_NAME).into_std_path_buf(),
+        Err(error) => {
+            tracing::error!(%error, "search projection: cannot resolve app-data dir; search indexing is disabled");
+            return;
+        }
+    };
+    let changes = store.subscribe_index_changes();
+
     tauri::async_runtime::spawn(async move {
-        run(app, db).await;
+        run(app, store, changes, index_dir).await;
     });
 }
 
-async fn run(app: AppHandle, db: Arc<hypr_db_core::Db>) {
-    let mut changes = db.change_notifier().subscribe();
+async fn run<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    store: Arc<SessionStore>,
+    mut changes: ChangeReceiver,
+    index_dir: PathBuf,
+) {
+    let queue = DirtyQueue::default();
 
     wait_for_tantivy(&app).await;
 
     loop {
-        match initialize(&app, db.pool()).await {
+        match initialize(&app, &store, &queue, &mut changes, &index_dir).await {
             Ok(()) => break,
             Err(error) => {
                 tracing::error!(%error, "failed to initialize search index projection");
@@ -51,17 +139,16 @@ async fn run(app: AppHandle, db: Arc<hypr_db_core::Db>) {
     }
 
     loop {
-        if let Err(error) = drain_queue(&app, db.pool()).await {
+        if let Err(error) = drain_queue(&app, &store, &queue, &mut changes).await {
             tracing::error!(%error, "failed to update search index projection");
         }
 
         tokio::select! {
             change = changes.recv() => {
                 match change {
-                    Ok(change) if change.table == "search_index_dirty" => {}
-                    Ok(_) => continue,
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Some((entity, ids)) => mark_dirty_sessions(&queue, entity, ids),
+                    // Store dropped -- nothing can change anymore.
+                    None => break,
                 }
             }
             _ = tokio::time::sleep(RETRY_INTERVAL) => {}
@@ -69,7 +156,26 @@ async fn run(app: AppHandle, db: Arc<hypr_db_core::Db>) {
     }
 }
 
-async fn wait_for_tantivy(app: &AppHandle) {
+/// Only these three entities feed the session search document (tasks/templates are
+/// not indexed); their change ids are session ids.
+fn mark_dirty_sessions(queue: &DirtyQueue, entity: IndexEntity, ids: Vec<String>) {
+    if matches!(
+        entity,
+        IndexEntity::Sessions | IndexEntity::Docs | IndexEntity::Transcripts
+    ) {
+        for id in ids {
+            queue.mark(&id);
+        }
+    }
+}
+
+fn absorb_pending_changes(queue: &DirtyQueue, changes: &mut ChangeReceiver) {
+    while let Ok((entity, ids)) = changes.try_recv() {
+        mark_dirty_sessions(queue, entity, ids);
+    }
+}
+
+async fn wait_for_tantivy<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
     loop {
         match index_document_count(app).await {
             Ok(_) => return,
@@ -84,116 +190,81 @@ async fn wait_for_tantivy(app: &AppHandle) {
     }
 }
 
-async fn initialize(app: &AppHandle, pool: &SqlitePool) -> WorkerResult<()> {
-    let projection_version: i64 = sqlx::query_scalar(
-        "SELECT projection_version FROM search_index_state WHERE id = 'default'",
-    )
-    .fetch_optional(pool)
-    .await?
-    .unwrap_or(0);
-
-    if projection_version != PROJECTION_VERSION {
-        return rebuild(app, pool).await;
+async fn initialize<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    store: &SessionStore,
+    queue: &DirtyQueue,
+    changes: &mut ChangeReceiver,
+    index_dir: &Path,
+) -> WorkerResult<()> {
+    if read_projection_version(index_dir) != PROJECTION_VERSION {
+        return rebuild(app, store, queue, changes, index_dir).await;
     }
 
-    drain_queue(app, pool).await?;
+    drain_queue(app, store, queue, changes).await?;
 
-    let (database_count, pending_count) = projection_consistency_snapshot(pool).await?;
-    if pending_count > 0 {
+    let session_count = store.session_count();
+    if queue.len() > 0 {
         return Ok(());
     }
 
-    let index_count_matches = wait_for_index_count(app, database_count as usize).await?;
+    let index_count_matches = wait_for_index_count(app, session_count).await?;
     if !index_count_matches {
         let index_count = index_document_count(app).await?;
         tracing::info!(
-            database_count,
+            session_count,
             index_count,
-            "search index count does not match SQLite; rebuilding projection"
+            "search index count does not match the vault index; rebuilding projection"
         );
-        rebuild(app, pool).await?;
+        rebuild(app, store, queue, changes, index_dir).await?;
     }
 
     Ok(())
 }
 
-async fn rebuild(app: &AppHandle, pool: &SqlitePool) -> WorkerResult<()> {
-    sqlx::query(
-        "UPDATE search_index_state
-         SET projection_version = 0,
-             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = 'default'",
-    )
-    .execute(pool)
-    .await?;
+async fn rebuild<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    store: &SessionStore,
+    queue: &DirtyQueue,
+    changes: &mut ChangeReceiver,
+    index_dir: &Path,
+) -> WorkerResult<()> {
+    // Durably drop to version 0 before touching the index, so a crash mid-rebuild
+    // forces another full rebuild on the next boot (what resetting the retired
+    // SQL projection row's version used to guarantee).
+    write_projection_version(index_dir, 0)?;
 
     app.tantivy().reindex(None).await?;
-    enqueue_all_entities(pool).await?;
-    drain_queue(app, pool).await?;
+    for id in store.session_ids() {
+        queue.mark(&id);
+    }
+    drain_queue(app, store, queue, changes).await?;
 
-    sqlx::query(
-        "UPDATE search_index_state
-         SET projection_version = ?,
-             updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-         WHERE id = 'default'",
-    )
-    .bind(PROJECTION_VERSION)
-    .execute(pool)
-    .await?;
-
+    write_projection_version(index_dir, PROJECTION_VERSION)?;
     tracing::info!("rebuilt search index projection");
     Ok(())
 }
 
-async fn enqueue_all_entities(pool: &SqlitePool) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-
-    sqlx::query(
-        "INSERT INTO search_index_dirty (entity_type, entity_id)
-         SELECT 'session', id
-         FROM sessions
-         ON CONFLICT(entity_type, entity_id) DO UPDATE SET
-           generation = search_index_dirty.generation + 1,
-           queued_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-    )
-    .execute(&mut *tx)
-    .await?;
-
-    tx.commit().await
-}
-
-async fn drain_queue(app: &AppHandle, pool: &SqlitePool) -> WorkerResult<()> {
+async fn drain_queue<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    store: &SessionStore,
+    queue: &DirtyQueue,
+    changes: &mut ChangeReceiver,
+) -> WorkerResult<()> {
     loop {
-        let rows = sqlx::query(
-            "SELECT entity_type, entity_id, generation
-             FROM search_index_dirty
-             ORDER BY queued_at, entity_type, entity_id
-             LIMIT ?",
-        )
-        .bind(BATCH_SIZE)
-        .fetch_all(pool)
-        .await?;
+        absorb_pending_changes(queue, changes);
 
-        if rows.is_empty() {
+        let batch = queue.batch(BATCH_SIZE);
+        if batch.is_empty() {
             return Ok(());
         }
 
-        let dirty_entities = rows
-            .into_iter()
-            .map(|row| DirtyEntity {
-                entity_type: row.get("entity_type"),
-                entity_id: row.get("entity_id"),
-                generation: row.get("generation"),
-            })
-            .collect::<Vec<_>>();
-
         let mut documents = Vec::new();
         let mut removals = Vec::new();
-        for dirty in &dirty_entities {
-            match build_index_action(pool, dirty).await? {
+        for (id, _generation) in &batch {
+            match build_session_document(store, id) {
                 IndexAction::Upsert(document) => documents.push(document),
                 IndexAction::Remove(id) => removals.push(id),
-                IndexAction::Skip => {}
             }
         }
 
@@ -204,127 +275,65 @@ async fn drain_queue(app: &AppHandle, pool: &SqlitePool) -> WorkerResult<()> {
             app.tantivy().remove_document(None, id).await?;
         }
 
-        acknowledge_dirty_entities(pool, &dirty_entities).await?;
+        // A session re-dirtied while its document was being built must be indexed
+        // again: pull in everything that arrived during the batch so a re-dirtied
+        // session's generation has moved past the one acknowledged below. The
+        // store updates its index before it notifies, so any change this batch's
+        // content read missed is either already absorbed here (generation bumped,
+        // acknowledge no-ops) or still in the channel (re-marked next iteration).
+        absorb_pending_changes(queue, changes);
+        for (id, generation) in &batch {
+            queue.acknowledge(id, *generation);
+        }
 
         tokio::task::yield_now().await;
     }
 }
 
-async fn acknowledge_dirty_entities(
-    pool: &SqlitePool,
-    dirty_entities: &[DirtyEntity],
-) -> Result<(), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    for dirty in dirty_entities {
-        sqlx::query(
-            "DELETE FROM search_index_dirty
-             WHERE entity_type = ? AND entity_id = ? AND generation = ?",
-        )
-        .bind(&dirty.entity_type)
-        .bind(&dirty.entity_id)
-        .bind(dirty.generation)
-        .execute(&mut *tx)
-        .await?;
-    }
-    tx.commit().await
-}
-
-async fn build_index_action(pool: &SqlitePool, dirty: &DirtyEntity) -> WorkerResult<IndexAction> {
-    match dirty.entity_type.as_str() {
-        "session" => build_session_document(pool, &dirty.entity_id).await,
-        entity_type => {
-            tracing::warn!(entity_type, "ignoring unknown search index entity type");
-            Ok(IndexAction::Skip)
-        }
-    }
-}
-
-async fn build_session_document(pool: &SqlitePool, id: &str) -> WorkerResult<IndexAction> {
-    let Some(session) = sqlx::query(
-        "SELECT title, created_at, event_json
-         FROM sessions
-         WHERE id = ?",
-    )
-    .bind(id)
-    .fetch_optional(pool)
-    .await?
-    else {
-        return Ok(IndexAction::Remove(id.to_string()));
+fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
+    let Some(record) = store.session_get(id) else {
+        return IndexAction::Remove(id.to_string());
     };
 
-    let raw_body: Option<String> = sqlx::query_scalar(
-        "SELECT body
-         FROM session_documents
-         WHERE session_id = ? AND kind = 'note' AND deleted_at IS NULL
-         ORDER BY CASE WHEN id = ? THEN 0 ELSE 1 END, id
-         LIMIT 1",
-    )
-    .bind(id)
-    .bind(id)
-    .fetch_optional(pool)
-    .await?;
+    // Same assembly order as the SQL projection: note body, then summary/
+    // template_output docs by (sort_order, id), then transcripts by
+    // (started_at, created_at, id).
+    let enhanced_docs = store.session_enhanced_docs(id);
+    let transcripts = store.session_transcripts(id);
 
-    let enhanced_bodies: Vec<String> = sqlx::query_scalar(
-        "SELECT body
-         FROM session_documents
-         WHERE session_id = ?
-           AND kind IN ('summary', 'template_output')
-           AND deleted_at IS NULL
-         ORDER BY sort_order, id",
-    )
-    .bind(id)
-    .fetch_all(pool)
-    .await?;
-
-    let transcripts: Vec<String> = sqlx::query_scalar(
-        "SELECT words_json
-         FROM transcripts
-         WHERE session_id = ? AND deleted_at IS NULL
-         ORDER BY started_at_ms, id",
-    )
-    .bind(id)
-    .fetch_all(pool)
-    .await?;
-
-    let mut content_parts = Vec::with_capacity(1 + enhanced_bodies.len() + transcripts.len());
-    if let Some(raw_body) = raw_body {
-        content_parts.push(extract_plain_text(&raw_body));
+    let mut content_parts = Vec::with_capacity(1 + enhanced_docs.len() + transcripts.len());
+    if let Some(note) = &record.note_markdown {
+        content_parts.push(extract_plain_text(note));
     }
-    content_parts.extend(enhanced_bodies.iter().map(|body| extract_plain_text(body)));
     content_parts.extend(
-        transcripts
+        enhanced_docs
             .iter()
-            .map(|transcript| flatten_transcript(transcript)),
+            .map(|doc| extract_plain_text(&doc.markdown)),
     );
+    content_parts.extend(transcripts.iter().map(flatten_transcript_words));
 
-    let title: String = session.get("title");
-    let created_at: String = session.get("created_at");
-    let event_json: String = session.get("event_json");
+    // The exact string the SQL mirror's `sessions.event_json` column carried.
+    let event_json = record
+        .meta
+        .event
+        .as_ref()
+        .map(|event| event.to_string())
+        .unwrap_or_default();
 
-    Ok(IndexAction::Upsert(SearchDocument {
+    IndexAction::Upsert(SearchDocument {
         id: id.to_string(),
         doc_type: "session".to_string(),
         language: None,
-        title: fallback_title(&title, "Untitled"),
+        title: fallback_title(&record.meta.title, "Untitled"),
         content: merge_content(content_parts.iter().map(String::as_str)),
-        created_at: session_search_timestamp(&event_json, &created_at),
+        created_at: session_search_timestamp(&event_json, &record.meta.created_at),
         facets: Vec::new(),
-    }))
+    })
 }
 
-async fn projection_consistency_snapshot(pool: &SqlitePool) -> Result<(i64, i64), sqlx::Error> {
-    let mut tx = pool.begin().await?;
-    let active_count = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
-        .fetch_one(&mut *tx)
-        .await?;
-    let pending_count = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
-        .fetch_one(&mut *tx)
-        .await?;
-    tx.commit().await?;
-    Ok((active_count, pending_count))
-}
-
-async fn index_document_count(app: &AppHandle) -> Result<usize, tauri_plugin_tantivy::Error> {
+async fn index_document_count<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+) -> Result<usize, tauri_plugin_tantivy::Error> {
     let result = app
         .tantivy()
         .search(SearchRequest {
@@ -338,8 +347,8 @@ async fn index_document_count(app: &AppHandle) -> Result<usize, tauri_plugin_tan
     Ok(result.count)
 }
 
-async fn wait_for_index_count(
-    app: &AppHandle,
+async fn wait_for_index_count<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
     expected: usize,
 ) -> Result<bool, tauri_plugin_tantivy::Error> {
     for _ in 0..40 {
@@ -350,6 +359,24 @@ async fn wait_for_index_count(
     }
 
     Ok(false)
+}
+
+fn projection_version_path(index_dir: &Path) -> PathBuf {
+    index_dir.join("projection_version")
+}
+
+/// Missing/unparseable reads as 0 -- deleting the `search_index/` dir (or a fresh
+/// install) therefore always forces a full rebuild, never a stale skip.
+fn read_projection_version(index_dir: &Path) -> i64 {
+    std::fs::read_to_string(projection_version_path(index_dir))
+        .ok()
+        .and_then(|version| version.trim().parse().ok())
+        .unwrap_or(0)
+}
+
+fn write_projection_version(index_dir: &Path, version: i64) -> std::io::Result<()> {
+    std::fs::create_dir_all(index_dir)?;
+    std::fs::write(projection_version_path(index_dir), version.to_string())
 }
 
 fn fallback_title(value: &str, fallback: &str) -> String {
@@ -414,60 +441,12 @@ fn normalize_whitespace(value: &str) -> String {
     value.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
-fn flatten_transcript(value: &str) -> String {
-    let parsed =
-        serde_json::from_str::<Value>(value).unwrap_or_else(|_| Value::String(value.to_string()));
-    flatten_transcript_value(&parsed)
-}
-
-fn flatten_transcript_value(value: &Value) -> String {
-    match value {
-        Value::String(value) => value.clone(),
-        Value::Array(segments) => {
-            let parts = segments
-                .iter()
-                .filter_map(|segment| match segment {
-                    Value::String(value) => Some(value.clone()),
-                    Value::Object(record) => Some(flatten_transcript_record(record)),
-                    Value::Array(_) => Some(flatten_transcript_value(segment)),
-                    _ => None,
-                })
-                .collect::<Vec<_>>();
-            merge_content(parts.iter().map(String::as_str))
-        }
-        Value::Object(record) => flatten_transcript_record_values(record),
-        _ => String::new(),
-    }
-}
-
-fn flatten_transcript_record(record: &Map<String, Value>) -> String {
-    let preferred = record
-        .get("text")
-        .filter(|value| !value.is_null())
-        .or_else(|| record.get("content"));
-    if let Some(value) = preferred.and_then(Value::as_str) {
-        return value.to_string();
-    }
-
-    flatten_transcript_record_values(record)
-}
-
-fn flatten_transcript_record_values(record: &Map<String, Value>) -> String {
-    let parts = record
-        .values()
-        .map(flatten_nested_transcript_value)
-        .collect::<Vec<_>>();
-    merge_content(parts.iter().map(String::as_str))
-}
-
-fn flatten_nested_transcript_value(value: &Value) -> String {
-    if let Value::String(value) = value {
-        let parsed =
-            serde_json::from_str::<Value>(value).unwrap_or_else(|_| Value::String(value.clone()));
-        return flatten_transcript_value(&parsed);
-    }
-
-    flatten_transcript_value(value)
+/// The typed replacement for the old `words_json` flattening: the store's
+/// transcripts are structurally-guaranteed word lists, and the SQL flattener's
+/// text/content preference collapsed a well-formed words array to exactly this --
+/// each word's `text`, space-joined, empties dropped.
+fn flatten_transcript_words(transcript: &hypr_fs_format::TranscriptWithData) -> String {
+    merge_content(transcript.words.iter().map(|word| word.text.as_str()))
 }
 
 fn session_search_timestamp(event_json: &str, created_at: &str) -> i64 {
@@ -498,66 +477,47 @@ fn to_epoch_ms(value: &Value) -> i64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::session_store::SessionMeta;
+    use tauri::Manager;
+    use tauri_plugin_tantivy::{CollectionIndex, IndexState, build_schema, register_tokenizers};
 
-    #[tokio::test]
-    async fn acknowledgement_does_not_drop_a_concurrent_change() {
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        sqlx::query("INSERT INTO sessions (id, title) VALUES ('session-1', 'Planning')")
-            .execute(db.pool())
-            .await
-            .unwrap();
+    /// Port of the SQL-era generation-race regression test ("acknowledgement does
+    /// not drop a concurrent change"): a session re-dirtied WHILE being indexed
+    /// must survive the stale acknowledgement and be processed again.
+    #[test]
+    fn acknowledgement_does_not_drop_a_concurrent_change() {
+        let queue = DirtyQueue::default();
+        queue.mark("session-1");
+        let queued_generation = queue.batch(BATCH_SIZE)[0].1;
 
-        let queued_generation: i64 = sqlx::query_scalar(
-            "SELECT generation FROM search_index_dirty
-             WHERE entity_type = 'session' AND entity_id = 'session-1'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-        sqlx::query("UPDATE sessions SET title = 'Updated' WHERE id = 'session-1'")
-            .execute(db.pool())
-            .await
-            .unwrap();
+        // The concurrent edit, arriving while the batch above is being indexed.
+        queue.mark("session-1");
 
-        acknowledge_dirty_entities(
-            db.pool(),
-            &[DirtyEntity {
-                entity_type: "session".to_string(),
-                entity_id: "session-1".to_string(),
-                generation: queued_generation,
-            }],
-        )
-        .await
-        .unwrap();
+        queue.acknowledge("session-1", queued_generation);
+        let current = queue.batch(BATCH_SIZE);
+        assert_eq!(
+            current,
+            vec![("session-1".to_string(), queued_generation + 1)],
+            "a stale acknowledgement must leave the re-dirtied session queued"
+        );
 
-        let current_generation: i64 = sqlx::query_scalar(
-            "SELECT generation FROM search_index_dirty
-             WHERE entity_type = 'session' AND entity_id = 'session-1'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-        assert_eq!(current_generation, queued_generation + 1);
+        queue.acknowledge("session-1", queued_generation + 1);
+        assert_eq!(queue.len(), 0);
+        assert!(queue.batch(BATCH_SIZE).is_empty());
+    }
 
-        acknowledge_dirty_entities(
-            db.pool(),
-            &[DirtyEntity {
-                entity_type: "session".to_string(),
-                entity_id: "session-1".to_string(),
-                generation: current_generation,
-            }],
-        )
-        .await
-        .unwrap();
-        let remaining: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM search_index_dirty
-             WHERE entity_type = 'session' AND entity_id = 'session-1'",
-        )
-        .fetch_one(db.pool())
-        .await
-        .unwrap();
-        assert_eq!(remaining, 0);
+    #[test]
+    fn remarking_moves_a_session_to_the_back_of_the_queue() {
+        let queue = DirtyQueue::default();
+        queue.mark("s1");
+        queue.mark("s2");
+        queue.mark("s1");
+        let ids: Vec<String> = queue
+            .batch(BATCH_SIZE)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        assert_eq!(ids, vec!["s2".to_string(), "s1".to_string()]);
     }
 
     #[test]
@@ -576,13 +536,13 @@ mod tests {
     }
 
     #[test]
-    fn flattens_transcript_segments_with_text_and_content_preference() {
-        assert_eq!(
-            flatten_transcript(
-                r#"[{"text":"hello","ignored":"x"},{"content":"world"},{"nested":{"text":"again"}},["nested","array"]]"#,
-            ),
-            "hello world again nested array"
+    fn transcript_words_flatten_to_space_joined_text() {
+        let transcript = transcript(
+            "t1",
+            0.0,
+            vec![word("w0", "hello"), word("w1", "  "), word("w2", "world")],
         );
+        assert_eq!(flatten_transcript_words(&transcript), "hello world");
     }
 
     #[test]
@@ -599,5 +559,342 @@ mod tests {
             1_735_689_600_000
         );
         assert_eq!(session_search_timestamp(r#"{"started_at":1234}"#, ""), 1234);
+    }
+
+    // -- end-to-end projection over a real Tantivy index --------------------------
+
+    fn meta(id: &str, title: &str) -> SessionMeta {
+        SessionMeta {
+            id: id.to_string(),
+            title: title.to_string(),
+            started_at: None,
+            ended_at: None,
+            created_at: "2026-07-24T00:00:00Z".to_string(),
+            tags: vec![],
+            event: None,
+            folder: None,
+        }
+    }
+
+    fn word(id: &str, text: &str) -> hypr_fs_format::TranscriptWord {
+        hypr_fs_format::TranscriptWord {
+            id: Some(id.to_string()),
+            text: text.to_string(),
+            start_ms: 0.0,
+            end_ms: 0.0,
+            channel: 0.0,
+            speaker: None,
+            metadata: None,
+        }
+    }
+
+    fn transcript(
+        id: &str,
+        started_at: f64,
+        words: Vec<hypr_fs_format::TranscriptWord>,
+    ) -> hypr_fs_format::TranscriptWithData {
+        hypr_fs_format::TranscriptWithData {
+            id: id.to_string(),
+            user_id: String::new(),
+            created_at: "2026-07-24T00:00:00Z".to_string(),
+            session_id: String::new(),
+            started_at,
+            ended_at: None,
+            memo_md: String::new(),
+            words,
+            speaker_hints: vec![],
+        }
+    }
+
+    struct Harness {
+        app: tauri::App<tauri::test::MockRuntime>,
+        store: Arc<SessionStore>,
+        queue: DirtyQueue,
+        changes: ChangeReceiver,
+        index_dir: PathBuf,
+        vault: tempfile::TempDir,
+        _state_dir: tempfile::TempDir,
+    }
+
+    /// A real Tantivy collection (in RAM, real schema + tokenizers) behind the
+    /// same `IndexState` the plugin manages, plus a store over a tempdir vault
+    /// with the projection's change-stream tap already subscribed -- the same
+    /// subscribe-before-anything-happens ordering `spawn` relies on.
+    async fn harness() -> Harness {
+        let vault = tempfile::tempdir().unwrap();
+        let state_dir = tempfile::tempdir().unwrap();
+        let store =
+            Arc::new(crate::session_store::new_test_store(vault.path().to_path_buf()).await);
+        let changes = store.subscribe_index_changes();
+
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        app.manage(IndexState::default());
+
+        let schema = build_schema();
+        let index = tantivy::Index::create_in_ram(schema.clone());
+        register_tokenizers(&index);
+        let reader = index
+            .reader_builder()
+            .reload_policy(tantivy::ReloadPolicy::OnCommitWithDelay)
+            .try_into()
+            .unwrap();
+        let writer = index.writer(50_000_000).unwrap();
+        app.state::<IndexState>()
+            .inner
+            .write()
+            .await
+            .collections
+            .insert(
+                "default".to_string(),
+                CollectionIndex {
+                    schema,
+                    index,
+                    reader,
+                    writer,
+                },
+            );
+
+        Harness {
+            app,
+            store,
+            queue: DirtyQueue::default(),
+            changes,
+            index_dir: state_dir.path().join(INDEX_DIR_NAME),
+            vault,
+            _state_dir: state_dir,
+        }
+    }
+
+    async fn all_documents<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Vec<SearchDocument> {
+        app.tantivy()
+            .search(SearchRequest {
+                query: String::new(),
+                collection: None,
+                filters: SearchFilters::default(),
+                limit: 100,
+                options: SearchOptions::default(),
+            })
+            .await
+            .unwrap()
+            .hits
+            .into_iter()
+            .map(|hit| hit.document)
+            .collect()
+    }
+
+    /// The reader reloads on commit with a delay; poll until the predicate holds.
+    async fn wait_for<R: tauri::Runtime>(
+        app: &tauri::AppHandle<R>,
+        description: &str,
+        predicate: impl Fn(&[SearchDocument]) -> bool,
+    ) -> Vec<SearchDocument> {
+        for _ in 0..100 {
+            let documents = all_documents(app).await;
+            if predicate(&documents) {
+                return documents;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+        panic!(
+            "search index never reached expected state: {description}; documents: {:?}",
+            all_documents(app).await
+        );
+    }
+
+    async fn initialize_harness(h: &mut Harness) {
+        let app = h.app.handle().clone();
+        initialize(&app, &h.store, &h.queue, &mut h.changes, &h.index_dir)
+            .await
+            .unwrap();
+    }
+
+    async fn drain_harness(h: &mut Harness) {
+        let app = h.app.handle().clone();
+        drain_queue(&app, &h.store, &h.queue, &mut h.changes)
+            .await
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn create_edit_and_delete_flow_through_the_change_stream() {
+        let mut h = harness().await;
+
+        // Empty vault, no version file: first boot after the cutover rebuilds and
+        // stamps the new projection version.
+        initialize_harness(&mut h).await;
+        assert_eq!(read_projection_version(&h.index_dir), PROJECTION_VERSION);
+
+        // create -> searchable
+        h.store
+            .write_meta(&meta("s1", "Planning session"))
+            .await
+            .unwrap();
+        h.store
+            .write_note("s1", "Quarterly goals discussion")
+            .await
+            .unwrap();
+        drain_harness(&mut h).await;
+        let app = h.app.handle().clone();
+        let docs = wait_for(&app, "s1 indexed with note", |docs| {
+            docs.iter()
+                .any(|doc| doc.id == "s1" && doc.content.contains("Quarterly goals discussion"))
+        })
+        .await;
+        let doc = docs.iter().find(|doc| doc.id == "s1").unwrap();
+        assert_eq!(doc.title, "Planning session");
+        assert_eq!(doc.doc_type, "session");
+
+        // edit -> reindexed (old content gone, new content present)
+        h.store
+            .write_note("s1", "Revised roadmap details")
+            .await
+            .unwrap();
+        h.store
+            .write_transcript("s1", transcript("t1", 5.0, vec![word("w0", "zebra token")]))
+            .await
+            .unwrap();
+        drain_harness(&mut h).await;
+        wait_for(&app, "s1 reindexed after edits", |docs| {
+            docs.iter().any(|doc| {
+                doc.id == "s1"
+                    && doc.content.contains("Revised roadmap details")
+                    && doc.content.contains("zebra token")
+                    && !doc.content.contains("Quarterly goals discussion")
+            })
+        })
+        .await;
+
+        // a full-text query actually finds it
+        let result = app
+            .tantivy()
+            .search(SearchRequest {
+                query: "zebra".to_string(),
+                collection: None,
+                filters: SearchFilters::default(),
+                limit: 10,
+                options: SearchOptions::default(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(result.hits.len(), 1);
+        assert_eq!(result.hits[0].document.id, "s1");
+
+        // delete -> gone
+        h.store.delete_session("s1").await.unwrap();
+        drain_harness(&mut h).await;
+        wait_for(&app, "s1 removed", |docs| docs.is_empty()).await;
+    }
+
+    #[tokio::test]
+    async fn count_mismatch_triggers_a_full_rebuild() {
+        let mut h = harness().await;
+        h.store.write_meta(&meta("s1", "Alpha")).await.unwrap();
+        h.store.write_meta(&meta("s2", "Beta")).await.unwrap();
+
+        initialize_harness(&mut h).await;
+        let app = h.app.handle().clone();
+        wait_for(&app, "both sessions indexed", |docs| docs.len() == 2).await;
+
+        // Simulate crash damage: the index silently lost a document while the
+        // vault (and projection version) still say everything is fine.
+        app.tantivy()
+            .remove_document(None, "s2".to_string())
+            .await
+            .unwrap();
+        wait_for(&app, "s2 dropped", |docs| docs.len() == 1).await;
+
+        initialize_harness(&mut h).await;
+        let docs = wait_for(&app, "rebuild restored both", |docs| docs.len() == 2).await;
+        assert!(docs.iter().any(|doc| doc.id == "s2" && doc.title == "Beta"));
+        assert_eq!(read_projection_version(&h.index_dir), PROJECTION_VERSION);
+    }
+
+    #[tokio::test]
+    async fn external_edit_reindexes_through_the_refresh_path() {
+        let mut h = harness().await;
+        h.store
+            .write_meta(&meta("s1", "Original title"))
+            .await
+            .unwrap();
+        initialize_harness(&mut h).await;
+        let app = h.app.handle().clone();
+        wait_for(&app, "s1 indexed", |docs| {
+            docs.iter().any(|doc| doc.title == "Original title")
+        })
+        .await;
+
+        // An external editor touches the vault; vault_watch reacts by calling
+        // refresh_session, whose index diff notifies the change bus.
+        let dir = h.vault.path().join("sessions/s1");
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(dir.join("_memo.md"), "external memo content").unwrap();
+        h.store.refresh_session("s1").await.unwrap();
+
+        drain_harness(&mut h).await;
+        wait_for(&app, "external edit reindexed", |docs| {
+            docs.iter().any(|doc| {
+                doc.id == "s1"
+                    && doc.title == "Edited outside"
+                    && doc.content.contains("external memo content")
+            })
+        })
+        .await;
+    }
+
+    #[tokio::test]
+    async fn build_session_document_matches_the_sql_projection_shape() {
+        let h = harness().await;
+        let mut m = meta("s1", "  ");
+        m.event = Some(serde_json::json!({"started_at": "2026-07-14T01:02:03Z"}));
+        h.store.write_meta(&m).await.unwrap();
+        h.store.write_note("s1", "# raw note body").await.unwrap();
+        h.store
+            .write_document("s1", "summary", "legacy summary body")
+            .await
+            .unwrap();
+        h.store
+            .write_enhanced_doc(&crate::session_store::EnhancedDoc {
+                id: "doc-1".to_string(),
+                session_id: "s1".to_string(),
+                kind: "template_output".to_string(),
+                title: "Review".to_string(),
+                template_id: "template-1".to_string(),
+                sort_order: 2,
+                markdown: "enhanced doc body".to_string(),
+            })
+            .await
+            .unwrap();
+        h.store
+            .write_transcript(
+                "s1",
+                transcript("t1", 5.0, vec![word("w0", "spoken"), word("w1", "words")]),
+            )
+            .await
+            .unwrap();
+
+        let IndexAction::Upsert(doc) = build_session_document(&h.store, "s1") else {
+            panic!("expected an upsert for an existing session");
+        };
+        assert_eq!(doc.id, "s1");
+        assert_eq!(
+            doc.title, "Untitled",
+            "blank title falls back like the SQL build"
+        );
+        assert_eq!(
+            doc.content, "# raw note body legacy summary body enhanced doc body spoken words",
+            "note, then enhanced docs by (sort_order, id), then transcript words"
+        );
+        assert_eq!(doc.created_at, 1_783_990_923_000, "event started_at wins");
+
+        assert!(matches!(
+            build_session_document(&h.store, "missing"),
+            IndexAction::Remove(_)
+        ));
     }
 }

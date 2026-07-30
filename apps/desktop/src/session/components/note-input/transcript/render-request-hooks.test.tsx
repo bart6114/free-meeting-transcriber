@@ -31,7 +31,7 @@ import {
   useTranscriptRenderData,
 } from "./render-request-hooks";
 
-describe("SQLite transcript render data", () => {
+describe("transcript render data", () => {
   beforeEach(() => {});
 
   it("builds a renderer request from one canonical transcript", () => {

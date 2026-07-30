@@ -84,11 +84,6 @@ export const SETTING_DEFINITIONS = {
     path: ["general", "telemetry_consent"],
     default: true as boolean,
   },
-  consent_auto_send_chat: {
-    type: "boolean",
-    path: ["general", "consent_auto_send_chat"],
-    default: false as boolean,
-  },
   cloud_sync_enabled: {
     type: "boolean",
     path: ["general", "cloud_sync_enabled"],
@@ -162,16 +157,6 @@ export const SETTING_DEFINITIONS = {
   selected_template_id: {
     type: "string",
     path: ["general", "selected_template_id"],
-  },
-  todo_linear_filter: {
-    type: "string",
-    path: ["todo", "linear_filter"],
-    default: "" as string,
-  },
-  todo_github_repository: {
-    type: "string",
-    path: ["todo", "github_repository"],
-    default: "" as string,
   },
 } as const;
 

@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => {
     clearDeletion: vi.fn(),
     pendingDeletions: {} as Record<string, { data: DeletedSessionData }>,
     emitTo: vi.fn(() => Promise.resolve()),
-    finalizeSessionDeletion: vi.fn(),
+    deleteSessionFolder: vi.fn(() =>
+      Promise.resolve({ status: "ok" as const, data: null }),
+    ),
     getAllWebviewWindows: vi.fn<
       () => Promise<Array<{ label: string; close: () => Promise<void> }>>
     >(() => Promise.resolve([])),
@@ -56,8 +58,13 @@ vi.mock("@hypr/ui/components/ui/toast", () => ({
 }));
 
 vi.mock("~/session/queries", () => ({
-  finalizeSessionDeletion: mocks.finalizeSessionDeletion,
   softDeleteSession: mocks.softDeleteSession,
+}));
+
+// The hard-delete command must stay unreachable from the delete flow: `session_delete`
+// trashes the folder, and `delete_session_folder` is an untrashed `remove_dir_all`.
+vi.mock("@hypr/plugin-fs-sync", () => ({
+  commands: { deleteSessionFolder: mocks.deleteSessionFolder },
 }));
 
 vi.mock("~/store/zustand/listener/instance", () => ({
@@ -125,7 +132,13 @@ describe("useDeleteSession", () => {
     mocks.listen.mockResolvedValue(vi.fn());
   });
 
-  it("finalizes the deletion once the local commit lands", async () => {
+  // Regression: the undo window used to arm a 5s timer that ran fs-sync's
+  // `delete_session_folder` -- a plain `remove_dir_all` with no `.trash` copy -- against a
+  // path `session_delete` had already trashed. Anything that recreated the folder inside
+  // that window (a sync client pulling it back from another device, a late transcript
+  // flush) was destroyed with no undo. The delete is complete when the commit resolves;
+  // letting the toast lapse must schedule no filesystem work at all.
+  it("schedules no hard delete when the undo window lapses", async () => {
     const { result } = renderHook(() => useDeleteSession());
 
     act(() => {
@@ -140,14 +153,10 @@ describe("useDeleteSession", () => {
       expect.any(String),
     );
 
-    const finalize = mocks.addDeletion.mock.calls[0]?.[1] as () => void;
-    act(() => {
-      finalize();
-    });
-
-    await waitFor(() => {
-      expect(mocks.finalizeSessionDeletion).toHaveBeenCalledWith("session-1");
-    });
+    // No confirm callback is registered, so `confirmDeletion` has nothing to run.
+    const onConfirm = mocks.addDeletion.mock.calls[0]?.[1];
+    expect(onConfirm).toBeUndefined();
+    expect(mocks.deleteSessionFolder).not.toHaveBeenCalled();
   });
 
   it("adds the undo deletion optimistically in the main window", async () => {
@@ -165,7 +174,7 @@ describe("useDeleteSession", () => {
         tombstone: expect.any(String),
         deletedAt: expect.any(Number),
       },
-      expect.any(Function),
+      undefined,
       undefined,
     );
     expect(mocks.softDeleteSession).toHaveBeenCalledWith(
@@ -195,7 +204,7 @@ describe("useDeleteSession", () => {
       expect(mocks.toastError).toHaveBeenCalledOnce();
     });
     expect(mocks.clearDeletion).toHaveBeenCalledWith("session-1");
-    expect(mocks.finalizeSessionDeletion).not.toHaveBeenCalled();
+    expect(mocks.deleteSessionFolder).not.toHaveBeenCalled();
     consoleError.mockRestore();
   });
 
@@ -214,26 +223,25 @@ describe("useDeleteSession", () => {
     expect(mocks.toastError).not.toHaveBeenCalled();
   });
 
-  it("never finalizes a deletion whose write failed", async () => {
+  // The background-window path (delete commits, `emitTo("main")` fails so main never learns
+  // about it) also used to fall back to the hard delete. It has nothing to clean up either.
+  it("never hard-deletes the folder when a background window's delete is stranded", async () => {
     const consoleError = vi
       .spyOn(console, "error")
       .mockImplementation(() => undefined);
-    mocks.softDeleteSession.mockRejectedValue(new Error("db locked"));
+    mocks.getCurrentWebviewWindowLabel.mockReturnValue("note-session-1");
+    mocks.emitTo.mockRejectedValue(new Error("main window unavailable"));
     const { result } = renderHook(() => useDeleteSession());
 
     act(() => {
       result.current("session-1");
     });
 
-    const finalize = mocks.addDeletion.mock.calls[0]?.[1] as () => void;
-    act(() => {
-      finalize();
-    });
-
     await waitFor(() => {
-      expect(mocks.toastError).toHaveBeenCalledOnce();
+      expect(mocks.emitTo).toHaveBeenCalled();
     });
-    expect(mocks.finalizeSessionDeletion).not.toHaveBeenCalled();
+    expect(mocks.deleteSessionFolder).not.toHaveBeenCalled();
+    expect(mocks.addDeletion).not.toHaveBeenCalled();
     consoleError.mockRestore();
   });
 
@@ -373,10 +381,7 @@ describe("useDeleteSession", () => {
       });
     });
 
-    expect(mocks.addDeletion).toHaveBeenCalledWith(
-      mocks.deletedSessionData,
-      expect.any(Function),
-    );
+    expect(mocks.addDeletion).toHaveBeenCalledWith(mocks.deletedSessionData);
     expect(mocks.invalidateResource).toHaveBeenCalledWith(
       "sessions",
       "session-1",

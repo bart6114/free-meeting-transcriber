@@ -1,16 +1,15 @@
 mod agents;
 mod appearance;
 mod commands;
-mod db;
 mod embedded_cli;
 mod ext;
+mod legacy_db;
 mod search_index;
 mod session_store;
 mod store;
 mod supervisor;
 mod vault_watch;
 
-use db::open_desktop_db;
 use ext::*;
 use store::*;
 
@@ -158,11 +157,9 @@ pub async fn main() {
     let audio: std::sync::Arc<dyn hypr_audio_actual::AudioProvider> =
         create_audio_provider(&context.config().identifier);
 
-    let db = open_desktop_db(&context.config().identifier).await;
+    legacy_db::retire_app_db(&context.config().identifier);
 
-    let mut builder = tauri_plugin_windows::extend_builder(tauri::Builder::default())
-        .manage(audio)
-        .manage(db.clone());
+    let mut builder = tauri_plugin_windows::extend_builder(tauri::Builder::default()).manage(audio);
 
     // https://docs.crabnebula.dev/plugins/tauri-e2e-tests/#macos-support
     #[cfg(all(target_os = "macos", feature = "automation"))]
@@ -185,7 +182,6 @@ pub async fn main() {
         .plugin(tauri_plugin_tracing::init())
         .plugin(tauri_plugin_analytics::init())
         .plugin(tauri_plugin_agent::init())
-        .plugin(tauri_plugin_db::init(db.clone()))
         .plugin(tauri_plugin_bedrock::init());
 
     #[cfg(target_os = "macos")]
@@ -317,34 +313,17 @@ pub async fn main() {
                 use tauri_plugin_settings::SettingsPluginExt;
                 match app_handle.settings().vault_base() {
                     Ok(base) => {
-                        // One-time, marker-gated `transcripts.words_json`
-                        // repair, before this run's `rebuild_index` indexes
-                        // whatever's on disk. `block_on` for the same reason
-                        // `rebuild_index` below is blocked on -- the UI must
-                        // not proceed against unrepaired rows.
-                        match hypr_tauri_utils::block_on(session_store::migrate::run_once(
-                            db.pool(),
-                            base.as_std_path(),
-                        )) {
-                            Ok(report) => {
-                                tracing::info!(
-                                    skipped_marker_present = report.skipped_marker_present,
-                                    repaired_words_json = report.repaired_words_json,
-                                    unparseable_words_json_count =
-                                        report.unparseable_words_json.len(),
-                                    "one-time words_json repair sweep complete"
-                                );
-                            }
-                            Err(e) => {
-                                tracing::error!("one-time words_json repair sweep failed: {}", e);
-                            }
-                        }
-
                         let store = std::sync::Arc::new(session_store::SessionStore::new(
                             base.as_std_path().to_path_buf(),
-                            db.pool().clone(),
                         ));
                         app_handle.manage(store.clone());
+
+                        // The Tantivy search projection rides the store's change
+                        // stream (Phase F). Spawned -- i.e. subscribed -- BEFORE the
+                        // startup rebuild below so edits made while the app was
+                        // closed flow into the search index as rebuild diffs; its
+                        // async worker then waits for the tantivy collection.
+                        search_index::spawn(app_handle.clone(), store.clone());
 
                         // Files are the source of truth, so every startup rebuilds the
                         // sessions/session_documents/transcripts index from what's on disk
@@ -367,6 +346,22 @@ pub async fn main() {
                                 tracing::error!("startup session index rebuild failed: {}", e);
                             }
                         }
+
+                        // Re-seed any bundled default template whose file is missing
+                        // (and isn't tombstoned in `.deleted-defaults.json`). This is
+                        // the file-side replacement for the retired SQL seed migration
+                        // and `repair_missing_core_tables` guarantee. `block_on`: the
+                        // template pickers must not come up against an empty folder on
+                        // first boot.
+                        match hypr_tauri_utils::block_on(store.seed_default_templates()) {
+                            Ok(seeded) if seeded > 0 => {
+                                tracing::info!(seeded, "seeded missing default templates");
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                tracing::error!("default template seeding failed: {}", e);
+                            }
+                        }
                     }
                     Err(e) => {
                         tracing::error!("failed to resolve vault_base for session_store: {}", e);
@@ -385,7 +380,10 @@ pub async fn main() {
                 }
             }
 
-            search_index::spawn(app_handle.clone(), db.clone());
+            // Coalescing `index-changed` emitter for the in-memory vault index
+            // (Phase E1). Needs the store managed; changes queued before this point
+            // (startup rebuild) simply flush as the dispatcher's first batch.
+            session_store::index::spawn_dispatcher(app_handle.clone());
             // Spawned last, after the session-store block above has finished its
             // startup `rebuild_index` pass: an external edit's refresh only needs to
             // account for vault state from here on, since everything the vault held at
@@ -411,6 +409,7 @@ pub async fn main() {
             use tauri_plugin_store2::Store2PluginExt;
 
             let _ = app.settings().reset();
+            let _ = app.settings().reset_config();
             let _ = app.store2().reset();
             let _ = app.set_onboarding_needed(true);
 
@@ -560,7 +559,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::get_env::<tauri::Wry>,
             commands::show_devtool::<tauri::Wry>,
             commands::complete_app_exit::<tauri::Wry>,
-            commands::get_tinybase_values::<tauri::Wry>,
             commands::get_pinned_tabs::<tauri::Wry>,
             commands::set_pinned_tabs::<tauri::Wry>,
             commands::get_recently_opened_sessions::<tauri::Wry>,
@@ -568,19 +566,43 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::check_embedded_cli::<tauri::Wry>,
             commands::install_embedded_cli::<tauri::Wry>,
             session_store::commands::session_write_meta::<tauri::Wry>,
+            session_store::commands::session_update_meta::<tauri::Wry>,
             session_store::commands::session_write_note::<tauri::Wry>,
             session_store::commands::session_read_note::<tauri::Wry>,
             session_store::commands::session_write_document::<tauri::Wry>,
+            session_store::commands::session_write_enhanced_doc::<tauri::Wry>,
+            session_store::commands::session_update_enhanced_doc::<tauri::Wry>,
+            session_store::commands::session_delete_enhanced_doc::<tauri::Wry>,
+            session_store::commands::template_list::<tauri::Wry>,
+            session_store::commands::template_get::<tauri::Wry>,
+            session_store::commands::template_upsert::<tauri::Wry>,
+            session_store::commands::template_delete::<tauri::Wry>,
+            session_store::commands::session_list_tasks::<tauri::Wry>,
+            session_store::commands::session_replace_tasks::<tauri::Wry>,
+            session_store::commands::session_remove_tasks::<tauri::Wry>,
+            session_store::commands::session_move_tasks::<tauri::Wry>,
             session_store::commands::session_append_transcript::<tauri::Wry>,
             session_store::commands::session_flush_transcript::<tauri::Wry>,
             session_store::commands::session_write_transcript::<tauri::Wry>,
+            session_store::commands::session_replace_transcripts::<tauri::Wry>,
             session_store::commands::session_delete::<tauri::Wry>,
             session_store::commands::session_restore::<tauri::Wry>,
             session_store::commands::session_rebuild_index::<tauri::Wry>,
             session_store::commands::session_store_audio::<tauri::Wry>,
             session_store::commands::session_list_audio::<tauri::Wry>,
             session_store::commands::session_delete_audio::<tauri::Wry>,
+            session_store::commands::session_get::<tauri::Wry>,
+            session_store::commands::session_list::<tauri::Wry>,
+            session_store::commands::session_ids::<tauri::Wry>,
+            session_store::commands::session_is_empty::<tauri::Wry>,
+            session_store::commands::session_has_transcript::<tauri::Wry>,
+            session_store::commands::session_enhanced_docs::<tauri::Wry>,
+            session_store::commands::enhanced_doc_get::<tauri::Wry>,
+            session_store::commands::session_transcripts::<tauri::Wry>,
+            session_store::commands::transcript_get::<tauri::Wry>,
+            session_store::commands::session_find_by_tracking_id::<tauri::Wry>,
         ])
+        .events(tauri_specta::collect_events![session_store::IndexChanged])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }
 
@@ -595,14 +617,8 @@ mod test {
     #[test]
     fn exit_flush_bounded_drains_dirty_buffer_and_second_call_is_a_noop() {
         let temp = tempfile::tempdir().unwrap();
-        let store = hypr_tauri_utils::block_on(async {
-            let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-            hypr_db_app::prepare_schema(&db).await.unwrap();
-            std::sync::Arc::new(session_store::SessionStore::new(
-                temp.path().to_path_buf(),
-                db.pool().clone(),
-            ))
-        });
+        let store =
+            std::sync::Arc::new(session_store::SessionStore::new(temp.path().to_path_buf()));
 
         hypr_tauri_utils::block_on(store.append_transcript(
             "s1",

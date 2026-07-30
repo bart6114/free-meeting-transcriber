@@ -4,8 +4,6 @@ const COMMANDS: &[&str] = &[
     "set_respect_do_not_disturb",
     "set_ignored_bundle_ids",
     "list_default_ignored_bundle_ids",
-    "inspect_meeting_accessibility",
-    "send_meeting_chat_message",
     "get_preferred_languages",
     "get_current_locale_identifier",
     "set_mic_active_threshold",

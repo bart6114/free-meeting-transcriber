@@ -54,22 +54,6 @@ async listDefaultIgnoredBundleIds() : Promise<Result<string[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async inspectMeetingAccessibility() : Promise<Result<MeetingAccessibilityInspection[], string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:detect|inspect_meeting_accessibility") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async sendMeetingChatMessage(message: string, micActiveBundleIds: string[]) : Promise<Result<MeetingChatSendResult, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:detect|send_meeting_chat_message", { message, micActiveBundleIds }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async getPreferredLanguages() : Promise<Result<string[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:detect|get_preferred_languages") };
@@ -111,15 +95,8 @@ detectEvent: "plugin:detect:detect-event"
 
 /** user-defined types **/
 
-export type AxRect = { x: number; y: number; width: number; height: number }
 export type DetectEvent = { type: "micDetected"; key: string; apps: InstalledApp[]; duration_secs: number } | { type: "micStopped"; apps: InstalledApp[] } | { type: "micMuted"; value: boolean } | { type: "sleepStateChanged"; value: boolean }
 export type InstalledApp = { id: string; name: string }
-export type MeetingAccessibilityInspection = { app: MeetingApp; pid: number; platform: MeetingPlatform; surface: MeetingSurface; accessibilityTrusted: boolean; windowTitle: string | null; participantStreams: MeetingParticipantStream[]; activeSpeakers: string[]; warnings: string[] }
-export type MeetingApp = { id: string; name: string }
-export type MeetingChatSendResult = { sent: boolean; app: MeetingApp | null; platform: MeetingPlatform; surface: MeetingSurface; inputLabel: string | null; sendAction: string | null; warnings: string[] }
-export type MeetingParticipantStream = { id: string; platform: MeetingPlatform; surface: MeetingSurface; participantName: string | null; label: string | null; bounds: AxRect | null; confidence: number; isActiveSpeaker: boolean; signals: string[] }
-export type MeetingPlatform = "zoom" | "googleMeet" | "microsoftTeams" | "slack" | "discord" | "webex" | "unknown"
-export type MeetingSurface = "native" | "web" | "unknown"
 
 /** tauri-specta globals **/
 

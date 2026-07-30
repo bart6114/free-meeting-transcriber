@@ -1,7 +1,6 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback } from "react";
 
-import { eq, max, ne, sql, templates } from "@hypr/db";
 import type { TemplateSection } from "@hypr/store";
 
 import {
@@ -16,21 +15,13 @@ import {
   type TemplateIcon,
 } from "./template-icon";
 
-import { db, useDrizzleLiveQuery } from "~/db";
-
-type TemplateRow = (typeof templates)["$inferSelect"];
-type NewTemplateRow = (typeof templates)["$inferInsert"];
-type TemplateLiveRow = {
-  id: string;
-  title: string;
-  description: string;
-  pinned: boolean;
-  pin_order: number | null;
-  category: string | null;
-  icon_json: unknown;
-  targets_json: unknown;
-  sections_json: unknown;
-};
+import { useIndexQuery } from "~/shared/index-query";
+import {
+  commands,
+  type Result,
+  type TemplateInput,
+  type TemplateItem,
+} from "~/types/tauri.gen";
 
 export type UserTemplate = {
   id: string;
@@ -49,100 +40,52 @@ export type UserTemplateDraft = Pick<
   "title" | "description" | "category" | "targets" | "sections"
 > & { icon?: TemplateIcon };
 
-const templateRowSelection = {
-  id: templates.id,
-  title: templates.title,
-  description: templates.description,
-  pinned: templates.pinned,
-  pinOrder: templates.pinOrder,
-  category: templates.category,
-  iconJson: templates.iconJson,
-  targetsJson: templates.targetsJson,
-  sectionsJson: templates.sectionsJson,
-  createdAt: templates.createdAt,
-  updatedAt: templates.updatedAt,
-};
+const templatesQueryKey = ["templates"];
 
-function toUserTemplate(
-  id: string,
-  title: string,
-  description: string,
-  pinned: boolean,
-  pinOrder: number | null,
-  category: string | null,
-  iconJson: unknown,
-  targetsJson: unknown,
-  sectionsJson: unknown,
-): UserTemplate {
+function unwrap<T>(result: Result<T, string>): T {
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
+  return result.data;
+}
+
+function toUserTemplate(item: TemplateItem): UserTemplate {
   return {
-    id,
-    title,
-    description,
-    pinned,
-    pinOrder: pinOrder ?? undefined,
-    category: category ?? undefined,
-    icon: normalizeTemplateIcon(iconJson),
-    targets: parseStoredTemplateTargets(targetsJson, id),
-    sections: parseStoredTemplateSections(sectionsJson, id),
+    id: item.id,
+    title: item.title ?? "",
+    description: item.description ?? "",
+    pinned: item.pinned ?? false,
+    pinOrder: item.pin_order ?? undefined,
+    category: item.category ?? undefined,
+    icon: normalizeTemplateIcon(item.icon),
+    targets: parseStoredTemplateTargets(item.targets, item.id),
+    sections: parseStoredTemplateSections(item.sections, item.id),
   };
 }
 
-function mapTemplateRows(rows: TemplateRow[]): UserTemplate[] {
-  return rows.map((row) =>
-    toUserTemplate(
-      row.id,
-      row.title,
-      row.description,
-      row.pinned,
-      row.pinOrder,
-      row.category,
-      row.iconJson,
-      row.targetsJson,
-      row.sectionsJson,
-    ),
-  );
-}
-
-function mapTemplateLiveRows(rows: TemplateLiveRow[]): UserTemplate[] {
-  return rows.map((row) =>
-    toUserTemplate(
-      row.id,
-      row.title,
-      row.description,
-      row.pinned,
-      row.pin_order,
-      row.category,
-      row.icon_json,
-      row.targets_json,
-      row.sections_json,
-    ),
-  );
+async function listTemplates(): Promise<UserTemplate[]> {
+  const items = unwrap(await commands.templateList());
+  return items.map(toUserTemplate);
 }
 
 export function useUserTemplates(): UserTemplate[] {
-  const query = db.select().from(templates).orderBy(templates.id);
-
-  const { data = [] } = useDrizzleLiveQuery<TemplateLiveRow, UserTemplate[]>(
-    query,
-    {
-      mapRows: mapTemplateLiveRows,
-    },
-  );
+  const { data = [] } = useIndexQuery({
+    entity: "templates",
+    queryKey: templatesQueryKey,
+    queryFn: listTemplates,
+  });
 
   return data;
 }
 
 export function useUserTemplate(id: string | null | undefined) {
-  const query = db
-    .select()
-    .from(templates)
-    .where(eq(templates.id, id ?? ""))
-    .limit(1);
-
-  return useDrizzleLiveQuery<TemplateLiveRow, UserTemplate | null>(query, {
-    mapRows: (rows) => {
-      return mapTemplateLiveRows(rows)[0] ?? null;
-    },
+  return useIndexQuery({
+    // Template events carry template ids.
+    entity: "templates",
+    ids: id ? [id] : undefined,
+    queryKey: [...templatesQueryKey, id ?? ""],
+    queryFn: () => getTemplateById(id ?? ""),
+    enabled: Boolean(id),
   });
 }
 
@@ -153,51 +96,51 @@ export async function getTemplateById(
     return null;
   }
 
-  const rows = await db
-    .select(templateRowSelection)
-    .from(templates)
-    .where(eq(templates.id, id))
-    .limit(1);
+  const item = unwrap(await commands.templateGet(id));
+  return item ? toUserTemplate(item) : null;
+}
 
-  const row = rows[0];
-  if (!row) {
-    return null;
-  }
+async function upsertTemplate(template: UserTemplate): Promise<string> {
+  const targets = assertCanonicalTemplateTargets(
+    template.targets,
+    `save template ${template.id} targets`,
+  );
+  const sections = assertCanonicalTemplateSections(
+    template.sections,
+    `save template ${template.id} sections`,
+  );
 
-  return mapTemplateRows([row])[0] ?? null;
+  const input: TemplateInput = {
+    id: template.id,
+    title: template.title,
+    description: template.description,
+    pinned: template.pinned,
+    pin_order: template.pinOrder ?? null,
+    category: template.category ?? null,
+    icon: normalizeTemplateIcon(template.icon) as TemplateInput["icon"],
+    targets: (targets ?? null) as TemplateInput["targets"],
+    sections: sections as TemplateInput["sections"],
+  };
+  unwrap(await commands.templateUpsert(input));
+  return template.id;
 }
 
 export function useCreateTemplate() {
+  const queryClient = useQueryClient();
   const { mutateAsync } = useMutation({
-    mutationFn: async (template: UserTemplateDraft) => {
-      const id = crypto.randomUUID();
-      const targets = assertCanonicalTemplateTargets(
-        template.targets,
-        `create template ${template.title || id} targets`,
-      );
-      const sections = assertCanonicalTemplateSections(
-        template.sections,
-        `create template ${template.title || id} sections`,
-      );
-
-      const values: Omit<NewTemplateRow, "createdAt" | "updatedAt"> = {
-        id,
+    mutationFn: (template: UserTemplateDraft) =>
+      upsertTemplate({
+        id: crypto.randomUUID(),
         title: template.title,
         description: template.description,
         pinned: false,
         category: template.category,
-        iconJson: template.icon ?? DEFAULT_TEMPLATE_ICON,
-        targetsJson: targets ?? null,
-        sectionsJson: sections,
-      };
-
-      await db.insert(templates).values({
-        ...values,
-        createdAt: sql`strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
-        updatedAt: sql`strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
-      });
-
-      return id;
+        icon: template.icon ?? DEFAULT_TEMPLATE_ICON,
+        targets: template.targets,
+        sections: template.sections,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: templatesQueryKey });
     },
     onError: (error) => {
       console.error("[useCreateTemplate]", error);
@@ -208,33 +151,11 @@ export function useCreateTemplate() {
 }
 
 export function useSaveTemplate() {
+  const queryClient = useQueryClient();
   const { mutateAsync } = useMutation({
-    mutationFn: async (template: UserTemplate) => {
-      const targets = assertCanonicalTemplateTargets(
-        template.targets,
-        `save template ${template.id} targets`,
-      );
-      const sections = assertCanonicalTemplateSections(
-        template.sections,
-        `save template ${template.id} sections`,
-      );
-
-      await db
-        .update(templates)
-        .set({
-          title: template.title,
-          description: template.description,
-          pinned: template.pinned,
-          pinOrder: template.pinOrder ?? null,
-          category: template.category ?? null,
-          iconJson: normalizeTemplateIcon(template.icon),
-          targetsJson: targets ?? null,
-          sectionsJson: sections,
-          updatedAt: sql`strftime('%Y-%m-%dT%H:%M:%SZ', 'now')`,
-        })
-        .where(eq(templates.id, template.id));
-
-      return template.id;
+    mutationFn: (template: UserTemplate) => upsertTemplate(template),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: templatesQueryKey });
     },
     onError: (error) => {
       console.error("[useSaveTemplate]", error);
@@ -245,9 +166,13 @@ export function useSaveTemplate() {
 }
 
 export function useDeleteTemplate() {
+  const queryClient = useQueryClient();
   const { mutateAsync } = useMutation({
     mutationFn: async (id: string) => {
-      await db.delete(templates).where(eq(templates.id, id));
+      unwrap(await commands.templateDelete(id));
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: templatesQueryKey });
     },
     onError: (error) => {
       console.error("[useDeleteTemplate]", error);
@@ -276,15 +201,15 @@ export function useToggleTemplateFavorite() {
         return;
       }
 
-      const [row] = await db
-        .select({ maxOrder: max(templates.pinOrder) })
-        .from(templates)
-        .where(ne(templates.id, templateId));
+      const templates = await listTemplates();
+      const maxOrder = templates
+        .filter((other) => other.id !== templateId)
+        .reduce((max, other) => Math.max(max, other.pinOrder ?? 0), 0);
 
       await saveTemplate({
         ...template,
         pinned: true,
-        pinOrder: ((row?.maxOrder as number | null) ?? 0) + 1,
+        pinOrder: maxOrder + 1,
       });
     },
     [saveTemplate],

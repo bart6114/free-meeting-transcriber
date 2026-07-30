@@ -1,10 +1,11 @@
-import { executeTransaction } from "~/db";
-import { enqueueDatabaseWrite } from "~/db/write-queue";
 import {
   loadSessionContentSnapshot,
   type SessionContentSnapshot,
 } from "~/session/content-queries";
+import { isStoreConflictError } from "~/session/store-errors";
 import { id } from "~/shared/utils";
+import { enqueueDatabaseWrite } from "~/shared/write-queue";
+import { commands } from "~/types/tauri.gen";
 
 export type EnhancerNote = SessionContentSnapshot["enhancedNotes"][number];
 
@@ -32,39 +33,31 @@ export function ensureSummaryDocument(
         (highest, note) => Math.max(highest, note.position),
         0,
       ) + 1;
-    const now = new Date().toISOString();
-    await executeTransaction([
-      {
-        sql: `
-          INSERT INTO session_documents (
-            id, session_id, kind, template_id, title,
-            body_format, body, sort_order, created_by, updated_by,
-            updated_at, deleted_at
-          )
-          SELECT
-            ?, id, ?, ?, 'Summary', 'prosemirror_json', '', ?,
-            owner_user_id, owner_user_id, ?, NULL
-          FROM sessions
-          WHERE id = ?
-        `,
-        params: [
-          noteId,
-          normalizedTemplateId ? "template_output" : "summary",
-          normalizedTemplateId,
-          position,
-          now,
-          sessionId,
-        ],
-        expectedRowsAffected: 1,
-      },
-    ]);
+    // File-first: `sessions/<id>/enhanced/<noteId>.md` is the doc's canonical home, and the
+    // store's dual-write seeds the `session_documents` index row (readers stay on SQL until
+    // Phase E). The store refuses to create a doc for a session without `_meta.json`, which
+    // replaces the old INSERT's `expectedRowsAffected` session-existence guard.
+    const result = await commands.sessionWriteEnhancedDoc({
+      id: noteId,
+      session_id: sessionId,
+      kind: normalizedTemplateId ? "template_output" : "summary",
+      title: "Summary",
+      template_id: normalizedTemplateId,
+      sort_order: position,
+      markdown: "",
+    });
+    if (result.status === "error") {
+      throw new Error(
+        `Failed to create summary document for session ${sessionId}: ${result.error}`,
+      );
+    }
 
     return {
       id: noteId,
       title: "Summary",
       markdown: "",
       content: "",
-      contentFormat: "prosemirror_json",
+      contentFormat: "md",
       templateId: normalizedTemplateId,
       position,
     };
@@ -84,76 +77,46 @@ export function replaceSummaryDocumentTemplate({
 }): Promise<void> {
   return enqueueDatabaseWrite(`session:${sessionId}`, async () => {
     const normalizedTemplateId = templateId ?? "";
-    const now = new Date().toISOString();
-    await executeTransaction([
-      {
-        sql: `
-          UPDATE session_documents
-          SET
-            kind = ?,
-            template_id = ?,
-            title = ?,
-            body_format = 'prosemirror_json',
-            body = '',
-            updated_by = COALESCE((
-              SELECT owner_user_id FROM sessions
-              WHERE sessions.id = ?
-            ), updated_by),
-            updated_at = ?
-          WHERE id = ?
-            AND session_id = ?
-            AND kind IN ('summary', 'template_output')
-            AND deleted_at IS NULL
-            AND EXISTS (
-              SELECT 1 FROM sessions
-              WHERE sessions.id = ?
-            )
-        `,
-        params: [
-          normalizedTemplateId ? "template_output" : "summary",
-          normalizedTemplateId,
-          title,
-          sessionId,
-          now,
-          noteId,
-          sessionId,
-          sessionId,
-        ],
-        expectedRowsAffected: 1,
-      },
-    ]);
+    const result = await commands.sessionUpdateEnhancedDoc(sessionId, noteId, {
+      kind: normalizedTemplateId ? "template_output" : "summary",
+      template_id: normalizedTemplateId,
+      title,
+      markdown: "",
+    });
+    if (result.status === "error") {
+      throw new Error(
+        `Failed to replace summary ${noteId} template: ${result.error}`,
+      );
+    }
   });
 }
 
 export function updateSummaryDocumentTitleIfCurrent({
   sessionId,
   noteId,
-  templateId,
   currentTitle,
   nextTitle,
 }: {
   sessionId: string;
   noteId: string;
-  templateId: string;
   currentTitle: string;
   nextTitle: string;
 }): Promise<void> {
   return enqueueDatabaseWrite(`session:${sessionId}`, async () => {
-    const now = new Date().toISOString();
-    await executeTransaction([
-      {
-        sql: `
-          UPDATE session_documents
-          SET title = ?, updated_at = ?
-          WHERE id = ?
-            AND session_id = ?
-            AND kind IN ('summary', 'template_output')
-            AND template_id = ?
-            AND title = ?
-            AND deleted_at IS NULL
-        `,
-        params: [nextTitle, now, noteId, sessionId, templateId, currentTitle],
-      },
-    ]);
+    const result = await commands.sessionUpdateEnhancedDoc(sessionId, noteId, {
+      title: nextTitle,
+      expected_title: currentTitle,
+    });
+    if (result.status === "error") {
+      // A CAS miss (user renamed the tab meanwhile) is the expected no-op outcome, same
+      // as the old `WHERE title = ?` update affecting zero rows -- only real failures
+      // propagate.
+      if (isStoreConflictError(result.error)) {
+        return;
+      }
+      throw new Error(
+        `Failed to hydrate summary ${noteId} title: ${result.error}`,
+      );
+    }
   });
 }

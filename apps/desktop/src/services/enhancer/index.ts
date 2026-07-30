@@ -422,7 +422,6 @@ export class EnhancerService {
       await updateSummaryDocumentTitleIfCurrent({
         sessionId,
         noteId,
-        templateId,
         currentTitle: note.title,
         nextTitle: title,
       });

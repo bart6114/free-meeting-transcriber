@@ -103,6 +103,9 @@ const COALESCE_WINDOW: Duration = Duration::from_secs(2);
 pub enum WatchAction {
     Ignore,
     Refresh(String),
+    /// An external edit under `templates/` -- rescans the in-memory templates index
+    /// (Phase E1; templates have no SQL half to refresh).
+    RefreshTemplates,
 }
 
 /// Pure routing decision: given a vault-relative path and whether its
@@ -127,10 +130,21 @@ pub fn classify_event(relative: &str, journal_match: bool) -> WatchAction {
         return WatchAction::Ignore;
     }
 
+    if is_templates_path(relative) {
+        return WatchAction::RefreshTemplates;
+    }
+
     match session_id_for_relative_path(relative) {
         Some(id) => WatchAction::Refresh(id),
         None => WatchAction::Ignore,
     }
+}
+
+/// Any change under `templates/` (including `.deleted-defaults.json` -- a tombstone
+/// edit changes which defaults exist) rescans the whole templates index; the map is
+/// small enough that per-file granularity isn't worth the bookkeeping.
+fn is_templates_path(relative: &str) -> bool {
+    relative == "templates" || relative.starts_with("templates/")
 }
 
 /// Extracts `<id>` from a `sessions/<id>` or `sessions/<id>/...` relative
@@ -152,9 +166,13 @@ fn is_trash_path(relative: &str) -> bool {
     relative == ".trash" || relative.starts_with(".trash/")
 }
 
-/// This app's own SQLite database file(s) -- normally live outside the
-/// vault entirely (`db.rs`'s `desktop_db_dir`), but guarded here too in
-/// case a deployment ever points the db path inside the vault.
+/// The retired SQLite database and its sidecars. The app-data dir that used
+/// to hold `app.db` is also the *default* vault base, so these can genuinely
+/// sit inside the vault. `legacy_db` renames the live names (`app.db`,
+/// `app.db-wal`, `app.db-shm`) to `app.db.pre-files-backup*` at startup, and
+/// a user may restore a backup by hand at any time, so the prefix match
+/// deliberately covers both spellings: neither a not-yet-retired database nor
+/// a restored backup may ever trigger a refresh.
 fn is_app_db_path(relative: &str) -> bool {
     relative
         .split('/')
@@ -216,15 +234,25 @@ fn is_ignored_relative_path(relative: &str) -> bool {
 /// need a refresh. Factored out from `run` so it's directly testable
 /// against a real `SessionStore` (see the `real_journal_end_to_end` tests
 /// below) without needing a live FSEvents stream.
-async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> HashSet<String> {
-    let mut ids = HashSet::new();
+async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> RefreshPlan {
+    let mut plan = RefreshPlan::default();
     for relative in changed {
         let journal_match = store.journal_matches_current_file(relative);
-        if let WatchAction::Refresh(id) = classify_event(relative, journal_match) {
-            ids.insert(id);
+        match classify_event(relative, journal_match) {
+            WatchAction::Refresh(id) => {
+                plan.session_ids.insert(id);
+            }
+            WatchAction::RefreshTemplates => plan.templates = true,
+            WatchAction::Ignore => {}
         }
     }
-    ids
+    plan
+}
+
+#[derive(Debug, Default, PartialEq)]
+struct RefreshPlan {
+    session_ids: HashSet<String>,
+    templates: bool,
 }
 
 /// Refreshes every id in `ids`, one at a time. A failure on one session is
@@ -246,8 +274,12 @@ async fn refresh_ids(store: &SessionStore, ids: HashSet<String>) {
 }
 
 async fn handle_batch(store: &SessionStore, changed: &HashSet<String>) {
-    let ids = ids_to_refresh(store, changed).await;
-    refresh_ids(store, ids).await;
+    let plan = ids_to_refresh(store, changed).await;
+    refresh_ids(store, plan.session_ids).await;
+    if plan.templates {
+        store.index_refresh_templates().await;
+        tracing::info!("vault watch: refreshed templates index from external change");
+    }
 }
 
 pub fn spawn(app: AppHandle) {
@@ -341,11 +373,53 @@ mod tests {
 
     // -- additional routing coverage --
 
+    /// Enhanced docs live one level deeper (`sessions/<id>/enhanced/<doc>.md`), but
+    /// session-id extraction only looks at the first two segments -- a nested external
+    /// edit must still refresh its session, and a deleted doc's trash destination must
+    /// stay ignored like all `.trash/` paths.
+    #[test]
+    fn nested_enhanced_doc_paths_refresh_their_session() {
+        assert!(matches!(
+            classify_event("sessions/s1/enhanced/doc-1.md", false),
+            WatchAction::Refresh(id) if id == "s1"
+        ));
+        assert!(matches!(
+            classify_event(".trash/2026-07-26/sessions/s1/enhanced/doc-1.md", false),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event("sessions/s1/enhanced/.tmp-1234-5678-doc-1.md", false),
+            WatchAction::Ignore
+        ));
+    }
+
     #[test]
     fn bare_session_folder_path_refreshes() {
         assert!(matches!(
             classify_event("sessions/s1", false),
             WatchAction::Refresh(id) if id == "s1"
+        ));
+    }
+
+    /// Phase E1: external edits under `templates/` refresh the in-memory templates
+    /// index. Own writes still win, and trashed template files stay ignored.
+    #[test]
+    fn template_paths_refresh_templates_unless_own_write_or_trash() {
+        assert!(matches!(
+            classify_event("templates/t-1.json", false),
+            WatchAction::RefreshTemplates
+        ));
+        assert!(matches!(
+            classify_event("templates/.deleted-defaults.json", false),
+            WatchAction::RefreshTemplates
+        ));
+        assert!(matches!(
+            classify_event("templates/t-1.json", true),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event(".trash/2026-07-26/templates/t-1.json", false),
+            WatchAction::Ignore
         ));
     }
 
@@ -365,6 +439,28 @@ mod tests {
         ));
         assert!(matches!(
             classify_event("app.db-wal", false),
+            WatchAction::Ignore
+        ));
+        for retired in [
+            "app.db.pre-files-backup",
+            "app.db.pre-files-backup-wal",
+            "app.db.pre-files-backup-shm",
+        ] {
+            assert!(
+                matches!(classify_event(retired, false), WatchAction::Ignore),
+                "{retired} must be ignored"
+            );
+        }
+    }
+
+    /// `migrate.rs`'s one-time-repair marker is gone along with the SQLite
+    /// store it repaired, but the file it wrote still sits at the root of
+    /// every vault that ran it. Top-level non-session files classify as
+    /// `Ignore` by default, so the leftover is inert without a named rule.
+    #[test]
+    fn the_retired_store_migration_marker_is_inert() {
+        assert!(matches!(
+            classify_event(".store-migrated-v1", false),
             WatchAction::Ignore
         ));
     }
@@ -420,15 +516,15 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
+            event: None,
+            folder: None,
         }
     }
 
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 
@@ -440,7 +536,7 @@ mod tests {
 
         // Simulate the FileChanged event vault_watch would receive for its own note write.
         let changed = HashSet::from(["sessions/s1/_memo.md".to_string()]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert!(
             ids.is_empty(),
@@ -461,7 +557,7 @@ mod tests {
         .unwrap();
 
         let changed = HashSet::from(["sessions/s1/_meta.json".to_string()]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
     }
@@ -474,16 +570,15 @@ mod tests {
         std::fs::remove_file(vault.path().join("sessions/s1/_meta.json")).unwrap();
 
         let changed = HashSet::from(["sessions/s1/_meta.json".to_string()]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
 
         handle_batch(&store, &changed).await;
 
-        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(n, 0, "index row must be gone");
+        assert!(
+            store.session_get("s1").is_none(),
+            "index entry must be gone"
+        );
         assert!(
             vault.path().join("sessions/s1/_memo.md").is_file(),
             "the watcher must never touch files -- only the index row is affected"
@@ -506,7 +601,7 @@ mod tests {
             "sessions/s1/_meta.json".to_string(),
             "sessions/s1/other.md".to_string(),
         ]);
-        let ids = ids_to_refresh(&store, &changed).await;
+        let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
     }

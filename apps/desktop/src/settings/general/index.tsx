@@ -33,7 +33,6 @@ const SETTINGS_FORM_KEYS = [
   "show_tray_icon",
   "notification_detect",
   "telemetry_consent",
-  "consent_auto_send_chat",
   "ai_language",
   "spoken_languages",
   "current_stt_provider",
@@ -53,7 +52,6 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
       show_tray_icon: settingsValue.show_tray_icon,
       notification_detect: settingsValue.notification_detect,
       telemetry_consent: settingsValue.telemetry_consent,
-      consent_auto_send_chat: settingsValue.consent_auto_send_chat,
       ai_language: settingsValue.ai_language,
       spoken_languages: getAdditionalSpokenLanguages(
         settingsValue.ai_language,
@@ -88,7 +86,6 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
         show_tray_icon: normalizedValue.show_tray_icon,
         notification_detect: normalizedValue.notification_detect,
         telemetry_consent: normalizedValue.telemetry_consent,
-        consent_auto_send_chat: normalizedValue.consent_auto_send_chat,
         ai_language: normalizedValue.ai_language,
         spoken_languages: JSON.stringify(normalizedValue.spoken_languages),
       });
@@ -102,7 +99,6 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
         show_tray_icon: normalizedValue.show_tray_icon,
         notification_detect: normalizedValue.notification_detect,
         telemetry_consent: normalizedValue.telemetry_consent,
-        consent_auto_send_chat: normalizedValue.consent_auto_send_chat,
       });
       void analyticsCommands.setProperties({
         set: {
@@ -162,68 +158,46 @@ function SettingsAppContent({
                           {(showTrayIconField) => (
                             <form.Field name="telemetry_consent">
                               {(telemetryConsentField) => (
-                                <form.Field name="consent_auto_send_chat">
-                                  {(meetingDisclosureAutoPostField) => (
-                                    <AppSettingsView
-                                      autostart={{
-                                        value: autostartField.state.value,
-                                        onChange: (val) =>
-                                          autostartField.handleChange(val),
-                                      }}
-                                      autoStopMeetings={{
-                                        value:
-                                          autoStopMeetingsField.state.value,
-                                        onChange: (val) =>
-                                          autoStopMeetingsField.handleChange(
-                                            val,
-                                          ),
-                                      }}
-                                      floatingBar={{
-                                        value:
-                                          floatingBarEnabledField.state.value,
-                                        onChange: (val) =>
-                                          floatingBarEnabledField.handleChange(
-                                            val,
-                                          ),
-                                      }}
-                                      showAppInDock={{
-                                        value: showAppInDockField.state.value,
-                                        onChange: (val) =>
-                                          showAppInDockField.handleChange(val),
-                                      }}
-                                      showTrayIcon={{
-                                        value: showTrayIconField.state.value,
-                                        onChange: (val) =>
-                                          showTrayIconField.handleChange(val),
-                                      }}
-                                      telemetryConsent={{
-                                        value:
-                                          telemetryConsentField.state.value,
-                                        onChange: (val) =>
-                                          telemetryConsentField.handleChange(
-                                            val,
-                                          ),
-                                      }}
-                                      meetingDisclosureAutoPost={{
-                                        value:
-                                          meetingDisclosureAutoPostField.state
-                                            .value,
-                                        onChange: (val) =>
-                                          meetingDisclosureAutoPostField.handleChange(
-                                            val,
-                                          ),
-                                      }}
-                                      audioRetention={{
-                                        value: audioRetention,
-                                        onChange: (val) =>
-                                          setSettingValues({
-                                            audio_retention: val,
-                                            save_recordings: val !== "none",
-                                          }),
-                                      }}
-                                    />
-                                  )}
-                                </form.Field>
+                                <AppSettingsView
+                                  autostart={{
+                                    value: autostartField.state.value,
+                                    onChange: (val) =>
+                                      autostartField.handleChange(val),
+                                  }}
+                                  autoStopMeetings={{
+                                    value: autoStopMeetingsField.state.value,
+                                    onChange: (val) =>
+                                      autoStopMeetingsField.handleChange(val),
+                                  }}
+                                  floatingBar={{
+                                    value: floatingBarEnabledField.state.value,
+                                    onChange: (val) =>
+                                      floatingBarEnabledField.handleChange(val),
+                                  }}
+                                  showAppInDock={{
+                                    value: showAppInDockField.state.value,
+                                    onChange: (val) =>
+                                      showAppInDockField.handleChange(val),
+                                  }}
+                                  showTrayIcon={{
+                                    value: showTrayIconField.state.value,
+                                    onChange: (val) =>
+                                      showTrayIconField.handleChange(val),
+                                  }}
+                                  telemetryConsent={{
+                                    value: telemetryConsentField.state.value,
+                                    onChange: (val) =>
+                                      telemetryConsentField.handleChange(val),
+                                  }}
+                                  audioRetention={{
+                                    value: audioRetention,
+                                    onChange: (val) =>
+                                      setSettingValues({
+                                        audio_retention: val,
+                                        save_recordings: val !== "none",
+                                      }),
+                                  }}
+                                />
                               )}
                             </form.Field>
                           )}

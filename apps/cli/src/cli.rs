@@ -23,11 +23,11 @@ pub struct Args {
     #[arg(
         long,
         global = true,
-        env = "FMTR_DB_PATH",
+        env = "FMTR_VAULT_PATH",
         hide_env_values = true,
-        value_name = "FILE"
+        value_name = "DIR"
     )]
-    pub db_path: Option<PathBuf>,
+    pub vault_path: Option<PathBuf>,
 
     #[arg(long, global = true)]
     pub json: bool,
@@ -38,7 +38,7 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Check the local CLI and database connection without changing data
+    /// Check the local CLI and vault access without changing data
     Doctor,
     /// Browse and export meetings
     Meetings {

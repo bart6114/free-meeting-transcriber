@@ -2,55 +2,112 @@ use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
-use super::{SessionStore, StoreError, paths};
+use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
 
-#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
-pub struct SessionMeta {
-    pub id: String,
-    pub title: String,
+// The `_meta.json` schema is shared with the read-only vault consumers (fmtr CLI/MCP);
+// the type lives in `hypr-vault-read` so both sides parse the same shape.
+pub use hypr_vault_read::SessionMeta;
+
+/// Partial update for `_meta.json`: `None` means "leave as-is", so callers can patch a single
+/// field without knowing the rest. There is deliberately no way to clear a field back to
+/// absent -- no mutation site needs that today.
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, Default, PartialEq)]
+pub struct SessionMetaPatch {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub title: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub started_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ended_at: Option<String>,
-    pub created_at: String,
-    pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub created_at: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tags: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub event: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
 }
 
 impl SessionStore {
     pub async fn write_meta(&self, meta: &SessionMeta) -> Result<(), StoreError> {
+        validate_session_id(&meta.id)?;
+        let guard = self.lock_writes().await;
+        self.write_meta_locked(&guard, meta).await
+    }
+
+    async fn write_meta_locked(
+        &self,
+        guard: &WriteGuard<'_>,
+        meta: &SessionMeta,
+    ) -> Result<(), StoreError> {
         let meta_json =
             serde_json::to_vec_pretty(meta).map_err(|e| StoreError::Serialize(e.to_string()))?;
 
-        self.write_file(paths::meta_path(&meta.id), meta_json)
+        self.write_file_locked(guard, paths::meta_path(&meta.id), meta_json)
             .await?;
 
-        let pool = self.pool();
-        let id = meta.id.clone();
-        let title = meta.title.clone();
-        let started_at = meta.started_at.as_deref().unwrap_or("");
-        let ended_at = meta.ended_at.as_deref().unwrap_or("");
-        let created_at = meta.created_at.clone();
-
-        sqlx::query(
-            "INSERT INTO sessions (id, title, started_at, ended_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               title = excluded.title,
-               started_at = excluded.started_at,
-               ended_at = excluded.ended_at,
-               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-        )
-        .bind(&id)
-        .bind(&title)
-        .bind(started_at)
-        .bind(ended_at)
-        .bind(&created_at)
-        .execute(pool)
-        .await
-        .map_err(|e| StoreError::Db(e.to_string()))?;
+        // Index write-through directly after the file write (file truth).
+        self.index_upsert_meta(meta);
+        self.notify_index_changed(super::IndexEntity::Sessions, vec![meta.id.clone()]);
 
         Ok(())
     }
 
+    /// Read-modify-write partial update of `_meta.json`, then the same file-first dual-write
+    /// as `write_meta`. Errors (rather than synthesizing a fresh meta) when the session has no
+    /// `_meta.json`: every store-created session has one, and inventing one here would let a
+    /// title edit racing a delete quietly resurrect the session folder.
+    ///
+    /// The write lock is held across the read *and* the write: two concurrent patches that
+    /// both read the pre-patch meta would otherwise each write a whole file back, and the
+    /// loser's fields would vanish.
+    pub async fn update_meta(&self, id: &str, patch: SessionMetaPatch) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+
+        let mut meta = self
+            .read_meta(id)
+            .await?
+            .ok_or_else(|| StoreError::Io(format!("session {id} has no _meta.json to update")))?;
+
+        let SessionMetaPatch {
+            title,
+            started_at,
+            ended_at,
+            created_at,
+            tags,
+            event,
+            folder,
+        } = patch;
+
+        if let Some(title) = title {
+            meta.title = title;
+        }
+        if let Some(started_at) = started_at {
+            meta.started_at = Some(started_at);
+        }
+        if let Some(ended_at) = ended_at {
+            meta.ended_at = Some(ended_at);
+        }
+        if let Some(created_at) = created_at {
+            meta.created_at = created_at;
+        }
+        if let Some(tags) = tags {
+            meta.tags = tags;
+        }
+        if let Some(event) = event {
+            meta.event = Some(event);
+        }
+        if let Some(folder) = folder {
+            meta.folder = Some(folder);
+        }
+
+        self.write_meta_locked(&guard, &meta).await
+    }
+
     pub async fn read_meta(&self, id: &str) -> Result<Option<SessionMeta>, StoreError> {
+        validate_session_id(id)?;
         let vault_base = self.vault_base.clone();
         let id = id.to_string();
 
@@ -82,31 +139,24 @@ impl SessionStore {
     }
 
     pub async fn write_note(&self, id: &str, markdown: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
         let note_bytes = markdown.as_bytes().to_vec();
         self.write_file(paths::note_path(id), note_bytes).await?;
 
-        let pool = self.pool();
-        let id = id.to_string();
-        let markdown = markdown.to_string();
-
-        sqlx::query(
-            "INSERT INTO session_documents (id, session_id, kind, body_format, body, updated_at)
-             VALUES (?, ?, 'note', 'md', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               body = excluded.body,
-               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-        )
-        .bind(format!("{}:note", &id))
-        .bind(&id)
-        .bind(&markdown)
-        .execute(pool)
-        .await
-        .map_err(|e| StoreError::Db(e.to_string()))?;
+        // Store what `read_note` would return, not the raw bytes: a body that starts with an
+        // exporter-shaped frontmatter block would otherwise sit un-stripped in the index and
+        // change under the user on the next rescan.
+        self.index_set_note(
+            id,
+            Some(super::strip_leading_frontmatter(markdown.to_string())),
+        );
+        self.notify_index_changed(super::IndexEntity::Sessions, vec![id.to_string()]);
 
         Ok(())
     }
 
     pub async fn read_note(&self, id: &str) -> Result<Option<String>, StoreError> {
+        validate_session_id(id)?;
         let vault_base = self.vault_base.clone();
         let id = id.to_string();
 
@@ -132,36 +182,39 @@ impl SessionStore {
         kind: &str,
         markdown: &str,
     ) -> Result<(), StoreError> {
+        validate_session_id(id)?;
         let doc_bytes = markdown.as_bytes().to_vec();
         self.write_file(paths::document_path(id, kind), doc_bytes)
             .await?;
 
-        let pool = self.pool();
-        let id = id.to_string();
-        let kind = kind.to_string();
-        let markdown = markdown.to_string();
-
-        sqlx::query(
-            "INSERT INTO session_documents (id, session_id, kind, body_format, body, updated_at)
-             VALUES (?, ?, ?, 'md', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               body = excluded.body,
-               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-        )
-        .bind(format!("{}:{}", &id, &kind))
-        .bind(&id)
-        .bind(&kind)
-        .bind(&markdown)
-        .execute(pool)
-        .await
-        .map_err(|e| StoreError::Db(e.to_string()))?;
+        self.index_upsert_doc(&super::index::legacy_doc(id, kind, markdown.to_string()));
+        self.notify_index_changed(super::IndexEntity::Docs, vec![id.to_string()]);
 
         Ok(())
     }
 
+    /// Moves the whole `sessions/<id>/` folder to trash (undo-able via `restore_session`).
+    ///
+    /// The id is validated first: `sessions/<id>` for an empty id resolves to `sessions/`
+    /// itself, so an unguarded delete would trash the user's entire session tree in one
+    /// call -- and `restore_session` could not put it back.
     pub async fn delete_session(&self, id: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+
         let vault_base = self.vault_base.clone();
         let id_str = id.to_string();
+
+        // Drop the session's live transcript buffer *before* trashing the folder, and keep
+        // the `live` lock held across the trash. A debounced flush still holding words for
+        // this session would otherwise fire afterwards, and `persist_transcript` ->
+        // `write_file` -> `create_dir_all` would recreate `sessions/<id>/` -- resurrecting a
+        // ghost session and, worse, making `restore_session` fail with ENOTEMPTY because the
+        // destination it renames onto now exists. Any flusher that wakes up during the delete
+        // blocks here, then finds no buffer and no-ops. (Recording into a session with no
+        // `_meta.json` still persists, deliberately: this only drops buffers for a session
+        // that was just deleted.)
+        let mut live = self.live.lock().await;
+        live.remove(id);
 
         // Move folder to trash first (file operation)
         tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
@@ -173,36 +226,10 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
 
-        // Delete from database in a single transaction
-        let pool = self.pool();
-        let id = id.to_string();
+        drop(live);
 
-        let mut tx = pool
-            .begin()
-            .await
-            .map_err(|e| StoreError::Db(format!("failed to start transaction: {}", e)))?;
-
-        sqlx::query("DELETE FROM sessions WHERE id = ?")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-
-        sqlx::query("DELETE FROM session_documents WHERE session_id = ?")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-
-        sqlx::query("DELETE FROM transcripts WHERE session_id = ?")
-            .bind(&id)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StoreError::Db(e.to_string()))?;
-
-        tx.commit()
-            .await
-            .map_err(|e| StoreError::Db(format!("failed to commit transaction: {}", e)))?;
+        // The folder is confirmed gone (trashed) -- clear every index map.
+        self.index_remove_session_and_notify(id);
 
         Ok(())
     }
@@ -213,6 +240,7 @@ impl SessionStore {
     /// (not an error) when there's nothing to restore, e.g. the toast window already lapsed
     /// past midnight or the session was never deleted.
     pub async fn restore_session(&self, id: &str) -> Result<bool, StoreError> {
+        validate_session_id(id)?;
         let vault_base = self.vault_base.clone();
         let id_owned = id.to_string();
 
@@ -316,15 +344,15 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
+            event: None,
+            folder: None,
         }
     }
 
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 
@@ -336,11 +364,7 @@ mod tests {
             .await
             .unwrap();
         assert!(vault.path().join("sessions/s1/_meta.json").is_file());
-        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(title, "Jury feedback");
+        assert_eq!(store.session_get("s1").unwrap().meta.title, "Jury feedback");
         assert_eq!(
             store.read_meta("s1").await.unwrap().unwrap().title,
             "Jury feedback"
@@ -348,23 +372,138 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn write_meta_round_trips_event_folder_and_tags_through_file_and_index() {
+        let (store, vault) = test_store().await;
+        let mut m = meta("s1", "Sprint sync");
+        m.event = Some(serde_json::json!({
+            "tracking_id": "evt-1",
+            "meeting_link": "https://example.com/x",
+        }));
+        m.folder = Some("work/standups".to_string());
+        m.tags = vec!["planning".to_string(), "q3".to_string()];
+        store.write_meta(&m).await.unwrap();
+
+        assert_eq!(store.read_meta("s1").await.unwrap().unwrap(), m);
+
+        let indexed = store.session_get("s1").unwrap().meta;
+        assert_eq!(indexed.event, m.event);
+        assert_eq!(indexed.folder.as_deref(), Some("work/standups"));
+
+        let raw = std::fs::read_to_string(vault.path().join("sessions/s1/_meta.json")).unwrap();
+        assert!(raw.contains("planning"));
+    }
+
+    /// Old `_meta.json` files (written before `event`/`folder` existed) must keep
+    /// deserializing -- the new fields default to absent, not an error.
+    #[tokio::test]
+    async fn read_meta_accepts_pre_event_folder_files() {
+        let (store, vault) = test_store().await;
+        let dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            br#"{"id":"s1","title":"Old","started_at":null,"ended_at":null,"created_at":"2026-07-01T00:00:00Z","tags":[]}"#,
+        )
+        .unwrap();
+
+        let m = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(m.event, None);
+        assert_eq!(m.folder, None);
+
+        store.write_meta(&m).await.unwrap();
+        let indexed = store.session_get("s1").unwrap().meta;
+        assert_eq!(indexed.event, None);
+        assert_eq!(indexed.folder, None);
+    }
+
+    #[tokio::test]
+    async fn update_meta_patches_only_the_given_fields() {
+        let (store, _vault) = test_store().await;
+        let mut m = meta("s1", "Original");
+        m.event = Some(serde_json::json!({"tracking_id": "evt-1"}));
+        store.write_meta(&m).await.unwrap();
+
+        store
+            .update_meta(
+                "s1",
+                SessionMetaPatch {
+                    title: Some("Renamed".to_string()),
+                    tags: Some(vec!["kept".to_string()]),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        let after = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(after.title, "Renamed");
+        assert_eq!(after.tags, vec!["kept".to_string()]);
+        assert_eq!(after.event, m.event, "unpatched fields must survive");
+        assert_eq!(after.created_at, m.created_at);
+
+        assert_eq!(
+            store.session_get("s1").unwrap().meta.title,
+            "Renamed",
+            "write-through must reach the index"
+        );
+    }
+
+    /// A patch against a session with no `_meta.json` must fail loudly instead of inventing
+    /// one -- otherwise a title edit racing a delete would resurrect the session folder.
+    #[tokio::test]
+    async fn update_meta_errors_when_meta_file_is_missing() {
+        let (store, vault) = test_store().await;
+        let result = store
+            .update_meta(
+                "ghost",
+                SessionMetaPatch {
+                    title: Some("nope".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await;
+        assert!(result.is_err());
+        assert!(!vault.path().join("sessions/ghost").exists());
+    }
+
+    #[tokio::test]
     async fn write_note_writes_file_and_index() {
         let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
         store
             .write_note("s1", "# Meeting notes\n\nDiscussed: X, Y, Z")
             .await
             .unwrap();
         assert!(vault.path().join("sessions/s1/_memo.md").is_file());
-        let body: String =
-            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:note'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(body, "# Meeting notes\n\nDiscussed: X, Y, Z");
+        assert_eq!(
+            store.session_get("s1").unwrap().note_markdown.as_deref(),
+            Some("# Meeting notes\n\nDiscussed: X, Y, Z")
+        );
         assert_eq!(
             store.read_note("s1").await.unwrap().unwrap(),
             "# Meeting notes\n\nDiscussed: X, Y, Z"
         );
+    }
+
+    #[tokio::test]
+    async fn write_note_indexes_what_read_note_would_return() {
+        // An exporter-shaped frontmatter block is stripped on read, so it must be stripped on
+        // the write-through too -- otherwise the index and the file disagree until the next
+        // rescan, at which point the displayed note silently changes under the user.
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_note("s1", "---\nid: legacy-1\nposition: 0\n---\n\nReal body")
+            .await
+            .unwrap();
+
+        let indexed = store.session_get("s1").unwrap().note_markdown;
+        let on_read = store.read_note("s1").await.unwrap();
+        assert_eq!(
+            indexed, on_read,
+            "index must hold exactly what read_note returns"
+        );
+        assert_eq!(indexed.as_deref(), Some("Real body"));
     }
 
     #[tokio::test]
@@ -375,18 +514,9 @@ mod tests {
             .await
             .unwrap();
         assert!(vault.path().join("sessions/s1/summary.md").is_file());
-        let body: String =
-            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:summary'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(body, "## Summary\n\nKey points: A, B, C");
-        let doc_kind: String =
-            sqlx::query_scalar("SELECT kind FROM session_documents WHERE id='s1:summary'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(doc_kind, "summary");
+        let doc = store.enhanced_doc_get("s1:summary").unwrap();
+        assert_eq!(doc.markdown, "## Summary\n\nKey points: A, B, C");
+        assert_eq!(doc.kind, "summary");
     }
 
     #[tokio::test]
@@ -399,12 +529,21 @@ mod tests {
             .await
             .unwrap();
 
-        // Seed a transcript row
-        sqlx::query("INSERT INTO transcripts (id, session_id, words_json) VALUES (?, ?, ?)")
-            .bind("t1")
-            .bind("s1")
-            .bind("[]")
-            .execute(store.pool())
+        store
+            .write_transcript(
+                "s1",
+                hypr_fs_format::TranscriptWithData {
+                    id: "t1".to_string(),
+                    user_id: String::new(),
+                    created_at: "2026-07-24T00:00:00Z".to_string(),
+                    session_id: "s1".to_string(),
+                    started_at: 0.0,
+                    ended_at: None,
+                    memo_md: String::new(),
+                    words: vec![],
+                    speaker_hints: vec![],
+                },
+            )
             .await
             .unwrap();
 
@@ -413,25 +552,9 @@ mod tests {
 
         assert!(!vault.path().join("sessions/s1").is_dir());
 
-        let session_count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(session_count, 0);
-
-        let doc_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM session_documents WHERE session_id='s1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(doc_count, 0);
-
-        let transcript_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(transcript_count, 0);
+        assert!(store.session_get("s1").is_none());
+        assert!(store.session_enhanced_docs("s1").is_empty());
+        assert!(store.session_transcripts("s1").is_empty());
 
         // Verify trashed content exists under .trash/
         let trash_root = vault.path().join(".trash");
@@ -459,6 +582,152 @@ mod tests {
             found_meta,
             "trashed session's _meta.json should exist under .trash/<date>/sessions/s1/"
         );
+    }
+
+    /// `sessions/<id>` for an empty id is `sessions/` itself, so an unguarded delete would
+    /// move the user's ENTIRE session tree to trash in one call -- and `restore_session("")`
+    /// could never bring it back, because it looks for `sessions/` *inside* the trashed
+    /// sessions dir.
+    #[tokio::test]
+    async fn delete_session_with_an_empty_id_is_rejected_and_spares_the_whole_sessions_tree() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "Keep me")).await.unwrap();
+        store.write_meta(&meta("s2", "Me too")).await.unwrap();
+
+        assert!(store.delete_session("").await.is_err());
+
+        assert!(vault.path().join("sessions/s1/_meta.json").is_file());
+        assert!(vault.path().join("sessions/s2/_meta.json").is_file());
+        assert!(!vault.path().join(".trash").exists());
+        assert!(store.session_get("s1").is_some());
+    }
+
+    /// `Path::join` with an absolute path replaces rather than appends, so an absolute id
+    /// escapes the vault entirely -- and `move_to_trash`'s `strip_prefix` fails open on it.
+    #[tokio::test]
+    async fn delete_session_with_an_absolute_id_is_rejected_and_touches_nothing_outside_the_vault()
+    {
+        let (store, vault) = test_store().await;
+        let outside = vault.path().parent().unwrap().join("precious-documents");
+        std::fs::create_dir_all(&outside).unwrap();
+        std::fs::write(outside.join("thesis.md"), b"years of work").unwrap();
+
+        let result = store.delete_session(outside.to_str().unwrap()).await;
+
+        assert!(result.is_err());
+        assert!(outside.join("thesis.md").is_file());
+    }
+
+    #[tokio::test]
+    async fn restore_session_rejects_unsafe_ids() {
+        let (store, _vault) = test_store().await;
+        for id in ["", "..", "/tmp"] {
+            assert!(store.restore_session(id).await.is_err(), "{id:?}");
+        }
+    }
+
+    /// REGRESSION (reviewer-found): a debounced transcript flush still in flight when a
+    /// session is deleted used to call `persist_transcript` -> `write_file` ->
+    /// `create_dir_all`, recreating `sessions/<id>/`. That resurrected a ghost session AND
+    /// permanently broke undo, because `restore_session`'s rename onto the (now existing)
+    /// destination fails with ENOTEMPTY.
+    #[tokio::test]
+    async fn delete_session_drops_the_live_buffer_so_a_pending_flush_cannot_resurrect_the_folder() {
+        let (store, vault) = test_store().await;
+        store
+            .write_meta(&meta("s1", "Being deleted"))
+            .await
+            .unwrap();
+        store
+            .write_note("s1", "notes worth restoring")
+            .await
+            .unwrap();
+
+        // A dirty buffer with a debounce timer already armed and never flushed.
+        store
+            .append_transcript(
+                "s1",
+                super::super::TranscriptDelta {
+                    transcript_id: "t1".to_string(),
+                    new_words: vec![hypr_fs_format::TranscriptWord {
+                        id: Some("w0".to_string()),
+                        text: "mid-recording".to_string(),
+                        start_ms: 0.0,
+                        end_ms: 0.0,
+                        channel: 0.0,
+                        speaker: None,
+                        metadata: None,
+                    }],
+                    replaced_ids: vec![],
+                    new_hints: vec![],
+                    started_at_ms: 0.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        store.delete_session("s1").await.unwrap();
+        assert!(!vault.path().join("sessions/s1").exists());
+
+        // Let the armed debounce timer fire well past its deadline.
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+        assert!(
+            !vault.path().join("sessions/s1").exists(),
+            "a pending flush must not recreate the deleted session folder"
+        );
+
+        let restored = store.restore_session("s1").await.unwrap();
+        assert!(restored, "undo-delete must still work");
+        assert_eq!(
+            std::fs::read_to_string(vault.path().join("sessions/s1/_memo.md")).unwrap(),
+            "notes worth restoring"
+        );
+    }
+
+    /// Two patches of different fields racing each other must both survive: the write lock
+    /// spans the read *and* the write, so neither can compute its new whole-file value from
+    /// bytes the other is about to replace.
+    #[tokio::test]
+    async fn concurrent_update_meta_calls_do_not_lose_each_others_fields() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "Original")).await.unwrap();
+        let store = std::sync::Arc::new(store);
+
+        let a = {
+            let store = store.clone();
+            async move {
+                store
+                    .update_meta(
+                        "s1",
+                        SessionMetaPatch {
+                            title: Some("Renamed".to_string()),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+            }
+        };
+        let b = {
+            let store = store.clone();
+            async move {
+                store
+                    .update_meta(
+                        "s1",
+                        SessionMetaPatch {
+                            tags: Some(vec!["tagged".to_string()]),
+                            ..Default::default()
+                        },
+                    )
+                    .await
+            }
+        };
+        let (ra, rb) = tokio::join!(a, b);
+        ra.unwrap();
+        rb.unwrap();
+
+        let after = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(after.title, "Renamed");
+        assert_eq!(after.tags, vec!["tagged".to_string()]);
     }
 
     #[tokio::test]
@@ -513,30 +782,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_note_file_first_survives_index_failure() {
-        let (store, vault) = test_store().await;
-        // Drop session_documents table to force index failure
-        sqlx::query("DROP TABLE session_documents")
-            .execute(store.pool())
-            .await
-            .unwrap();
-
-        // Call write_note; should return Err(StoreError::Db)
-        let result = store.write_note("s1", "# Test note").await;
-        assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), StoreError::Db(_)));
-
-        // But the file should exist on disk with correct content
-        let file_path = vault.path().join("sessions/s1/_memo.md");
-        assert!(
-            file_path.exists(),
-            "file should exist despite index failure"
-        );
-        let content = std::fs::read_to_string(&file_path).unwrap();
-        assert_eq!(content, "# Test note");
-    }
-
-    #[tokio::test]
     async fn delete_session_on_nonexistent_session_succeeds() {
         let (store, _vault) = test_store().await;
         // delete_session on a session that doesn't exist should succeed
@@ -563,18 +808,9 @@ mod tests {
         assert!(vault.path().join("sessions/s1/_meta.json").is_file());
         assert!(vault.path().join("sessions/s1/_memo.md").is_file());
 
-        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(title, "Jury feedback");
-
-        let body: String =
-            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:note'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(body, "Some notes");
+        let record = store.session_get("s1").unwrap();
+        assert_eq!(record.meta.title, "Jury feedback");
+        assert_eq!(record.note_markdown.as_deref(), Some("Some notes"));
     }
 
     #[tokio::test]

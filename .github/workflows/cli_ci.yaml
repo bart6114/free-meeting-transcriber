@@ -12,12 +12,7 @@ on:
       - .agents/skills/**
       - apps/cli/**
       - crates/agent-access/**
-      - crates/cloudsync/**
       - crates/cli-docs/**
-      - crates/db-app/**
-      - crates/db-change/**
-      - crates/db-core/**
-      - crates/db-migrate/**
       - crates/tiptap/**
       - docs/**
       - skills/**
@@ -34,12 +29,7 @@ on:
       - .agents/skills/**
       - apps/cli/**
       - crates/agent-access/**
-      - crates/cloudsync/**
       - crates/cli-docs/**
-      - crates/db-app/**
-      - crates/db-change/**
-      - crates/db-core/**
-      - crates/db-migrate/**
       - crates/tiptap/**
       - docs/**
       - skills/**
@@ -71,17 +61,11 @@ jobs:
       - run: |
           cargo test --locked -p agent-access
           cargo test --locked -p fmtr-cli
-          cargo test --locked -p db-app --lib
-          cargo test --locked -p db-core --lib
-          cargo test --locked -p db-migrate --lib
           cargo test --locked -p tiptap
       - run: |
           cargo clippy --locked \
             -p agent-access \
             -p fmtr-cli \
-            -p db-app \
-            -p db-core \
-            -p db-migrate \
             -p tiptap \
             --all-targets \
             --no-deps \

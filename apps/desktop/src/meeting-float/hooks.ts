@@ -1,11 +1,7 @@
-import { liveQueryClient } from "~/db";
+import { subscribeIndexChanged } from "~/shared/index-query";
+import { DEFAULT_USER_ID } from "~/shared/utils";
 import type { RenderLabelContext } from "~/stt/live-segment";
-
-type MeetingFloatSqlRow = {
-  session_id: string;
-  title: string;
-  owner_user_id: string;
-};
+import { commands, type SessionListEntry } from "~/types/tauri.gen";
 
 export type MeetingFloatData = {
   sessions: Record<
@@ -17,25 +13,34 @@ export type MeetingFloatData = {
   >;
 };
 
-const MEETING_FLOAT_SQL = `
-  SELECT session.id AS session_id, session.title, session.owner_user_id
-  FROM sessions AS session
-`;
-
 export async function loadMeetingFloatData(): Promise<MeetingFloatData> {
-  return mapMeetingFloatRows(
-    await liveQueryClient.execute<MeetingFloatSqlRow>(MEETING_FLOAT_SQL),
-  );
+  const result = await commands.sessionList();
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
+  return mapMeetingFloatEntries(result.data);
 }
 
 export async function subscribeMeetingFloatData(
   onData: (data: MeetingFloatData) => void,
   onError: (error: string) => void,
 ): Promise<() => Promise<void>> {
-  return liveQueryClient.subscribe<MeetingFloatSqlRow>(MEETING_FLOAT_SQL, [], {
-    onData: (rows) => onData(mapMeetingFloatRows(rows)),
-    onError,
+  const push = async () => {
+    try {
+      onData(await loadMeetingFloatData());
+    } catch (error) {
+      onError(error instanceof Error ? error.message : String(error));
+    }
+  };
+
+  const unsubscribe = subscribeIndexChanged("sessions", () => {
+    void push();
   });
+  await push();
+
+  return async () => {
+    unsubscribe();
+  };
 }
 
 export function createMeetingFloatLabelContext(
@@ -50,13 +55,14 @@ export function createMeetingFloatLabelContext(
   };
 }
 
-function mapMeetingFloatRows(rows: MeetingFloatSqlRow[]): MeetingFloatData {
+function mapMeetingFloatEntries(entries: SessionListEntry[]): MeetingFloatData {
   const sessions: MeetingFloatData["sessions"] = {};
 
-  for (const row of rows) {
-    sessions[row.session_id] = {
-      title: row.title,
-      ownerUserId: row.owner_user_id,
+  for (const entry of entries) {
+    sessions[entry.meta.id] = {
+      title: entry.meta.title,
+      // The owner concept died with the workspaces removal (D10).
+      ownerUserId: DEFAULT_USER_ID,
     };
   }
 

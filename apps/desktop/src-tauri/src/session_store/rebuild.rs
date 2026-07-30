@@ -1,18 +1,17 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
-use hypr_fs_format::TranscriptWithData;
-
+use super::index::{IndexEntity, SessionEntry, VAULT_TASKS_KEY, apply_map_value, legacy_doc};
 use super::{SessionStore, StoreError, paths};
 
-/// Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect rows *upserted* this
-/// pass, not the resulting table size. `errors` never aborts the scan -- an unparseable file
-/// is logged here and its existing index row is left untouched (see the hard rule in each
-/// match arm below: corruption must never look like deletion).
+/// Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect entries *derived
+/// from files* this pass, not the resulting index size. `errors` never aborts the scan --
+/// an unparseable file is logged here and its existing index entry is left untouched (see
+/// the hard rule in each match arm below: corruption must never look like deletion).
 #[derive(Debug, Default, Clone, PartialEq, serde::Serialize, specta::Type)]
 pub struct RebuildReport {
     pub sessions: usize,
-    /// Upserted `session_documents` rows this pass -- every `<kind>.md` file including the
-    /// note (`_memo.md`), not just the note.
+    /// Documents read this pass -- every `<kind>.md` file including the note (`_memo.md`)
+    /// and every `enhanced/<doc_id>.md` doc, not just the note.
     pub notes: usize,
     pub transcripts: usize,
     /// Folder ids that have at least one recognized content file (a `<kind>.md` document or
@@ -22,8 +21,13 @@ pub struct RebuildReport {
 }
 
 impl SessionStore {
-    /// One-way: scan sessions/*/ -> upsert index rows; delete index rows whose folder is gone.
-    /// Never writes to the vault -- read-only on the filesystem, write-only on the index.
+    /// One-way: scan sessions/*/ -> reconcile the in-memory index; drop index entries whose
+    /// folder is gone. Never writes to the vault -- read-only on the filesystem, write-only
+    /// on the index. Also reconciles the vault-root tasks file and the templates folder.
+    /// Only the entities whose value actually changed are notified onto the change bus
+    /// (`PartialEq` diff), so the automatic startup/focus rescans stay silent over
+    /// unchanged files -- the search projection and the frontend both ride that bus, and
+    /// a no-op rescan must not re-trigger either.
     pub async fn rebuild_index(&self) -> Result<RebuildReport, StoreError> {
         let mut report = RebuildReport::default();
 
@@ -34,31 +38,57 @@ impl SessionStore {
             let _ = self.refresh_one(id, &mut report).await?;
         }
 
+        // Sessions that vanished from disk are removed (the folder scan succeeded and came
+        // back without them -- the only certainty a prune is allowed to act on).
         let present: HashSet<&str> = folder_ids.iter().map(String::as_str).collect();
-        let stale: Vec<String> = self
-            .all_indexed_session_ids()
-            .await?
-            .into_iter()
-            .filter(|indexed_id| !present.contains(indexed_id.as_str()))
-            .collect();
-        self.delete_session_index_tx(&stale).await?;
+        let stale: Vec<String> = {
+            let index = self.index.read().unwrap();
+            index
+                .sessions
+                .keys()
+                .chain(index.docs.keys())
+                .chain(index.transcripts.keys())
+                .chain(index.tasks.keys())
+                .filter(|id| *id != VAULT_TASKS_KEY && !present.contains(id.as_str()))
+                .cloned()
+                .collect::<HashSet<String>>()
+                .into_iter()
+                .collect()
+        };
+        for id in stale {
+            self.index_remove_session_and_notify(&id);
+        }
+
+        if let Some(tasks) = self.read_index_tasks(paths::vault_tasks_path()).await {
+            let changed = {
+                let mut index = self.index.write().unwrap();
+                apply_map_value(&mut index.tasks, VAULT_TASKS_KEY, tasks)
+            };
+            if changed {
+                self.notify_index_changed(IndexEntity::Tasks, vec![VAULT_TASKS_KEY.to_string()]);
+            }
+        }
+
+        self.index_refresh_templates().await;
 
         Ok(report)
     }
 
-    /// Watcher + focus entry point: re-read one session's files, refresh its index rows.
-    /// Missing `_meta.json` -> delete the session's index rows. Never touches files.
+    /// Watcher + focus entry point: re-read one session's files, refresh its index slice.
+    /// Missing `_meta.json` -> remove the session's index entries. Never touches files.
     ///
-    /// `Err` does not mean nothing happened: any upserts that succeeded before the failing
-    /// artifact are already committed to the index. rebuild/refresh are idempotent, so a
+    /// `Err` does not mean nothing happened: any slices that reconciled before the failing
+    /// artifact are already applied to the index. rebuild/refresh are idempotent, so a
     /// caller can simply retry -- the next pass converges on the same result rather than
     /// double-applying anything.
     pub async fn refresh_session(&self, session_id: &str) -> Result<(), StoreError> {
         let mut report = RebuildReport::default();
-        if let Some(first_error) = self.refresh_one(session_id, &mut report).await? {
-            // Propagate the original variant (Io/Db/Serialize) rather than relabeling every
-            // per-artifact failure as Serialize -- callers may want to distinguish, e.g., a
-            // transient permission error (Io, worth retrying) from real corruption.
+        let first_error = self.refresh_one(session_id, &mut report).await?;
+
+        if let Some(first_error) = first_error {
+            // Propagate the original variant (Io/Serialize) rather than relabeling every
+            // per-artifact failure -- callers may want to distinguish, e.g., a transient
+            // permission error (Io, worth retrying) from real corruption.
             return Err(first_error);
         }
         Ok(())
@@ -66,13 +96,14 @@ impl SessionStore {
 
     /// Shared by `rebuild_index` (looped over every folder) and `refresh_session` (one id).
     /// A missing `_meta.json` means this id has no session identity in the index -- every
-    /// row for it is wiped and we return early without inspecting the other files. Anything
-    /// else that fails to parse is logged and its existing row is left exactly as it was.
+    /// entry for it is removed and we return early without inspecting the other files.
+    /// Anything else that fails to read/parse is logged and its existing entry is left
+    /// exactly as it was; only the entities whose value actually changed are notified.
     ///
     /// Returns the first raw `StoreError` encountered among the per-artifact reads (already
     /// also logged into `report.errors` as a formatted string) so `refresh_session` can hand
     /// its caller the real error variant. The outer `Result` is reserved for failures that
-    /// must abort this session's refresh entirely (index writes, task-join failures).
+    /// must abort this session's refresh entirely (task-join failures).
     async fn refresh_one(
         &self,
         id: &str,
@@ -80,9 +111,9 @@ impl SessionStore {
     ) -> Result<Option<StoreError>, StoreError> {
         let mut first_error: Option<StoreError> = None;
 
-        match self.read_meta(id).await {
+        let meta = match self.read_meta(id).await {
             Ok(None) => {
-                self.delete_session_index_tx(&[id.to_string()]).await?;
+                self.index_remove_session_and_notify(id);
                 match self.session_has_content(id).await {
                     Ok(true) => report.ghost_sessions.push(id.to_string()),
                     Ok(false) => {}
@@ -96,88 +127,185 @@ impl SessionStore {
                 return Ok(first_error);
             }
             Ok(Some(meta)) => {
-                self.upsert_session_row(&meta).await?;
                 report.sessions += 1;
+                Some(meta)
             }
-            Err(e) => record_error(
-                &mut report.errors,
-                &mut first_error,
-                &format!("{id}: _meta.json"),
-                e,
-            ),
-        }
-
-        match self.read_note(id).await {
-            Ok(None) => self.delete_document_row(id, "note").await?,
-            Ok(Some(body)) => {
-                self.upsert_document_row(id, "note", &body).await?;
-                report.notes += 1;
+            Err(e) => {
+                // Unreadable/corrupt: keep the old entry.
+                record_error(
+                    &mut report.errors,
+                    &mut first_error,
+                    &format!("{id}: _meta.json"),
+                    e,
+                );
+                None
             }
-            Err(e) => record_error(
-                &mut report.errors,
-                &mut first_error,
-                &format!("{id}: _memo.md"),
-                e,
-            ),
-        }
+        };
 
-        // "note" is always protected here: either just upserted above, deliberately left
-        // alone after a parse error, or already deleted -- in the last case there's no row
-        // left to prune anyway, so including it unconditionally is harmless.
-        let mut keep_kinds = vec!["note".to_string()];
+        let note = match self.read_note(id).await {
+            Ok(note) => {
+                if note.is_some() {
+                    report.notes += 1;
+                }
+                Some(note)
+            }
+            Err(e) => {
+                record_error(
+                    &mut report.errors,
+                    &mut first_error,
+                    &format!("{id}: _memo.md"),
+                    e,
+                );
+                None
+            }
+        };
+
+        // Documents: both directory listings must succeed before the docs vec is replaced
+        // wholesale -- a failed listing can't tell "gone" from "unlistable", and replacing
+        // from a partial scan would make corruption look like deletion. Individual files
+        // that fail to parse keep their previous entry by id, same invariant.
+        let previous_docs: HashMap<String, super::EnhancedDoc> = {
+            let index = self.index.read().unwrap();
+            index
+                .docs
+                .get(id)
+                .map(|docs| {
+                    docs.iter()
+                        .map(|doc| (doc.id.clone(), doc.clone()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let mut document_scans_succeeded = true;
+        let mut collected_docs = Vec::new();
         match self.scan_document_files(id).await {
             Ok(doc_files) => {
                 for (kind, content) in doc_files {
-                    keep_kinds.push(kind.clone());
                     match content {
                         Ok(body) => {
-                            self.upsert_document_row(id, &kind, &body).await?;
+                            collected_docs.push(legacy_doc(id, &kind, body));
                             report.notes += 1;
                         }
-                        Err(e) => record_error(
-                            &mut report.errors,
-                            &mut first_error,
-                            &format!("{id}: {kind}.md"),
-                            e,
-                        ),
+                        Err(e) => {
+                            record_error(
+                                &mut report.errors,
+                                &mut first_error,
+                                &format!("{id}: {kind}.md"),
+                                e,
+                            );
+                            if let Some(old) = previous_docs.get(&format!("{id}:{kind}")) {
+                                collected_docs.push(old.clone());
+                            }
+                        }
                     }
                 }
-                self.prune_document_rows(id, &keep_kinds).await?;
             }
             Err(e) => {
-                // Couldn't even list the directory -- treat like any other unparseable file:
-                // log it, touch nothing. Pruning here would risk mistaking "can't tell" for
-                // "definitely gone".
+                document_scans_succeeded = false;
                 record_error(&mut report.errors, &mut first_error, id, e);
             }
         }
-
-        match self.read_transcript_json(id).await {
-            Ok(file) => {
-                let mut keep_ids = Vec::with_capacity(file.transcripts.len());
-                for t in &file.transcripts {
-                    self.upsert_transcript_row(id, t).await?;
-                    keep_ids.push(t.id.clone());
-                    report.transcripts += 1;
+        match self.scan_enhanced_doc_files(id).await {
+            Ok(enhanced_files) => {
+                for (doc_id, parsed) in enhanced_files {
+                    match parsed {
+                        Ok(doc) => {
+                            collected_docs.push(doc);
+                            report.notes += 1;
+                        }
+                        Err(e) => {
+                            record_error(
+                                &mut report.errors,
+                                &mut first_error,
+                                &format!("{id}: enhanced/{doc_id}.md"),
+                                e,
+                            );
+                            if let Some(old) = previous_docs.get(&doc_id) {
+                                collected_docs.push(old.clone());
+                            }
+                        }
+                    }
                 }
-                // A missing transcript.json parses to an empty list via read_transcript_json,
-                // so this also correctly prunes every row when the file itself is gone.
-                self.prune_transcript_rows(id, &keep_ids).await?;
             }
-            Err(e) => record_error(
-                &mut report.errors,
-                &mut first_error,
-                &format!("{id}: transcript.json"),
-                e,
-            ),
+            Err(e) => {
+                document_scans_succeeded = false;
+                record_error(&mut report.errors, &mut first_error, id, e);
+            }
         }
+        let docs = document_scans_succeeded.then_some(collected_docs);
+
+        let transcripts = match self.read_transcript_json(id).await {
+            Ok(file) => {
+                report.transcripts += file.transcripts.len();
+                // A missing transcript.json parses to an empty list via read_transcript_json,
+                // so this also correctly removes the entry when the file itself is gone.
+                Some(file.transcripts)
+            }
+            Err(e) => {
+                record_error(
+                    &mut report.errors,
+                    &mut first_error,
+                    &format!("{id}: transcript.json"),
+                    e,
+                );
+                None
+            }
+        };
+
+        let tasks = self.read_index_tasks(paths::session_tasks_path(id)).await;
+
+        let mut changes = Vec::new();
+        {
+            let mut index = self.index.write().unwrap();
+
+            if let Some(new_meta) = meta {
+                let old = index.sessions.get(id);
+                let note_markdown = match note.clone() {
+                    Some(note) => note,
+                    None => old.and_then(|entry| entry.note_markdown.clone()),
+                };
+                let entry = SessionEntry {
+                    meta: new_meta,
+                    note_markdown,
+                };
+                if old != Some(&entry) {
+                    index.sessions.insert(id.to_string(), entry);
+                    changes.push((IndexEntity::Sessions, id.to_string()));
+                }
+            } else if let Some(Some(note)) = note {
+                // Meta unreadable (kept as-is) but the note read fine: still refresh it.
+                if let Some(entry) = index.sessions.get_mut(id) {
+                    if entry.note_markdown.as_ref() != Some(&note) {
+                        entry.note_markdown = Some(note);
+                        changes.push((IndexEntity::Sessions, id.to_string()));
+                    }
+                }
+            }
+
+            if let Some(new_docs) = docs {
+                if apply_map_value(&mut index.docs, id, new_docs) {
+                    changes.push((IndexEntity::Docs, id.to_string()));
+                }
+            }
+            if let Some(new_transcripts) = transcripts {
+                if apply_map_value(&mut index.transcripts, id, new_transcripts) {
+                    changes.push((IndexEntity::Transcripts, id.to_string()));
+                }
+            }
+            if let Some(new_tasks) = tasks {
+                if apply_map_value(&mut index.tasks, id, new_tasks) {
+                    changes.push((IndexEntity::Tasks, id.to_string()));
+                }
+            }
+        }
+        self.notify_many(changes);
 
         Ok(first_error)
     }
 
     // -- filesystem reads (read-only; never writes to the vault) --
 
-    async fn scan_session_ids(&self) -> Result<Vec<String>, StoreError> {
+    pub(super) async fn scan_session_ids(&self) -> Result<Vec<String>, StoreError> {
         let dir = self.vault_base.join(paths::sessions_root());
         tokio::task::spawn_blocking(move || -> Result<Vec<String>, StoreError> {
             let mut ids = Vec::new();
@@ -208,10 +336,10 @@ impl SessionStore {
     }
 
     /// Lists every `<kind>.md` file in the session directory except `_memo.md`. Per-file read
-    /// failures are carried in the inner `Result` (unparseable -> caller logs, leaves the row
-    /// alone); an `Err` here means the directory itself couldn't be listed, which the caller
-    /// must not treat as "zero files" (that would look like every document vanished).
-    async fn scan_document_files(
+    /// failures are carried in the inner `Result` (unparseable -> caller logs, leaves the
+    /// entry alone); an `Err` here means the directory itself couldn't be listed, which the
+    /// caller must not treat as "zero files" (that would look like every document vanished).
+    pub(super) async fn scan_document_files(
         &self,
         id: &str,
     ) -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
@@ -272,6 +400,69 @@ impl SessionStore {
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
     }
 
+    /// Lists every `<doc_id>.md` under `sessions/<id>/enhanced/` and parses each file's
+    /// frontmatter+body into an `EnhancedDoc`. Same error contract as
+    /// `scan_document_files`: per-file failures ride the inner `Result` (caller logs and
+    /// keeps the entry -- the doc id is still reported so pruning never mistakes
+    /// "unparseable" for "gone"); an outer `Err` means the directory listing itself
+    /// failed and the caller must not prune. A missing `enhanced/` dir is simply "no
+    /// docs" -- most sessions never get one.
+    pub(super) async fn scan_enhanced_doc_files(
+        &self,
+        id: &str,
+    ) -> Result<Vec<(String, Result<super::EnhancedDoc, StoreError>)>, StoreError> {
+        let dir = self.vault_base.join(paths::enhanced_dir(id));
+        let session_id = id.to_string();
+        tokio::task::spawn_blocking(
+            move || -> Result<Vec<(String, Result<super::EnhancedDoc, StoreError>)>, StoreError> {
+                let mut out = Vec::new();
+                let entries = match std::fs::read_dir(&dir) {
+                    Ok(entries) => entries,
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
+                    Err(e) => {
+                        return Err(StoreError::Io(format!(
+                            "failed to read enhanced docs directory: {e}"
+                        )));
+                    }
+                };
+                for entry in entries {
+                    let entry = entry
+                        .map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
+                    let path = entry.path();
+                    if !path.is_file() {
+                        continue;
+                    }
+                    if path.extension().and_then(|e| e.to_str()) != Some("md") {
+                        continue;
+                    }
+                    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
+                        continue;
+                    };
+                    // Same hygiene rules as scan_document_files: hidden files (crashed
+                    // atomic-write `.tmp-*` leftovers) and retired conflict backups are
+                    // never live documents.
+                    if stem.starts_with('.') {
+                        continue;
+                    }
+                    if stem.contains(".conflict-") {
+                        continue;
+                    }
+                    let parsed = std::fs::read_to_string(&path)
+                        .map_err(|e| {
+                            StoreError::Io(format!("failed to read enhanced/{stem}.md: {e}"))
+                        })
+                        .and_then(|raw| {
+                            super::enhanced::parse_enhanced_file(stem, &session_id, &raw)
+                        });
+                    out.push((stem.to_string(), parsed));
+                }
+                Ok(out)
+            },
+        )
+        .await
+        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
+    }
+
     /// Existence-only scan used to populate `RebuildReport.ghost_sessions`: true if the
     /// session directory has at least one recognized content file (a `<kind>.md` document or
     /// `transcript.json`) despite having no `_meta.json`. Never reads file contents.
@@ -306,207 +497,6 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
     }
-
-    // -- index writes (never touch the filesystem) --
-
-    async fn upsert_session_row(
-        &self,
-        meta: &super::content::SessionMeta,
-    ) -> Result<(), StoreError> {
-        // Deliberately does not touch `updated_at` on conflict -- rebuild is a read-side
-        // reconciliation, not a write, so replaying it against unchanged files must not
-        // manufacture a new "last modified" time (rebuild_is_idempotent depends on this).
-        //
-        // The `WHERE` guard on the `DO UPDATE` makes this a true no-op (no row touched, no
-        // `AFTER UPDATE` trigger fired) when nothing actually changed -- load-bearing now that
-        // Task 10 calls `rebuild_index` automatically on every startup and window focus:
-        // without it, every one of those passes fires `sessions`' `search_index_dirty` trigger
-        // for every session unconditionally, re-queueing a full search re-projection even
-        // when the file on disk hasn't changed since the index already reflects it.
-        sqlx::query(
-            "INSERT INTO sessions (id, title, started_at, ended_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               title = excluded.title,
-               started_at = excluded.started_at,
-               ended_at = excluded.ended_at
-             WHERE title IS NOT excluded.title
-                OR started_at IS NOT excluded.started_at
-                OR ended_at IS NOT excluded.ended_at",
-        )
-        .bind(&meta.id)
-        .bind(&meta.title)
-        .bind(meta.started_at.as_deref().unwrap_or(""))
-        .bind(meta.ended_at.as_deref().unwrap_or(""))
-        .bind(&meta.created_at)
-        .execute(self.pool())
-        .await?;
-        Ok(())
-    }
-
-    async fn upsert_document_row(
-        &self,
-        id: &str,
-        kind: &str,
-        body: &str,
-    ) -> Result<(), StoreError> {
-        // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
-        // re-firing `session_documents`' `search_index_dirty` trigger on every automatic
-        // rebuild/refresh pass (Task 10).
-        sqlx::query(
-            "INSERT INTO session_documents (id, session_id, kind, body_format, body, updated_at)
-             VALUES (?, ?, ?, 'md', ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               body = excluded.body
-             WHERE body IS NOT excluded.body",
-        )
-        .bind(format!("{id}:{kind}"))
-        .bind(id)
-        .bind(kind)
-        .bind(body)
-        .execute(self.pool())
-        .await?;
-        Ok(())
-    }
-
-    async fn upsert_transcript_row(
-        &self,
-        id: &str,
-        t: &TranscriptWithData,
-    ) -> Result<(), StoreError> {
-        // Bind the scanned folder id, not `t.session_id` from the file -- the folder is the
-        // source of truth for which session this transcript belongs to.
-        let words_json =
-            serde_json::to_string(&t.words).map_err(|e| StoreError::Serialize(e.to_string()))?;
-        let hints_json = serde_json::to_string(&t.speaker_hints)
-            .map_err(|e| StoreError::Serialize(e.to_string()))?;
-
-        // See `upsert_session_row`'s comment: the `WHERE` guard keeps an unchanged file from
-        // re-firing `transcripts`' `search_index_dirty` trigger on every automatic
-        // rebuild/refresh pass (Task 10).
-        sqlx::query(
-            "INSERT INTO transcripts (id, session_id, started_at_ms, memo, words_json, speaker_hints_json, updated_at)
-             VALUES (?, ?, ?, '', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               session_id = excluded.session_id,
-               started_at_ms = excluded.started_at_ms,
-               words_json = excluded.words_json,
-               speaker_hints_json = excluded.speaker_hints_json
-             WHERE session_id IS NOT excluded.session_id
-                OR started_at_ms IS NOT excluded.started_at_ms
-                OR words_json IS NOT excluded.words_json
-                OR speaker_hints_json IS NOT excluded.speaker_hints_json",
-        )
-        .bind(&t.id)
-        .bind(id)
-        .bind(t.started_at.round() as i64)
-        .bind(&words_json)
-        .bind(&hints_json)
-        .execute(self.pool())
-        .await?;
-        Ok(())
-    }
-
-    async fn delete_document_row(&self, id: &str, kind: &str) -> Result<(), StoreError> {
-        sqlx::query("DELETE FROM session_documents WHERE id = ?")
-            .bind(format!("{id}:{kind}"))
-            .execute(self.pool())
-            .await?;
-        Ok(())
-    }
-
-    /// Deletes `session_documents` rows for `id` whose kind isn't in `keep_kinds` -- the files
-    /// backing them are confirmed gone (the directory scan that produced `keep_kinds` did
-    /// succeed), so per mirror honesty their index rows go too.
-    async fn prune_document_rows(&self, id: &str, keep_kinds: &[String]) -> Result<(), StoreError> {
-        let keep_ids: Vec<String> = keep_kinds.iter().map(|k| format!("{id}:{k}")).collect();
-        prune_rows_not_in(self.pool(), "session_documents", id, &keep_ids).await
-    }
-
-    async fn prune_transcript_rows(&self, id: &str, keep_ids: &[String]) -> Result<(), StoreError> {
-        prune_rows_not_in(self.pool(), "transcripts", id, keep_ids).await
-    }
-
-    async fn all_indexed_session_ids(&self) -> Result<Vec<String>, StoreError> {
-        let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT id FROM sessions
-             UNION SELECT DISTINCT session_id FROM session_documents WHERE session_id <> ''
-             UNION SELECT DISTINCT session_id FROM transcripts WHERE session_id <> ''",
-        )
-        .fetch_all(self.pool())
-        .await?;
-        Ok(ids)
-    }
-
-    /// Same rationale as Task 6's `delete_session` fix: a partial delete across the three
-    /// index tables must never be observable, so it's one transaction. File-system-free by
-    /// design -- rebuild/refresh never touch the vault. Takes a batch so `rebuild_index`'s
-    /// vanished-session prune is three `IN (...)` deletes per chunk instead of three per id.
-    async fn delete_session_index_tx(&self, ids: &[String]) -> Result<(), StoreError> {
-        if ids.is_empty() {
-            return Ok(());
-        }
-
-        let mut tx = self
-            .pool()
-            .begin()
-            .await
-            .map_err(|e| StoreError::Db(format!("failed to start transaction: {e}")))?;
-
-        // Chunked to stay far below SQLite's bound-parameter limit (999 on older builds).
-        for chunk in ids.chunks(500) {
-            let placeholders = placeholder_list(chunk.len());
-            for (table, column) in [
-                ("sessions", "id"),
-                ("session_documents", "session_id"),
-                ("transcripts", "session_id"),
-            ] {
-                let sql = format!("DELETE FROM {table} WHERE {column} IN ({placeholders})");
-                let mut query = sqlx::query(sqlx::AssertSqlSafe(sql));
-                for id in chunk {
-                    query = query.bind(id);
-                }
-                query
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(|e| StoreError::Db(e.to_string()))?;
-            }
-        }
-
-        tx.commit()
-            .await
-            .map_err(|e| StoreError::Db(format!("failed to commit transaction: {e}")))?;
-        Ok(())
-    }
-}
-
-fn placeholder_list(count: usize) -> String {
-    vec!["?"; count].join(", ")
-}
-
-/// One `DELETE ... WHERE session_id = ? AND id NOT IN (...)` instead of a select-then-loop
-/// issuing one DELETE per stale row. `keep_ids` is bounded by the number of files in a single
-/// session directory, so it always fits one statement's bound-parameter budget.
-async fn prune_rows_not_in(
-    pool: &sqlx::SqlitePool,
-    table: &str,
-    session_id: &str,
-    keep_ids: &[String],
-) -> Result<(), StoreError> {
-    let sql = if keep_ids.is_empty() {
-        format!("DELETE FROM {table} WHERE session_id = ?")
-    } else {
-        format!(
-            "DELETE FROM {table} WHERE session_id = ? AND id NOT IN ({})",
-            placeholder_list(keep_ids.len())
-        )
-    };
-    let mut query = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(session_id);
-    for keep_id in keep_ids {
-        query = query.bind(keep_id);
-    }
-    query.execute(pool).await?;
-    Ok(())
 }
 
 /// Pushes a human-readable line to `errors` and remembers the first raw `StoreError`
@@ -526,7 +516,7 @@ fn record_error(
 
 #[cfg(test)]
 mod tests {
-    use sqlx::SqlitePool;
+    use hypr_fs_format::TranscriptWithData;
 
     use super::*;
     use crate::session_store::content::SessionMeta;
@@ -539,6 +529,8 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
+            event: None,
+            folder: None,
         }
     }
 
@@ -566,86 +558,62 @@ mod tests {
 
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
-        let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(temp.path().to_path_buf());
         (store, temp)
     }
 
-    async fn index_dump(pool: &SqlitePool) -> Vec<String> {
-        let mut dump = Vec::new();
-
-        let sessions: Vec<(String, String, String, String, String, String)> = sqlx::query_as(
-            "SELECT id, title, started_at, ended_at, created_at, updated_at FROM sessions ORDER BY id",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap();
-        dump.extend(sessions.into_iter().map(|row| format!("{row:?}")));
-
-        let documents: Vec<(String, String, String, String, String, String)> = sqlx::query_as(
-            "SELECT id, session_id, kind, body_format, body, updated_at FROM session_documents ORDER BY id",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap();
-        dump.extend(documents.into_iter().map(|row| format!("{row:?}")));
-
-        let transcripts: Vec<(String, String, i64, String, String, String, String)> = sqlx::query_as(
-            "SELECT id, session_id, started_at_ms, memo, words_json, speaker_hints_json, updated_at FROM transcripts ORDER BY id",
-        )
-        .fetch_all(pool)
-        .await
-        .unwrap();
-        dump.extend(transcripts.into_iter().map(|row| format!("{row:?}")));
-
-        dump
+    /// A second store over the same vault, with a cold (empty) index -- the startup shape:
+    /// everything it knows must come back from the files alone.
+    fn cold_store(vault: &tempfile::TempDir) -> SessionStore {
+        SessionStore::new(vault.path().to_path_buf())
     }
 
-    /// Task 10 calls `rebuild_index` automatically on every startup and window focus, so a
-    /// no-op rebuild must be a true DB no-op: the upserts' `WHERE` guards must keep unchanged
-    /// rows from firing their `AFTER UPDATE` triggers (observable via the `search_index_dirty`
-    /// queue) -- otherwise every boot/focus re-queues every session for a needless search
-    /// re-projection, forever, even when nothing on disk changed.
+    /// Drains everything currently queued on the store's change bus. The bus is the
+    /// observable that replaced the SQL dirty queue: a no-op rescan must leave it
+    /// empty, a genuine change must land on it.
+    fn drain_changes(
+        store: &SessionStore,
+    ) -> Vec<(crate::session_store::IndexEntity, Vec<String>)> {
+        let mut rx = store
+            .take_index_change_receiver()
+            .expect("receiver taken once per drain");
+        let mut changes = Vec::new();
+        while let Ok(change) = rx.try_recv() {
+            changes.push(change);
+        }
+        *store.index_changes_rx.lock().unwrap() = Some(rx);
+        changes
+    }
+
+    /// The no-op-rescan guarantee (was: "unchanged rebuild must not requeue search
+    /// reindexing" against the SQL dirty queue): rebuild_index runs
+    /// automatically on every startup and window focus, so a rebuild over unchanged files
+    /// must emit nothing on the change bus -- otherwise every boot/focus re-triggers the
+    /// search projection and every subscribed webview, forever.
     #[tokio::test]
-    async fn rebuild_of_unchanged_files_does_not_requeue_search_reindexing() {
+    async fn rebuild_of_unchanged_files_does_not_notify_the_change_bus() {
         let (store, _vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "# hi").await.unwrap();
         store.rebuild_index().await.unwrap();
-
-        sqlx::query("DELETE FROM search_index_dirty")
-            .execute(store.pool())
-            .await
-            .unwrap();
+        drain_changes(&store);
 
         store.rebuild_index().await.unwrap();
 
-        let dirty: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM search_index_dirty")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(dirty, 0);
+        assert_eq!(drain_changes(&store), vec![]);
     }
 
-    /// The mirror image of the no-op test above: the `WHERE` guard must never suppress a
-    /// *genuine* change, only a spurious re-fire. Simulates an external edit with a raw
+    /// The mirror image of the no-op test above: the diff must never suppress a *genuine*
+    /// change, only a spurious re-fire. Simulates an external edit with a raw
     /// `std::fs::write` (bypassing `write_meta` entirely, the way another device or a
-    /// hand-edit would) so the guard's `DO UPDATE` branch -- not just its no-op branch -- gets
-    /// exercised, and asserts both halves of "the reconcile actually reconciled": the index
-    /// value changed, and the session got queued for search reindexing.
+    /// hand-edit would) and asserts both halves of "the reconcile actually reconciled":
+    /// the index value changed, and the change bus saw the session.
     #[tokio::test]
-    async fn rebuild_of_a_genuinely_changed_file_updates_the_index_and_requeues_search_reindexing()
-    {
+    async fn rebuild_of_a_genuinely_changed_file_updates_the_index_and_notifies() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.rebuild_index().await.unwrap();
-
-        sqlx::query("DELETE FROM search_index_dirty")
-            .execute(store.pool())
-            .await
-            .unwrap();
+        drain_changes(&store);
 
         let meta_path = vault.path().join("sessions/s1/_meta.json");
         let edited = serde_json::to_vec_pretty(&meta("s1", "Two")).unwrap();
@@ -653,21 +621,14 @@ mod tests {
 
         store.rebuild_index().await.unwrap();
 
-        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id = 's1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(title, "Two");
-
-        let dirty: i64 = sqlx::query_scalar(
-            "SELECT COUNT(*) FROM search_index_dirty WHERE entity_type = 'session' AND entity_id = 's1'",
-        )
-        .fetch_one(store.pool())
-        .await
-        .unwrap();
-        assert_eq!(
-            dirty, 1,
-            "a genuine change must still queue search reindexing, not just no-ops getting skipped"
+        assert_eq!(store.session_get("s1").unwrap().meta.title, "Two");
+        let changes = drain_changes(&store);
+        assert!(
+            changes.iter().any(|(entity, ids)| {
+                *entity == crate::session_store::IndexEntity::Sessions
+                    && ids.contains(&"s1".to_string())
+            }),
+            "a genuine change must still notify, not just no-ops getting skipped: {changes:?}"
         );
     }
 
@@ -676,7 +637,7 @@ mod tests {
     /// would leave behind) must not have that wrapper compound with each
     /// automatic rebuild pass. Without `strip_leading_frontmatter` in the read path, each of
     /// these calls would index the *previous* pass's own wrapper verbatim, growing the indexed
-    /// body by one nested frontmatter block every time -- exactly what Task 10's automatic
+    /// body by one nested frontmatter block every time -- exactly what the automatic
     /// startup/focus rescans would otherwise do to it on every boot.
     #[tokio::test]
     async fn rebuild_of_an_already_wrapped_note_file_does_not_grow_the_indexed_body() {
@@ -690,21 +651,17 @@ mod tests {
         .unwrap();
 
         store.rebuild_index().await.unwrap();
-        let first: String =
-            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:note'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(first, "real content");
+        assert_eq!(
+            store.session_get("s1").unwrap().note_markdown.as_deref(),
+            Some("real content")
+        );
 
         store.rebuild_index().await.unwrap();
         store.rebuild_index().await.unwrap();
-        let after_three_passes: String =
-            sqlx::query_scalar("SELECT body FROM session_documents WHERE id='s1:note'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(after_three_passes, "real content");
+        assert_eq!(
+            store.session_get("s1").unwrap().note_markdown.as_deref(),
+            Some("real content")
+        );
     }
 
     #[tokio::test]
@@ -713,67 +670,107 @@ mod tests {
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "# hi").await.unwrap();
         store.rebuild_index().await.unwrap();
-        let first = index_dump(store.pool()).await;
+        let first = store.index.read().unwrap().clone();
         store.rebuild_index().await.unwrap();
-        assert_eq!(first, index_dump(store.pool()).await);
+        assert_eq!(first, *store.index.read().unwrap());
     }
 
+    /// The whole point of files-as-truth: a brand-new store (cold, empty index -- the
+    /// startup shape) rebuilds everything from the vault alone.
     #[tokio::test]
-    async fn rebuild_from_empty_db_restores_index_from_files() {
-        let (store, _vault) = test_store().await;
+    async fn rebuild_from_a_cold_index_restores_everything_from_files() {
+        let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
-        sqlx::query("DELETE FROM sessions")
-            .execute(store.pool())
+        store.write_note("s1", "notes").await.unwrap();
+        store
+            .write_transcript("s1", transcript("t1", "restored-word"))
             .await
             .unwrap();
-        store.rebuild_index().await.unwrap();
-        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(n, 1);
+
+        let cold = cold_store(&vault);
+        assert!(cold.session_get("s1").is_none());
+        cold.rebuild_index().await.unwrap();
+
+        let record = cold.session_get("s1").unwrap();
+        assert_eq!(record.meta.title, "One");
+        assert_eq!(record.note_markdown.as_deref(), Some("notes"));
+        assert_eq!(
+            cold.transcript_get("t1").unwrap().words[0].text,
+            "restored-word"
+        );
     }
 
     #[tokio::test]
-    async fn refresh_missing_meta_removes_index_row_but_no_files() {
+    async fn rebuild_restores_event_and_folder_from_files() {
+        let (store, vault) = test_store().await;
+        let mut m = meta("s1", "One");
+        m.event = Some(serde_json::json!({"tracking_id": "evt-1", "meeting_link": ""}));
+        m.folder = Some("work".to_string());
+        store.write_meta(&m).await.unwrap();
+
+        let cold = cold_store(&vault);
+        cold.rebuild_index().await.unwrap();
+
+        let restored = cold.session_get("s1").unwrap().meta;
+        assert_eq!(restored.event, m.event);
+        assert_eq!(restored.folder.as_deref(), Some("work"));
+    }
+
+    /// The no-op property must hold for the widened meta fields too: a meta whose `event`
+    /// is populated re-derives to an identical entry on every rebuild pass, so an
+    /// unchanged file must still stay silent on the bus.
+    #[tokio::test]
+    async fn rebuild_of_unchanged_event_and_folder_does_not_notify() {
+        let (store, _vault) = test_store().await;
+        let mut m = meta("s1", "One");
+        m.event = Some(serde_json::json!({"tracking_id": "evt-1", "meeting_link": "x"}));
+        m.folder = Some("work".to_string());
+        store.write_meta(&m).await.unwrap();
+        store.rebuild_index().await.unwrap();
+        drain_changes(&store);
+
+        store.rebuild_index().await.unwrap();
+
+        assert_eq!(drain_changes(&store), vec![]);
+    }
+
+    #[tokio::test]
+    async fn refresh_missing_meta_removes_index_entry_but_no_files() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "keep me").await.unwrap();
         std::fs::remove_file(vault.path().join("sessions/s1/_meta.json")).unwrap();
         store.refresh_session("s1").await.unwrap();
-        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(n, 0);
+        assert!(store.session_get("s1").is_none());
         assert!(vault.path().join("sessions/s1/_memo.md").is_file()); // vault untouched
     }
 
     #[tokio::test]
-    async fn rebuild_unparseable_meta_leaves_existing_row_and_logs_error() {
+    async fn rebuild_unparseable_meta_leaves_existing_entry_and_logs_error() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "Original")).await.unwrap();
         std::fs::write(vault.path().join("sessions/s1/_meta.json"), b"{ not json").unwrap();
 
         let report = store.rebuild_index().await.unwrap();
 
-        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
         assert_eq!(
-            title, "Original",
-            "existing row must survive a corrupt file"
+            store.session_get("s1").unwrap().meta.title,
+            "Original",
+            "existing entry must survive a corrupt file"
         );
         assert_eq!(report.errors.len(), 1);
         assert!(report.errors[0].contains("s1"));
     }
 
     #[tokio::test]
-    async fn rebuild_deletes_rows_for_vanished_folder_across_all_tables() {
+    async fn rebuild_removes_entries_for_vanished_folder_across_all_maps() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "notes").await.unwrap();
+        store
+            .write_document("s1", "summary", "doc body")
+            .await
+            .unwrap();
         store
             .write_transcript("s1", transcript("t1", "hi"))
             .await
@@ -783,78 +780,33 @@ mod tests {
 
         store.rebuild_index().await.unwrap();
 
-        let sessions_n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(sessions_n, 0);
-        let docs_n: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM session_documents WHERE session_id='s1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(docs_n, 0);
-        let transcripts_n: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(transcripts_n, 0);
+        assert!(store.session_get("s1").is_none());
+        assert!(store.session_enhanced_docs("s1").is_empty());
+        assert!(store.session_transcripts("s1").is_empty());
     }
 
-    #[tokio::test]
-    async fn rebuild_restores_transcript_words_after_table_wipe() {
-        let (store, _vault) = test_store().await;
-        store.write_meta(&meta("s1", "One")).await.unwrap();
-        store
-            .write_transcript("s1", transcript("t1", "restored-word"))
-            .await
-            .unwrap();
-
-        sqlx::query("DELETE FROM transcripts")
-            .execute(store.pool())
-            .await
-            .unwrap();
-
-        store.rebuild_index().await.unwrap();
-
-        let words_json: String =
-            sqlx::query_scalar("SELECT words_json FROM transcripts WHERE session_id='s1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert!(words_json.contains("restored-word"));
-    }
-
-    /// REGRESSION: `Path::exists()` swallows permission-denied as "false", which used to make
+    /// REGRESSION: `Path::exists()` swallows read failures as "false", which used to make
     /// a transiently-unreadable `_meta.json` look identical to a missing one and delete a
-    /// live session's index rows. read_meta must now distinguish "not found" from "exists but
-    /// unreadable" and rebuild must treat the latter as an error, not a deletion.
-    #[cfg(unix)]
+    /// live session's index entries. read_meta must distinguish "not found" from "exists
+    /// but unreadable" and rebuild must treat the latter as an error, not a deletion.
+    /// Unreadability is injected by replacing the file with a directory of the same name
+    /// (EISDIR on read) -- unlike the previous chmod-0o000 injection, this fails for root
+    /// too, so the test holds no matter which user runs it.
     #[tokio::test]
-    async fn rebuild_unreadable_meta_leaves_existing_row_and_logs_error() {
-        use std::os::unix::fs::PermissionsExt;
-
+    async fn rebuild_unreadable_meta_leaves_existing_entry_and_logs_error() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "Original")).await.unwrap();
 
         let meta_path = vault.path().join("sessions/s1/_meta.json");
-        let original_perms = std::fs::metadata(&meta_path).unwrap().permissions();
-        std::fs::set_permissions(&meta_path, std::fs::Permissions::from_mode(0o000)).unwrap();
+        std::fs::remove_file(&meta_path).unwrap();
+        std::fs::create_dir(&meta_path).unwrap();
 
         let report = store.rebuild_index().await.unwrap();
 
-        // Restore permissions before any assertion can panic, so tempdir cleanup never trips
-        // over a file it can't stat/delete.
-        std::fs::set_permissions(&meta_path, original_perms).unwrap();
-
-        let title: String = sqlx::query_scalar("SELECT title FROM sessions WHERE id='s1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
         assert_eq!(
-            title, "Original",
-            "existing row must survive a transiently-unreadable file, not just a corrupt one"
+            store.session_get("s1").unwrap().meta.title,
+            "Original",
+            "existing entry must survive a transiently-unreadable file, not just a corrupt one"
         );
         assert!(
             !report.errors.is_empty(),
@@ -882,12 +834,158 @@ mod tests {
         let report = store.rebuild_index().await.unwrap();
 
         assert_eq!(report.notes, 1, "only the live note should be indexed");
-        let kinds: Vec<String> =
-            sqlx::query_scalar("SELECT kind FROM session_documents WHERE session_id='s1'")
-                .fetch_all(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(kinds, vec!["note".to_string()]);
+        assert_eq!(
+            store.session_get("s1").unwrap().note_markdown.as_deref(),
+            Some("live note")
+        );
+        let index = store.index.read().unwrap();
+        assert!(
+            !index.docs.contains_key("s1"),
+            "neither leftover may become a document entry: {:?}",
+            index.docs.get("s1")
+        );
+    }
+
+    fn enhanced_doc(session_id: &str, doc_id: &str) -> crate::session_store::EnhancedDoc {
+        crate::session_store::EnhancedDoc {
+            id: doc_id.to_string(),
+            session_id: session_id.to_string(),
+            kind: "template_output".to_string(),
+            title: "Customer review".to_string(),
+            template_id: "template-1".to_string(),
+            sort_order: 2,
+            markdown: "# Review\n\n- Point".to_string(),
+        }
+    }
+
+    /// The whole point of the file home: on a cold index, every metadata field
+    /// (title/template_id/sort_order/kind) comes back from the frontmatter alone.
+    #[tokio::test]
+    async fn rebuild_restores_enhanced_doc_metadata_from_frontmatter() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        let cold = cold_store(&vault);
+        cold.rebuild_index().await.unwrap();
+
+        assert_eq!(
+            cold.enhanced_doc_get("doc-1"),
+            Some(enhanced_doc("s1", "doc-1"))
+        );
+    }
+
+    /// The no-op property must hold for enhanced docs too: an unchanged
+    /// `enhanced/<doc>.md` must stay silent on the bus across the automatic
+    /// startup/focus rebuild passes.
+    #[tokio::test]
+    async fn rebuild_of_unchanged_enhanced_doc_does_not_notify() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+        store.rebuild_index().await.unwrap();
+        drain_changes(&store);
+
+        store.rebuild_index().await.unwrap();
+
+        assert_eq!(drain_changes(&store), vec![]);
+    }
+
+    #[tokio::test]
+    async fn rebuild_prunes_enhanced_doc_entry_whose_file_is_gone() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        std::fs::remove_file(vault.path().join("sessions/s1/enhanced/doc-1.md")).unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        assert!(store.enhanced_doc_get("doc-1").is_none());
+    }
+
+    /// Corruption must never look like deletion: an `enhanced/<doc>.md` whose frontmatter
+    /// no longer parses is logged, and its existing index entry survives the pass -- both
+    /// the re-derive and the prune must respect it.
+    #[tokio::test]
+    async fn rebuild_unparseable_enhanced_doc_leaves_existing_entry_and_logs_error() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        std::fs::write(
+            vault.path().join("sessions/s1/enhanced/doc-1.md"),
+            "---\ntitle: [unclosed\n---\n\nbody",
+        )
+        .unwrap();
+
+        let report = store.rebuild_index().await.unwrap();
+
+        assert_eq!(
+            store.enhanced_doc_get("doc-1").unwrap().title,
+            "Customer review",
+            "existing entry must survive a corrupt file"
+        );
+        assert!(
+            report
+                .errors
+                .iter()
+                .any(|e| e.contains("enhanced/doc-1.md")),
+            "the corrupt doc must be reported: {:?}",
+            report.errors
+        );
+    }
+
+    /// Pre-cutover UUID summary entries never had a file home, and the owner's
+    /// no-migration directive means they never get one -- rebuild prunes them exactly as
+    /// it did before this task (this test pins that preserved behavior rather than
+    /// introducing it).
+    #[tokio::test]
+    async fn rebuild_still_prunes_legacy_index_only_uuid_entries_without_files() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
+            .await
+            .unwrap();
+
+        {
+            let mut index = store.index.write().unwrap();
+            index.docs.entry("s1".to_string()).or_default().push(
+                crate::session_store::EnhancedDoc {
+                    id: "legacy-uuid".to_string(),
+                    session_id: "s1".to_string(),
+                    kind: "summary".to_string(),
+                    title: String::new(),
+                    template_id: String::new(),
+                    sort_order: 0,
+                    markdown: "{}".to_string(),
+                },
+            );
+        }
+
+        store.rebuild_index().await.unwrap();
+
+        assert!(
+            store.enhanced_doc_get("legacy-uuid").is_none(),
+            "index-only entries without files stay pruned"
+        );
+        assert!(
+            store.enhanced_doc_get("doc-1").is_some(),
+            "file-backed docs must survive the same prune"
+        );
     }
 
     #[tokio::test]
@@ -903,10 +1001,9 @@ mod tests {
         let report = store.rebuild_index().await.unwrap();
 
         assert_eq!(report.ghost_sessions, vec!["ghost".to_string()]);
-        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE id='ghost'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert_eq!(n, 0, "ghost sessions must not be indexed");
+        assert!(
+            store.session_get("ghost").is_none(),
+            "ghost sessions must not be indexed"
+        );
     }
 }

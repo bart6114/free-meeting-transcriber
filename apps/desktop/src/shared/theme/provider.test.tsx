@@ -79,7 +79,7 @@ describe("AppThemeProvider", () => {
     expect(setDockIcon).not.toHaveBeenCalled();
   });
 
-  it("applies the hydrated settings theme once SQLite is ready", async () => {
+  it("applies the hydrated settings theme once the store is ready", async () => {
     themeState.settingsReady = true;
     themeState.theme = "light";
 

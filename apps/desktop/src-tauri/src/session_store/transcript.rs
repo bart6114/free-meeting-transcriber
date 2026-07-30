@@ -1,6 +1,6 @@
 use hypr_fs_format::{TranscriptJson, TranscriptSpeakerHint, TranscriptWithData, TranscriptWord};
 
-use super::{SessionStore, StoreError, paths};
+use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
 
 #[derive(serde::Deserialize, specta::Type, Clone)]
 pub struct TranscriptDelta {
@@ -42,6 +42,8 @@ impl SessionStore {
         session_id: &str,
         delta: TranscriptDelta,
     ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+
         if delta.new_words.is_empty() && delta.replaced_ids.is_empty() && delta.new_hints.is_empty()
         {
             // Nothing to buffer, nothing to (re)dirty, nothing to schedule.
@@ -214,6 +216,8 @@ impl SessionStore {
         session_id: &str,
         t: TranscriptWithData,
     ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+
         let transcript_id = t.id.clone();
         let started_at_ms = t.started_at;
 
@@ -238,6 +242,77 @@ impl SessionStore {
         .await
     }
 
+    /// Supersede primitive (E3): the incoming transcript REPLACES the session's whole
+    /// transcript set (batch re-run / re-transcription path -- the old frontend
+    /// tombstone-others UPDATE). The file is the truth, so superseded transcripts must
+    /// leave `transcript.json`: the previous file moves to `.trash/<date>/sessions/<id>/`
+    /// (hand-recoverable, same policy as enhanced-doc deletes) whenever it holds anything
+    /// besides the incoming transcript id, then the file is rewritten to just the incoming
+    /// transcript.
+    ///
+    /// Clears the session's whole live buffer first (not just a matching transcript_id,
+    /// unlike `write_transcript`): every buffered transcript is superseded by definition,
+    /// and a pending debounced flush must not resurrect one afterward.
+    pub async fn replace_session_transcripts(
+        &self,
+        session_id: &str,
+        t: TranscriptWithData,
+    ) -> Result<(), StoreError> {
+        validate_session_id(session_id)?;
+
+        {
+            let mut live = self.live.lock().await;
+            if let Some(buffer) = live.get_mut(session_id) {
+                buffer.words.clear();
+                buffer.hints.clear();
+                buffer.dirty = false;
+            }
+        }
+
+        // One guard spans the "what's in the file today" read, the supersede-trash and the
+        // rewrite, so a concurrent transcript write can't slip between them.
+        let guard = self.lock_writes().await;
+
+        let previous = self.read_transcript_json(session_id).await?;
+        let loses_content = previous
+            .transcripts
+            .iter()
+            .any(|existing| existing.id != t.id);
+        if loses_content {
+            let vault_base = self.vault_base.clone();
+            let relative = paths::transcript_path(session_id);
+            tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
+                let abs = vault_base.join(relative);
+                hypr_fs_sync_core::export::move_to_trash(&vault_base, &abs)
+                    .map(|_| ())
+                    .map_err(|e| {
+                        StoreError::Io(format!(
+                            "failed to move superseded transcripts to trash: {e}"
+                        ))
+                    })
+            })
+            .await
+            .map_err(|e| StoreError::Io(format!("task join error: {e}")))??;
+        }
+
+        let transcript_id = t.id.clone();
+        let started_at_ms = t.started_at;
+
+        // The file is now absent (trashed) or already holds only this transcript, so
+        // persist_transcript's read-merge-write lands a file with exactly one entry --
+        // and its index_set_transcripts/notify covers the removals too, since the index
+        // gets the full (single-entry) list.
+        self.persist_transcript_locked(
+            &guard,
+            session_id,
+            &transcript_id,
+            started_at_ms,
+            t.words,
+            t.speaker_hints,
+        )
+        .await
+    }
+
     async fn persist_transcript(
         &self,
         session_id: &str,
@@ -246,16 +321,39 @@ impl SessionStore {
         words: Vec<TranscriptWord>,
         hints: Vec<TranscriptSpeakerHint>,
     ) -> Result<(), StoreError> {
+        // The lock spans the read *and* the write: `transcript.json` holds every transcript
+        // of the session, so two concurrent persists that each read the file and write a
+        // whole new one back would drop the loser's entry entirely.
+        let guard = self.lock_writes().await;
+        self.persist_transcript_locked(
+            &guard,
+            session_id,
+            transcript_id,
+            started_at_ms,
+            words,
+            hints,
+        )
+        .await
+    }
+
+    async fn persist_transcript_locked(
+        &self,
+        guard: &WriteGuard<'_>,
+        session_id: &str,
+        transcript_id: &str,
+        started_at_ms: f64,
+        words: Vec<TranscriptWord>,
+        hints: Vec<TranscriptSpeakerHint>,
+    ) -> Result<(), StoreError> {
         let mut file = self.read_transcript_json(session_id).await?;
 
-        let idx = match file.transcripts.iter().position(|t| t.id == transcript_id) {
+        match file.transcripts.iter().position(|t| t.id == transcript_id) {
             Some(idx) => {
                 let existing = &mut file.transcripts[idx];
                 existing.session_id = session_id.to_string();
                 existing.started_at = started_at_ms;
                 existing.words = words;
                 existing.speaker_hints = hints;
-                idx
             }
             None => {
                 file.transcripts.push(TranscriptWithData {
@@ -269,40 +367,23 @@ impl SessionStore {
                     words,
                     speaker_hints: hints,
                 });
-                file.transcripts.len() - 1
             }
-        };
+        }
 
         // Serialize the full file up front: a word that can't round-trip must fail the whole
         // flush (StoreError::Serialize), never get silently dropped or collapse to `[]`.
         let bytes =
             serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Serialize(e.to_string()))?;
-        let words_json = serde_json::to_string(&file.transcripts[idx].words)
-            .map_err(|e| StoreError::Serialize(e.to_string()))?;
-        let hints_json = serde_json::to_string(&file.transcripts[idx].speaker_hints)
-            .map_err(|e| StoreError::Serialize(e.to_string()))?;
 
-        self.write_file(paths::transcript_path(session_id), bytes)
+        self.write_file_locked(guard, paths::transcript_path(session_id), bytes)
             .await?;
 
-        sqlx::query(
-            "INSERT INTO transcripts (id, session_id, started_at_ms, memo, words_json, speaker_hints_json, updated_at)
-             VALUES (?, ?, ?, '', ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
-             ON CONFLICT(id) DO UPDATE SET
-               session_id = excluded.session_id,
-               started_at_ms = excluded.started_at_ms,
-               words_json = excluded.words_json,
-               speaker_hints_json = excluded.speaker_hints_json,
-               updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')",
-        )
-        .bind(transcript_id)
-        .bind(session_id)
-        .bind(started_at_ms.round() as i64)
-        .bind(&words_json)
-        .bind(&hints_json)
-        .execute(self.pool())
-        .await
-        .map_err(|e| StoreError::Db(e.to_string()))?;
+        // The file was just re-derived whole, so the index gets the same full list.
+        self.index_set_transcripts(session_id, file.transcripts.clone());
+        self.notify_index_changed(
+            super::IndexEntity::Transcripts,
+            vec![session_id.to_string()],
+        );
 
         Ok(())
     }
@@ -314,6 +395,7 @@ impl SessionStore {
         &self,
         session_id: &str,
     ) -> Result<TranscriptJson, StoreError> {
+        validate_session_id(session_id)?;
         let vault_base = self.vault_base.clone();
         let relative = paths::transcript_path(session_id);
 
@@ -353,9 +435,7 @@ mod tests {
     async fn test_store() -> (SessionStore, tempfile::TempDir) {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path().to_path_buf();
-        let db = hypr_db_core::Db::connect_memory_plain().await.unwrap();
-        hypr_db_app::prepare_schema(&db).await.unwrap();
-        let store = SessionStore::new(vault, db.pool().clone());
+        let store = SessionStore::new(vault);
         (store, temp)
     }
 
@@ -371,20 +451,17 @@ mod tests {
         }
     }
 
-    // Mirrors 20260725120000_drop_sync_machinery's transcripts DDL, for tests that DROP the
-    // table to force index-write failures and then need to restore it.
-    const TRANSCRIPTS_TABLE_DDL: &str = "CREATE TABLE IF NOT EXISTS transcripts (
-      id                  TEXT PRIMARY KEY NOT NULL,
-      owner_user_id       TEXT NOT NULL DEFAULT '',
-      session_id          TEXT NOT NULL DEFAULT '',
-      started_at_ms       INTEGER NOT NULL DEFAULT 0,
-      ended_at_ms         INTEGER,
-      memo                TEXT NOT NULL DEFAULT '',
-      words_json          TEXT NOT NULL DEFAULT '[]',
-      speaker_hints_json  TEXT NOT NULL DEFAULT '[]',
-      updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-      deleted_at          TEXT
-    ) STRICT";
+    /// Failure injection for flush retries: a regular FILE squatting on the `sessions/`
+    /// directory path makes every transcript read/write under it fail (ENOTDIR), without
+    /// relying on permission bits (which root ignores). Remove the file to "recover the
+    /// disk".
+    fn block_sessions_dir(vault: &std::path::Path) {
+        std::fs::write(vault.join("sessions"), b"not a directory").unwrap();
+    }
+
+    fn unblock_sessions_dir(vault: &std::path::Path) {
+        std::fs::remove_file(vault.join("sessions")).unwrap();
+    }
 
     fn delta_with_words(words: &[&str]) -> TranscriptDelta {
         TranscriptDelta {
@@ -413,12 +490,9 @@ mod tests {
         )
         .unwrap();
         assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 2);
-        let words: String =
-            sqlx::query_scalar("SELECT words_json FROM transcripts WHERE session_id='s1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert!(words.contains("hello"));
+        let indexed = store.session_transcripts("s1");
+        assert_eq!(indexed.len(), 1);
+        assert_eq!(indexed[0].words[0].text, "hello");
     }
 
     /// REGRESSION for the 2026-07-23 data loss: no index row, no folder, no _meta.json — words still land.
@@ -554,12 +628,14 @@ mod tests {
         .unwrap();
         assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 3);
 
-        let words_json: String =
-            sqlx::query_scalar("SELECT words_json FROM transcripts WHERE id='t1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert!(words_json.contains('a') && words_json.contains('b') && words_json.contains('c'));
+        let texts: Vec<String> = store
+            .transcript_get("t1")
+            .unwrap()
+            .words
+            .into_iter()
+            .map(|w| w.text)
+            .collect();
+        assert_eq!(texts, vec!["a", "b", "c"]);
     }
 
     #[tokio::test]
@@ -709,12 +785,10 @@ mod tests {
             .unwrap();
 
         assert!(vault.path().join("sessions/s1/transcript.json").is_file());
-        let words_json: String =
-            sqlx::query_scalar("SELECT words_json FROM transcripts WHERE id='batch'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert!(words_json.contains("uploaded"));
+        assert_eq!(
+            store.transcript_get("batch").unwrap().words[0].text,
+            "uploaded"
+        );
     }
 
     #[tokio::test]
@@ -776,33 +850,24 @@ mod tests {
         );
     }
 
-    /// REGRESSION for Critical 1 (reviewer-traced): a failed index write must not be
-    /// swallowed, and the buffer must stay dirty so flush_all() can recover the session
-    /// instead of silently treating it as flushed.
+    /// REGRESSION for Critical 1 (reviewer-traced): a failed flush must not be swallowed,
+    /// and the buffer must stay dirty so flush_all() can recover the session instead of
+    /// silently treating it as flushed. Failure is injected at the file layer (the only
+    /// persistence layer left): a regular file squatting on `sessions/` makes the write
+    /// fail with ENOTDIR.
     #[tokio::test]
-    async fn flush_transcript_index_failure_leaves_file_intact_and_buffer_dirty_for_retry() {
+    async fn flush_transcript_write_failure_leaves_buffer_dirty_for_retry() {
         let (store, vault) = test_store().await;
         store
             .append_transcript("s1", delta_with_words(&["hello"]))
             .await
             .unwrap();
 
-        sqlx::query("DROP TABLE transcripts")
-            .execute(store.pool())
-            .await
-            .unwrap();
+        block_sessions_dir(vault.path());
 
         let result = store.flush_transcript("s1").await;
         assert!(result.is_err());
-        assert!(matches!(result.unwrap_err(), StoreError::Db(_)));
-
-        // File write happens before the index upsert, so it must have landed even though
-        // the index write failed -- the file is truth.
-        let json: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 1);
+        assert!(matches!(result.unwrap_err(), StoreError::Io(_)));
 
         // The failed flush must re-dirty the buffer, not leave it looking clean.
         {
@@ -813,21 +878,18 @@ mod tests {
             );
         }
 
-        // Recreate the table and confirm flush_all() recovers the session that
-        // previously failed.
-        sqlx::query(TRANSCRIPTS_TABLE_DDL)
-            .execute(store.pool())
-            .await
-            .unwrap();
+        // Clear the obstacle and confirm flush_all() recovers the session that
+        // previously failed -- the words were only in memory until now.
+        unblock_sessions_dir(vault.path());
 
         store.flush_all().await.unwrap();
 
-        let row_count: i64 =
-            sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
-                .fetch_one(store.pool())
-                .await
-                .unwrap();
-        assert_eq!(row_count, 1);
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 1);
+        assert_eq!(store.transcript_get("t1").unwrap().words[0].text, "hello");
     }
 
     /// Direct test for `append_transcript`'s `needs_flush_before_switch` branch: a delta for
@@ -873,11 +935,10 @@ mod tests {
             .map(|w| w["text"].as_str().unwrap())
             .collect();
         assert_eq!(t1_texts, vec!["old-words"]);
-        let t1_row: String = sqlx::query_scalar("SELECT words_json FROM transcripts WHERE id='t1'")
-            .fetch_one(store.pool())
-            .await
-            .unwrap();
-        assert!(t1_row.contains("old-words"));
+        assert_eq!(
+            store.transcript_get("t1").unwrap().words[0].text,
+            "old-words"
+        );
 
         // The incoming delta proceeded normally: t2 is buffered dirty and flushes with only
         // its own words, alongside (not replacing) t1's entry.
@@ -898,6 +959,183 @@ mod tests {
         assert_eq!(t2_texts, vec!["new-words"]);
     }
 
+    fn batch(id: &str, word_texts: &[&str]) -> TranscriptWithData {
+        TranscriptWithData {
+            id: id.to_string(),
+            user_id: String::new(),
+            created_at: "2026-07-24T00:00:00Z".to_string(),
+            session_id: "s1".to_string(),
+            started_at: 500.0,
+            ended_at: None,
+            memo_md: String::new(),
+            words: word_texts
+                .iter()
+                .enumerate()
+                .map(|(i, w)| word(&format!("b{i}"), w))
+                .collect(),
+            speaker_hints: vec![],
+        }
+    }
+
+    // -- replace_session_transcripts (E3 supersede primitive) --
+
+    #[tokio::test]
+    async fn replace_supersedes_every_other_transcript_in_file_and_index_and_sql() {
+        let (store, vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t-old-1", &["one"]))
+            .await
+            .unwrap();
+        store
+            .write_transcript("s1", batch("t-old-2", &["two"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t-new", &["fresh"]))
+            .await
+            .unwrap();
+
+        // File truth: only the new transcript remains.
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let transcripts = json["transcripts"].as_array().unwrap();
+        assert_eq!(transcripts.len(), 1);
+        assert_eq!(transcripts[0]["id"], "t-new");
+
+        // Index queries agree with the file.
+        let indexed: Vec<String> = store
+            .session_transcripts("s1")
+            .into_iter()
+            .map(|t| t.id)
+            .collect();
+        assert_eq!(indexed, vec!["t-new"]);
+        assert!(store.transcript_get("t-old-1").is_none());
+        assert!(store.transcript_get("t-old-2").is_none());
+    }
+
+    #[tokio::test]
+    async fn replace_moves_the_previous_file_to_trash_for_recovery() {
+        let (store, vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t-old", &["recoverable"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t-new", &["fresh"]))
+            .await
+            .unwrap();
+
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let trashed = vault
+            .path()
+            .join(".trash")
+            .join(date)
+            .join("sessions/s1/transcript.json");
+        assert!(
+            trashed.is_file(),
+            "superseded file must be hand-recoverable"
+        );
+        let json: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&trashed).unwrap()).unwrap();
+        assert_eq!(json["transcripts"][0]["id"], "t-old");
+        assert_eq!(json["transcripts"][0]["words"][0]["text"], "recoverable");
+    }
+
+    #[tokio::test]
+    async fn replace_of_the_same_single_transcript_does_not_trash() {
+        let (store, vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t1", &["v1"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t1", &["v2"]))
+            .await
+            .unwrap();
+
+        assert!(
+            !vault.path().join(".trash").exists(),
+            "overwriting the only transcript in place is a plain write, not a supersede"
+        );
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json["transcripts"][0]["words"][0]["text"], "v2");
+    }
+
+    #[tokio::test]
+    async fn replace_into_a_session_without_transcripts_behaves_like_a_plain_write() {
+        let (store, vault) = test_store().await;
+        store
+            .replace_session_transcripts("s1", batch("t1", &["first"]))
+            .await
+            .unwrap();
+
+        assert!(vault.path().join("sessions/s1/transcript.json").is_file());
+        assert!(!vault.path().join(".trash").exists());
+        assert_eq!(store.session_transcripts("s1").len(), 1);
+    }
+
+    #[tokio::test]
+    async fn replace_emits_a_transcripts_index_event() {
+        let (store, _vault) = test_store().await;
+        store
+            .write_transcript("s1", batch("t-old", &["one"]))
+            .await
+            .unwrap();
+        // drain what the setup writes emitted
+        let mut rx = store.take_index_change_receiver().unwrap();
+        while rx.try_recv().is_ok() {}
+
+        store
+            .replace_session_transcripts("s1", batch("t-new", &["fresh"]))
+            .await
+            .unwrap();
+
+        let mut saw_transcripts_change = false;
+        while let Ok((entity, ids)) = rx.try_recv() {
+            if entity == super::super::IndexEntity::Transcripts && ids.contains(&"s1".to_string()) {
+                saw_transcripts_change = true;
+            }
+        }
+        assert!(saw_transcripts_change);
+    }
+
+    /// A dirty live buffer for a *different* transcript is superseded content too -- a
+    /// pending debounced flush must not fire afterward and resurrect it next to (or on
+    /// top of) the replacement.
+    #[tokio::test]
+    async fn replace_clears_a_dirty_live_buffer_for_another_transcript() {
+        let (store, vault) = test_store().await;
+        store
+            .append_transcript("s1", delta_with_words(&["buffered"]))
+            .await
+            .unwrap();
+
+        store
+            .replace_session_transcripts("s1", batch("t-batch", &["replacement"]))
+            .await
+            .unwrap();
+
+        // let the pending debounce timer from the append fire
+        tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
+
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        let transcripts = json["transcripts"].as_array().unwrap();
+        assert_eq!(transcripts.len(), 1);
+        assert_eq!(transcripts[0]["id"], "t-batch");
+        assert_eq!(transcripts[0]["words"][0]["text"], "replacement");
+    }
+
     #[test]
     fn retry_delay_doubles_and_caps_without_ever_reaching_zero() {
         let mut delay = DEBOUNCE;
@@ -910,40 +1148,29 @@ mod tests {
     }
 
     /// The debounce flusher must keep retrying after a failure (now with backoff) rather
-    /// than abandoning the buffer: drop the index table so the first attempt fails, restore
-    /// it, and assert a later retry lands the words with no further appends and no explicit
-    /// flush call.
+    /// than abandoning the buffer: block the vault's `sessions/` path so the first attempt
+    /// fails, clear it, and assert a later retry lands the words with no further appends
+    /// and no explicit flush call.
     #[tokio::test]
     async fn debounce_retry_recovers_after_transient_failure_without_new_appends() {
-        let (store, _vault) = test_store().await;
-        sqlx::query("DROP TABLE transcripts")
-            .execute(store.pool())
-            .await
-            .unwrap();
+        let (store, vault) = test_store().await;
+        block_sessions_dir(vault.path());
         store
             .append_transcript("s1", delta_with_words(&["survivor"]))
             .await
             .unwrap();
 
-        // First flush attempt fires at ~1s and fails; restore the table before the backoff
-        // retry (~2s later) fires.
+        // First flush attempt fires at ~1s and fails; clear the obstacle before the
+        // backoff retry (~2s later) fires.
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
-        sqlx::query(TRANSCRIPTS_TABLE_DDL)
-            .execute(store.pool())
-            .await
-            .unwrap();
+        unblock_sessions_dir(vault.path());
 
         // Poll instead of a single fixed sleep: on a loaded machine the recovery may only
         // land on a later (further backed-off) retry, and "retries never stop" is exactly
         // the property under test.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
         loop {
-            let row_count: i64 =
-                sqlx::query_scalar("SELECT COUNT(*) FROM transcripts WHERE session_id='s1'")
-                    .fetch_one(store.pool())
-                    .await
-                    .unwrap();
-            if row_count == 1 {
+            if store.transcript_get("t1").is_some() {
                 break;
             }
             assert!(
@@ -952,5 +1179,9 @@ mod tests {
             );
             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
         }
+        assert!(
+            vault.path().join("sessions/s1/transcript.json").is_file(),
+            "the recovered flush must land the file too"
+        );
     }
 }

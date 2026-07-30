@@ -99,6 +99,26 @@ pub(crate) async fn load<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub(crate) async fn get_config<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+) -> Result<crate::AppConfig, String> {
+    Ok(app.settings().config())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn set_config_values<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    values: std::collections::HashMap<String, serde_json::Value>,
+) -> Result<(), String> {
+    app.settings()
+        .set_config_values(values)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub(crate) async fn save<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     settings: serde_json::Value,

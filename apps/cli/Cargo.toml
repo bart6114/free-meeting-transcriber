@@ -9,8 +9,7 @@ path = "src/main.rs"
 
 [dependencies]
 hypr-agent-access = { workspace = true }
-hypr-db-app = { workspace = true }
-hypr-db-core = { workspace = true }
+hypr-vault-read = { workspace = true }
 
 clap = { workspace = true, features = ["derive", "env"] }
 dirs = { workspace = true }
@@ -25,5 +24,4 @@ url = { workspace = true }
 cli-docs = { path = "../../crates/cli-docs" }
 insta = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["client"] }
-sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
 tempfile = { workspace = true }

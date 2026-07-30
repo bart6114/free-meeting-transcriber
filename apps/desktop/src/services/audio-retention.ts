@@ -3,9 +3,9 @@ import {
   type AudioRetentionPolicy,
 } from "./audio-retention-policy";
 
-import { liveQueryClient } from "~/db";
 import { deleteLocalSessionAudio } from "~/session/attachments";
 import { listenerStore } from "~/store/zustand/listener/instance";
+import { commands } from "~/types/tauri.gen";
 
 export const AUDIO_RETENTION_TASK_ID = "audio-retention-cleanup";
 export const AUDIO_RETENTION_INTERVAL = 60 * 1000;
@@ -49,20 +49,11 @@ export function isSessionAudioIdle(sessionId: string) {
 }
 
 async function sessionHasTranscriptWords(sessionId: string): Promise<boolean> {
-  const rows = await liveQueryClient.execute<{ has_words: number }>(
-    `
-      SELECT EXISTS(
-        SELECT 1
-        FROM transcripts
-        WHERE session_id = ?
-          AND deleted_at IS NULL
-          AND json_valid(words_json)
-          AND json_array_length(words_json) > 0
-      ) AS has_words
-    `,
-    [sessionId],
-  );
-  return rows[0]?.has_words === 1;
+  const result = await commands.sessionHasTranscript(sessionId);
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
+  return result.data;
 }
 
 export async function deleteProcessedAudioForRetention(
@@ -104,49 +95,35 @@ export async function cleanupExpiredAudio(
   }
 
   const deletes: Promise<void>[] = [];
-  const sessions = await liveQueryClient.execute<{
-    id: string;
-    created_at: string;
-    has_words: number;
-  }>(`
-    SELECT
-      session.id,
-      session.created_at,
-      EXISTS(
-        SELECT 1
-        FROM transcripts AS transcript
-        WHERE transcript.session_id = session.id
-          AND transcript.deleted_at IS NULL
-          AND json_valid(transcript.words_json)
-          AND json_array_length(transcript.words_json) > 0
-      ) AS has_words
-    FROM sessions AS session
-    ORDER BY session.created_at, session.id
-  `);
+  const result = await commands.sessionList();
+  if (result.status === "error") {
+    throw new Error(result.error);
+  }
 
-  for (const session of sessions) {
-    if (!isSessionAudioIdle(session.id)) {
+  for (const entry of result.data) {
+    const sessionId = entry.meta.id;
+    if (!isSessionAudioIdle(sessionId)) {
       continue;
     }
 
-    if (policy === "none" && session.has_words !== 1) {
+    if (policy === "none" && !entry.has_transcript_words) {
       continue;
     }
 
-    if (!sessionAudioExpired(session.created_at, policy, nowMs)) {
+    if (!sessionAudioExpired(entry.meta.created_at, policy, nowMs)) {
       continue;
     }
 
     deletes.push(
-      deleteLocalSessionAudio(session.id, () => isSessionAudioIdle(session.id))
+      deleteLocalSessionAudio(sessionId, () => isSessionAudioIdle(sessionId))
         .then((deleted) => {
           if (deleted) {
-            deletedSessionIds.push(session.id);
+            deletedSessionIds.push(sessionId);
           }
         })
         .catch((error) => {
           console.error("[audio-retention] failed to delete audio", {
-            sessionId: session.id,
+            sessionId,
             error,
           });
         }),
