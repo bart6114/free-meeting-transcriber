@@ -2,7 +2,7 @@
 
 Tauri desktop note-taking app (`apps/desktop/`) with a web app (`apps/web/`).
 Uses pnpm workspaces.
-SQLite is the primary data store (schema and migrations in `crates/db-app/`, desktop transport in `plugins/db/`), Zustand is used for UI state, and TipTap powers the editor. Sessions are the core entity — all notes are backed by sessions.
+Files in the user's vault directory are the only source of truth — there is no database. The vault format lives in `crates/vault-read/`; the desktop write path and in-memory index are `apps/desktop/src-tauri/src/session_store/`. App settings are a `config.json` in the vault, not rows. Zustand is used for UI state, and TipTap powers the editor. Sessions are the core entity — all notes are backed by sessions, stored under `sessions/<id>/`.
 
 ## Commands
 
@@ -22,7 +22,7 @@ SQLite is the primary data store (schema and migrations in `crates/db-app/`, des
 - For `apps/desktop/` TypeScript changes, prefer `pnpm -F desktop typecheck` to match CI.
 - After edits, run `pnpm exec dprint fmt`.
 - Use `useForm` (tanstack-form) and `useQuery`/`useMutation` (tanstack-query) for form/mutation state. Avoid manual state management (e.g. `setError`).
-- For `plugins/db` live queries, keep schema creation, migrations, and DB initialization on the Rust side; TypeScript should only consume `execute`/`subscribe` APIs.
+- Keep file I/O, atomic writes, and index maintenance on the Rust side. TypeScript reads through the typed store commands and subscribes to changes via `useIndexQuery` (`src/shared/index-query.ts`), which fans out the coalesced `index-changed` event — never read or write vault files directly from the frontend.
 - Branch naming: `fix/`, `chore/`, `refactor/` prefixes.
 
 ## Code Style
