@@ -80,7 +80,11 @@ import {
   getPreferredProviderModel,
 } from "~/stt/model-selection";
 
-export function SelectProviderAndModel() {
+export function SelectProviderAndModel({
+  showAlerts = true,
+}: {
+  showAlerts?: boolean;
+} = {}) {
   const { t } = useLingui();
   const { current_stt_provider, current_stt_model } = useConfigValues([
     "current_stt_provider",
@@ -215,12 +219,14 @@ export function SelectProviderAndModel() {
           model={defaultSelection.model}
         />
       ) : null}
-      <SettingsAlertToast
-        id="stt-settings-alert"
-        description={alertDescription}
-        variant={hasError ? "error" : "warning"}
-      />
-      {!alertDescription && <TranscriptionLanguageWarningToast />}
+      {showAlerts && (
+        <SettingsAlertToast
+          id="stt-settings-alert"
+          description={alertDescription}
+          variant={hasError ? "error" : "warning"}
+        />
+      )}
+      {showAlerts && !alertDescription && <TranscriptionLanguageWarningToast />}
 
       <h3 className="text-md font-sans font-semibold">
         <Trans>Model being used</Trans>

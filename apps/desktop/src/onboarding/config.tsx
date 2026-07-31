@@ -1,14 +1,26 @@
-import { platform } from "@tauri-apps/plugin-os";
+import { arch, platform } from "@tauri-apps/plugin-os";
 
 import type { SectionStatus } from "./shared";
 
-export type OnboardingStep = "permissions" | "folder-location" | "final";
-
-const STEPS_MACOS: OnboardingStep[] = ["permissions", "final"];
-const STEPS_OTHER: OnboardingStep[] = ["final"];
+export type OnboardingStep =
+  | "permissions"
+  | "folder-location"
+  | "stt-model"
+  | "llm-provider"
+  | "final";
 
 function getOnboardingSteps(): OnboardingStep[] {
-  return platform() === "macos" ? STEPS_MACOS : STEPS_OTHER;
+  const steps: OnboardingStep[] = [];
+  if (platform() === "macos") {
+    steps.push("permissions");
+  }
+  // On-device STT models are only offered on aarch64, matching the arch gate
+  // in settings/ai/stt/select.tsx.
+  if (arch() === "aarch64") {
+    steps.push("stt-model");
+  }
+  steps.push("llm-provider", "final");
+  return steps;
 }
 
 export function getInitialStep(): OnboardingStep {

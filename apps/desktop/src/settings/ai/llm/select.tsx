@@ -50,7 +50,11 @@ import { setSettingValues, useSettingsReady } from "~/settings/queries";
 import { useConfigValues } from "~/shared/config";
 import { SettingsAlertToast } from "~/shared/ui/settings-alert";
 
-export function SelectProviderAndModel() {
+export function SelectProviderAndModel({
+  showAlerts = true,
+}: {
+  showAlerts?: boolean;
+} = {}) {
   const { t } = useLingui();
   const { providers: configuredProviders, isReady: providerSettingsReady } =
     useConfiguredMapping();
@@ -330,11 +334,13 @@ export function SelectProviderAndModel() {
           model={defaultSelection.model}
         />
       ) : null}
-      <SettingsAlertToast
-        id="llm-settings-alert"
-        description={alertDescription}
-        variant={hasError ? "error" : "warning"}
-      />
+      {showAlerts && (
+        <SettingsAlertToast
+          id="llm-settings-alert"
+          description={alertDescription}
+          variant={hasError ? "error" : "warning"}
+        />
+      )}
 
       <h3 className="text-md font-sans font-semibold">
         <Trans>Model being used</Trans>
