@@ -106,6 +106,41 @@ impl SessionStore {
         self.write_meta_locked(&guard, &meta).await
     }
 
+    /// Recording lifecycle stamps for `_meta.json`, driven by capture start/stop events.
+    /// `started_at` keeps the first recording's start -- a paused-and-resumed recording
+    /// must not shift the session forward on the timeline -- while `ended_at` always
+    /// advances to the latest stop, so together they span every take in the session.
+    /// Errors on a missing `_meta.json` for the same reason as `update_meta`: a stamp
+    /// racing a delete must not resurrect the session folder.
+    pub async fn mark_recording_started(&self, id: &str, at: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+
+        let mut meta = self
+            .read_meta(id)
+            .await?
+            .ok_or_else(|| StoreError::Io(format!("session {id} has no _meta.json to update")))?;
+
+        if meta.started_at.is_some() {
+            return Ok(());
+        }
+        meta.started_at = Some(at.to_string());
+        self.write_meta_locked(&guard, &meta).await
+    }
+
+    pub async fn mark_recording_ended(&self, id: &str, at: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+
+        let mut meta = self
+            .read_meta(id)
+            .await?
+            .ok_or_else(|| StoreError::Io(format!("session {id} has no _meta.json to update")))?;
+
+        meta.ended_at = Some(at.to_string());
+        self.write_meta_locked(&guard, &meta).await
+    }
+
     pub async fn read_meta(&self, id: &str) -> Result<Option<SessionMeta>, StoreError> {
         validate_session_id(id)?;
         let vault_base = self.vault_base.clone();
@@ -728,6 +763,93 @@ mod tests {
         let after = store.read_meta("s1").await.unwrap().unwrap();
         assert_eq!(after.title, "Renamed");
         assert_eq!(after.tags, vec!["tagged".to_string()]);
+    }
+
+    /// REGRESSION: sessions are created with `started_at`/`ended_at` null and nothing on
+    /// either side of the IPC boundary ever patched them, so every real recording kept
+    /// null timestamps forever. A start/stop cycle must leave both stamped in the
+    /// persisted file (not just the in-memory index).
+    #[tokio::test]
+    async fn recording_start_stop_cycle_persists_non_null_timestamps() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "Standup")).await.unwrap();
+
+        store
+            .mark_recording_started("s1", "2026-07-31T10:00:00.000Z")
+            .await
+            .unwrap();
+        store
+            .mark_recording_ended("s1", "2026-07-31T10:30:00.000Z")
+            .await
+            .unwrap();
+
+        let raw: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/_meta.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(raw["started_at"], "2026-07-31T10:00:00.000Z");
+        assert_eq!(raw["ended_at"], "2026-07-31T10:30:00.000Z");
+
+        let indexed = store.session_get("s1").unwrap().meta;
+        assert_eq!(
+            indexed.started_at.as_deref(),
+            Some("2026-07-31T10:00:00.000Z"),
+            "write-through must reach the index"
+        );
+        assert_eq!(
+            indexed.ended_at.as_deref(),
+            Some("2026-07-31T10:30:00.000Z")
+        );
+    }
+
+    #[tokio::test]
+    async fn a_second_recording_keeps_the_first_start_and_advances_the_end() {
+        let (store, _vault) = test_store().await;
+        store.write_meta(&meta("s1", "Standup")).await.unwrap();
+
+        store
+            .mark_recording_started("s1", "2026-07-31T10:00:00.000Z")
+            .await
+            .unwrap();
+        store
+            .mark_recording_ended("s1", "2026-07-31T10:30:00.000Z")
+            .await
+            .unwrap();
+        store
+            .mark_recording_started("s1", "2026-07-31T11:00:00.000Z")
+            .await
+            .unwrap();
+        store
+            .mark_recording_ended("s1", "2026-07-31T11:10:00.000Z")
+            .await
+            .unwrap();
+
+        let after = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(
+            after.started_at.as_deref(),
+            Some("2026-07-31T10:00:00.000Z")
+        );
+        assert_eq!(after.ended_at.as_deref(), Some("2026-07-31T11:10:00.000Z"));
+    }
+
+    /// Same rationale as `update_meta_errors_when_meta_file_is_missing`: a stamp racing a
+    /// delete must fail loudly, not invent a meta and resurrect the session folder.
+    #[tokio::test]
+    async fn mark_recording_timestamps_error_when_meta_file_is_missing() {
+        let (store, vault) = test_store().await;
+        assert!(
+            store
+                .mark_recording_started("ghost", "2026-07-31T10:00:00.000Z")
+                .await
+                .is_err()
+        );
+        assert!(
+            store
+                .mark_recording_ended("ghost", "2026-07-31T10:30:00.000Z")
+                .await
+                .is_err()
+        );
+        assert!(!vault.path().join("sessions/ghost").exists());
     }
 
     #[tokio::test]
