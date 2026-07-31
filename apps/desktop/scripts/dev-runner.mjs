@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn, spawnSync } from "node:child_process";
+import { linkSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -24,10 +25,26 @@ if (command === "run" || command === "build") {
   cargoArgs.push(command, ...args);
   runChild("cargo", cargoArgs);
 } else {
+  let binary = command;
   if (process.platform === "darwin") {
-    signBinary(command);
+    signBinary(binary);
+    binary = displayNamedBinary(binary);
   }
-  runChild(command, args);
+  runChild(binary, args);
+}
+
+// macOS names raw (unbundled) processes after the executable file, so the dev
+// app would show up in the Dock as "desktop". Run through a hardlink named
+// after the product instead.
+function displayNamedBinary(binary) {
+  const displayPath = resolve(dirname(binary), "Free Meeting Transcriber Dev");
+  try {
+    rmSync(displayPath, { force: true });
+    linkSync(binary, displayPath);
+  } catch {
+    return binary;
+  }
+  return displayPath;
 }
 
 function signBinary(binary) {

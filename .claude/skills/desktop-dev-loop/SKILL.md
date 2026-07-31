@@ -7,6 +7,10 @@ description: Use when running, restarting, or resetting the desktop dev app, whe
 
 Run: `pnpm -F @hypr/desktop tauri:dev` (first Rust build is slow; later ones ~10s).
 
+Cargo builds `target/debug/desktop`, but on macOS `dev-runner.mjs` hardlinks it to
+`target/debug/Free Meeting Transcriber Dev` and runs that, so the Dock shows the
+product name — the running process is the hardlink, not `desktop`.
+
 ## Where state actually lives
 
 Dev builds use the **raw bundle id** as the folder name; release builds use
@@ -52,7 +56,7 @@ grep -iE "error|warn|stt|transcri|session_" ~/Library/Logs/org.freemeetingtransc
 Move the state aside rather than deleting it — recordings are unrecoverable otherwise.
 
 ```bash
-pkill -f "target/debug/desktop"; pkill -f "tauri dev"
+pkill -f "target/debug/Free Meeting Transcriber Dev"; pkill -f "tauri dev"
 mv ~/Library/Application\ Support/org.freemeetingtranscriber.dev ~/fmtr-backup-$(date +%s)
 ```
 
