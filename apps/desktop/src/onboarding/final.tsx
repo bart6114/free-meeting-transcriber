@@ -6,7 +6,6 @@ import { useRef, useState } from "react";
 
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as openerCommands } from "@hypr/plugin-opener2";
-import { commands as sfxCommands } from "@hypr/plugin-sfx";
 
 import { OnboardingButton } from "./shared";
 import {
@@ -114,7 +113,6 @@ export async function finishOnboarding(
   onContinue?: (sessionId: string) => void,
   welcomeSessionRef?: { current: string | null },
 ) {
-  await sfxCommands.stop("BGM").catch(console.error);
   const welcomeSessionId =
     welcomeSessionRef?.current ??
     (await getOrCreateWelcomeSession().catch((error) => {
