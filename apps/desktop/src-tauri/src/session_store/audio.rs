@@ -36,11 +36,62 @@ fn plain_rename(source: &Path, dest: &Path) -> std::io::Result<()> {
     std::fs::rename(source, dest)
 }
 
+/// The recording file names every reader knows about: `hypr_fs_sync_core::audio` (the audio
+/// player's existence/path/metadata lookups), `listener_core::resolve_final_audio_path` (the
+/// path handed to post-capture batch transcription) and docs/storage.md all agree on
+/// `audio.{mp3,wav,ogg}` inside the session directory, and none of them search anywhere else.
+const READABLE_AUDIO_EXTENSIONS: [&str; 3] = ["mp3", "wav", "ogg"];
+
+fn canonical_audio_file_name(source: &Path) -> Result<String, StoreError> {
+    let extension = source
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| extension.to_ascii_lowercase())
+        .ok_or_else(|| StoreError::Io("source audio path has no extension".to_string()))?;
+
+    if !READABLE_AUDIO_EXTENSIONS.contains(&extension.as_str()) {
+        return Err(StoreError::Io(format!(
+            "unsupported audio extension {:?}: a recording stored under it would be invisible to the app",
+            extension
+        )));
+    }
+
+    Ok(format!("audio.{}", extension))
+}
+
+/// Sessions can live under a user folder (`sessions/<folder>/<id>/`), which the readers find by
+/// searching rather than by the flat `sessions/<id>/` path. So a recording that already sits in
+/// a directory named for its session stays there; only a file from outside (an import) is moved
+/// into the session directory.
+fn canonical_audio_dir(vault_base: &Path, session_id: &str, source: &Path) -> PathBuf {
+    let session_dir = source.parent().filter(|parent| {
+        parent
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == session_id)
+    });
+
+    match session_dir {
+        Some(dir) => dir.to_path_buf(),
+        None => vault_base.join(paths::session_dir(session_id)),
+    }
+}
+
+fn is_same_file_path(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => a == b,
+    }
+}
+
 impl SessionStore {
-    /// Moves a finished recording's audio file into `sessions/<id>/audio/<filename>`. Prefers
-    /// `std::fs::rename` (atomic, no data-duplication window); falls back to copy+delete when
-    /// the source and destination are on different volumes (rename can't cross devices).
-    /// Returns the new path relative to the vault base.
+    /// Settles a finished recording at the one path the rest of the app reads:
+    /// `<session dir>/audio.<ext>` (docs/storage.md). The recorder already writes there, so the
+    /// usual case is a no-op; an imported file from outside the vault is moved in, preferring
+    /// `std::fs::rename` (atomic, no data-duplication window) and falling back to copy+delete
+    /// across volumes. Returns the absolute settled path -- callers hold paths to this file
+    /// (batch transcription re-reads it, the player resolves it), so they need the path the
+    /// recording actually ended up at, not the one they passed in.
     pub async fn store_audio(
         &self,
         session_id: &str,
@@ -52,21 +103,18 @@ impl SessionStore {
         let source_path = PathBuf::from(source_path);
 
         tokio::task::spawn_blocking(move || -> Result<String, StoreError> {
-            let file_name = source_path
-                .file_name()
-                .ok_or_else(|| StoreError::Io("source path has no file name".to_string()))?;
+            let file_name = canonical_audio_file_name(&source_path)?;
+            let dest_dir = canonical_audio_dir(&vault_base, &session_id, &source_path);
+            let dest_abs = dest_dir.join(&file_name);
 
-            let audio_dir_rel = paths::audio_dir(&session_id);
-            let audio_dir_abs = vault_base.join(&audio_dir_rel);
-            std::fs::create_dir_all(&audio_dir_abs)
-                .map_err(|e| StoreError::Io(format!("failed to create audio directory: {}", e)))?;
+            if !is_same_file_path(&source_path, &dest_abs) {
+                std::fs::create_dir_all(&dest_dir).map_err(|e| {
+                    StoreError::Io(format!("failed to create session directory: {}", e))
+                })?;
+                move_or_copy_delete(&source_path, &dest_abs, plain_rename)?;
+            }
 
-            let dest_abs = audio_dir_abs.join(file_name);
-
-            move_or_copy_delete(&source_path, &dest_abs, plain_rename)?;
-
-            let dest_rel = audio_dir_rel.join(file_name);
-            dest_rel
+            dest_abs
                 .to_str()
                 .map(|s| s.to_string())
                 .ok_or_else(|| StoreError::Io("invalid destination path".to_string()))
@@ -77,6 +125,10 @@ impl SessionStore {
 
     /// Lists audio file names (not full paths) under `sessions/<id>/audio/`, sorted. Missing
     /// directory -> empty list, matching the "nothing recorded yet" state rather than an error.
+    ///
+    /// Nothing writes that directory any more -- recordings settle at `<session dir>/audio.<ext>`
+    /// (see `store_audio`). This and `delete_audio` stay so retention can still clear vaults
+    /// written by the builds that did relocate recordings there.
     pub async fn list_audio(&self, session_id: &str) -> Result<Vec<String>, StoreError> {
         validate_session_id(session_id)?;
         let vault_base = self.vault_base.clone();
@@ -160,43 +212,92 @@ mod tests {
         (store, temp)
     }
 
+    /// REGRESSION: `store_audio` used to move recordings into `sessions/<id>/audio/<name>`, a
+    /// location nothing reads. The recorder writes `sessions/<id>/audio.<ext>`
+    /// (docs/storage.md), the audio player gates on `hypr_fs_sync_core::audio::exists`, and
+    /// post-capture batch transcription re-reads the path the recorder reported -- moving the
+    /// file out from under all three cost every recording both its transcript and its player
+    /// entry. Asserting through the real reader (rather than a hardcoded path) is the point:
+    /// it fails if either side of the convention drifts again.
     #[tokio::test]
-    async fn store_audio_moves_file_into_session_audio_dir() {
+    async fn store_audio_leaves_the_recording_where_the_readers_look() {
         let (store, vault) = test_store().await;
         let source = vault.path().join("recording.wav");
         std::fs::write(&source, b"wav-bytes").unwrap();
 
-        let relative = store
+        let stored = store
             .store_audio("s1", source.to_str().unwrap())
             .await
             .unwrap();
 
-        assert_eq!(relative, "sessions/s1/audio/recording.wav");
-        assert!(vault.path().join(&relative).is_file());
-        assert!(!source.exists(), "source file must be moved, not copied");
-        assert_eq!(
-            std::fs::read(vault.path().join(&relative)).unwrap(),
-            b"wav-bytes"
+        let session_dir = vault.path().join("sessions/s1");
+        assert_eq!(stored, session_dir.join("audio.wav").to_str().unwrap());
+        assert!(
+            hypr_fs_sync_core::audio::exists(&session_dir).unwrap(),
+            "the audio player's existence check must find the stored recording"
         );
+        assert_eq!(
+            hypr_fs_sync_core::audio::path(&session_dir),
+            Some(session_dir.join("audio.wav")),
+            "the audio player's path lookup must resolve to the stored recording"
+        );
+        assert_eq!(std::fs::read(&stored).unwrap(), b"wav-bytes");
+        assert!(!source.exists(), "source file must be moved, not copied");
     }
 
+    /// REGRESSION: the recorder already writes into the session directory, so cataloging a
+    /// finished recording must be a no-op that hands back the path it was given -- not a
+    /// relocation that invalidates every path already handed out for that file.
     #[tokio::test]
-    async fn store_audio_uses_plain_rename_on_the_happy_path() {
+    async fn store_audio_is_a_noop_when_the_recording_is_already_canonical() {
         let (store, vault) = test_store().await;
-        let source = vault.path().join("nested").join("take.wav");
-        std::fs::create_dir_all(source.parent().unwrap()).unwrap();
-        std::fs::write(&source, b"content").unwrap();
+        let session_dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        let source = session_dir.join("audio.mp3");
+        std::fs::write(&source, b"mp3-bytes").unwrap();
 
-        let relative = store
+        let stored = store
             .store_audio("s1", source.to_str().unwrap())
             .await
             .unwrap();
 
-        assert_eq!(
-            std::fs::read(vault.path().join(&relative)).unwrap(),
-            b"content"
-        );
-        assert!(!source.exists());
+        assert_eq!(stored, source.to_str().unwrap());
+        assert!(source.is_file(), "the recording must survive cataloging");
+        assert_eq!(std::fs::read(&source).unwrap(), b"mp3-bytes");
+    }
+
+    /// A session stored under a user folder (`sessions/<folder>/<id>/`) keeps its recording in
+    /// its own directory -- hoisting it to `sessions/<id>/` would hide it from the readers,
+    /// which resolve the session directory by search rather than by the flat path.
+    #[tokio::test]
+    async fn store_audio_keeps_a_foldered_session_recording_beside_its_session() {
+        let (store, vault) = test_store().await;
+        let session_dir = vault.path().join("sessions/Work/s1");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        let source = session_dir.join("audio.mp3");
+        std::fs::write(&source, b"mp3-bytes").unwrap();
+
+        let stored = store
+            .store_audio("s1", source.to_str().unwrap())
+            .await
+            .unwrap();
+
+        assert_eq!(stored, source.to_str().unwrap());
+        assert!(hypr_fs_sync_core::audio::exists(&session_dir).unwrap());
+    }
+
+    /// Only extensions the readers know about are accepted -- silently storing `take.m4a`
+    /// would reproduce the original bug's signature (a file on disk that no reader can find).
+    #[tokio::test]
+    async fn store_audio_rejects_an_extension_no_reader_understands() {
+        let (store, vault) = test_store().await;
+        let source = vault.path().join("take.m4a");
+        std::fs::write(&source, b"bytes").unwrap();
+
+        let result = store.store_audio("s1", source.to_str().unwrap()).await;
+
+        assert!(result.is_err());
+        assert!(source.exists(), "a rejected source must not be destroyed");
     }
 
     /// REGRESSION (reviewer-found minor): the previous version of this test asserted only the

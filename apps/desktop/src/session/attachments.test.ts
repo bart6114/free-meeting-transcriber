@@ -54,7 +54,7 @@ describe("attachment catalog", () => {
     });
     mocks.sessionStoreAudio.mockResolvedValue({
       status: "ok",
-      data: "sessions/session-1/audio/recording.wav",
+      data: "/vault/sessions/session-1/audio.wav",
     });
     mocks.sessionListAudio.mockResolvedValue({ status: "ok", data: [] });
     mocks.sessionDeleteAudio.mockResolvedValue({ status: "ok", data: null });
@@ -87,10 +87,12 @@ describe("attachment catalog", () => {
     );
   });
 
-  it("moves a finished recording into the session's audio folder via the store", async () => {
+  // REGRESSION: this used to discard the store's return value, so callers kept using the
+  // path they passed in — which the store had just moved out from under them.
+  it("returns the path the recording actually settled at", async () => {
     await expect(
       catalogLocalSessionAudio("session-1", "/tmp/recording.wav"),
-    ).resolves.toBeUndefined();
+    ).resolves.toBe("/vault/sessions/session-1/audio.wav");
 
     expect(mocks.sessionStoreAudio).toHaveBeenCalledWith(
       "session-1",

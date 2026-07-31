@@ -20,16 +20,18 @@ export async function catalogLocalNoteAttachment(_input: {
   sha256: string;
 }): Promise<void> {}
 
-// Moves a just-finished recording from wherever the capture backend wrote it
-// into `sessions/<id>/audio/<filename>` via the session store.
+// Settles a just-finished recording at the canonical `<session dir>/audio.<ext>` via the
+// session store, and returns where it ended up — the store may relocate it, so callers
+// holding the capture backend's path must re-point at this one.
 export async function catalogLocalSessionAudio(
   sessionId: string,
   sourcePath: string,
-): Promise<void> {
+): Promise<string> {
   const result = await commands.sessionStoreAudio(sessionId, sourcePath);
   if (result.status === "error") {
     throw new Error(result.error);
   }
+  return result.data;
 }
 
 export async function deleteLocalSessionAudio(

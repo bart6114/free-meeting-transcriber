@@ -42,8 +42,17 @@ export function getPostCaptureAction(
     needsBatchRepair: boolean;
   },
   canRunBatch: boolean,
+  // `liveTranscriptionActive` only reports the transcription *mode* the session ran in, so a
+  // live stream that opens and dies without emitting a word is indistinguishable from one that
+  // worked. Whether any words actually landed is the thing worth trusting: if none did, the
+  // recording still has to be transcribed rather than handed to the summarizer empty.
+  liveTranscriptEmpty = false,
 ) {
-  if (details.liveTranscriptionActive && !details.needsBatchRepair) {
+  if (
+    details.liveTranscriptionActive &&
+    !details.needsBatchRepair &&
+    !liveTranscriptEmpty
+  ) {
     return "enhance_only" as const;
   }
 
@@ -99,10 +108,14 @@ export function useStartListening(sessionId: string) {
 
     let audioCatalogFailed = false;
     const onStopped: OnStoppedCallback = async (_sessionId, details) => {
+      // Cataloging can relocate the recording, so everything downstream reads the path it
+      // settled at; the capture backend's path is only a fallback for when cataloging failed
+      // and the file is therefore still where capture left it.
+      let storedAudioPath = details.audioPath;
       if (details.audioPath) {
         const audioPath = details.audioPath;
         try {
-          await enqueueSessionAudioOperation(sessionId, () =>
+          storedAudioPath = await enqueueSessionAudioOperation(sessionId, () =>
             catalogLocalSessionAudio(sessionId, audioPath),
           );
         } catch (error) {
@@ -124,15 +137,21 @@ export function useStartListening(sessionId: string) {
         }
       }
 
+      // Restricted to sessions that came out of this capture with no transcript at all:
+      // re-transcribing one that already has words would duplicate them over the same audio.
+      const liveTranscriptEmpty =
+        !hadTranscriptBeforeStart && transcriptId === null;
+
       const postCaptureAction = getPostCaptureAction(
         details,
         canRunBatchRef.current,
+        liveTranscriptEmpty,
       );
 
       let batchCompleted = false;
       if (postCaptureAction === "batch_then_enhance") {
         try {
-          await runBatchRef.current(details.audioPath!);
+          await runBatchRef.current(storedAudioPath!);
           batchCompleted = true;
         } catch (error) {
           if (isStoppedTranscriptionError(error)) {

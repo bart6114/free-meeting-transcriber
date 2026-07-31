@@ -186,6 +186,37 @@ describe("getPostCaptureAction", () => {
     ).toBe("batch_then_enhance");
   });
 
+  // REGRESSION: `liveTranscriptionActive` reports the configured transcription *mode*, not
+  // whether the stream ever emitted a word. A live stream that opened and died produced a
+  // session with no transcript, no batch fallback and no error at all.
+  test("falls back to batch when live transcription was active but produced no words", () => {
+    expect(
+      getPostCaptureAction(
+        {
+          audioPath: "/tmp/session.wav",
+          liveTranscriptionActive: true,
+          needsBatchRepair: false,
+        },
+        true,
+        true,
+      ),
+    ).toBe("batch_then_enhance");
+  });
+
+  test("enhances without re-transcribing when live transcription did produce words", () => {
+    expect(
+      getPostCaptureAction(
+        {
+          audioPath: "/tmp/session.wav",
+          liveTranscriptionActive: true,
+          needsBatchRepair: false,
+        },
+        true,
+        false,
+      ),
+    ).toBe("enhance_only");
+  });
+
   test("does nothing when batch fallback is needed but no transcription connection is available", () => {
     expect(
       getPostCaptureAction(
@@ -236,7 +267,9 @@ describe("useStartListening", () => {
     sessionAppendTranscriptMock.mockResolvedValue({ status: "ok", data: null });
     sessionFlushTranscriptMock.mockResolvedValue({ status: "ok", data: null });
     softDeleteTranscriptMock.mockResolvedValue(undefined);
-    catalogLocalSessionAudioMock.mockResolvedValue(undefined);
+    catalogLocalSessionAudioMock.mockResolvedValue(
+      "/vault/sessions/session-1/audio.wav",
+    );
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language" ? "en" : [],
     );
@@ -337,7 +370,9 @@ describe("useStartListening", () => {
       });
     });
 
-    expect(runBatchMock).toHaveBeenCalledWith("/tmp/session.wav");
+    // REGRESSION: cataloging can relocate the recording, and this ran batch transcription
+    // against the pre-catalog path — which failed with ENOENT, leaving every record-only
+    // session with no transcript at all. Batch must read where the audio ended up.
     expect(catalogLocalSessionAudioMock).toHaveBeenCalledWith(
       "session-1",
       "/tmp/session.wav",
@@ -345,6 +380,9 @@ describe("useStartListening", () => {
     expect(
       catalogLocalSessionAudioMock.mock.invocationCallOrder[0],
     ).toBeLessThan(runBatchMock.mock.invocationCallOrder[0]!);
+    expect(runBatchMock).toHaveBeenCalledWith(
+      "/vault/sessions/session-1/audio.wav",
+    );
     expect(queueAutoEnhanceIfSummaryEmptyMock).toHaveBeenCalledWith(
       "session-1",
     );
@@ -382,6 +420,92 @@ describe("useStartListening", () => {
       { id: "audio-catalog-failed" },
     );
     expect(deleteProcessedAudioForRetentionMock).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  // REGRESSION: this is the shape of a real lost recording — live mode selected, the stream
+  // reported itself active, but not one word was persisted. The app concluded live
+  // transcription had succeeded and skipped the batch fallback, so the session ended up with
+  // no transcript and no error anywhere.
+  test("transcribes the recording when a live capture persists no words at all", async () => {
+    const { result } = renderHook(() => useStartListening("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
+    await act(async () => {
+      await onStopped?.("session-1", {
+        durationSeconds: 12,
+        audioPath: "/tmp/session.wav",
+        requestedLiveTranscription: true,
+        liveTranscriptionActive: true,
+        needsBatchRepair: false,
+      });
+    });
+
+    expect(runBatchMock).toHaveBeenCalledWith(
+      "/vault/sessions/session-1/audio.wav",
+    );
+    expect(queueAutoEnhanceIfSummaryEmptyMock).toHaveBeenCalledWith(
+      "session-1",
+    );
+  });
+
+  test("does not re-transcribe when a live capture already persisted words", async () => {
+    const { result } = renderHook(() => useStartListening("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const callbacks = startMock.mock.calls[0]?.[1];
+    callbacks?.handlePersist?.({
+      new_words: [
+        { id: "word-1", text: "hello", start_ms: 0, end_ms: 100, channel: 0 },
+      ],
+      replaced_ids: [],
+      partials: [],
+    });
+
+    await act(async () => {
+      await callbacks?.onStopped?.("session-1", {
+        durationSeconds: 12,
+        audioPath: "/tmp/session.wav",
+        requestedLiveTranscription: true,
+        liveTranscriptionActive: true,
+        needsBatchRepair: false,
+      });
+    });
+
+    expect(runBatchMock).not.toHaveBeenCalled();
+  });
+
+  test("transcribes the recording where capture left it when cataloging fails", async () => {
+    catalogLocalSessionAudioMock.mockRejectedValueOnce(new Error("disk full"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+
+    const { result } = renderHook(() => useStartListening("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
+    await act(async () => {
+      await onStopped?.("session-1", {
+        durationSeconds: 42,
+        audioPath: "/tmp/session.wav",
+        requestedLiveTranscription: false,
+        liveTranscriptionActive: false,
+        needsBatchRepair: false,
+      });
+    });
+
+    expect(runBatchMock).toHaveBeenCalledWith("/tmp/session.wav");
     consoleError.mockRestore();
   });
 
@@ -646,10 +770,17 @@ describe("useStartListening", () => {
       await result.current();
     });
 
-    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
+    const callbacks = startMock.mock.calls[0]?.[1];
+    callbacks?.handlePersist?.({
+      new_words: [
+        { id: "word-1", text: "hello", start_ms: 0, end_ms: 100, channel: 0 },
+      ],
+      replaced_ids: [],
+      partials: [],
+    });
 
     await act(async () => {
-      await onStopped?.("session-1", {
+      await callbacks?.onStopped?.("session-1", {
         durationSeconds: 42,
         audioPath: "/tmp/session.wav",
         requestedLiveTranscription: true,
@@ -745,7 +876,9 @@ describe("useStartListening", () => {
       });
     });
 
-    expect(runBatchMock).toHaveBeenCalledWith("/tmp/session.wav");
+    expect(runBatchMock).toHaveBeenCalledWith(
+      "/vault/sessions/session-1/audio.wav",
+    );
     expect(resetEnhanceTasksMock).toHaveBeenCalledWith("session-1");
     expect(queueAutoEnhanceMock).toHaveBeenCalledWith("session-1");
     expect(queueAutoEnhanceIfSummaryEmptyMock).not.toHaveBeenCalled();
