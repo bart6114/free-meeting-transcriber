@@ -128,14 +128,38 @@ describe("getBatchProvider", () => {
 });
 
 describe("canRunBatchTranscription", () => {
-  test("allows post-capture batch so useRunBatch can choose a fallback", () => {
-    expect(canRunBatchTranscription(null)).toBe(true);
+  test("requires an STT connection", () => {
+    expect(canRunBatchTranscription(null)).toBe(false);
+  });
+
+  test("allows on-device connections that map to a batch provider", () => {
     expect(
       canRunBatchTranscription({
         provider: "fmtr",
         model: "soniqo-parakeet-streaming",
       }),
     ).toBe(true);
+    expect(
+      canRunBatchTranscription(
+        { provider: "fmtr", model: "soniqo-parakeet-streaming" },
+        "am-parakeet-v3",
+      ),
+    ).toBe(true);
+  });
+
+  test("rejects connections without a batch provider mapping", () => {
+    expect(
+      canRunBatchTranscription({
+        provider: "deepgram",
+        model: "nova-3-general",
+      }),
+    ).toBe(false);
+    expect(
+      canRunBatchTranscription(
+        { provider: "custom", model: "whisper-large-v3" },
+        "whisper-large-v3",
+      ),
+    ).toBe(false);
   });
 });
 

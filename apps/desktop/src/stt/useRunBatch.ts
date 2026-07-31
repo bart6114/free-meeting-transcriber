@@ -69,10 +69,14 @@ export function getBatchProvider(
 }
 
 export function canRunBatchTranscription(
-  _conn: { provider: string; model: string } | null,
-  _modelOverride?: string,
+  conn: { provider: string; model: string } | null,
+  modelOverride?: string,
 ) {
-  return true;
+  if (!conn) {
+    return false;
+  }
+
+  return getBatchProvider(conn.provider, modelOverride ?? conn.model) != null;
 }
 
 async function canUseBatchTarget(

@@ -12,6 +12,7 @@ const {
   resetEnhanceTasksMock,
   startMock,
   runBatchMock,
+  canRunBatchTranscriptionMock,
   useListenerMock,
   useSessionMock,
   useSessionHasTranscriptMock,
@@ -35,6 +36,7 @@ const {
   resetEnhanceTasksMock: vi.fn(),
   startMock: vi.fn(),
   runBatchMock: vi.fn(),
+  canRunBatchTranscriptionMock: vi.fn(() => true),
   useListenerMock: vi.fn(),
   useSessionMock: vi.fn(),
   useSessionHasTranscriptMock: vi.fn(),
@@ -82,7 +84,7 @@ vi.mock("./useKeywords", () => ({
 
 vi.mock("./useRunBatch", () => ({
   STOPPED_TRANSCRIPTION_ERROR_MESSAGE: "Transcription stopped.",
-  canRunBatchTranscription: vi.fn(() => true),
+  canRunBatchTranscription: canRunBatchTranscriptionMock,
   isStoppedTranscriptionError: vi.fn(
     (error: unknown) =>
       (error instanceof Error ? error.message : String(error)) ===
@@ -284,6 +286,7 @@ describe("useStartListening", () => {
     });
     startMock.mockResolvedValue(true);
     runBatchMock.mockResolvedValue(undefined);
+    canRunBatchTranscriptionMock.mockReturnValue(true);
     isSupportedLanguagesLiveMock.mockResolvedValue({
       status: "ok",
       data: true,
@@ -390,6 +393,33 @@ describe("useStartListening", () => {
       "forever",
       "session-1",
     );
+  });
+
+  test("skips post-capture batch when the connection cannot run batch transcription", async () => {
+    canRunBatchTranscriptionMock.mockReturnValue(false);
+
+    const { result } = renderHook(() => useStartListening("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    const onStopped = startMock.mock.calls[0]?.[1]?.onStopped;
+    await act(async () => {
+      await onStopped?.("session-1", {
+        durationSeconds: 42,
+        audioPath: "/tmp/session.wav",
+        requestedLiveTranscription: false,
+        liveTranscriptionActive: false,
+        needsBatchRepair: false,
+      });
+    });
+
+    expect(canRunBatchTranscriptionMock).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "fmtr", model: "am-test" }),
+    );
+    expect(runBatchMock).not.toHaveBeenCalled();
+    expect(queueAutoEnhanceIfSummaryEmptyMock).not.toHaveBeenCalled();
   });
 
   test("shows a toast and skips retention deletion when moving recorded audio into the session folder fails", async () => {
