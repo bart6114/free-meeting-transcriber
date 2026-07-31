@@ -1,6 +1,6 @@
 # Overview
 
-Tauri desktop note-taking app (`apps/desktop/`) with a web app (`apps/web/`).
+Tauri desktop note-taking app (`apps/desktop/`) and a CLI (`apps/cli/`).
 Uses pnpm workspaces.
 Files in the user's vault directory are the only source of truth — there is no database. The vault format lives in `crates/vault-read/`; the desktop write path and in-memory index are `apps/desktop/src-tauri/src/session_store/`. App settings are a `config.json` in the vault, not rows. Zustand is used for UI state, and TipTap powers the editor. Sessions are the core entity — all notes are backed by sessions, stored under `sessions/<id>/`.
 
@@ -10,7 +10,6 @@ Files in the user's vault directory are the only source of truth — there is no
 - Typecheck (TS): `pnpm -r typecheck`
 - Typecheck (Rust): `cargo check`
 - Desktop dev: `pnpm -F @hypr/desktop tauri:dev`
-- Web dev: `pnpm -F @hypr/web dev`
 - Dev docs: `docs/` (Mintlify project source; not currently published)
 
 ## Guidelines

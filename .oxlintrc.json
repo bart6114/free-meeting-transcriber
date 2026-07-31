@@ -12,7 +12,7 @@
       "plugins": ["typescript"]
     },
     {
-      "files": ["apps/desktop/src/**/*.{ts,tsx}", "apps/web/src/**/*.{ts,tsx}"],
+      "files": ["apps/desktop/src/**/*.{ts,tsx}"],
       "plugins": ["react", "react-perf"]
     },
     {
