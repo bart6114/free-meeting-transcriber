@@ -4,6 +4,7 @@ mod commands;
 mod embedded_cli;
 mod ext;
 mod legacy_db;
+mod recording_meta;
 mod search_index;
 mod session_store;
 mod store;
@@ -384,6 +385,9 @@ pub async fn main() {
             // (Phase E1). Needs the store managed; changes queued before this point
             // (startup rebuild) simply flush as the dispatcher's first batch.
             session_store::index::spawn_dispatcher(app_handle.clone());
+            // Stamps `_meta.json` recording timestamps off capture lifecycle events.
+            // Needs the store managed (the block above); missing it only logs.
+            recording_meta::spawn(app_handle.clone());
             // Spawned last, after the session-store block above has finished its
             // startup `rebuild_index` pass: an external edit's refresh only needs to
             // account for vault state from here on, since everything the vault held at

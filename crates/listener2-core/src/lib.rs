@@ -72,14 +72,14 @@ pub fn is_supported_languages_batch(
             .parse::<hypr_transcribe_soniqo::SoniqoModel>()
             .map_err(|e| e.to_string())?;
 
-        return Ok(model.supports_languages(languages));
+        return Ok(model.batch_model().supports_languages(languages));
     }
 
     if provider == "fmtr" {
         if let Some(model) =
             model.and_then(|model| model.parse::<hypr_transcribe_soniqo::SoniqoModel>().ok())
         {
-            return Ok(model.supports_languages(languages));
+            return Ok(model.batch_model().supports_languages(languages));
         }
 
         return Ok(true);
@@ -181,13 +181,28 @@ mod tests {
 
     #[test]
     fn fmtr_soniqo_live_respects_platform_support() {
-        let languages = vec!["fr".parse().unwrap()];
+        let languages = vec!["en".parse().unwrap()];
         let expected = cfg!(all(target_os = "macos", target_arch = "aarch64"));
 
         assert_eq!(
             is_supported_languages_live("fmtr", Some("soniqo-parakeet-streaming"), &languages)
                 .unwrap(),
             expected
+        );
+    }
+
+    #[test]
+    fn fmtr_soniqo_streaming_demotes_non_english_to_batch() {
+        let languages = vec!["nl".parse().unwrap()];
+
+        assert_eq!(
+            is_supported_languages_live("fmtr", Some("soniqo-parakeet-streaming"), &languages)
+                .unwrap(),
+            false
+        );
+        assert!(
+            is_supported_languages_batch("fmtr", Some("soniqo-parakeet-streaming"), &languages)
+                .unwrap()
         );
     }
 

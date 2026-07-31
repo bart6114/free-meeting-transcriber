@@ -845,17 +845,24 @@ mod tests {
     }
 
     #[test]
-    fn test_fmtr_soniqo_live_limits_parakeet_languages() {
+    fn test_fmtr_soniqo_live_limits_parakeet_streaming_to_english() {
         use hypr_language::ISO639::*;
 
+        let en: Vec<hypr_language::Language> = vec![En.into()];
         let fr: Vec<hypr_language::Language> = vec![Fr.into()];
         let ko: Vec<hypr_language::Language> = vec![Ko.into()];
 
         assert!(
-            AdapterKind::Fmtr.is_supported_languages_live(&fr, Some("soniqo-parakeet-streaming"))
+            AdapterKind::Fmtr.is_supported_languages_live(&en, Some("soniqo-parakeet-streaming"))
+        );
+        assert!(
+            !AdapterKind::Fmtr.is_supported_languages_live(&fr, Some("soniqo-parakeet-streaming"))
         );
         assert!(
             !AdapterKind::Fmtr.is_supported_languages_live(&ko, Some("soniqo-parakeet-streaming"))
+        );
+        assert!(
+            AdapterKind::Fmtr.is_supported_languages_batch(&fr, Some("soniqo-parakeet-streaming"))
         );
     }
 
