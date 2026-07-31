@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 const MAIN_SHELL_SELECTOR = "[data-testid='main-app-shell']";
+const MAIN_CONTENT_SELECTOR = "[data-main-content-panel]";
 
 export function useMainContentCenterOffset() {
   const [contentOffset, setContentOffset] = useState(0);
@@ -13,8 +14,7 @@ export function useMainContentCenterOffset() {
         return;
       }
 
-      const panels = document.querySelectorAll("[data-panel-id]");
-      const bodyPanel = panels[0];
+      const bodyPanel = shell.querySelector(MAIN_CONTENT_SELECTOR);
       if (!bodyPanel) {
         setContentOffset(0);
         return;
@@ -30,9 +30,9 @@ export function useMainContentCenterOffset() {
     window.addEventListener("resize", computeOffset);
 
     const resizeObserver = new ResizeObserver(computeOffset);
-    const panels = document.querySelectorAll("[data-panel-id]");
-    for (const panel of panels) {
-      resizeObserver.observe(panel);
+    const bodyPanel = document.querySelector(MAIN_CONTENT_SELECTOR);
+    if (bodyPanel) {
+      resizeObserver.observe(bodyPanel);
     }
 
     return () => {
