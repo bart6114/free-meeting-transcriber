@@ -16,7 +16,6 @@ static PLAYING_SOUNDS: LazyLock<Mutex<std::collections::HashMap<AppSounds, Sound
 pub enum AppSounds {
     StartRecording,
     StopRecording,
-    BGM,
 }
 
 pub(crate) fn to_speaker(
@@ -75,8 +74,7 @@ impl AppSounds {
         self.stop();
 
         let bytes = self.get_sound_bytes();
-        let looping = matches!(self, AppSounds::BGM);
-        let control_tx = to_speaker(bytes, looping);
+        let control_tx = to_speaker(bytes, false);
 
         {
             let mut sounds = PLAYING_SOUNDS.lock().unwrap();
@@ -102,7 +100,6 @@ impl AppSounds {
         match self {
             AppSounds::StartRecording => include_bytes!("../sounds/start_recording.ogg"),
             AppSounds::StopRecording => include_bytes!("../sounds/stop_recording.ogg"),
-            AppSounds::BGM => include_bytes!("../sounds/bgm.mp3"),
         }
     }
 }

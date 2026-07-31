@@ -1,12 +1,9 @@
 import { Trans } from "@lingui/react/macro";
 import { useQueryClient } from "@tanstack/react-query";
 import { platform } from "@tauri-apps/plugin-os";
-import { Volume2Icon, VolumeXIcon } from "lucide-react";
-import { motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
-import { commands as sfxCommands } from "@hypr/plugin-sfx";
 import { cn } from "@hypr/utils";
 
 import {
@@ -80,9 +77,7 @@ function OnboardingScreenContent({
   headerDragRegion?: boolean;
 }) {
   const queryClient = useQueryClient();
-  const [isMuted, setIsMuted] = useState(false);
   const [currentStep, setCurrentStep] = useState(getInitialStep);
-  const onboardingVideoRef = useRef<HTMLVideoElement>(null);
   const currentPlatform = platform();
 
   const goNext = useCallback(() => {
@@ -103,26 +98,6 @@ function OnboardingScreenContent({
     });
   }, [currentPlatform, currentStep]);
 
-  useEffect(() => {
-    sfxCommands
-      .play("BGM")
-      .then(() => sfxCommands.setVolume("BGM", 0.2))
-      .catch(console.error);
-    return () => {
-      sfxCommands.stop("BGM").catch(console.error);
-    };
-  }, []);
-
-  useEffect(() => {
-    sfxCommands.setVolume("BGM", isMuted ? 0 : 0.2).catch(console.error);
-  }, [isMuted]);
-
-  useEffect(() => {
-    if (onboardingVideoRef.current) {
-      onboardingVideoRef.current.playbackRate = 0.65;
-    }
-  }, []);
-
   const handleFinish = useCallback(
     (sessionId: string) => {
       void queryClient.invalidateQueries({ queryKey: ["onboarding-needed"] });
@@ -133,55 +108,10 @@ function OnboardingScreenContent({
 
   return (
     <div className="bg-card relative flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <motion.div
-          className="absolute inset-0"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 2, ease: [0.22, 1, 0.36, 1], delay: 0.4 }}
-        >
-          <video
-            ref={onboardingVideoRef}
-            className="absolute inset-0 h-full w-full object-cover object-bottom opacity-28"
-            autoPlay
-            loop
-            muted
-            playsInline
-            preload="auto"
-            aria-hidden="true"
-          >
-            <source src="/assets/onboarding-video.mp4" type="video/mp4" />
-          </video>
-          <div className="from-background/8 via-background/18 absolute inset-0 bg-linear-to-t to-transparent" />
-        </motion.div>
-        <div className="absolute inset-x-0 top-0 h-[80%] [mask-image:linear-gradient(to_bottom,black,black_18%,rgba(0,0,0,0.9)_36%,rgba(0,0,0,0.6)_58%,transparent)] backdrop-blur-[32px]" />
-        <div className="absolute inset-x-0 top-0 h-[92%] [mask-image:linear-gradient(to_bottom,black,rgba(0,0,0,0.8)_34%,rgba(0,0,0,0.35)_62%,transparent)] backdrop-blur-[12px]" />
-        <div className="from-background via-background/82 via-background/97 to-background/0 absolute inset-x-0 top-0 h-[84%] bg-linear-to-b via-18% via-42%" />
-        <motion.div
-          className="bg-background absolute inset-0"
-          initial={{ opacity: 1 }}
-          animate={{ opacity: 0 }}
-          transition={{ duration: 1.0, ease: "easeOut", delay: 0.1 }}
-        />
-      </div>
-
       <div
         data-tauri-drag-region={headerDragRegion || undefined}
-        className="relative z-30 flex h-12 shrink-0 items-center justify-end pr-3 pl-12"
-      >
-        <button
-          onClick={() => setIsMuted((prev) => !prev)}
-          data-tauri-drag-region="false"
-          className="hover:bg-accent rounded-full p-1.5 transition-colors"
-          aria-label={isMuted ? "Unmute" : "Mute"}
-        >
-          {isMuted ? (
-            <VolumeXIcon size={16} className="text-muted-foreground" />
-          ) : (
-            <Volume2Icon size={16} className="text-muted-foreground" />
-          )}
-        </button>
-      </div>
+        className="relative z-30 h-12 shrink-0"
+      />
 
       <div
         data-tauri-drag-region={headerDragRegion || undefined}

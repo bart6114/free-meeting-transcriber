@@ -27,7 +27,7 @@ async setVolume(sfx: AppSounds, volume: number) : Promise<void> {
 
 /** user-defined types **/
 
-export type AppSounds = "StartRecording" | "StopRecording" | "BGM"
+export type AppSounds = "StartRecording" | "StopRecording"
 
 /** tauri-specta globals **/
 
