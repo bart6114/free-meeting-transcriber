@@ -123,7 +123,7 @@ impl SoniqoModel {
 
     pub const fn description(self) -> &'static str {
         match self {
-            Self::ParakeetStreaming => "Realtime transcription for 25 European languages.",
+            Self::ParakeetStreaming => "Realtime English transcription.",
             Self::ParakeetBatch => "Batch transcription for 25 European languages.",
             Self::Omnilingual => "Multilingual batch transcription.",
             Self::Qwen3Small => "Multilingual batch transcription.",
@@ -166,9 +166,10 @@ impl SoniqoModel {
 
     pub fn supports_language(self, language: &hypr_language::Language) -> bool {
         match self {
-            Self::ParakeetStreaming | Self::ParakeetBatch => {
-                hypr_language::is_parakeet_tdt_v3_language(language)
-            }
+            // Parakeet-EOU-120M uses an English-only BPE vocabulary; it decodes
+            // other languages into English-shaped gibberish or nothing at all.
+            Self::ParakeetStreaming => hypr_language::is_parakeet_eou_language(language),
+            Self::ParakeetBatch => hypr_language::is_parakeet_tdt_v3_language(language),
             Self::Omnilingual | Self::Qwen3Small | Self::Qwen3Large => true,
         }
     }
@@ -945,14 +946,30 @@ mod tests {
     }
 
     #[test]
-    fn parakeet_models_support_documented_european_languages() {
+    fn parakeet_batch_supports_documented_european_languages() {
         let english = "en-US".parse().unwrap();
         let french = "fr".parse().unwrap();
+        let dutch = "nl".parse().unwrap();
+
+        assert!(SoniqoModel::ParakeetBatch.supports_language(&english));
+        assert!(SoniqoModel::ParakeetBatch.supports_language(&french));
+        assert!(SoniqoModel::ParakeetBatch.supports_language(&dutch));
+    }
+
+    #[test]
+    fn parakeet_streaming_is_english_only() {
+        let english = "en-US".parse().unwrap();
+        let french = "fr".parse().unwrap();
+        let dutch = "nl".parse().unwrap();
 
         assert!(SoniqoModel::ParakeetStreaming.supports_language(&english));
-        assert!(SoniqoModel::ParakeetBatch.supports_language(&english));
-        assert!(SoniqoModel::ParakeetStreaming.supports_language(&french));
-        assert!(SoniqoModel::ParakeetBatch.supports_language(&french));
+        assert!(!SoniqoModel::ParakeetStreaming.supports_language(&french));
+        assert!(!SoniqoModel::ParakeetStreaming.supports_language(&dutch));
+        assert!(
+            SoniqoModel::ParakeetStreaming
+                .batch_model()
+                .supports_language(&dutch)
+        );
     }
 
     #[test]

@@ -54,7 +54,11 @@ fn soniqo_language_support(
     let model = model?;
 
     match model {
-        "soniqo-parakeet-streaming" => Some(parakeet_language_support(languages)),
+        "soniqo-parakeet-streaming" => Some(if live {
+            parakeet_streaming_language_support(languages)
+        } else {
+            parakeet_language_support(languages)
+        }),
         "soniqo-parakeet-batch" => Some(if live {
             LanguageSupport::NotSupported
         } else {
@@ -75,6 +79,19 @@ fn parakeet_language_support(languages: &[hypr_language::Language]) -> LanguageS
     if languages
         .iter()
         .all(hypr_language::is_parakeet_tdt_v3_language)
+    {
+        LanguageSupport::Supported {
+            quality: LanguageQuality::NoData,
+        }
+    } else {
+        LanguageSupport::NotSupported
+    }
+}
+
+fn parakeet_streaming_language_support(languages: &[hypr_language::Language]) -> LanguageSupport {
+    if languages
+        .iter()
+        .all(hypr_language::is_parakeet_eou_language)
     {
         LanguageSupport::Supported {
             quality: LanguageQuality::NoData,

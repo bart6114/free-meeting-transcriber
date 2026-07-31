@@ -272,6 +272,10 @@ pub fn is_parakeet_tdt_v3_language(language: &Language) -> bool {
     PARAKEET_TDT_V3_LANGUAGE_CODES.contains(&language.iso639_code())
 }
 
+pub fn is_parakeet_eou_language(language: &Language) -> bool {
+    language.iso639_code() == "en"
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
