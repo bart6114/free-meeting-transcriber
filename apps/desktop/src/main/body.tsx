@@ -5,6 +5,7 @@ import {
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
   SearchIcon,
+  SettingsIcon,
   SquarePenIcon,
   WrenchIcon,
 } from "lucide-react";
@@ -167,6 +168,10 @@ export function ClassicMainBody() {
   const currentSessionId =
     currentTab?.type === "sessions" ? currentTab.id : undefined;
   const createNewNote = useNewNote();
+  const openNewTab = useTabs((state) => state.openNew);
+  const handleOpenSettings = useCallback(() => {
+    openNewTab({ type: "settings" });
+  }, [openNewTab]);
   const openNoteDialog = useOpenNoteDialog();
   const handleOpenNoteDialog = useCallback(() => {
     openNoteDialog.open();
@@ -481,6 +486,7 @@ export function ClassicMainBody() {
           onNewNote={createNewNote}
           onSearch={handleOpenNoteDialog}
           onOpenDevtools={handleOpenDevtoolsPanel}
+          onOpenSettings={handleOpenSettings}
           onToggleSidebar={handleToggleLeftSidebar}
           update={update}
         />
@@ -517,6 +523,7 @@ export function ClassicMainBody() {
               onNewNote={createNewNote}
               onSearch={handleOpenNoteDialog}
               onOpenDevtools={handleOpenDevtoolsPanel}
+              onOpenSettings={handleOpenSettings}
               onToggleSidebar={handleToggleLeftSidebar}
               update={update}
             />
@@ -865,6 +872,7 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
     devtoolsPanelOpen,
     onNewNote,
     onOpenDevtools,
+    onOpenSettings,
     onSearch,
     onToggleSidebar,
     sidebarExpanded,
@@ -875,6 +883,7 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
     devtoolsPanelOpen: boolean;
     onNewNote: () => void;
     onOpenDevtools: () => void;
+    onOpenSettings: () => void;
     onSearch: () => void;
     onToggleSidebar: () => void;
     sidebarExpanded: boolean;
@@ -893,6 +902,7 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
         hasUpcomingMeeting={hasUpcomingMeeting}
         onNewNote={onNewNote}
         onOpenDevtools={onOpenDevtools}
+        onOpenSettings={onOpenSettings}
         onSearch={onSearch}
         onToggleSidebar={onToggleSidebar}
         sidebarExpanded={sidebarExpanded}
@@ -908,6 +918,7 @@ function SidebarTimelineChrome({
   hasUpcomingMeeting,
   onNewNote,
   onOpenDevtools,
+  onOpenSettings,
   onSearch,
   onToggleSidebar,
   sidebarExpanded,
@@ -918,6 +929,7 @@ function SidebarTimelineChrome({
   hasUpcomingMeeting: boolean;
   onNewNote: () => void;
   onOpenDevtools: () => void;
+  onOpenSettings: () => void;
   onSearch: () => void;
   onToggleSidebar: () => void;
   sidebarExpanded: boolean;
@@ -955,6 +967,12 @@ function SidebarTimelineChrome({
             </LeftSurfaceChromeButton>
             <LeftSurfaceChromeButton ariaLabel="New note" onClick={onNewNote}>
               <SquarePenIcon size={15} />
+            </LeftSurfaceChromeButton>
+            <LeftSurfaceChromeButton
+              ariaLabel="Settings"
+              onClick={onOpenSettings}
+            >
+              <SettingsIcon size={15} />
             </LeftSurfaceChromeButton>
             {showDevtoolsPanelButton && !devtoolsPanelOpen ? (
               <LeftSurfaceChromeButton
