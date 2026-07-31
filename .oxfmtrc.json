@@ -50,8 +50,6 @@
     "**/__pycache__",
     "crates",
     "apps/desktop/dist",
-    "apps/desktop/src-tauri",
-    "apps/web/dist",
-    "apps/web/.content-collections"
+    "apps/desktop/src-tauri"
   ]
 }

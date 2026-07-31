@@ -13,7 +13,7 @@ export default defineConfig(
     ],
   },
   {
-    files: ["apps/web/**/*.{ts,tsx}", "apps/desktop/**/*.{ts,tsx}"],
+    files: ["apps/desktop/**/*.{ts,tsx}"],
     extends: [
       tseslint.configs.base,
       ...pluginQuery.configs["flat/recommended"],
