@@ -461,7 +461,7 @@ impl Meeting {
         } else {
             &self.started_at
         };
-        let lines = vec![
+        let lines = [
             format!("- ID: `{}`", self.id),
             format!("- Date: {occurred_at}"),
         ];
