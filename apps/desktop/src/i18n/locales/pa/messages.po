@@ -342,7 +342,6 @@ msgid "Developers"
 msgstr ""
 
 #: src/settings/dictionary/index.tsx
-#: src/sidebar/settings.tsx
 msgid "Dictionary"
 msgstr ""
 

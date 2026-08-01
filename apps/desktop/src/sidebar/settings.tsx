@@ -4,7 +4,6 @@ import {
   AudioLinesIcon,
   ArrowUpRightIcon,
   BellIcon,
-  BookOpenIcon,
   BookText,
   Code2Icon,
   CogIcon,
@@ -74,11 +73,6 @@ export function SettingsNav() {
       items: [
         { id: "transcription", label: t`Transcription`, icon: AudioLinesIcon },
         { id: "intelligence", label: t`Intelligence`, icon: SparklesIcon },
-        {
-          id: "dictionary",
-          label: t`Dictionary`,
-          icon: BookOpenIcon,
-        },
         {
           action: "open-templates",
           label: t`Templates`,

@@ -121,22 +121,16 @@ describe("SettingsNav", () => {
       "AI",
       "Transcription",
       "Intelligence",
-      "Dictionary",
       "Templates",
     ].forEach((label) => {
       expect(screen.getByText(label)).toBeTruthy();
     });
   });
 
-  it("places dictionary and templates in the AI section", () => {
+  it("does not surface the dictionary entry", () => {
     render(<SettingsNav />);
 
-    expect(
-      screen
-        .getByText("Dictionary")
-        .closest("button")
-        ?.querySelector(".lucide-book-open"),
-    ).toBeTruthy();
+    expect(screen.queryByText("Dictionary")).toBeNull();
     expect(screen.queryByText("Personalization")).toBeNull();
   });
 
@@ -182,16 +176,5 @@ describe("SettingsNav", () => {
     });
     expect(mocks.select).toHaveBeenCalledWith(templatesTab);
     expect(mocks.openNew).not.toHaveBeenCalled();
-  });
-
-  it("opens Dictionary inside settings", () => {
-    render(<SettingsNav />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Dictionary" }));
-
-    expect(mocks.updateSettingsTabState).toHaveBeenCalledWith(
-      mocks.currentTab,
-      { tab: "dictionary" },
-    );
   });
 });
