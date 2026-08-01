@@ -266,6 +266,10 @@ msgstr "Confirm"
 msgid "Context always provided"
 msgstr "Context always provided"
 
+#: src/onboarding/llm-provider.tsx
+msgid "Continue"
+msgstr "Continue"
+
 #: src/templates/details.tsx
 msgid "Create template"
 msgstr "Create template"
@@ -469,6 +473,10 @@ msgstr "Free Meeting Transcriber needs microphone and system audio to transcribe
 msgid "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
 msgstr "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
 
+#: src/onboarding/index.tsx
+msgid "Free Meeting Transcriber transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
+msgstr "Free Meeting Transcriber transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
+
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr "Frequently used"
@@ -574,6 +582,14 @@ msgstr "Language & Region"
 #: src/settings/general/main-language.tsx
 msgid "Language for summaries, chats, and AI-generated responses"
 msgstr "Language for summaries, chats, and AI-generated responses"
+
+#: src/onboarding/index.tsx
+msgid "Language model"
+msgstr "Language model"
+
+#: src/onboarding/index.tsx
+msgid "Language model configured"
+msgstr "Language model configured"
 
 #: src/settings/ai/llm/select.tsx
 msgid "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
@@ -1134,6 +1150,10 @@ msgstr "Storage configured"
 msgid "Storage Updated"
 msgstr "Storage Updated"
 
+#: src/onboarding/index.tsx
+msgid "Summaries and chat need a language model. Use a local server like Ollama, or bring an API key from your favorite provider."
+msgstr "Summaries and chat need a language model. Use a local server like Ollama, or bring an API key from your favorite provider."
+
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Summary"
 msgstr "Summary"
@@ -1203,6 +1223,14 @@ msgstr "Transcript"
 #: src/sidebar/settings.tsx
 msgid "Transcription"
 msgstr "Transcription"
+
+#: src/onboarding/index.tsx
+msgid "Transcription model"
+msgstr "Transcription model"
+
+#: src/onboarding/index.tsx
+msgid "Transcription model configured"
+msgstr "Transcription model configured"
 
 #: src/settings/ai/stt/select.tsx
 msgid "Transcription model is needed to make Free Meeting Transcriber listen to your conversations."

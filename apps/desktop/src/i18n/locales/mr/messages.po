@@ -266,6 +266,10 @@ msgstr ""
 msgid "Context always provided"
 msgstr ""
 
+#: src/onboarding/llm-provider.tsx
+msgid "Continue"
+msgstr ""
+
 #: src/templates/details.tsx
 msgid "Create template"
 msgstr ""
@@ -469,6 +473,10 @@ msgstr ""
 msgid "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
 msgstr ""
 
+#: src/onboarding/index.tsx
+msgid "Free Meeting Transcriber transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
+msgstr ""
+
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr ""
@@ -574,6 +582,14 @@ msgstr "भाषा आणि प्रदेश"
 #: src/settings/general/main-language.tsx
 msgid "Language for summaries, chats, and AI-generated responses"
 msgstr "सारांश, चॅट आणि AI-व्युत्पन्न प्रतिसादांसाठी भाषा"
+
+#: src/onboarding/index.tsx
+msgid "Language model"
+msgstr ""
+
+#: src/onboarding/index.tsx
+msgid "Language model configured"
+msgstr ""
 
 #: src/settings/ai/llm/select.tsx
 msgid "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
@@ -1134,6 +1150,10 @@ msgstr ""
 msgid "Storage Updated"
 msgstr ""
 
+#: src/onboarding/index.tsx
+msgid "Summaries and chat need a language model. Use a local server like Ollama, or bring an API key from your favorite provider."
+msgstr ""
+
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Summary"
 msgstr ""
@@ -1202,6 +1222,14 @@ msgstr ""
 #: src/settings/ai/stt/index.tsx
 #: src/sidebar/settings.tsx
 msgid "Transcription"
+msgstr ""
+
+#: src/onboarding/index.tsx
+msgid "Transcription model"
+msgstr ""
+
+#: src/onboarding/index.tsx
+msgid "Transcription model configured"
 msgstr ""
 
 #: src/settings/ai/stt/select.tsx

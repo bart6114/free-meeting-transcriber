@@ -1,0 +1,64 @@
+name: desktop-build
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/desktop_build.yaml
+      - .github/actions/**
+      - apps/desktop/**
+      - packages/**
+      - plugins/**
+      - crates/**
+      - Cargo.toml
+      - Cargo.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: true
+          persist-credentials: false
+      - uses: ./.github/actions/pnpm_install
+      - uses: denoland/setup-deno@v2
+      - run: pnpm -F ui build
+      - uses: ./.github/actions/install_desktop_deps
+        with:
+          target: macos
+      - uses: ./.github/actions/rust_install
+        with:
+          platform: macos
+      - run: echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
+      - run: pnpm -F desktop tauri build --ci --bundles app,dmg --no-sign --config ./src-tauri/tauri.conf.staging.json --features devtools
+      - name: Checksum
+        run: |
+          set -euo pipefail
+          bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
+          dmg="$(ls "$bundle_dir"/*.dmg | head -n1)"
+          if [ -z "$dmg" ]; then
+            echo "No dmg found in $bundle_dir"
+            exit 1
+          fi
+          (cd "$bundle_dir" && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fmtr-macos-arm64-dmg-${{ github.sha }}
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
+            apps/desktop/src-tauri/target/release/bundle/dmg/*.sha256
+          if-no-files-found: error
+          retention-days: 14
