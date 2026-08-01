@@ -16,7 +16,6 @@ members = [
   "plugins/*",
 ]
 exclude = [
-  "plugins/apple-calendar",
   "plugins/extensions",
   "crates/vad-ext",
 ]
@@ -75,7 +74,6 @@ hypr-fs-sync-core = { path = "crates/fs-sync-core", package = "fs-sync-core" }
 hypr-gbnf = { path = "crates/gbnf", package = "gbnf" }
 hypr-gguf = { path = "crates/gguf", package = "gguf" }
 hypr-github-issues = { path = "crates/github-issues", package = "github-issues" }
-hypr-google-calendar = { path = "crates/google-calendar", package = "google-calendar" }
 hypr-google-drive = { path = "crates/google-drive", package = "google-drive" }
 hypr-google-mail = { path = "crates/google-mail", package = "google-mail" }
 hypr-granola = { path = "crates/granola", package = "granola" }
@@ -110,7 +108,6 @@ hypr-observability = { path = "crates/observability", package = "observability" 
 hypr-onnx = { path = "crates/onnx", package = "onnx" }
 hypr-opencode = { path = "crates/opencode", package = "opencode" }
 hypr-openrouter = { path = "crates/openrouter", package = "openrouter" }
-hypr-outlook-calendar = { path = "crates/outlook-calendar", package = "outlook-calendar" }
 hypr-porkbun = { path = "crates/porkbun", package = "porkbun" }
 hypr-power = { path = "crates/power", package = "power" }
 hypr-pyannote-local = { path = "crates/pyannote-local", package = "pyannote-local" }

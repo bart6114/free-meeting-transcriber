@@ -530,8 +530,6 @@ name = "api-client"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "google-calendar",
- "outlook-calendar",
  "progenitor-client 0.13.0",
  "progenitor-utils",
  "reqwest 0.13.2",
@@ -7196,21 +7194,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "google-calendar"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "hypr-http-utils",
- "serde",
- "serde_json",
- "specta",
- "thiserror 2.0.18",
- "tokio",
- "urlencoding",
- "utoipa",
-]
-
-[[package]]
 name = "google-drive"
 version = "0.1.0"
 dependencies = [
@@ -10111,23 +10094,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "notification-worker"
-version = "0.1.0"
-dependencies = [
- "apalis",
- "apalis-cron",
- "chrono",
- "cron",
- "serde",
- "serde_json",
- "specta",
- "tauri-specta",
- "thiserror 2.0.18",
- "tokio",
- "tracing",
-]
-
-[[package]]
 name = "notify"
 version = "8.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11067,21 +11033,6 @@ dependencies = [
  "serde",
  "serde_json",
  "thiserror 2.0.18",
-]
-
-[[package]]
-name = "outlook-calendar"
-version = "0.1.0"
-dependencies = [
- "chrono",
- "hypr-http-utils",
- "serde",
- "serde_json",
- "specta",
- "thiserror 2.0.18",
- "tokio",
- "urlencoding",
- "utoipa",
 ]
 
 [[package]]
