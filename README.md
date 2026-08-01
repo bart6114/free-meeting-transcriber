@@ -1,13 +1,17 @@
 # Free Meeting Transcriber
 
-A local-first, privacy-first AI meeting notetaker. It joins your meetings,
-transcribes them entirely on-device, and turns the transcript into markdown
-notes you own on disk — no cloud backend, no account, and no telemetry. Bring
-your own LLM (OpenAI, Anthropic, Gemini, OpenRouter, Ollama, LM Studio, or
-anything OpenAI-compatible) to summarize and chat about your meetings.
+A fork of [anarlog](https://github.com/fastrepl/anarlog), stripped down to
+just the part I actually needed: a local-first AI meeting notetaker that
+transcribes on-device and writes markdown notes to disk.
 
-There is no hosted/cloud-sync, account, or billing functionality — everything
-runs locally on your own machine.
+This is software for an audience of one — I built it because I needed it.
+It's an actually free-as-in-beer thing, with all the capture-the-customer
+cruft removed: no cloud backend, no accounts, no billing, no telemetry, no
+upsells. If it's useful to you too, great.
+
+Bring your own LLM (OpenAI, Anthropic, Gemini, OpenRouter, Ollama, LM
+Studio, or anything OpenAI-compatible) to summarize and chat about your
+meetings.
 
 ## How to use it
 
@@ -32,8 +36,9 @@ as markdown on disk.
 ## Development
 
 This is a pnpm-workspace monorepo: a Tauri desktop app (`apps/desktop/`) plus
-a Rust CLI (`apps/cli/`), built on SQLite (schema/migrations in
-`crates/db-app/`) with Zustand for UI state and TipTap for the editor.
+a Rust CLI (`apps/cli/`). There is no database — the markdown files in your
+vault directory are the only source of truth (vault format in
+`crates/vault-read/`), with Zustand for UI state and TipTap for the editor.
 
 ```sh
 pnpm install
@@ -47,7 +52,8 @@ typechecking, code-style conventions).
 ## License
 
 MIT licensed. See [LICENSE](./LICENSE) for the full license and copyright
-history.
+history, which includes the upstream
+[anarlog](https://github.com/fastrepl/anarlog) copyright.
 
 ---
 
