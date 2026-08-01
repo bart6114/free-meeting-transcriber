@@ -3,7 +3,7 @@ title: "Use Free Meeting Transcriber offline"
 description: "Prepare local transcription and intelligence models before working without a network connection."
 ---
 
-Free Meeting Transcriber can record meetings and manage notes without an internet connection. To transcribe, summarize, and chat offline, configure local models before you disconnect.
+Free Meeting Transcriber can record meetings and manage notes without an internet connection. To transcribe and summarize offline, configure local models before you disconnect.
 
 ## What works without the internet
 
@@ -11,9 +11,9 @@ Free Meeting Transcriber can record meetings and manage notes without an interne
 - Record and play meeting audio.
 - Export memos, summaries, and transcripts already on your computer.
 - Transcribe with a downloaded on-device model on a supported Apple Silicon Mac.
-- Generate summaries and chat with a local LM Studio or Ollama server.
+- Generate summaries with a local LM Studio or Ollama server.
 
-Remote API-key providers and Google and Outlook calendar sync need a network connection.
+Remote API-key Intelligence providers need a network connection.
 
 ## Prepare offline transcription
 
@@ -24,7 +24,7 @@ Remote API-key providers and Google and Outlook calendar sync need a network con
 
 The model's **Live** or **After recording** label tells you when text will appear. On-device model availability depends on your Mac and the current Free Meeting Transcriber release.
 
-## Prepare offline summaries and chat
+## Prepare offline summaries
 
 Use [LM Studio](https://lmstudio.ai/download) or [Ollama](https://ollama.com/download) as your local Intelligence provider. Download the model in advance, start the local server, and select that model in **Settings → Intelligence**.
 
@@ -32,9 +32,4 @@ Free Meeting Transcriber must be able to reach the local server while you work. 
 
 ## Check that nothing uses a remote provider
 
-Before a sensitive meeting, confirm both selections:
-
-- **Settings → Transcription → Model being used** points to an on-device model.
-- **Settings → Intelligence → Model being used** points to LM Studio or Ollama.
-
-Choosing a local model for only one setting does not make the other setting local. See [Data, privacy, and retention](/data-and-privacy) for what each provider receives.
+Transcription always runs on-device. Before a sensitive meeting, confirm that **Settings → Intelligence → Model being used** points to LM Studio or Ollama rather than a remote API-key provider. See [Data, privacy, and retention](/data-and-privacy) for what each provider receives.

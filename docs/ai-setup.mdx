@@ -5,10 +5,10 @@ description: "Choose how Free Meeting Transcriber turns audio into text and text
 
 Free Meeting Transcriber uses two model settings:
 
-- **Transcription** turns meeting audio into a transcript.
-- **Intelligence** creates summaries and powers chat.
+- **Transcription** turns meeting audio into a transcript. It always runs on-device.
+- **Intelligence** creates summaries and note titles. Choose a local server or a provider with your own API key.
 
-Open **Settings → Transcription** or **Settings → Intelligence** to choose a provider and model.
+Open **Settings → Transcription** or **Settings → Intelligence** to choose a model.
 
 ## Choose a setup
 
@@ -17,16 +17,16 @@ Open **Settings → Transcription** or **Settings → Intelligence** to choose a
     Download a supported local model from Transcription. Local models are available on supported Apple Silicon Macs.
   </Card>
   <Card title="Your API key" icon="key">
-    Configure a provider, enter its API key, then select it under Model being used.
+    For Intelligence, configure a provider, enter its API key, then select it under Model being used.
   </Card>
   <Card title="Local language model" icon="server">
     Connect LM Studio or Ollama to generate summaries on your computer.
   </Card>
 </CardGroup>
 
-Models labeled **Live** show text during the meeting. Models labeled **After recording** transcribe after you stop.
+Models labeled **Live** show text during the meeting; live transcription is currently English-only, and other languages are transcribed after the recording. Models labeled **After recording** always transcribe after you stop.
 
-To keep transcription, summaries, and chat on your computer, follow [Use Free Meeting Transcriber offline](/offline).
+To keep transcription and summaries on your computer, follow [Use Free Meeting Transcriber offline](/offline).
 
 ## LM Studio
 

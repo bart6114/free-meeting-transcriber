@@ -9,16 +9,13 @@ Free Meeting Transcriber stores its app data on your computer and captures meeti
 
 Your notes, local transcripts, settings, recordings you choose to keep, and downloaded local models are stored locally. You can write notes, record audio, and use configured local models without sending meeting content anywhere.
 
-Use Free Meeting Transcriber's export tools when you need a portable copy. Do not edit the app database directly.
+Your data lives in plain files in the vault folder you chose during setup. You can edit those files with other tools; Free Meeting Transcriber picks up external changes and moves the previous version to the vault's `.trash/` folder before overwriting anything. Use the export tools when you need a portable copy.
 
 ## When content is sent elsewhere
 
-The destination depends on the feature you choose:
+Transcription always runs on your computer. A remote **Intelligence** provider receives the text and instructions needed to create a summary.
 
-- A remote **Intelligence** provider receives the text and instructions needed to create a summary or chat response.
-- Connected calendars send the calendar and event details needed to show upcoming events and associate them with your notes.
-
-Your own API-key providers and local providers are separate choices. Review the provider's own retention and training policies before sending sensitive content.
+Your own API-key providers and local providers are separate choices, and API keys are stored in the macOS keychain, not in the vault. Review the provider's own retention and training policies before sending sensitive content.
 
 ## Keep a meeting fully local
 
@@ -30,7 +27,7 @@ See [Use Free Meeting Transcriber offline](/offline) for the full setup.
 
 ## Choose how long audio is kept
 
-Open **Settings → App → Storage → Audio file retention**. Choose:
+Open **Settings → App → Meetings → Audio file retention**. Choose:
 
 - **Don't save**
 - **1 day**
@@ -41,9 +38,9 @@ Open **Settings → App → Storage → Audio file retention**. Choose:
 
 Deleting retained audio does not remove the meeting note or transcript. If you need the recording later, open the meeting's **•••** menu, choose **Show in Finder**, and copy the audio before its retention period ends.
 
-## Turn off usage analytics
+## Usage analytics
 
-Open **Settings → App** and disable **Share usage data**. This controls anonymous product analytics, not the meeting content sent to a provider you selected.
+This build of Free Meeting Transcriber never sends usage analytics or telemetry, regardless of the **Share usage data** setting under **Settings → App**.
 
 <Warning>
   Recording-consent rules depend on where you and the other participants are located. Make sure you have permission before recording.

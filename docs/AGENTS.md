@@ -15,7 +15,7 @@
 - Treat `apps/cli/src/cli.rs` as the CLI command contract.
 - Treat `apps/cli/src/mcp.rs` as the MCP tool and resource contract.
 - Treat current release automation as the source of truth for installation channels.
-- Do not infer product behavior from the raw SQLite schema.
+- Do not infer product behavior from raw vault files; the write path is `apps/desktop/src-tauri/src/session_store/`.
 
 ## Writing
 
@@ -31,8 +31,8 @@
 
 - Document only commands, options, tools, resources, and output behavior present in the source.
 - Mark planned features and distribution channels as forthcoming.
-- Never describe Homebrew, desktop-bundled CLI, or Windows binaries as available until release automation publishes them.
-- Never tell users or agents to read, migrate, or modify the SQLite database directly.
+- Never describe Homebrew or Windows binaries as available until release automation publishes them.
+- Never tell agents to crawl or modify the vault files directly; agents go through the CLI or MCP server.
 - Keep transcript examples bounded. CLI and MCP transcript pages default to 200 words and cap at 500 words.
 
 ## Verification

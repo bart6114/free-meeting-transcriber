@@ -39,8 +39,10 @@ Transcript limits are measured in words. The default is 200 and the maximum is 5
 fmtr --json doctor
 ```
 
-The report includes the CLI version, resolved database path, read-only connection status, and schema readiness.
+The report includes the CLI version, an overall `ready` flag, and vault health: the resolved vault path, whether it exists and is a directory, and the session count.
 The command exits with status 1 when `ready` is false while preserving the diagnostic report on standard output.
+
+When the vault lives somewhere non-standard, point the CLI at it with the global `--vault-path DIR` flag or the `FMTR_VAULT_PATH` environment variable.
 
 ## Exports
 

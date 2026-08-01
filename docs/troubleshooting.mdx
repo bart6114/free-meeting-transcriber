@@ -1,6 +1,6 @@
 ---
 title: "Troubleshooting"
-description: "Fix the most common recording, transcription, summary, and calendar problems."
+description: "Fix the most common recording, transcription, and summary problems."
 ---
 
 ## Audio is missing
@@ -10,13 +10,13 @@ Open **Settings → Permissions** and confirm:
 - **Microphone** is allowed so Free Meeting Transcriber can hear you.
 - **System Audio** is allowed so Free Meeting Transcriber can hear the other people on the call.
 
-If a permission is denied, use **Open** to change it in macOS Settings, then restart Free Meeting Transcriber.
+If a permission is denied, open it in macOS Settings from the permission row, then restart Free Meeting Transcriber.
 
 ## The transcript is not live
 
 Open **Settings → Transcription** and check the selected model. **Live** models transcribe during the meeting. **After recording** models wait until you stop.
 
-If transcription fails, confirm the provider is configured, the model supports your spoken languages, and a local provider is running.
+If transcription fails, confirm the model is downloaded and supports your spoken languages. See [Use multiple languages](/languages) for what each model supports.
 
 ## No summary appears
 
@@ -24,15 +24,9 @@ A summary needs an Intelligence model. Open **Settings → Intelligence**, then 
 
 For LM Studio and Ollama, confirm the local server is running. See [Transcription and AI](/ai-setup).
 
-## Calendar events are missing
-
-Open **Calendar** and confirm the account is connected and the calendar is enabled. Refresh the calendar list. Reconnect any account marked **Reconnect required**.
-
-For Apple Calendar, also check **Settings → Permissions → Calendar**.
-
 ## A recording disappeared
 
-Open **Settings → App → Storage** and check **Audio file retention**. Free Meeting Transcriber can delete audio immediately or after a selected period while keeping the note and transcript.
+Open **Settings → App → Meetings** and check **Audio file retention**. Free Meeting Transcriber can delete audio immediately or after a selected period while keeping the note and transcript.
 
 See [Data, privacy, and retention](/data-and-privacy#choose-how-long-audio-is-kept) for every retention option.
 

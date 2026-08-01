@@ -38,7 +38,7 @@ fn plain_rename(source: &Path, dest: &Path) -> std::io::Result<()> {
 
 /// The recording file names every reader knows about: `hypr_fs_sync_core::audio` (the audio
 /// player's existence/path/metadata lookups), `listener_core::resolve_final_audio_path` (the
-/// path handed to post-capture batch transcription) and docs/storage.md all agree on
+/// path handed to post-capture batch transcription) all agree on
 /// `audio.{mp3,wav,ogg}` inside the session directory, and none of them search anywhere else.
 const READABLE_AUDIO_EXTENSIONS: [&str; 3] = ["mp3", "wav", "ogg"];
 
@@ -86,7 +86,7 @@ fn is_same_file_path(a: &Path, b: &Path) -> bool {
 
 impl SessionStore {
     /// Settles a finished recording at the one path the rest of the app reads:
-    /// `<session dir>/audio.<ext>` (docs/storage.md). The recorder already writes there, so the
+    /// `<session dir>/audio.<ext>`. The recorder already writes there, so the
     /// usual case is a no-op; an imported file from outside the vault is moved in, preferring
     /// `std::fs::rename` (atomic, no data-duplication window) and falling back to copy+delete
     /// across volumes. Returns the absolute settled path -- callers hold paths to this file
@@ -213,8 +213,8 @@ mod tests {
     }
 
     /// REGRESSION: `store_audio` used to move recordings into `sessions/<id>/audio/<name>`, a
-    /// location nothing reads. The recorder writes `sessions/<id>/audio.<ext>`
-    /// (docs/storage.md), the audio player gates on `hypr_fs_sync_core::audio::exists`, and
+    /// location nothing reads. The recorder writes `sessions/<id>/audio.<ext>`,
+    /// the audio player gates on `hypr_fs_sync_core::audio::exists`, and
     /// post-capture batch transcription re-reads the path the recorder reported -- moving the
     /// file out from under all three cost every recording both its transcript and its player
     /// entry. Asserting through the real reader (rather than a hardcoded path) is the point:

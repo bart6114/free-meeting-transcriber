@@ -8,7 +8,7 @@ Free Meeting Transcriber offers two local, read-only agent transports. They shar
 | Transport | Choose it when | Output |
 | --- | --- | --- |
 | MCP | The agent supports a local stdio MCP server | Structured tool results and contextual resources |
-| CLI | The agent can run shell commands but MCP is unavailable | JSON with `--json`, or Markdown for people |
+| CLI | The agent can run shell commands but MCP is unavailable | JSON with `--json`, or human-readable text |
 
 ## Recommended agent flow
 
@@ -21,7 +21,7 @@ Prefer MCP when it is connected because tools carry their input schemas and resu
 
 ## Safety boundary
 
-Agents should use the CLI or MCP server, not SQLite. Those interfaces apply Free Meeting Transcriber's rules for canonical notes, generated summaries, and transcript text.
+Agents should use the CLI or MCP server rather than crawling the vault files directly. Those interfaces apply Free Meeting Transcriber's rules for canonical notes, generated summaries, and transcript text.
 
 All current Free Meeting Transcriber data operations are read-only. An agent cannot update a note, action item, or meeting through these interfaces. CLI export may create a separate file; replacing an existing file requires `--force`.
 
