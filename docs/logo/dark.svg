@@ -1,10 +1,36 @@
 <svg width="252" height="32" viewBox="0 0 252 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-  <rect width="32" height="32" rx="8" fill="#F5EEDC" />
-  <g fill="#74540F">
-    <rect x="7" y="13" width="3" height="6" rx="1.5" />
-    <rect x="12" y="9" width="3" height="14" rx="1.5" />
-    <rect x="17" y="6" width="3" height="20" rx="1.5" />
-    <rect x="22" y="11" width="3" height="10" rx="1.5" />
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#312e81" />
+      <stop offset="1" stop-color="#0f172a" />
+    </linearGradient>
+    <mask id="handle">
+      <rect x="640" y="480" width="160" height="220" rx="70" fill="white" />
+      <rect x="696" y="528" width="52" height="124" rx="26" fill="black" />
+    </mask>
+  </defs>
+  <g transform="scale(0.03125)">
+    <rect width="1024" height="1024" rx="256" fill="url(#bg)" />
+    <g transform="rotate(-8 512 512)">
+      <rect x="330" y="400" width="330" height="400" rx="40" fill="#f59e0b" />
+      <rect x="640" y="480" width="160" height="220" rx="70" fill="#f59e0b" mask="url(#handle)" />
+      <g fill="#fffbeb">
+        <rect x="353" y="560" width="36" height="100" rx="18" />
+        <rect x="415" y="530" width="36" height="160" rx="18" />
+        <rect x="477" y="495" width="36" height="230" rx="18" />
+        <rect x="539" y="530" width="36" height="160" rx="18" />
+        <rect x="601" y="560" width="36" height="100" rx="18" />
+      </g>
+      <g fill="#f8fafc">
+        <rect x="328" y="368" width="334" height="62" rx="30" />
+        <circle cx="370" cy="368" r="68" />
+        <circle cx="455" cy="352" r="80" />
+        <circle cx="545" cy="362" r="72" />
+        <circle cx="615" cy="355" r="70" />
+        <ellipse cx="340" cy="462" rx="24" ry="42" />
+        <circle cx="332" cy="570" r="18" />
+      </g>
+    </g>
   </g>
-  <text x="42" y="21" fill="#F8F4EA" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="600">Free Meeting Transcriber</text>
+  <text x="42" y="21" fill="#f8fafc" font-family="Inter, ui-sans-serif, system-ui, sans-serif" font-size="15" font-weight="600">Free Meeting Transcriber</text>
 </svg>

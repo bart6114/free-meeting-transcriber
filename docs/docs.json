@@ -3,9 +3,9 @@
   "theme": "mint",
   "name": "Free Meeting Transcriber",
   "colors": {
-    "primary": "#74540F",
-    "light": "#946F25",
-    "dark": "#5D430D"
+    "primary": "#f59e0b",
+    "light": "#fbbf24",
+    "dark": "#d97706"
   },
   "favicon": "/favicon.svg",
   "navigation": {
@@ -22,7 +22,6 @@
           "import-recordings",
           "notes",
           "customize-summaries",
-          "calendar",
           "languages"
         ]
       },
