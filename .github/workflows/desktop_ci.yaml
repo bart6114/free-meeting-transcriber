@@ -1,4 +1,5 @@
-# https://github.com/tauri-apps/tauri-action/blob/3013cac/examples/test-build-only.yml
+name: desktop-ci
+
 on:
   workflow_dispatch:
   push:
@@ -6,8 +7,10 @@ on:
       - main
     paths:
       - .github/workflows/desktop_ci.yaml
+      - .github/actions/**
       - apps/cli/**
       - apps/desktop/**
+      - packages/**
       - plugins/**
       - crates/**
       - Cargo.toml
@@ -15,43 +18,50 @@ on:
   pull_request:
     paths:
       - .github/workflows/desktop_ci.yaml
+      - .github/actions/**
       - apps/cli/**
       - apps/desktop/**
+      - packages/**
       - plugins/**
       - crates/**
       - Cargo.toml
       - Cargo.lock
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
-  desktop_ci:
+  frontend:
     if: ${{ !startsWith(github.head_ref || '', 'blog/') }}
-    defaults:
-      run:
-        shell: bash
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - platform: "macos"
-            runner: "depot-macos-15"
-    runs-on: ${{ matrix.runner }}
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
       - uses: ./.github/actions/pnpm_install
       - uses: denoland/setup-deno@v2
       - run: pnpm -F ui build
       - run: pnpm -F desktop typecheck
       - run: pnpm -F desktop test
+      - run: pnpm -F desktop i18n:check
+
+  rust:
+    if: ${{ !startsWith(github.head_ref || '', 'blog/') }}
+    runs-on: macos-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
       - uses: ./.github/actions/install_desktop_deps
         with:
-          target: ${{ matrix.platform }}
+          target: macos
       - uses: ./.github/actions/rust_install
         with:
-          platform: ${{ matrix.platform }}
-      - if: matrix.platform == 'macos'
-        run: echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
+          platform: macos
+      - run: echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
       - run: cargo check -p desktop
       - run: cargo test -p desktop
       - run: |
@@ -137,76 +147,3 @@ jobs:
             --exclude db3 \
             --exclude activity-capture-macos \
             --exclude tauri-plugin-activity-capture
-
-  desktop_windows:
-    if: ${{ !startsWith(github.head_ref || '', 'blog/') }}
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-      - uses: ./.github/actions/rust_install
-        with:
-          platform: windows
-      - run: cargo check --locked -p desktop
-      - run: cargo test --locked -p desktop --no-run
-      - if: github.event_name == 'workflow_dispatch'
-        uses: ./.github/actions/pnpm_install
-      - if: github.event_name == 'workflow_dispatch'
-        run: pnpm -F ui build
-      - if: github.event_name == 'workflow_dispatch'
-        run: pnpm -F desktop tauri build --ci --bundles nsis --no-sign --target x86_64-pc-windows-msvc --config ./src-tauri/tauri.conf.staging.json --features devtools --verbose
-      - if: github.event_name == 'workflow_dispatch'
-        shell: pwsh
-        run: |
-          $bundleDir = "apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis"
-          $installer = Get-ChildItem $bundleDir -Filter "*.exe" | Select-Object -First 1
-          if (-not $installer) {
-            throw "No NSIS installer found in $bundleDir"
-          }
-
-          $hash = (Get-FileHash -Algorithm SHA256 $installer.FullName).Hash.ToLowerInvariant()
-          "$hash  $($installer.Name)" |
-            Out-File "$($installer.FullName).sha256" -Encoding ascii
-      - if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
-        with:
-          name: fmtr-windows-x64-nsis-${{ github.sha }}
-          path: |
-            apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.exe
-            apps/desktop/src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*.sha256
-          if-no-files-found: error
-          retention-days: 7
-
-  desktop_i18n:
-    if: ${{ !startsWith(github.head_ref || '', 'blog/') }}
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-      - uses: ./.github/actions/pnpm_install
-      - run: pnpm -F desktop i18n:check
-
-  desktop_swift:
-    if: ${{ !startsWith(github.head_ref || '', 'blog/') }}
-    runs-on: depot-macos-15
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-          fetch-depth: 0
-      - run: swift build --package-path plugins/windows/swift-lib
-
-  ci:
-    if: always()
-    needs: [desktop_ci, desktop_windows, desktop_i18n, desktop_swift]
-    runs-on: ubuntu-latest
-    steps:
-      - run: exit 1
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')

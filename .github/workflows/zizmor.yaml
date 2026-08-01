@@ -1,3 +1,5 @@
+name: zizmor
+
 on:
   push:
     branches: ["main"]
@@ -5,7 +7,7 @@ on:
 
 jobs:
   zizmor:
-    runs-on: depot-ubuntu-24.04-8
+    runs-on: ubuntu-latest
     permissions:
       security-events: write
       contents: read
