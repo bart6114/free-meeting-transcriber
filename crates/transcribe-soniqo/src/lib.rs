@@ -248,6 +248,15 @@ pub struct FileTranscriptChunk {
     pub text: String,
     pub start_seconds: f64,
     pub duration_seconds: f64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub speech_spans: Vec<SpeechSpan>,
+}
+
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SpeechSpan {
+    pub start_seconds: f64,
+    pub end_seconds: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -537,7 +546,16 @@ pub fn batch_response_from_channels(
         .iter()
         .map(|channel| channel.duration_seconds)
         .fold(0.05, f64::max);
-    let metadata = metadata_json(model, duration_seconds, channels.len() as u32);
+    let has_speech_spans = channels
+        .iter()
+        .flat_map(|channel| channel.chunks.iter())
+        .any(|chunk| !chunk.speech_spans.is_empty());
+    let metadata = metadata_json(
+        model,
+        duration_seconds,
+        channels.len() as u32,
+        has_speech_spans,
+    );
 
     batch::Response {
         metadata,
@@ -583,14 +601,23 @@ fn metadata(model: SoniqoModel) -> stream::Metadata {
     }
 }
 
-fn metadata_json(model: SoniqoModel, duration_seconds: f64, channels: u32) -> serde_json::Value {
+fn metadata_json(
+    model: SoniqoModel,
+    duration_seconds: f64,
+    channels: u32,
+    has_speech_spans: bool,
+) -> serde_json::Value {
     let mut value = serde_json::to_value(metadata(model)).unwrap_or_else(|_| serde_json::json!({}));
     if let Some(object) = value.as_object_mut() {
         object.insert("duration".to_string(), serde_json::json!(duration_seconds));
         object.insert("channels".to_string(), serde_json::json!(channels));
         object.insert(
             "timing_source".to_string(),
-            serde_json::json!("synthetic_text"),
+            serde_json::json!(if has_speech_spans {
+                "synthetic_speech"
+            } else {
+                "synthetic_text"
+            }),
         );
     }
     value
@@ -633,10 +660,116 @@ fn batch_words_from_chunks(chunks: &[FileTranscriptChunk], channel: i32) -> Vec<
         .iter()
         .flat_map(|chunk| {
             let text = normalize_transcript_text(&chunk.text);
+            if !chunk.speech_spans.is_empty() {
+                return batch_words_from_speech_spans(
+                    &text,
+                    chunk.start_seconds,
+                    chunk.duration_seconds,
+                    &chunk.speech_spans,
+                    channel,
+                );
+            }
+
             let duration = synthetic_text_duration(&text)
                 .min(chunk.duration_seconds.max(MIN_SYNTHETIC_DURATION_SECONDS));
             let start = chunk.start_seconds.max(0.0);
             batch_words_from_text(&text, start, duration, channel)
+        })
+        .collect()
+}
+
+fn batch_words_from_speech_spans(
+    text: &str,
+    start: f64,
+    duration: f64,
+    speech_spans: &[SpeechSpan],
+    channel: i32,
+) -> Vec<batch::Word> {
+    let words = split_words(text);
+    if words.is_empty() {
+        return Vec::new();
+    }
+
+    let chunk_start = start.max(0.0);
+    let chunk_end = chunk_start + duration.max(MIN_SYNTHETIC_DURATION_SECONDS);
+    let mut spans = speech_spans
+        .iter()
+        .filter_map(|span| {
+            let start = span.start_seconds.max(chunk_start);
+            let end = span.end_seconds.min(chunk_end);
+            (end > start).then_some((start, end))
+        })
+        .collect::<Vec<_>>();
+    spans.sort_by(|left, right| {
+        left.0
+            .total_cmp(&right.0)
+            .then_with(|| left.1.total_cmp(&right.1))
+    });
+    let mut non_overlapping = Vec::with_capacity(spans.len());
+    let mut previous_end = chunk_start;
+    for (start, end) in spans {
+        let start = start.max(previous_end);
+        if end > start {
+            non_overlapping.push((start, end));
+            previous_end = end;
+        }
+    }
+    let spans = non_overlapping;
+
+    let active_duration = spans.iter().map(|(start, end)| end - start).sum::<f64>();
+    if active_duration <= 0.0 {
+        let duration =
+            synthetic_text_duration(text).min(duration.max(MIN_SYNTHETIC_DURATION_SECONDS));
+        return batch_words_from_text(text, chunk_start, duration, channel);
+    }
+
+    let position = |offset: f64| {
+        let mut remaining = offset.clamp(0.0, active_duration);
+        for (index, (start, end)) in spans.iter().enumerate() {
+            let span_duration = end - start;
+            if remaining <= span_duration || index + 1 == spans.len() {
+                return (start + remaining.min(span_duration), index);
+            }
+            remaining -= span_duration;
+        }
+        (chunk_end, spans.len() - 1)
+    };
+    let count = words.len();
+
+    words
+        .into_iter()
+        .enumerate()
+        .map(|(index, word)| {
+            let start_offset = index as f64 / count as f64 * active_duration;
+            let end_offset = (index + 1) as f64 / count as f64 * active_duration;
+            let midpoint_offset = (start_offset + end_offset) / 2.0;
+            let (mapped_start, _) = position(start_offset);
+            let (mapped_end, _) = position(end_offset);
+            let (midpoint, span_index) = position(midpoint_offset);
+            let (span_start, span_end) = spans[span_index];
+            let word_start = mapped_start.max(span_start).min(span_end);
+            let word_end = mapped_end
+                .min(span_end)
+                .max((word_start + MIN_SYNTHETIC_DURATION_SECONDS).min(span_end));
+            let (word_start, word_end) = if word_end > word_start {
+                (word_start, word_end)
+            } else {
+                let half = MIN_SYNTHETIC_DURATION_SECONDS / 2.0;
+                (
+                    (midpoint - half).max(span_start),
+                    (midpoint + half).min(span_end),
+                )
+            };
+
+            batch::Word {
+                word: word.to_string(),
+                start: word_start,
+                end: word_end.max(word_start + f64::EPSILON),
+                confidence: 1.0,
+                channel,
+                speaker: None,
+                punctuated_word: Some(word.to_string()),
+            }
         })
         .collect()
 }
@@ -1093,11 +1226,13 @@ mod tests {
                         text: "early words".to_string(),
                         start_seconds: 0.0,
                         duration_seconds: 29.5,
+                        speech_spans: Vec::new(),
                     },
                     FileTranscriptChunk {
                         text: "later words".to_string(),
                         start_seconds: 29.5,
                         duration_seconds: 29.5,
+                        speech_spans: Vec::new(),
                     },
                 ],
                 59.0,
@@ -1110,6 +1245,65 @@ mod tests {
         assert_eq!(words[2].start, 29.5);
         assert_eq!(words[3].start, 29.5 + SYNTHETIC_BATCH_WORD_SECONDS);
         assert_eq!(response.metadata["timing_source"], "synthetic_text");
+    }
+
+    #[test]
+    fn batch_response_places_words_inside_speech_spans() {
+        let response = batch_response_from_channels(
+            SoniqoModel::ParakeetBatch,
+            vec![FileTranscript::from_chunks(
+                vec![FileTranscriptChunk {
+                    text: "one two three four".to_string(),
+                    start_seconds: 10.0,
+                    duration_seconds: 29.5,
+                    speech_spans: vec![
+                        SpeechSpan {
+                            start_seconds: 12.0,
+                            end_seconds: 14.0,
+                        },
+                        SpeechSpan {
+                            start_seconds: 30.0,
+                            end_seconds: 32.0,
+                        },
+                    ],
+                }],
+                40.0,
+            )],
+        );
+        let words = &response.results.channels[0].alternatives[0].words;
+
+        assert_eq!(words.len(), 4);
+        assert_eq!(words[0].start, 12.0);
+        assert!(words[1].end <= 14.0);
+        assert!(words[2].start >= 30.0);
+        assert!(words[3].end <= 32.0);
+        for pair in words.windows(2) {
+            assert!(pair[0].start <= pair[1].start);
+        }
+        assert_eq!(response.metadata["timing_source"], "synthetic_speech");
+    }
+
+    #[test]
+    fn batch_response_ignores_speech_spans_outside_chunk() {
+        let response = batch_response_from_channels(
+            SoniqoModel::ParakeetBatch,
+            vec![FileTranscript::from_chunks(
+                vec![FileTranscriptChunk {
+                    text: "hello world".to_string(),
+                    start_seconds: 10.0,
+                    duration_seconds: 5.0,
+                    speech_spans: vec![SpeechSpan {
+                        start_seconds: 100.0,
+                        end_seconds: 110.0,
+                    }],
+                }],
+                15.0,
+            )],
+        );
+        let words = &response.results.channels[0].alternatives[0].words;
+
+        assert_eq!(words[0].start, 10.0);
+        assert_eq!(words[1].end, 10.0 + 2.0 * SYNTHETIC_BATCH_WORD_SECONDS);
     }
 
     #[test]

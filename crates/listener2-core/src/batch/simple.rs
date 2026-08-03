@@ -20,6 +20,7 @@ use super::{BatchParams, BatchRunMode, BatchRunOutput, format_user_friendly_erro
 use crate::{BatchEvent, BatchRuntime};
 
 const SONIQO_PARAKEET_MAX_CHUNK_SAMPLES: usize = TARGET_SAMPLE_RATE as usize * 59 / 2;
+const SONIQO_DIRECT_MIC_MIN_RMS: f64 = 0.0008;
 const SONIQO_PROGRESS_PLANNED: f64 = 0.05;
 const SONIQO_PROGRESS_RANGE: f64 = 0.90;
 const SONIQO_PROGRESS_MAX: f64 = 0.95;
@@ -276,10 +277,18 @@ fn transcribe_soniqo_file(
         "soniqo_channels_prepared"
     );
 
+    let transcribed_channel_count = channel_samples.len();
     let plans = channel_samples
         .into_iter()
         .enumerate()
-        .map(|(channel_index, samples)| soniqo_channel_plan(model, channel_index, &samples))
+        .map(|(channel_index, samples)| {
+            soniqo_channel_plan(
+                model,
+                channel_index,
+                &samples,
+                transcribed_channel_count == 2 && channel_index == 0,
+            )
+        })
         .collect::<std::result::Result<Vec<_>, _>>()?;
     let total_chunks = plans.iter().map(|plan| plan.chunks.len()).sum::<usize>();
     let mut completed_chunks = 0usize;
@@ -318,7 +327,26 @@ impl SoniqoProgressReporter {
 struct SoniqoChannelPlan {
     channel_index: usize,
     duration_seconds: f64,
-    chunks: Vec<AudioChunk>,
+    is_direct_mic: bool,
+    chunks: Vec<ChannelChunk>,
+}
+
+struct ChannelChunk {
+    samples: Vec<f32>,
+    sample_start: usize,
+    sample_end: usize,
+    speech_spans: Vec<(usize, usize)>,
+}
+
+impl From<AudioChunk> for ChannelChunk {
+    fn from(chunk: AudioChunk) -> Self {
+        Self {
+            samples: chunk.samples,
+            sample_start: chunk.sample_start,
+            sample_end: chunk.sample_end,
+            speech_spans: Vec::new(),
+        }
+    }
 }
 
 fn soniqo_language_hint(language: Option<&str>) -> Option<String> {
@@ -391,6 +419,7 @@ fn soniqo_channel_plan(
     model: hypr_transcribe_soniqo::SoniqoModel,
     channel_index: usize,
     samples: &[f32],
+    is_direct_mic: bool,
 ) -> std::result::Result<SoniqoChannelPlan, String> {
     let duration_seconds = channel_duration_sec(samples);
     let chunks = soniqo_channel_chunks(model, samples)?;
@@ -407,6 +436,7 @@ fn soniqo_channel_plan(
     Ok(SoniqoChannelPlan {
         channel_index,
         duration_seconds,
+        is_direct_mic,
         chunks,
     })
 }
@@ -422,10 +452,26 @@ fn transcribe_soniqo_channel_chunks(
     let mut successful_chunks = 0usize;
     let mut failed_chunks = 0usize;
     let channel_index = plan.channel_index;
+    let is_direct_mic = plan.is_direct_mic;
 
     for (chunk_index, chunk) in plan.chunks.into_iter().enumerate() {
         let chunk_duration_ms =
             (chunk.sample_end - chunk.sample_start) * 1000 / TARGET_SAMPLE_RATE as usize;
+        let chunk_rms = chunk_speech_rms(&chunk);
+        if is_direct_mic && chunk_rms < SONIQO_DIRECT_MIC_MIN_RMS {
+            on_chunk_completed();
+            tracing::info!(
+                fmtr.stt.provider.name = "soniqo",
+                fmtr.stt.model = %model,
+                channel.index = channel_index,
+                chunk.index = chunk_index,
+                audio.rms = chunk_rms,
+                audio.minimum_rms = SONIQO_DIRECT_MIC_MIN_RMS,
+                "soniqo_direct_mic_chunk_skipped"
+            );
+            continue;
+        }
+
         let chunk_started_at = Instant::now();
         tracing::info!(
             fmtr.stt.provider.name = "soniqo",
@@ -479,6 +525,14 @@ fn transcribe_soniqo_channel_chunks(
                 start_seconds: chunk.sample_start as f64 / TARGET_SAMPLE_RATE as f64,
                 duration_seconds: (chunk.sample_end - chunk.sample_start) as f64
                     / TARGET_SAMPLE_RATE as f64,
+                speech_spans: chunk
+                    .speech_spans
+                    .iter()
+                    .map(|&(start, end)| hypr_transcribe_soniqo::SpeechSpan {
+                        start_seconds: start as f64 / TARGET_SAMPLE_RATE as f64,
+                        end_seconds: end as f64 / TARGET_SAMPLE_RATE as f64,
+                    })
+                    .collect(),
             });
         }
     }
@@ -544,15 +598,121 @@ fn transcribe_soniqo_samples(
 fn soniqo_channel_chunks(
     model: hypr_transcribe_soniqo::SoniqoModel,
     samples: &[f32],
-) -> std::result::Result<Vec<AudioChunk>, String> {
+) -> std::result::Result<Vec<ChannelChunk>, String> {
     if model == hypr_transcribe_soniqo::SoniqoModel::ParakeetBatch {
-        return Ok(split_audio_samples(
-            samples,
-            SONIQO_PARAKEET_MAX_CHUNK_SAMPLES,
-        ));
+        return Ok(
+            match chunk_channel_audio::<hypr_audio_chunking::Error>(samples) {
+                Ok(chunks) => {
+                    pack_speech_chunks(samples, chunks, SONIQO_PARAKEET_MAX_CHUNK_SAMPLES)
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        fmtr.stt.provider.name = "soniqo",
+                        fmtr.stt.model = %model,
+                        error = %error,
+                        "soniqo_speech_chunking_failed_using_fixed_windows"
+                    );
+                    split_audio_samples(samples, SONIQO_PARAKEET_MAX_CHUNK_SAMPLES)
+                        .into_iter()
+                        .map(ChannelChunk::from)
+                        .collect()
+                }
+            },
+        );
     }
 
-    chunk_channel_audio::<hypr_audio_chunking::Error>(samples).map_err(|e| e.to_string())
+    Ok(chunk_channel_audio::<hypr_audio_chunking::Error>(samples)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(ChannelChunk::from)
+        .collect())
+}
+
+fn pack_speech_chunks(
+    samples: &[f32],
+    chunks: Vec<AudioChunk>,
+    max_samples: usize,
+) -> Vec<ChannelChunk> {
+    let mut packs: Vec<ChannelChunk> = Vec::new();
+    let mut current: Option<(usize, usize, Vec<(usize, usize)>)> = None;
+
+    for chunk in chunks {
+        let span = (
+            chunk.sample_start.min(samples.len()),
+            chunk.sample_end.min(samples.len()),
+        );
+        match current.as_mut() {
+            Some((start, end, spans)) if span.1.saturating_sub(*start) <= max_samples => {
+                *end = span.1.max(*end);
+                spans.push(span);
+            }
+            _ => {
+                if let Some((start, end, spans)) = current.take() {
+                    packs.push(pack_from_range(samples, start, end, spans));
+                }
+                current = Some((span.0, span.1, vec![span]));
+            }
+        }
+    }
+
+    if let Some((start, end, spans)) = current.take() {
+        packs.push(pack_from_range(samples, start, end, spans));
+    }
+
+    packs
+}
+
+fn pack_from_range(
+    samples: &[f32],
+    sample_start: usize,
+    sample_end: usize,
+    speech_spans: Vec<(usize, usize)>,
+) -> ChannelChunk {
+    ChannelChunk {
+        samples: samples[sample_start..sample_end].to_vec(),
+        sample_start,
+        sample_end,
+        speech_spans,
+    }
+}
+
+fn chunk_speech_rms(chunk: &ChannelChunk) -> f64 {
+    if chunk.speech_spans.is_empty() {
+        return audio_rms(&chunk.samples);
+    }
+
+    let mut sum = 0.0f64;
+    let mut count = 0usize;
+    for &(start, end) in &chunk.speech_spans {
+        let local_start = start
+            .saturating_sub(chunk.sample_start)
+            .min(chunk.samples.len());
+        let local_end = end
+            .saturating_sub(chunk.sample_start)
+            .min(chunk.samples.len());
+        for sample in &chunk.samples[local_start..local_end] {
+            sum += f64::from(*sample) * f64::from(*sample);
+            count += 1;
+        }
+    }
+
+    if count == 0 {
+        0.0
+    } else {
+        (sum / count as f64).sqrt()
+    }
+}
+
+fn audio_rms(samples: &[f32]) -> f64 {
+    if samples.is_empty() {
+        return 0.0;
+    }
+
+    let sum = samples
+        .iter()
+        .map(|sample| f64::from(*sample) * f64::from(*sample))
+        .sum::<f64>();
+    (sum / samples.len() as f64).sqrt()
 }
 
 fn split_audio_samples(samples: &[f32], max_samples: usize) -> Vec<AudioChunk> {
@@ -618,21 +778,89 @@ mod tests {
         assert_eq!(channels, vec![vec![0.1, 0.2], vec![0.9, 0.8]]);
     }
 
-    #[test]
-    fn parakeet_batch_uses_fixed_audio_windows() {
-        let samples =
-            vec![0.0; SONIQO_PARAKEET_MAX_CHUNK_SAMPLES * 2 + TARGET_SAMPLE_RATE as usize];
-        let chunks =
-            soniqo_channel_chunks(hypr_transcribe_soniqo::SoniqoModel::ParakeetBatch, &samples)
-                .unwrap();
+    fn speech_chunk(start_seconds: usize, end_seconds: usize) -> AudioChunk {
+        let rate = TARGET_SAMPLE_RATE as usize;
+        AudioChunk {
+            samples: vec![0.5; (end_seconds - start_seconds) * rate],
+            sample_start: start_seconds * rate,
+            sample_end: end_seconds * rate,
+        }
+    }
 
-        assert_eq!(chunks.len(), 3);
-        assert_eq!(chunks[0].sample_start, 0);
-        assert_eq!(chunks[0].sample_end, SONIQO_PARAKEET_MAX_CHUNK_SAMPLES);
-        assert_eq!(chunks[1].sample_start, chunks[0].sample_end);
-        assert_eq!(chunks[1].sample_end, SONIQO_PARAKEET_MAX_CHUNK_SAMPLES * 2);
-        assert_eq!(chunks[2].sample_start, chunks[1].sample_end);
-        assert_eq!(chunks[2].samples.len(), TARGET_SAMPLE_RATE as usize);
+    #[test]
+    fn packs_adjacent_speech_chunks_into_one_window() {
+        let rate = TARGET_SAMPLE_RATE as usize;
+        let samples = vec![0.1; rate * 60];
+        let packs = pack_speech_chunks(
+            &samples,
+            vec![
+                speech_chunk(2, 6),
+                speech_chunk(10, 14),
+                speech_chunk(20, 25),
+            ],
+            SONIQO_PARAKEET_MAX_CHUNK_SAMPLES,
+        );
+
+        assert_eq!(packs.len(), 1);
+        assert_eq!(packs[0].sample_start, rate * 2);
+        assert_eq!(packs[0].sample_end, rate * 25);
+        assert_eq!(
+            packs[0].speech_spans,
+            vec![
+                (rate * 2, rate * 6),
+                (rate * 10, rate * 14),
+                (rate * 20, rate * 25)
+            ]
+        );
+        assert_eq!(packs[0].samples.len(), rate * 23);
+    }
+
+    #[test]
+    fn starts_new_pack_when_window_capacity_is_exceeded() {
+        let rate = TARGET_SAMPLE_RATE as usize;
+        let samples = vec![0.1; rate * 120];
+        let packs = pack_speech_chunks(
+            &samples,
+            vec![
+                speech_chunk(0, 20),
+                speech_chunk(40, 50),
+                speech_chunk(52, 56),
+            ],
+            SONIQO_PARAKEET_MAX_CHUNK_SAMPLES,
+        );
+
+        assert_eq!(packs.len(), 2);
+        assert_eq!(packs[0].sample_start, 0);
+        assert_eq!(packs[0].sample_end, rate * 20);
+        assert_eq!(packs[1].sample_start, rate * 40);
+        assert_eq!(packs[1].sample_end, rate * 56);
+        assert_eq!(
+            packs[1].speech_spans,
+            vec![(rate * 40, rate * 50), (rate * 52, rate * 56)]
+        );
+    }
+
+    #[test]
+    fn speech_rms_ignores_silence_between_spans() {
+        let rate = TARGET_SAMPLE_RATE as usize;
+        let mut samples = vec![0.0f32; rate * 10];
+        samples[rate * 2..rate * 3].fill(0.5);
+        let packs = pack_speech_chunks(
+            &samples,
+            vec![speech_chunk(2, 3), speech_chunk(8, 9)],
+            SONIQO_PARAKEET_MAX_CHUNK_SAMPLES,
+        );
+        let pack = packs.into_iter().next().unwrap();
+
+        let rms = chunk_speech_rms(&pack);
+        assert!((rms - (0.125f64).sqrt()).abs() < 1e-6);
+        assert!(audio_rms(&pack.samples) < rms);
+    }
+
+    #[test]
+    fn direct_mic_rms_floor_keeps_audible_speech() {
+        assert!(audio_rms(&[0.0; 16_000]) < SONIQO_DIRECT_MIC_MIN_RMS);
+        assert!(audio_rms(&[0.01; 16_000]) >= SONIQO_DIRECT_MIC_MIN_RMS);
     }
 
     #[test]

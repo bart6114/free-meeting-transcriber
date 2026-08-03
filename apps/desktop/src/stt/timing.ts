@@ -1,6 +1,7 @@
 export type TranscriptTimingSource =
   | "provider_word"
   | "provider_segment_interpolated"
+  | "synthetic_speech"
   | "synthetic_text";
 
 export type TranscriptWordMetadata = Record<string, unknown>;
@@ -42,7 +43,8 @@ export function getTranscriptTimingSource(word: {
 }
 
 export function isTranscriptWordSeekable(word: { metadata?: unknown }) {
-  return getTranscriptTimingSource(word) !== "synthetic_text";
+  const source = getTranscriptTimingSource(word);
+  return source !== "synthetic_text" && source !== "synthetic_speech";
 }
 
 export function getValidTimingSource(
@@ -50,6 +52,7 @@ export function getValidTimingSource(
 ): TranscriptTimingSource | undefined {
   return source === "provider_word" ||
     source === "provider_segment_interpolated" ||
+    source === "synthetic_speech" ||
     source === "synthetic_text"
     ? source
     : undefined;
