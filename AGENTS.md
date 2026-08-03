@@ -31,6 +31,7 @@ Files in the user's vault directory are the only source of truth — there is no
 - The version's source of truth is the root `package.json`; `apps/desktop/package.json` is kept in sync by the workflow, and `tauri.conf.json` reads it (`"version": "../package.json"`) — never bump versions by hand.
 - Signed + notarized stable DMGs are built on demand: run the `desktop-release` workflow (`gh workflow run desktop-release`, optional `tag` input, defaults to the latest release) and it attaches the DMG + sha256 to that release.
 - `desktop_build.yaml` is the separate staging lane: unversioned DMG artifact on every push to `main`.
+- Each push leaves a bot `chore(release)` commit on `main`, so local `main` is behind after every push — `git pull --rebase origin main` before pushing.
 
 ## Code Style
 
