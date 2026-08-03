@@ -32,25 +32,38 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          last_tag="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)"
-          if [ -n "$last_tag" ]; then
-            range="${last_tag}..HEAD"
-          else
-            range=HEAD
-          fi
+          # A human push can land on main mid-run; --atomic keeps the branch
+          # and tag together, and each retry recomputes from the fresh tip.
+          for attempt in 1 2 3; do
+            git fetch --tags origin main
+            git reset --hard origin/main
 
-          log="$(git log --format='%s%n%b' "$range")"
-          bump=patch
-          if printf '%s\n' "$log" | grep -qE '(^[a-z]+(\([^)]*\))?!:)|(^BREAKING CHANGE:)'; then
-            bump=major
-          elif printf '%s\n' "$log" | grep -qE '^feat(\([^)]*\))?:'; then
-            bump=minor
-          fi
+            last_tag="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)"
+            if [ -n "$last_tag" ]; then
+              range="${last_tag}..HEAD"
+            else
+              range=HEAD
+            fi
 
-          version="$(npm version "$bump" --no-git-tag-version)"
-          (cd apps/desktop && npm version "${version#v}" --no-git-tag-version --allow-same-version)
+            log="$(git log --format='%s%n%b' "$range")"
+            bump=patch
+            if printf '%s\n' "$log" | grep -qE '(^[a-z]+(\([^)]*\))?!:)|(^BREAKING CHANGE:)'; then
+              bump=major
+            elif printf '%s\n' "$log" | grep -qE '^feat(\([^)]*\))?:'; then
+              bump=minor
+            fi
 
-          git commit -am "chore(release): ${version} [skip ci]"
-          git tag "$version"
-          git push origin main "$version"
-          gh release create "$version" --generate-notes
+            version="$(npm version "$bump" --no-git-tag-version)"
+            (cd apps/desktop && npm version "${version#v}" --no-git-tag-version --allow-same-version)
+
+            git commit -am "chore(release): ${version} [skip ci]"
+            git tag -f "$version"
+            if git push --atomic origin main "$version"; then
+              gh release create "$version" --generate-notes
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt), retrying from fresh main"
+            git tag -d "$version"
+          done
+          echo "gave up after 3 attempts"
+          exit 1
