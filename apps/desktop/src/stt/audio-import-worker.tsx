@@ -10,6 +10,7 @@ import {
 import { commands as notificationCommands } from "@hypr/plugin-notification";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
+import { AUDIO_IMPORT_COMPLETED_NOTIFICATION_KEY } from "./audio-import-notification";
 import { estimateUploadedAudioSessionCreatedAt } from "./audio-note-date";
 import { useListener } from "./contexts";
 import { isStoppedTranscriptionError, useRunBatch } from "./useRunBatch";
@@ -59,7 +60,10 @@ export function AudioImportWorker() {
     const items = useAudioImport.getState().items;
     const done = items.filter((item) => item.status === "done").length;
     const failed = items.filter((item) => item.status === "failed").length;
-    void announceImportCompleted(done, failed);
+    const lastImportedSessionId =
+      [...items].reverse().find((item) => item.status === "done")?.sessionId ??
+      null;
+    void announceImportCompleted(done, failed, lastImportedSessionId);
   }, [shouldAnnounceCompletion]);
 
   if (!activeItem) {
@@ -275,7 +279,11 @@ function importAudioToSession(
   });
 }
 
-async function announceImportCompleted(done: number, failed: number) {
+async function announceImportCompleted(
+  done: number,
+  failed: number,
+  lastImportedSessionId: string | null,
+) {
   const total = done + failed;
   const message =
     failed > 0
@@ -294,16 +302,22 @@ async function announceImportCompleted(done: number, failed: number) {
   }
 
   try {
+    // A session source makes the notification click open that note; without
+    // one (nothing succeeded) the click reopens the import dialog instead.
     const result = await notificationCommands.showNotification({
-      key: "audio-import-completed",
+      key: AUDIO_IMPORT_COMPLETED_NOTIFICATION_KEY,
       title: "Audio import finished",
       message,
       timeout: null,
-      source: null,
+      source: lastImportedSessionId
+        ? { type: "session", session_id: lastImportedSessionId }
+        : null,
       start_time: null,
       participants: null,
       event_details: null,
-      action_label: "Open Free Meeting Transcriber",
+      action_label: lastImportedSessionId
+        ? "Open note"
+        : "Open Free Meeting Transcriber",
       action_variant: null,
       options: null,
       footer: null,

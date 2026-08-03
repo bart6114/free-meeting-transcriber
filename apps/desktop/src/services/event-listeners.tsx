@@ -14,8 +14,10 @@ import { useLatestRef } from "~/shared/hooks/useLatestRef";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import { subscribeIndexChanged } from "~/shared/index-query";
 import { DEFAULT_USER_ID } from "~/shared/utils";
+import { useAudioImport } from "~/store/zustand/audio-import";
 import { listenerStore } from "~/store/zustand/listener/instance";
 import { useTabs } from "~/store/zustand/tabs";
+import { AUDIO_IMPORT_COMPLETED_NOTIFICATION_KEY } from "~/stt/audio-import-notification";
 import { parseAutoStopEndedNotificationKey } from "~/stt/auto-stop-notification";
 import { parseBatchCompletedNotificationKey } from "~/stt/batch-completed-notification";
 import {
@@ -283,10 +285,6 @@ function useNotificationEvents() {
             payload.source?.type === "session"
               ? payload.source.session_id
               : parseBatchCompletedNotificationKey(payload.key);
-          const triggerAppIds =
-            payload.source?.type === "mic_detected"
-              ? (payload.source.app_ids ?? null)
-              : null;
           if (sourceSessionId) {
             openNewRef.current({
               type: "sessions",
@@ -296,7 +294,19 @@ function useNotificationEvents() {
             return;
           }
 
-          void createNotificationSession(triggerAppIds)
+          if (payload.key === AUDIO_IMPORT_COMPLETED_NOTIFICATION_KEY) {
+            useAudioImport.getState().setDialogOpen(true);
+            return;
+          }
+
+          // Only meeting-detection notifications may start a recording;
+          // anything unrecognized just focuses the app (the Rust handler
+          // already showed the main window).
+          if (payload.source?.type !== "mic_detected") {
+            return;
+          }
+
+          void createNotificationSession(payload.source.app_ids ?? null)
             .then(({ sessionId, autoStart }) => {
               openNewRef.current({
                 type: "sessions",

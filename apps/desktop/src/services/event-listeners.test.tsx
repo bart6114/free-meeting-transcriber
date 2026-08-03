@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import { EventListeners } from "./event-listeners";
 
+import { useAudioImport } from "~/store/zustand/audio-import";
+import { AUDIO_IMPORT_COMPLETED_NOTIFICATION_KEY } from "~/stt/audio-import-notification";
 import { createAutoStopEndedNotificationKey } from "~/stt/auto-stop-notification";
 import { createBatchCompletedNotificationKey } from "~/stt/batch-completed-notification";
 
@@ -302,6 +304,53 @@ describe("EventListeners notification events", () => {
       id: "session-1",
       state: { view: null, autoStart: null },
     });
+  });
+
+  test("notification_confirm with audio-import key opens the import dialog", async () => {
+    useAudioImport.getState().setDialogOpen(false);
+
+    render(<EventListeners />);
+
+    await vi.waitFor(() =>
+      expect(notificationListenMock).toHaveBeenCalledTimes(1),
+    );
+
+    const handler = notificationListenMock.mock.calls[0]?.[0];
+    expect(handler).toBeTypeOf("function");
+
+    handler({
+      payload: {
+        type: "notification_confirm",
+        key: AUDIO_IMPORT_COMPLETED_NOTIFICATION_KEY,
+        source: null,
+      },
+    });
+
+    expect(useAudioImport.getState().dialogOpen).toBe(true);
+    expect(createSessionMock).not.toHaveBeenCalled();
+    expect(openNewMock).not.toHaveBeenCalled();
+  });
+
+  test("notification_confirm with unknown key does not create a session or start recording", async () => {
+    render(<EventListeners />);
+
+    await vi.waitFor(() =>
+      expect(notificationListenMock).toHaveBeenCalledTimes(1),
+    );
+
+    const handler = notificationListenMock.mock.calls[0]?.[0];
+    expect(handler).toBeTypeOf("function");
+
+    handler({
+      payload: {
+        type: "notification_confirm",
+        key: "some-future-notification",
+        source: null,
+      },
+    });
+
+    expect(createSessionMock).not.toHaveBeenCalled();
+    expect(openNewMock).not.toHaveBeenCalled();
   });
 
   test("notification_confirm with mic_detected source creates a session and sets triggerAppIds", async () => {
