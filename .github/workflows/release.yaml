@@ -12,24 +12,55 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  release-please:
+  version:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
     outputs:
-      release_created: ${{ steps.release.outputs.release_created }}
-      tag_name: ${{ steps.release.outputs.tag_name }}
+      tag_name: ${{ steps.bump.outputs.tag_name }}
     steps:
-      - uses: googleapis/release-please-action@v4
-        id: release
+      - uses: actions/checkout@v4
         with:
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          # ref: main (not the pushed sha) + kept credentials: this job
+          # commits the bump on top of the latest main and pushes it back.
+          ref: main
+          fetch-depth: 0
+          persist-credentials: true
+      - name: Bump version, tag, and create release
+        id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          last_tag="$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || true)"
+          if [ -n "$last_tag" ]; then
+            range="${last_tag}..HEAD"
+          else
+            range=HEAD
+          fi
+
+          log="$(git log --format='%s%n%b' "$range")"
+          bump=patch
+          if printf '%s\n' "$log" | grep -qE '(^[a-z]+(\([^)]*\))?!:)|(^BREAKING CHANGE:)'; then
+            bump=major
+          elif printf '%s\n' "$log" | grep -qE '^feat(\([^)]*\))?:'; then
+            bump=minor
+          fi
+
+          version="$(npm version "$bump" --no-git-tag-version)"
+          (cd apps/desktop && npm version "${version#v}" --no-git-tag-version --allow-same-version)
+
+          git commit -am "chore(release): ${version} [skip ci]"
+          git tag "$version"
+          git push origin main "$version"
+          gh release create "$version" --generate-notes
+          echo "tag_name=$version" >> "$GITHUB_OUTPUT"
 
   macos:
-    needs: release-please
-    if: needs.release-please.outputs.release_created == 'true'
+    needs: version
     runs-on: macos-latest
     permissions:
       contents: write
@@ -39,7 +70,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name }}
+          ref: ${{ needs.version.outputs.tag_name }}
           lfs: true
           persist-credentials: false
       - uses: ./.github/actions/pnpm_install
@@ -78,7 +109,7 @@ jobs:
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.release-please.outputs.tag_name }}
+          TAG: ${{ needs.version.outputs.tag_name }}
         run: |
           set -euo pipefail
           bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
