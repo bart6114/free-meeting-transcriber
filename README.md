@@ -1,4 +1,12 @@
-# Free Meeting Transcriber
+<p align="center">
+  <img src="apps/desktop/src-tauri/icons/stable/128x128.png" width="128" alt="Free Meeting Transcriber app icon" />
+</p>
+
+<h1 align="center">Free Meeting Transcriber</h1>
+
+<p align="center">
+  <a href="https://github.com/bart6114/free-meeting-transcriber/releases/download/updater/FreeMeetingTranscriber_latest_aarch64.dmg"><img src="https://img.shields.io/badge/Download_for_macOS-Apple_Silicon-1b2a6b?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS (Apple Silicon)" /></a>
+</p>
 
 So this is my fork of [anarlog](https://github.com/fastrepl/anarlog). I built
 it because I needed it: a meeting notetaker that transcribes on-device and
@@ -13,9 +21,13 @@ Fair warning: this scratches my own itch. If it's useful to you too, great.
 
 ## How to use it
 
-Build it yourself (see Development below) and run it. Join a meeting, it
-records and transcribes locally, and your notes end up as markdown on disk.
-That's it, really.
+Hit the download button above (macOS on Apple Silicon, signed and notarized).
+It always points at the newest published build; older versions live on the
+[releases page](https://github.com/bart6114/free-meeting-transcriber/releases).
+Or build it yourself (see Development below).
+
+Run it, join a meeting, it records and transcribes locally, and your notes
+end up as markdown on disk. That's it, really.
 
 ## Why
 

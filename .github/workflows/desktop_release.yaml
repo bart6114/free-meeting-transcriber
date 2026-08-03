@@ -127,10 +127,11 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           macos_dir="apps/desktop/src-tauri/target/release/bundle/macos"
+          bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
           if ! gh release view updater >/dev/null 2>&1; then
             gh release create updater --prerelease \
               --title "Updater feed" \
-              --notes "Rolling release holding latest.json for the in-app updater. Do not delete."
+              --notes "Rolling release holding latest.json for the in-app updater and a stable-named copy of the latest DMG. Do not delete."
           fi
           feed_version="$(gh release download updater --pattern latest.json -O - 2>/dev/null | jq -r .version || echo "0.0.0")"
           newest="$(printf '%s\n%s\n' "$feed_version" "$version" | sort -V | tail -n1)"
@@ -138,4 +139,5 @@ jobs:
             echo "Feed already at $feed_version; not downgrading to $version"
             exit 0
           fi
-          gh release upload updater "$macos_dir/latest.json" --clobber
+          cp "$bundle_dir/FreeMeetingTranscriber_${version}_aarch64.dmg" "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg"
+          gh release upload updater "$macos_dir/latest.json" "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg" --clobber
