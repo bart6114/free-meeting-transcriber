@@ -103,6 +103,14 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Updater2<'a, R, M> {
         let update = updater.check().await?;
         let version = update.map(|u| u.version);
 
+        // A cached artifact for a superseded version can never be installed
+        // (install re-checks and rejects on version mismatch), so drop it here.
+        // Skip while a download holds the mutex to avoid deleting bytes it is
+        // about to cache.
+        if let Ok(_download_guard) = DOWNLOAD_MUTEX.try_lock() {
+            self.prune_cached_updates(version.as_deref());
+        }
+
         if let Some(version) = &version {
             if self.has_cached_update(version) {
                 let _ = UpdateReadyEvent {
@@ -124,6 +132,27 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Updater2<'a, R, M> {
         get_cache_path(self.manager, version)
             .map(|p| p.exists())
             .unwrap_or(false)
+    }
+
+    fn prune_cached_updates(&self, keep: Option<&str>) {
+        let Some(dir) = get_cache_dir(self.manager) else {
+            return;
+        };
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return;
+        };
+
+        let keep_file = keep.map(|v| format!("{}.bin", v));
+        for entry in entries.flatten() {
+            if keep_file.as_deref() == entry.file_name().to_str() {
+                continue;
+            }
+            if let Err(e) = std::fs::remove_file(entry.path()) {
+                tracing::warn!("failed_to_prune_cached_update: {}", e);
+            } else {
+                tracing::debug!("pruned_cached_update: {:?}", entry.path());
+            }
+        }
     }
 
     pub async fn download(&self, version: &str) -> Result<(), crate::Error> {
@@ -244,15 +273,18 @@ impl<R: tauri::Runtime, T: tauri::Manager<R>> Updater2PluginExt<R> for T {
     }
 }
 
-fn get_cache_path<R: tauri::Runtime, M: tauri::Manager<R>>(
-    manager: &M,
-    version: &str,
-) -> Option<PathBuf> {
-    let dir = manager
+fn get_cache_dir<R: tauri::Runtime, M: tauri::Manager<R>>(manager: &M) -> Option<PathBuf> {
+    manager
         .app_handle()
         .path()
         .app_cache_dir()
         .ok()
-        .map(|p: PathBuf| p.join("updates"))?;
-    Some(dir.join(format!("{}.bin", version)))
+        .map(|p: PathBuf| p.join("updates"))
+}
+
+fn get_cache_path<R: tauri::Runtime, M: tauri::Manager<R>>(
+    manager: &M,
+    version: &str,
+) -> Option<PathBuf> {
+    Some(get_cache_dir(manager)?.join(format!("{}.bin", version)))
 }

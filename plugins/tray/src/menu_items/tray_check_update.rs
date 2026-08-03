@@ -33,9 +33,10 @@ impl TrayCheckUpdate {
             }
         };
 
-        if let UpdateMenuState::RestartToApply(version) = state {
-            *PENDING_VERSION.lock().unwrap() = Some(version);
-        }
+        *PENDING_VERSION.lock().unwrap() = match state {
+            UpdateMenuState::RestartToApply(version) => Some(version),
+            _ => None,
+        };
 
         UPDATE_STATE.store(state_value, Ordering::SeqCst);
 
@@ -61,22 +62,19 @@ impl TrayCheckUpdate {
     }
 
     async fn apply_update(app: AppHandle<tauri::Wry>, version: String) {
-        match app.updater2().install(&version).await {
-            Ok(result) => {
-                if let Err(e) = app.updater2().postinstall(result).await {
-                    app.dialog()
-                        .message(format!("Failed to apply update: {}", e))
-                        .title("Update Failed")
-                        .show(|_| {});
-                }
-            }
-            Err(e) => {
-                app.dialog()
-                    .message(format!("Failed to install update: {}", e))
-                    .title("Update Failed")
-                    .show(|_| {});
-            }
-        }
+        let message = match app.updater2().install(&version).await {
+            Ok(result) => match app.updater2().postinstall(result).await {
+                Ok(()) => return,
+                Err(e) => format!("Failed to apply update: {}", e),
+            },
+            Err(e) => format!("Failed to install update: {}", e),
+        };
+
+        let _ = Self::set_state(&app, UpdateMenuState::CheckForUpdate);
+        app.dialog()
+            .message(message)
+            .title("Update Failed")
+            .show(|_| {});
     }
 }
 

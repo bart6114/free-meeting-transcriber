@@ -1,4 +1,4 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { DownloadIcon, RotateCwIcon } from "lucide-react";
 import { useCallback, useMemo, useState, type ReactNode } from "react";
 
@@ -46,6 +46,7 @@ const UPDATE_CHECK_QUERY_KEY = ["updater2", "check"] as const;
 const UPDATE_CHECK_INTERVAL_MS = 30 * 60 * 1000;
 
 export function useDesktopUpdateControl(): DesktopUpdateControl {
+  const queryClient = useQueryClient();
   const [eventState, setEventState] = useState<UpdateEventState | null>(null);
   const [acknowledgedVersion, setAcknowledgedVersion] = useState<string | null>(
     null,
@@ -172,7 +173,7 @@ export function useDesktopUpdateControl(): DesktopUpdateControl {
 
       if (!version) {
         setEventState((current) =>
-          current?.status === "available" ? null : current,
+          current?.status === "downloading" ? current : null,
         );
         return null;
       }
@@ -183,7 +184,9 @@ export function useDesktopUpdateControl(): DesktopUpdateControl {
       };
 
       setEventState((current) =>
-        current?.status === "available" && current.version !== version
+        current &&
+        current.status !== "downloading" &&
+        current.version !== version
           ? null
           : current,
       );
@@ -215,6 +218,7 @@ export function useDesktopUpdateControl(): DesktopUpdateControl {
         contentLength: null,
         errorMessage: readErrorMessage(error),
       });
+      void queryClient.invalidateQueries({ queryKey: UPDATE_CHECK_QUERY_KEY });
     },
     onSuccess: (_data, version) => {
       setEventState((current) =>
@@ -244,6 +248,7 @@ export function useDesktopUpdateControl(): DesktopUpdateControl {
         contentLength: null,
         errorMessage: readErrorMessage(error),
       });
+      void queryClient.invalidateQueries({ queryKey: UPDATE_CHECK_QUERY_KEY });
     },
   });
 

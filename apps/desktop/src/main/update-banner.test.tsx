@@ -296,6 +296,66 @@ describe("SidebarTimelineUpdateButton", () => {
     ).toBeNull();
   });
 
+  it("resets a stale ready state when a recheck finds a newer version", async () => {
+    renderSidebarUpdateButton();
+
+    await waitFor(() =>
+      expect(eventHandlers.updateReady).toBeTypeOf("function"),
+    );
+
+    act(() => {
+      eventHandlers.updateReady?.({ payload: { version: "1.0.34" } });
+    });
+
+    expect(
+      screen.getByRole("button", { name: "Restart to update" }),
+    ).toBeTruthy();
+
+    checkMock.mockResolvedValue({ status: "ok", data: "1.0.35" });
+
+    await act(async () => {
+      await queryClients[queryClients.length - 1]?.refetchQueries({
+        queryKey: ["updater2", "check"],
+      });
+    });
+
+    const button = await screen.findByRole("button", {
+      name: "Download update",
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledWith("1.0.35"));
+  });
+
+  it("recovers with the newer version after installing a superseded update fails", async () => {
+    checkMock.mockResolvedValue({ status: "ok", data: "1.0.35" });
+    installMock.mockResolvedValue({
+      status: "error",
+      error: "version mismatch: expected 1.0.34, got 1.0.35",
+    });
+
+    renderSidebarUpdateButton();
+
+    await waitFor(() =>
+      expect(eventHandlers.updateReady).toBeTypeOf("function"),
+    );
+
+    act(() => {
+      eventHandlers.updateReady?.({ payload: { version: "1.0.34" } });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Restart to update" }));
+
+    await waitFor(() => expect(installMock).toHaveBeenCalledWith("1.0.34"));
+
+    const button = await screen.findByRole("button", {
+      name: "Download update",
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(downloadMock).toHaveBeenCalledWith("1.0.35"));
+  });
+
   it("shows sidebar circular progress while downloading", async () => {
     renderSidebarUpdateButton();
 
