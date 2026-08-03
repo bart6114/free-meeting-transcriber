@@ -24,6 +24,14 @@ Files in the user's vault directory are the only source of truth — there is no
 - Keep file I/O, atomic writes, and index maintenance on the Rust side. TypeScript reads through the typed store commands and subscribes to changes via `useIndexQuery` (`src/shared/index-query.ts`), which fans out the coalesced `index-changed` event — never read or write vault files directly from the frontend.
 - Branch naming: `fix/`, `chore/`, `refactor/` prefixes.
 
+## Releases & Versioning
+
+- Every push to `main` auto-releases: `.github/workflows/release.yaml` bumps the version, commits `chore(release): vX.Y.Z [skip ci]`, tags, and creates a GitHub release with generated notes. No binary is built at this point.
+- Bump size comes from conventional-commit keywords across the commits since the last `v*` tag (largest wins): `feat!:`/`BREAKING CHANGE:` → major, `feat:` → minor, everything else → patch.
+- The version's source of truth is the root `package.json`; `apps/desktop/package.json` is kept in sync by the workflow, and `tauri.conf.json` reads it (`"version": "../package.json"`) — never bump versions by hand.
+- Signed + notarized stable DMGs are built on demand: run the `desktop-release` workflow (`gh workflow run desktop-release`, optional `tag` input, defaults to the latest release) and it attaches the DMG + sha256 to that release.
+- `desktop_build.yaml` is the separate staging lane: unversioned DMG artifact on every push to `main`.
+
 ## Code Style
 
 - Avoid creating types/interfaces unless shared. Inline function props.
