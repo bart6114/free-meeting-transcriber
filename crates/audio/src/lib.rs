@@ -12,8 +12,16 @@ pub enum Error {
     MicOpenFailed,
     #[error("mic_stream_setup_failed")]
     MicStreamSetupFailed,
-    #[error("speaker_stream_setup_failed")]
-    SpeakerStreamSetupFailed,
+    #[error(
+        "System audio recording permission is not granted. Enable \"System Audio Recording Only\" for this app in System Settings > Privacy & Security > Screen & System Audio Recording, then try again."
+    )]
+    SystemAudioPermissionDenied,
+    #[error("speaker_tap_failed: {0}")]
+    SpeakerTapFailed(String),
+    #[error("speaker_aggregate_device_failed: {0}")]
+    SpeakerAggregateDeviceFailed(String),
+    #[error("speaker_stream_setup_failed: {0}")]
+    SpeakerStreamSetupFailed(String),
     #[error("mic_resample_failed")]
     MicResampleFailed,
     #[error("speaker_resample_failed")]

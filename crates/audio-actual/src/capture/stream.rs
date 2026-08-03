@@ -70,13 +70,30 @@ pub(crate) fn setup_speaker_stream(
     sample_rate: u32,
     chunk_size: usize,
 ) -> Result<ChunkStream, Error> {
-    let speaker = SpeakerInput::new().map_err(|_| Error::SpeakerStreamSetupFailed)?;
+    ensure_system_audio_permission()?;
+
+    let speaker = SpeakerInput::new().map_err(crate::speaker::setup_error)?;
     speaker
         .stream()
-        .map_err(|_| Error::SpeakerStreamSetupFailed)?
+        .map_err(crate::speaker::setup_error)?
         .resampled_chunks(sample_rate, chunk_size)
         .map(|stream| Box::pin(stream) as ChunkStream)
-        .map_err(|_| Error::SpeakerStreamSetupFailed)
+        .map_err(|err| Error::SpeakerStreamSetupFailed(format!("resample: {err}")))
+}
+
+// NEVER_ASKED must pass through so first tap use can trigger the OS prompt;
+// a stale DENIED grant makes the tap deliver silence, so fail fast instead.
+#[cfg(target_os = "macos")]
+fn ensure_system_audio_permission() -> Result<(), Error> {
+    if hypr_tcc::audio_capture_permission_status() == hypr_tcc::DENIED {
+        return Err(Error::SystemAudioPermissionDenied);
+    }
+    Ok(())
+}
+
+#[cfg(not(target_os = "macos"))]
+fn ensure_system_audio_permission() -> Result<(), Error> {
+    Ok(())
 }
 
 pub(crate) fn open_dual(

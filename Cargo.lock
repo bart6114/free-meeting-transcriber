@@ -1077,6 +1077,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "tcc",
  "thiserror 2.0.18",
  "tokio",
  "tokio-stream",

@@ -7,6 +7,13 @@ use pin_project::pin_project;
 pub(super) const CHUNK_SIZE: usize = 256;
 pub(super) const BUFFER_SIZE: usize = CHUNK_SIZE * 256;
 
+pub(crate) fn setup_error(err: anyhow::Error) -> hypr_audio::Error {
+    match err.downcast::<hypr_audio::Error>() {
+        Ok(err) => err,
+        Err(err) => hypr_audio::Error::SpeakerStreamSetupFailed(format!("{err:#}")),
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
@@ -55,7 +62,7 @@ impl SpeakerInput {
 
     #[cfg(all(target_os = "macos", not(test)))]
     pub fn stream(self) -> Result<SpeakerStream> {
-        Ok(self.inner.stream())
+        Ok(self.inner.stream()?)
     }
 
     #[cfg(all(not(target_os = "macos"), not(test)))]

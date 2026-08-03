@@ -35,6 +35,7 @@ ringbuf = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 cidre = { workspace = true, features = ["av"] }
+hypr-tcc = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 wasapi = { workspace = true }
