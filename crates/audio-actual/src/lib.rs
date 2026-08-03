@@ -144,13 +144,15 @@ impl AudioInput {
         })
     }
 
-    pub fn from_speaker() -> Self {
-        Self {
+    pub fn from_speaker() -> Result<Self, Error> {
+        let speaker = SpeakerInput::new().map_err(speaker::setup_error)?;
+
+        Ok(Self {
             source: AudioSource::RealtimeSpeaker,
             mic: None,
-            speaker: Some(SpeakerInput::new().unwrap()),
+            speaker: Some(speaker),
             data: None,
-        }
+        })
     }
 
     pub fn device_name(&self) -> String {
@@ -273,10 +275,8 @@ impl AudioProvider for ActualAudio {
     }
 
     fn probe_speaker(&self) -> Result<(), Error> {
-        let speaker = SpeakerInput::new().map_err(|_| Error::SpeakerStreamSetupFailed)?;
-        let _stream = speaker
-            .stream()
-            .map_err(|_| Error::SpeakerStreamSetupFailed)?;
+        let speaker = SpeakerInput::new().map_err(speaker::setup_error)?;
+        let _stream = speaker.stream().map_err(speaker::setup_error)?;
         Ok(())
     }
 }

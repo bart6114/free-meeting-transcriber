@@ -385,7 +385,7 @@ fn load_audio(path: &Path, is_speaker: bool) -> Result<MockAudioData, Error> {
 
 fn map_audio_error(is_speaker: bool) -> Error {
     if is_speaker {
-        Error::SpeakerStreamSetupFailed
+        Error::SpeakerStreamSetupFailed("mock_audio_load_failed".to_string())
     } else {
         Error::MicStreamSetupFailed
     }

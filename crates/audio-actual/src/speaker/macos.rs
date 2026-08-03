@@ -2,9 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::Poll;
 
-use anyhow::Result;
 use futures_util::Stream;
 use futures_util::task::AtomicWaker;
+use hypr_audio::Error;
 use hypr_audio_interface::AsyncSource;
 use hypr_audio_utils::{pcm_f64_to_f32, pcm_i16_to_f32, pcm_i32_to_f32};
 use pin_project::pin_project;
@@ -49,13 +49,19 @@ struct Ctx {
 use super::{BUFFER_SIZE, CHUNK_SIZE};
 
 impl SpeakerInput {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, Error> {
         let tap_desc = ca::TapDesc::with_mono_global_tap_excluding_processes(&ns::Array::new());
-        let tap = tap_desc.create_process_tap()?;
+        let tap = tap_desc
+            .create_process_tap()
+            .map_err(|e| Error::SpeakerTapFailed(format!("create_process_tap: {e}")))?;
+
+        let tap_uid = tap
+            .uid()
+            .map_err(|e| Error::SpeakerTapFailed(format!("uid: {e}")))?;
 
         let sub_tap = cf::DictionaryOf::with_keys_values(
             &[ca::sub_device_keys::uid()],
-            &[tap.uid().unwrap().as_type_ref()],
+            &[tap_uid.as_type_ref()],
         );
 
         let agg_desc = cf::DictionaryOf::with_keys_values(
@@ -85,7 +91,7 @@ impl SpeakerInput {
     fn start_device(
         &self,
         ctx: &mut Box<Ctx>,
-    ) -> Result<ca::hardware::StartedDevice<ca::AggregateDevice>> {
+    ) -> Result<ca::hardware::StartedDevice<ca::AggregateDevice>, Error> {
         extern "C" fn proc(
             _device: ca::Device,
             _now: &cat::AudioTimeStamp,
@@ -124,17 +130,25 @@ impl SpeakerInput {
             os::Status::NO_ERR
         }
 
-        let agg_device = ca::AggregateDevice::with_desc(&self.agg_desc)?;
-        let proc_id = agg_device.create_io_proc_id(proc, Some(ctx))?;
-        let started_device = ca::device_start(agg_device, Some(proc_id))?;
+        let agg_device = ca::AggregateDevice::with_desc(&self.agg_desc)
+            .map_err(|e| Error::SpeakerAggregateDeviceFailed(format!("with_desc: {e}")))?;
+        let proc_id = agg_device
+            .create_io_proc_id(proc, Some(ctx))
+            .map_err(|e| Error::SpeakerAggregateDeviceFailed(format!("create_io_proc_id: {e}")))?;
+        let started_device = ca::device_start(agg_device, Some(proc_id))
+            .map_err(|e| Error::SpeakerAggregateDeviceFailed(format!("device_start: {e}")))?;
 
         Ok(started_device)
     }
 
-    pub fn stream(self) -> SpeakerStream {
-        let asbd = self.tap.asbd().unwrap();
+    pub fn stream(self) -> Result<SpeakerStream, Error> {
+        let asbd = self
+            .tap
+            .asbd()
+            .map_err(|e| Error::SpeakerTapFailed(format!("asbd: {e}")))?;
 
-        let format = av::AudioFormat::with_asbd(&asbd).unwrap();
+        let format = av::AudioFormat::with_asbd(&asbd)
+            .ok_or_else(|| Error::SpeakerTapFailed(format!("unsupported_asbd: {asbd:?}")))?;
         let common_format = format.common_format();
 
         let rb = HeapRb::<f32>::new(BUFFER_SIZE);
@@ -156,9 +170,9 @@ impl SpeakerInput {
             conversion_buffer: vec![0.0f32; crate::rt_ring::DEFAULT_SCRATCH_LEN],
         });
 
-        let device = self.start_device(&mut ctx).unwrap();
+        let device = self.start_device(&mut ctx)?;
 
-        SpeakerStream {
+        Ok(SpeakerStream {
             reader: RingbufAsyncReader::new(
                 consumer,
                 waker,
@@ -172,7 +186,7 @@ impl SpeakerInput {
             current_sample_rate,
             sample_rate_probe_counter: 0,
             buffer_rate: asbd.sample_rate as u32,
-        }
+        })
     }
 }
 
@@ -252,9 +266,11 @@ impl Stream for SpeakerStream {
                 .sample_rate_probe_counter
                 .is_multiple_of(SAMPLE_RATE_PROBE_INTERVAL)
             {
-                let after = this._tap.asbd().unwrap().sample_rate as u32;
-                if this.current_sample_rate != after {
-                    this.current_sample_rate = after;
+                if let Ok(asbd) = this._tap.asbd() {
+                    let after = asbd.sample_rate as u32;
+                    if this.current_sample_rate != after {
+                        this.current_sample_rate = after;
+                    }
                 }
             }
         }
