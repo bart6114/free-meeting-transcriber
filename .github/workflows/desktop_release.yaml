@@ -78,15 +78,16 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
       - name: Checksum
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
+          version="${TAG#v}"
           bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
           dmg="$(ls "$bundle_dir"/*.dmg | head -n1)"
-          if [ -z "$dmg" ]; then
-            echo "No dmg found in $bundle_dir"
-            exit 1
-          fi
-          (cd "$bundle_dir" && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256")
+          asset="FreeMeetingTranscriber_${version}_aarch64.dmg"
+          mv "$dmg" "$bundle_dir/$asset"
+          (cd "$bundle_dir" && shasum -a 256 "$asset" > "$asset.sha256")
       - name: Prepare updater artifacts
         env:
           TAG: ${{ needs.resolve.outputs.tag }}
