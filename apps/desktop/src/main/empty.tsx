@@ -6,6 +6,7 @@ import { cn } from "@hypr/utils";
 
 import { StandardContentWrapper } from "~/shared/main";
 import { useNewNote, useNewNoteAndListen } from "~/shared/useNewNote";
+import { useAudioImport } from "~/store/zustand/audio-import";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
 
 export function TabContentEmpty({
@@ -24,10 +25,18 @@ function EmptyView() {
   const newNote = useNewNote({ behavior: "current" });
   const newNoteAndListen = useNewNoteAndListen({ behavior: "current" });
   const openCurrent = useTabs((state) => state.openCurrent);
+  const setAudioImportDialogOpen = useAudioImport(
+    (state) => state.setDialogOpen,
+  );
 
   const openSettings = useCallback(
     () => openCurrent({ type: "settings" }),
     [openCurrent],
+  );
+
+  const openAudioImport = useCallback(
+    () => setAudioImportDialogOpen(true),
+    [setAudioImportDialogOpen],
   );
 
   return (
@@ -45,6 +54,10 @@ function EmptyView() {
           label={<Trans>Start Recording</Trans>}
           shortcut={["⌘", "⇧", "N"]}
           onClick={newNoteAndListen}
+        />
+        <ActionItem
+          label={<Trans>Import Audio</Trans>}
+          onClick={openAudioImport}
         />
         <div className="bg-accent my-1 h-px" />
         <ActionItem

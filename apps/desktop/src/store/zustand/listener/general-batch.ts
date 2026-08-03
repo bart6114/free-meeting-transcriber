@@ -15,6 +15,7 @@ import {
   type BatchState,
 } from "./batch";
 
+import { isActiveAudioImportSession } from "~/store/zustand/audio-import";
 import { createBatchCompletedNotificationKey } from "~/stt/batch-completed-notification";
 
 type BatchStore = BatchActions & BatchState;
@@ -260,7 +261,11 @@ export const runBatchSession = async <T extends BatchStore>(
       });
   });
 
-  await showBatchCompletedNotification(sessionId);
+  // Queue-managed sessions get one aggregate notification from the import
+  // worker instead of one per file.
+  if (!isActiveAudioImportSession(sessionId)) {
+    await showBatchCompletedNotification(sessionId);
+  }
 };
 
 export function shouldUseSyntheticBatchProgress(params: TranscriptionParams) {

@@ -17,6 +17,9 @@ const baseParams = {
   activeDownloads: [],
   localSttStatus: null,
   isLocalSttModel: false,
+  isAudioImportActive: false,
+  audioImportDescription: null,
+  onOpenAudioImport: vi.fn(),
   onOpenLLMSettings: vi.fn(),
   onOpenSTTSettings: vi.fn(),
 };

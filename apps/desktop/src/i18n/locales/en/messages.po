@@ -203,6 +203,10 @@ msgstr "Choose a file format and what to include."
 msgid "Choose custom color"
 msgstr "Choose custom color"
 
+#: src/main/audio-import-dialog.tsx
+msgid "Choose files"
+msgstr "Choose files"
+
 #: src/settings/general/theme.tsx
 msgid "Choose light, dark, or match your system setting."
 msgstr "Choose light, dark, or match your system setting."
@@ -215,6 +219,10 @@ msgstr "Choose storage location"
 #: src/templates/template-icon-picker.tsx
 msgid "Choose template icon"
 msgstr "Choose template icon"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Clear"
+msgstr "Clear"
 
 #: src/templates/template-sidebar.tsx
 msgid "Clear search"
@@ -357,6 +365,10 @@ msgstr "Don't show notifications when Do-Not-Disturb is enabled on your system"
 msgid "Download"
 msgstr "Download"
 
+#: src/main/audio-import-dialog.tsx
+msgid "Drop audio files or a folder here"
+msgstr "Drop audio files or a folder here"
+
 #: src/templates/details.tsx
 #: src/templates/template-form.tsx
 msgid "Duplicate"
@@ -365,6 +377,10 @@ msgstr "Duplicate"
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Duration"
 msgstr "Duration"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Each file becomes its own note and is transcribed and summarized one at a time."
+msgstr "Each file becomes its own note and is transcribed and summarized one at a time."
 
 #: src/session/components/outer-header/metadata/date.tsx
 msgid "Edit date"
@@ -536,6 +552,37 @@ msgstr "How long the mic must be active before triggering"
 #: src/templates/template-icon-picker.tsx
 msgid "Icons"
 msgstr "Icons"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Import {selectedCount} files"
+msgstr "Import {selectedCount} files"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Import 1 file"
+msgstr "Import 1 file"
+
+#: src/main/empty.tsx
+msgid "Import Audio"
+msgstr "Import Audio"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Import audio files"
+msgstr "Import audio files"
+
+#. placeholder {0}: items.length
+#: src/main/audio-import-dialog.tsx
+msgid "Imported {finishedCount} of {0}"
+msgstr "Imported {finishedCount} of {0}"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Importing"
+msgstr "Importing"
+
+#. placeholder {0}: finishedCount + 1
+#. placeholder {1}: items.length
+#: src/main/audio-import-dialog.tsx
+msgid "Importing {0} of {1}"
+msgstr "Importing {0} of {1}"
 
 #: src/sidebar/timeline/upcoming-meeting.ts
 msgid "In {minutes}m {seconds}s"
@@ -845,6 +892,10 @@ msgstr "Preparing transcript..."
 msgid "Previous match"
 msgstr "Previous match"
 
+#: src/main/audio-import-dialog.tsx
+msgid "Queued"
+msgstr "Queued"
+
 #: src/settings/general/storage/rebuild-index.tsx
 msgid "Re-read every session file and rebuild the database index"
 msgstr "Re-read every session file and rebuild the database index"
@@ -943,6 +994,7 @@ msgstr "Resume"
 msgid "Resume listening"
 msgstr "Resume listening"
 
+#: src/main/audio-import-dialog.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 msgid "Retry"
 msgstr "Retry"
@@ -1211,6 +1263,10 @@ msgstr "Timezone"
 #: src/session/components/note-input/enhanced/streaming.tsx
 msgid "Tip: The Free Meeting Transcriber team loves our users!"
 msgstr "Tip: The Free Meeting Transcriber team loves our users!"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Transcribing"
+msgstr "Transcribing"
 
 #: src/session/components/note-input/header.tsx
 #: src/session/components/outer-header/overflow/export-modal.tsx

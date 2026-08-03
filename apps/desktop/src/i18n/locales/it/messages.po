@@ -203,6 +203,10 @@ msgstr ""
 msgid "Choose custom color"
 msgstr ""
 
+#: src/main/audio-import-dialog.tsx
+msgid "Choose files"
+msgstr ""
+
 #: src/settings/general/theme.tsx
 msgid "Choose light, dark, or match your system setting."
 msgstr ""
@@ -214,6 +218,10 @@ msgstr ""
 
 #: src/templates/template-icon-picker.tsx
 msgid "Choose template icon"
+msgstr ""
+
+#: src/main/audio-import-dialog.tsx
+msgid "Clear"
 msgstr ""
 
 #: src/templates/template-sidebar.tsx
@@ -357,6 +365,10 @@ msgstr ""
 msgid "Download"
 msgstr ""
 
+#: src/main/audio-import-dialog.tsx
+msgid "Drop audio files or a folder here"
+msgstr ""
+
 #: src/templates/details.tsx
 #: src/templates/template-form.tsx
 msgid "Duplicate"
@@ -364,6 +376,10 @@ msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Duration"
+msgstr ""
+
+#: src/main/audio-import-dialog.tsx
+msgid "Each file becomes its own note and is transcribed and summarized one at a time."
 msgstr ""
 
 #: src/session/components/outer-header/metadata/date.tsx
@@ -535,6 +551,37 @@ msgstr ""
 
 #: src/templates/template-icon-picker.tsx
 msgid "Icons"
+msgstr ""
+
+#: src/main/audio-import-dialog.tsx
+msgid "Import {selectedCount} files"
+msgstr ""
+
+#: src/main/audio-import-dialog.tsx
+msgid "Import 1 file"
+msgstr ""
+
+#: src/main/empty.tsx
+msgid "Import Audio"
+msgstr ""
+
+#: src/main/audio-import-dialog.tsx
+msgid "Import audio files"
+msgstr ""
+
+#. placeholder {0}: items.length
+#: src/main/audio-import-dialog.tsx
+msgid "Imported {finishedCount} of {0}"
+msgstr ""
+
+#: src/main/audio-import-dialog.tsx
+msgid "Importing"
+msgstr ""
+
+#. placeholder {0}: finishedCount + 1
+#. placeholder {1}: items.length
+#: src/main/audio-import-dialog.tsx
+msgid "Importing {0} of {1}"
 msgstr ""
 
 #: src/sidebar/timeline/upcoming-meeting.ts
@@ -845,6 +892,10 @@ msgstr ""
 msgid "Previous match"
 msgstr ""
 
+#: src/main/audio-import-dialog.tsx
+msgid "Queued"
+msgstr ""
+
 #: src/settings/general/storage/rebuild-index.tsx
 msgid "Re-read every session file and rebuild the database index"
 msgstr ""
@@ -943,6 +994,7 @@ msgstr ""
 msgid "Resume listening"
 msgstr ""
 
+#: src/main/audio-import-dialog.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 msgid "Retry"
 msgstr ""
@@ -1210,6 +1262,10 @@ msgstr ""
 
 #: src/session/components/note-input/enhanced/streaming.tsx
 msgid "Tip: The Free Meeting Transcriber team loves our users!"
+msgstr ""
+
+#: src/main/audio-import-dialog.tsx
+msgid "Transcribing"
 msgstr ""
 
 #: src/session/components/note-input/header.tsx

@@ -1,5 +1,6 @@
 import { memo } from "react";
 
+import { AudioImportDialog } from "./audio-import-dialog";
 import { ClassicMainBody } from "./body";
 import { resolveMainSurfaceChrome } from "./main-surface-chrome";
 
@@ -11,6 +12,7 @@ import {
   hasLeftSurfaceCustomSidebarTab,
 } from "~/sidebar/use-custom-sidebar";
 import { useTabs } from "~/store/zustand/tabs";
+import { AudioImportWorker } from "~/stt/audio-import-worker";
 
 export function ClassicMainShellFrame() {
   const { leftsidebar } = useShell();
@@ -38,6 +40,8 @@ export function ClassicMainShellFrame() {
     >
       <ClassicMainBodyHost />
       <ToastNotifications />
+      <AudioImportDialog />
+      <AudioImportWorker />
     </MainShellScaffold>
   );
 }

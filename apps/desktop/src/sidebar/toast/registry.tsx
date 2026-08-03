@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+
 import type { ServerStatus } from "@hypr/plugin-local-stt";
 
 import type { DownloadProgress, ToastCondition, ToastType } from "./types";
@@ -20,6 +22,9 @@ type ToastRegistryParams = {
   activeDownloads: DownloadProgress[];
   localSttStatus: ServerStatus | null;
   isLocalSttModel: boolean;
+  isAudioImportActive: boolean;
+  audioImportDescription: ReactNode;
+  onOpenAudioImport: () => void;
   onOpenLLMSettings: () => void;
   onOpenSTTSettings: () => void;
 };
@@ -41,6 +46,9 @@ export function createToastRegistry({
   activeDownloads,
   localSttStatus,
   isLocalSttModel,
+  isAudioImportActive,
+  audioImportDescription,
+  onOpenAudioImport,
   onOpenLLMSettings,
   onOpenSTTSettings,
 }: ToastRegistryParams): ToastRegistryEntry[] {
@@ -51,6 +59,18 @@ export function createToastRegistry({
 
   // order matters
   return [
+    {
+      toast: {
+        id: "audio-import-progress",
+        description: audioImportDescription,
+        primaryAction: {
+          label: "View",
+          onClick: onOpenAudioImport,
+        },
+        dismissible: false,
+      },
+      condition: () => isAudioImportActive,
+    },
     {
       toast: {
         id: "downloading-model",

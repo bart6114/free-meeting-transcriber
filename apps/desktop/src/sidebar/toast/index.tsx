@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
+import { AudioImportToastDescription } from "./audio-import-description";
 import {
   createDevtoolsToastPreview,
   createToastRegistry,
@@ -14,6 +15,10 @@ import { useNotifications } from "~/contexts/notifications";
 import { useConfigValues } from "~/shared/config";
 import { useLatestRef } from "~/shared/hooks/useLatestRef";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
+import {
+  isFinishedAudioImportStatus,
+  useAudioImport,
+} from "~/store/zustand/audio-import";
 import { useDevtoolsToastPreview } from "~/store/zustand/devtools-toast-preview";
 import { useTabs } from "~/store/zustand/tabs";
 import { useToastAction } from "~/store/zustand/toast-action";
@@ -75,6 +80,16 @@ export function ToastNotifications() {
   );
   const setToastActionTarget = useToastAction((state) => state.setTarget);
 
+  const isAudioImportActive = useAudioImport((state) =>
+    state.items.some((item) => !isFinishedAudioImportStatus(item.status)),
+  );
+  const setAudioImportDialogOpen = useAudioImport(
+    (state) => state.setDialogOpen,
+  );
+  const handleOpenAudioImport = useCallback(() => {
+    setAudioImportDialogOpen(true);
+  }, [setAudioImportDialogOpen]);
+
   const openAiTab = useCallback(
     (tab: "intelligence" | "transcription") => {
       if (currentTab?.type === "settings") {
@@ -108,6 +123,9 @@ export function ToastNotifications() {
         activeDownloads,
         localSttStatus,
         isLocalSttModel,
+        isAudioImportActive,
+        audioImportDescription: <AudioImportToastDescription />,
+        onOpenAudioImport: handleOpenAudioImport,
         onOpenLLMSettings: handleOpenLLMSettings,
         onOpenSTTSettings: handleOpenSTTSettings,
       }),
@@ -122,6 +140,8 @@ export function ToastNotifications() {
       activeDownloads,
       localSttStatus,
       isLocalSttModel,
+      isAudioImportActive,
+      handleOpenAudioImport,
       handleOpenLLMSettings,
       handleOpenSTTSettings,
     ],
