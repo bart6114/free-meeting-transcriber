@@ -1,0 +1,19 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "4e22804e5acc8b553b2bdf7d552cc8d4fdd1a5f0",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "package-name": "free-meeting-transcriber",
+      "include-component-in-tag": false,
+      "bump-minor-pre-major": true,
+      "extra-files": [
+        {
+          "type": "json",
+          "path": "apps/desktop/package.json",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
+  }
+}

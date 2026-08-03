@@ -3,6 +3,7 @@
   "productName": "Free Meeting Transcriber Dev",
   "mainBinaryName": "free-meeting-transcriber-dev",
   "identifier": "org.freemeetingtranscriber.dev",
+  "version": "../package.json",
   "build": {
     "beforeDevCommand": "pnpm -F desktop dev",
     "devUrl": "http://localhost:1422",
