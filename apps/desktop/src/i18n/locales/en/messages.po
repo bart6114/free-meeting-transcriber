@@ -233,6 +233,7 @@ msgid "Clone"
 msgstr "Clone"
 
 #: src/changelog/index.tsx
+#: src/main/audio-import-dialog.tsx
 #: src/session/components/note-input/search/bar.tsx
 #: src/shared/open-note-dialog.tsx
 msgid "Close"
@@ -583,6 +584,10 @@ msgstr "Importing"
 #: src/main/audio-import-dialog.tsx
 msgid "Importing {0} of {1}"
 msgstr "Importing {0} of {1}"
+
+#: src/main/audio-import-dialog.tsx
+msgid "Importing continues in the background — you can close this window and we'll notify you when it's done."
+msgstr "Importing continues in the background — you can close this window and we'll notify you when it's done."
 
 #: src/sidebar/timeline/upcoming-meeting.ts
 msgid "In {minutes}m {seconds}s"

@@ -138,7 +138,10 @@ export function AudioImportDialog() {
       }
       return [];
     });
-  }, [enqueue]);
+    // The sidebar toast takes over as the progress surface; reopen via its
+    // "View" action to see per-file status or retry failures.
+    setDialogOpen(false);
+  }, [enqueue, setDialogOpen]);
 
   const finishedCount = items.filter((item) =>
     isFinishedAudioImportStatus(item.status),
@@ -237,17 +240,31 @@ export function AudioImportDialog() {
                 <QueueRow key={item.id} item={item} onRetry={retryItem} />
               ))}
             </div>
+            {!allFinished && (
+              <p className="text-muted-foreground text-xs">
+                <Trans>
+                  Importing continues in the background — you can close this
+                  window and we'll notify you when it's done.
+                </Trans>
+              </p>
+            )}
           </div>
         )}
 
         <DialogFooter>
-          <Button onClick={handleImport} disabled={selectedCount === 0}>
-            {selectedCount === 1 ? (
-              <Trans>Import 1 file</Trans>
-            ) : (
-              <Trans>Import {selectedCount} files</Trans>
-            )}
-          </Button>
+          {candidates.length > 0 ? (
+            <Button onClick={handleImport} disabled={selectedCount === 0}>
+              {selectedCount === 1 ? (
+                <Trans>Import 1 file</Trans>
+              ) : (
+                <Trans>Import {selectedCount} files</Trans>
+              )}
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => setDialogOpen(false)}>
+              <Trans>Close</Trans>
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>
