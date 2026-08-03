@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
     collapse: vi.fn(),
     expand: vi.fn(),
     getId: vi.fn(() => "classic-main-sidebar-left"),
-    getSize: vi.fn(() => 12.5),
+    getSize: vi.fn(() => 13.75),
     isCollapsed: vi.fn(() => false),
     isExpanded: vi.fn(() => true),
     resize: vi.fn(),
@@ -319,11 +319,11 @@ describe("ClassicMainBody", () => {
     expect(panels[0]?.dataset.order).toBe("1");
     expect(panels[0]?.dataset.collapsible).toBe("true");
     expect(panels[0]?.dataset.collapsedSize).toBe("0");
-    expect(panels[0]?.dataset.defaultSize).toBe("12.5");
-    expect(panels[0]?.dataset.minSize).toBe("12.5");
+    expect(panels[0]?.dataset.defaultSize).toBe("13.75");
+    expect(panels[0]?.dataset.minSize).toBe("13.75");
     expect(panels[0]?.dataset.maxSize).toBe("22.5");
     expect(panels[0]?.dataset.flexGrow).toBe("var(--left-sidebar-panel-size)");
-    expect(panels[0]?.dataset.minWidth).toBe("200");
+    expect(panels[0]?.dataset.minWidth).toBe("220");
     expect(panels[0]?.dataset.maxWidth).toBe("360");
     expect(panels[0]?.dataset.transition).toBeUndefined();
     expect(panels[1]?.dataset.panelId).toBe("classic-main-content");
@@ -351,7 +351,7 @@ describe("ClassicMainBody", () => {
 
     const bodyRoot = screen.getByTestId("panel-group").parentElement;
     expect(bodyRoot?.getAttribute("style")).toContain(
-      "--left-sidebar-panel-size: 12.5",
+      "--left-sidebar-panel-size: 13.75",
     );
 
     act(() => {
@@ -395,19 +395,19 @@ describe("ClassicMainBody", () => {
     expect(mocks.onResizeDragging).toBeNull();
 
     const panels = screen.getAllByTestId("panel");
-    expect(panels[0]?.dataset.defaultSize).toBe("12.5");
-    expect(panels[0]?.dataset.minSize).toBe("12.5");
-    expect(panels[0]?.dataset.maxSize).toBe("12.5");
+    expect(panels[0]?.dataset.defaultSize).toBe("13.75");
+    expect(panels[0]?.dataset.minSize).toBe("13.75");
+    expect(panels[0]?.dataset.maxSize).toBe("13.75");
     expect(panels[0]?.dataset.flexGrow).toBe("0");
-    expect(panels[0]?.dataset.flexBasis).toBe("200");
-    expect(panels[0]?.dataset.minWidth).toBe("200");
-    expect(panels[0]?.dataset.maxWidth).toBe("200");
+    expect(panels[0]?.dataset.flexBasis).toBe("220");
+    expect(panels[0]?.dataset.minWidth).toBe("220");
+    expect(panels[0]?.dataset.maxWidth).toBe("220");
 
     const sidebarChrome = document.querySelector<HTMLElement>(
       "[data-left-sidebar-chrome]",
     );
-    expect(sidebarChrome?.style.width).toBe("200px");
-    expect(sidebarChrome?.style.maxWidth).toBe("200px");
+    expect(sidebarChrome?.style.width).toBe("220px");
+    expect(sidebarChrome?.style.maxWidth).toBe("220px");
 
     const bodyRoot = screen.getByTestId("panel-group").parentElement;
     act(() => {
@@ -415,10 +415,10 @@ describe("ClassicMainBody", () => {
     });
 
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-size")).toBe(
-      "12.5",
+      "13.75",
     );
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width")).toBe(
-      "12.5%",
+      "13.75%",
     );
   });
 
@@ -447,21 +447,21 @@ describe("ClassicMainBody", () => {
       render(<ClassicMainBody />);
 
       await waitFor(() => {
-        expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(20);
+        expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(22);
       });
 
       const panels = screen.getAllByTestId("panel");
-      expect(panels[0]?.dataset.defaultSize).toBe("20");
-      expect(panels[0]?.dataset.minSize).toBe("20");
+      expect(panels[0]?.dataset.defaultSize).toBe("22");
+      expect(panels[0]?.dataset.minSize).toBe("22");
       expect(panels[0]?.dataset.maxSize).toBe("36");
 
       const bodyRoot = screen.getByTestId("panel-group").parentElement;
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-size"),
-      ).toBe("20");
+      ).toBe("22");
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width"),
-      ).toBe("20%");
+      ).toBe("22%");
 
       act(() => {
         mocks.onPanelLayout?.([12.5, 87.5]);
@@ -469,28 +469,28 @@ describe("ClassicMainBody", () => {
 
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-size"),
-      ).toBe("20");
+      ).toBe("22");
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width"),
-      ).toBe("20%");
+      ).toBe("22%");
 
       bodyWidth = 800;
       fireEvent.resize(window);
 
       await waitFor(() => {
-        expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(25);
+        expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(27.5);
       });
 
       const resizedPanels = screen.getAllByTestId("panel");
-      expect(resizedPanels[0]?.dataset.defaultSize).toBe("25");
-      expect(resizedPanels[0]?.dataset.minSize).toBe("25");
+      expect(resizedPanels[0]?.dataset.defaultSize).toBe("27.5");
+      expect(resizedPanels[0]?.dataset.minSize).toBe("27.5");
       expect(resizedPanels[0]?.dataset.maxSize).toBe("45");
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-size"),
-      ).toBe("25");
+      ).toBe("27.5");
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width"),
-      ).toBe("25%");
+      ).toBe("27.5%");
     } finally {
       requestAnimationFrame.mockRestore();
       cancelAnimationFrame.mockRestore();
@@ -548,7 +548,7 @@ describe("ClassicMainBody", () => {
       fireEvent.resize(window);
 
       await waitFor(() => {
-        expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(20);
+        expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(22);
       });
     } finally {
       requestAnimationFrame.mockRestore();
@@ -661,12 +661,12 @@ describe("ClassicMainBody", () => {
 
     expect(mocks.leftsidebar.setExpanded).toHaveBeenCalledWith(false);
     expect(mocks.leftsidebar.toggleExpanded).not.toHaveBeenCalled();
-    expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(12.5);
+    expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(13.75);
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-size")).toBe(
-      "12.5",
+      "13.75",
     );
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width")).toBe(
-      "12.5%",
+      "13.75%",
     );
   });
 
@@ -738,7 +738,7 @@ describe("ClassicMainBody", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
 
-    expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(12.5);
+    expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(13.75);
     expect(mocks.leftSidebarPanelHandle.expand).not.toHaveBeenCalled();
     expect(mocks.leftsidebar.toggleExpanded).toHaveBeenCalledTimes(1);
 

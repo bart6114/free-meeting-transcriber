@@ -46,6 +46,7 @@ import { useShell } from "~/contexts/shell";
 import { scrollElementByWheel } from "~/shared/dom/scroll-wheel";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import {
+  LEFT_SIDEBAR_MIN_WIDTH_PX,
   NOTE_SURFACE_MIN_WIDTH_PX,
   usesNoteSurfaceMinWidth,
 } from "~/shared/main/layout-widths";
@@ -61,8 +62,7 @@ import { commands } from "~/types/tauri.gen";
 
 const MAIN_AREA_TOP_DRAG_HEIGHT_PX = 48;
 const MAIN_AREA_WINDOW_DRAG_THRESHOLD_PX = 5;
-const LEFT_SIDEBAR_DEFAULT_WIDTH_PX = 200;
-const LEFT_SIDEBAR_MIN_WIDTH_PX = 200;
+const LEFT_SIDEBAR_DEFAULT_WIDTH_PX = LEFT_SIDEBAR_MIN_WIDTH_PX;
 const LEFT_SIDEBAR_MAX_WIDTH_PX = 360;
 const LEFT_SIDEBAR_COLLAPSED_SIZE = 0;
 const LEFT_SIDEBAR_FALLBACK_CONTAINER_WIDTH_PX = 1000;
@@ -707,7 +707,8 @@ function getInitialMainAreaWidthPx() {
 }
 
 function percentageFromPixels(widthPx: number, containerWidthPx: number) {
-  return Math.min((widthPx / containerWidthPx) * 100, 100);
+  const percentage = Math.min((widthPx / containerWidthPx) * 100, 100);
+  return Math.round(percentage * 10_000) / 10_000;
 }
 
 function panelSizesAreEqual(left: number, right: number) {

@@ -4,14 +4,13 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import { commands as windowsCommands } from "@hypr/plugin-windows";
 
 import {
+  LEFT_SIDEBAR_MIN_WIDTH_PX,
   NOTE_SURFACE_MIN_WIDTH_PX,
   usesNoteSurfaceMinWidth,
 } from "./layout-widths";
 
 import { useShell } from "~/contexts/shell";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
-
-const LEFT_SIDEBAR_MIN_WIDTH_PX = 200;
 
 export function MainBodyPanel({ children }: { children: React.ReactNode }) {
   const { leftsidebar } = useShell();
