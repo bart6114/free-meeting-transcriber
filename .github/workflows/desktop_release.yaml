@@ -75,6 +75,8 @@ jobs:
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
       - name: Checksum
         run: |
           set -euo pipefail
@@ -85,6 +87,25 @@ jobs:
             exit 1
           fi
           (cd "$bundle_dir" && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256")
+      - name: Prepare updater artifacts
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          macos_dir="apps/desktop/src-tauri/target/release/bundle/macos"
+          archive="$(ls "$macos_dir"/*.app.tar.gz | head -n1)"
+          asset="FreeMeetingTranscriber_${version}_aarch64.app.tar.gz"
+          mv "$archive" "$macos_dir/$asset"
+          mv "$archive.sig" "$macos_dir/$asset.sig"
+          jq -n \
+            --arg version "$version" \
+            --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --arg signature "$(cat "$macos_dir/$asset.sig")" \
+            --arg url "https://github.com/$REPO/releases/download/$TAG/$asset" \
+            '{version: $version, pub_date: $pub_date, platforms: {"darwin-aarch64": {signature: $signature, url: $url}}}' \
+            > "$macos_dir/latest.json"
       - name: Upload release assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -92,4 +113,28 @@ jobs:
         run: |
           set -euo pipefail
           bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
-          gh release upload "$TAG" "$bundle_dir"/*.dmg "$bundle_dir"/*.sha256 --clobber
+          macos_dir="apps/desktop/src-tauri/target/release/bundle/macos"
+          gh release upload "$TAG" \
+            "$bundle_dir"/*.dmg "$bundle_dir"/*.sha256 \
+            "$macos_dir"/*.app.tar.gz "$macos_dir"/*.app.tar.gz.sig "$macos_dir/latest.json" \
+            --clobber
+      - name: Publish updater feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          macos_dir="apps/desktop/src-tauri/target/release/bundle/macos"
+          if ! gh release view updater >/dev/null 2>&1; then
+            gh release create updater --prerelease \
+              --title "Updater feed" \
+              --notes "Rolling release holding latest.json for the in-app updater. Do not delete."
+          fi
+          feed_version="$(gh release download updater --pattern latest.json -O - 2>/dev/null | jq -r .version || echo "0.0.0")"
+          newest="$(printf '%s\n%s\n' "$feed_version" "$version" | sort -V | tail -n1)"
+          if [ "$newest" != "$version" ]; then
+            echo "Feed already at $feed_version; not downgrading to $version"
+            exit 0
+          fi
+          gh release upload updater "$macos_dir/latest.json" --clobber

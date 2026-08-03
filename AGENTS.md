@@ -30,6 +30,7 @@ Files in the user's vault directory are the only source of truth — there is no
 - Bump size comes from conventional-commit keywords across the commits since the last `v*` tag (largest wins): `feat!:`/`BREAKING CHANGE:` → major, `feat:` → minor, everything else → patch.
 - The version's source of truth is the root `package.json`; `apps/desktop/package.json` is kept in sync by the workflow, and `tauri.conf.json` reads it (`"version": "../package.json"`) — never bump versions by hand.
 - Signed + notarized stable DMGs are built on demand: run the `desktop-release` workflow (`gh workflow run desktop-release`, optional `tag` input, defaults to the latest release) and it attaches the DMG + sha256 to that release.
+- That same workflow also builds the in-app updater artifact (`.app.tar.gz` + minisign `.sig`, signed with the `TAURI_SIGNING_PRIVATE_KEY` repo secret) and refreshes `latest.json` on the rolling `updater` prerelease — the endpoint stable builds poll (`tauri.conf.stable.json`). Never delete the `updater` release; the feed only moves forward (version-guarded against rebuilding old tags).
 - `desktop_build.yaml` is the separate staging lane: unversioned DMG artifact on every push to `main`.
 - Each push leaves a bot `chore(release)` commit on `main`, so local `main` is behind after every push — `git pull --rebase origin main` before pushing.
 

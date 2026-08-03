@@ -8,7 +8,12 @@
       "desktop": { "schemes": ["freemeetingtranscriber"] }
     },
     "updater": {
-      "active": false
+      "endpoints": [
+        "https://github.com/bart6114/free-meeting-transcriber/releases/download/updater/latest.json"
+      ]
     }
+  },
+  "bundle": {
+    "createUpdaterArtifacts": true
   }
 }

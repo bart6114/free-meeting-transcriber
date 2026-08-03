@@ -6,9 +6,6 @@
   "plugins": {
     "deep-link": {
       "desktop": { "schemes": ["freemeetingtranscriber-staging"] }
-    },
-    "updater": {
-      "active": false
     }
   },
   "bundle": {
