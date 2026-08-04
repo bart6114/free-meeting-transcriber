@@ -228,7 +228,12 @@ export type LiveTranscriptSegment = { id: string; key: SegmentKey; start_ms: num
 export type LiveTranscriptSegmentDelta = { upserts: LiveTranscriptSegment[]; removed_ids: string[] }
 export type PartialWord = { text: string; start_ms: number; end_ms: number; channel: number; speaker_index?: number | null }
 export type RenderTranscriptHuman = { human_id: string; name: string }
-export type RenderTranscriptInput = { started_at: number | null; words: RenderTranscriptWordInput[]; assignments: IdentityAssignment[] }
+export type RenderTranscriptInput = { started_at: number | null; words: RenderTranscriptWordInput[]; assignments: IdentityAssignment[]; 
+/**
+ * True when word timings are synthetic (e.g. Soniqo batch), meaning they
+ * are too imprecise for word-level cross-channel interleaving.
+ */
+synthetic_timing?: boolean | null }
 export type RenderTranscriptRequest = { transcripts: RenderTranscriptInput[]; participant_human_ids: string[]; self_human_id: string | null; humans: RenderTranscriptHuman[] }
 export type RenderTranscriptWordInput = { id: string; text: string; start_ms: number; end_ms: number; channel: number; speaker_index?: number | null }
 export type RenderedTranscriptSegment = { id: string; key: SegmentKey; speaker_label: string; start_ms: number; end_ms: number; text: string; words: SegmentWord[] }

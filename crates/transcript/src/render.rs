@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 
 use crate::{
-    FinalizedWord, IdentityAssignment, SegmentKey, SegmentWord, SpeakerLabelContext,
-    SpeakerLabeler, WordState, build_segments, channel_assignments_for_participants,
-    render_speaker_label, segment_options_for_participants,
+    FinalizedWord, IdentityAssignment, SegmentBuilderOptions, SegmentKey, SegmentWord,
+    SpeakerLabelContext, SpeakerLabeler, WordState, build_segments,
+    channel_assignments_for_participants, render_speaker_label, segment_options_for_participants,
 };
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
@@ -28,6 +28,10 @@ pub struct RenderTranscriptInput {
     pub started_at: Option<i64>,
     pub words: Vec<RenderTranscriptWordInput>,
     pub assignments: Vec<IdentityAssignment>,
+    /// True when word timings are synthetic (e.g. Soniqo batch), meaning they
+    /// are too imprecise for word-level cross-channel interleaving.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub synthetic_timing: Option<bool>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
@@ -70,6 +74,7 @@ pub fn render_transcript_segments(
             .started_at
             .map(|started_at| started_at - base_started_at)
             .unwrap_or(0);
+        let synthetic_timing = transcript.synthetic_timing.unwrap_or(false);
 
         let (words, mut assignments) =
             offset_transcript_data(transcript.words, transcript.assignments, offset);
@@ -77,7 +82,11 @@ pub fn render_transcript_segments(
             channel_assignments_for_participants(&participant_human_ids, self_human_id.as_deref());
         assignments.extend(channel_assignments);
 
-        let segments = build_segments(&words, &[], &assignments, Some(&segment_options));
+        let options = SegmentBuilderOptions {
+            sentence_atomic: Some(synthetic_timing),
+            ..segment_options.clone()
+        };
+        let segments = build_segments(&words, &[], &assignments, Some(&options));
         all_segments.extend(segments);
     }
 
@@ -303,6 +312,7 @@ mod tests {
                     word("w2", " world", 120, 240, 1),
                 ],
                 assignments: vec![],
+                synthetic_timing: None,
             }],
             participant_human_ids: vec!["human-1".to_string(), "human-2".to_string()],
             self_human_id: Some("human-1".to_string()),
@@ -336,6 +346,7 @@ mod tests {
                     word_si("w3", " three", 400, 500, 2, 2),
                 ],
                 assignments: vec![],
+                synthetic_timing: None,
             }],
             participant_human_ids: vec!["self".to_string(), "remote".to_string()],
             self_human_id: Some("self".to_string()),
@@ -355,6 +366,7 @@ mod tests {
                 started_at: Some(0),
                 words: vec![word_si("w1", " hello", 0, 100, 0, 2)],
                 assignments: vec![],
+                synthetic_timing: None,
             }],
             participant_human_ids: vec![],
             self_human_id: Some("self".to_string()),
@@ -414,6 +426,7 @@ mod tests {
                     word("w2", " reply", 120, 220, 1),
                 ],
                 assignments: vec![channel_assignment("remote", ChannelProfile::RemoteParty)],
+                synthetic_timing: None,
             }],
             participant_human_ids: vec!["self".to_string(), "remote".to_string()],
             self_human_id: None,
@@ -446,6 +459,7 @@ mod tests {
                     speaker_assignment("john", ChannelProfile::DirectMic, 0),
                     speaker_assignment("janet", ChannelProfile::RemoteParty, 0),
                 ],
+                synthetic_timing: None,
             }],
             participant_human_ids: vec![],
             self_human_id: None,
@@ -475,11 +489,13 @@ mod tests {
                     started_at: Some(5_000),
                     words: vec![word("late", " later", 100, 200, 1)],
                     assignments: vec![],
+                    synthetic_timing: None,
                 },
                 RenderTranscriptInput {
                     started_at: Some(1_000),
                     words: vec![word("early", " hello", 0, 100, 0)],
                     assignments: vec![],
+                    synthetic_timing: None,
                 },
             ],
             participant_human_ids: vec!["self".to_string(), "remote".to_string()],
@@ -508,6 +524,7 @@ mod tests {
                     word("w3", " more", 240, 340, 1),
                 ],
                 assignments: vec![channel_assignment("remote", ChannelProfile::RemoteParty)],
+                synthetic_timing: None,
             }],
             participant_human_ids: vec!["remote".to_string()],
             self_human_id: Some("self".to_string()),
@@ -537,11 +554,13 @@ mod tests {
                     started_at: None,
                     words: vec![word("missing-start", " hello", 0, 100, 0)],
                     assignments: vec![],
+                    synthetic_timing: None,
                 },
                 RenderTranscriptInput {
                     started_at: Some(1_000),
                     words: vec![word("known-start", " later", 100, 200, 1)],
                     assignments: vec![],
+                    synthetic_timing: None,
                 },
             ],
             participant_human_ids: vec!["self".to_string(), "remote".to_string()],
@@ -557,5 +576,88 @@ mod tests {
         assert_eq!(segments[0].start_ms, 0);
         assert_eq!(segments[1].text, "later");
         assert_eq!(segments[1].start_ms, 100);
+    }
+
+    fn cross_talk_words() -> Vec<RenderTranscriptWordInput> {
+        vec![
+            word("r1", " Heb", 1_000, 1_500, 1),
+            word("r2", " ik", 1_600, 1_900, 1),
+            word("r3", " gekeken,", 2_000, 2_500, 1),
+            word("r4", " ook", 3_000, 3_500, 1),
+            word("m1", " hebben.", 4_000, 4_400, 0),
+            word("r5", " buitenland,", 4_500, 5_000, 1),
+            word("r6", " in", 5_500, 6_000, 1),
+            word("r7", " Engeland.", 6_500, 7_000, 1),
+        ]
+    }
+
+    #[test]
+    fn word_level_interleave_splits_sentences_without_synthetic_timing() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: cross_talk_words(),
+                assignments: vec![],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![],
+        });
+
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[1].text, "hebben.");
+    }
+
+    #[test]
+    fn keeps_sentences_whole_for_synthetic_timing() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: cross_talk_words(),
+                assignments: vec![],
+                synthetic_timing: Some(true),
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![],
+        });
+
+        assert_eq!(segments.len(), 2);
+        assert_eq!(
+            segments[0].text,
+            "Heb ik gekeken, ook buitenland, in Engeland."
+        );
+        assert_eq!(segments[1].text, "hebben.");
+    }
+
+    #[test]
+    fn synthetic_timing_closes_sentence_units_on_long_silence() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![
+                    word("r1", " we", 0, 400, 1),
+                    word("r2", " were", 500, 900, 1),
+                    word("r3", " talking", 1_000, 1_600, 1),
+                    word("m1", " that's", 10_000, 10_300, 0),
+                    word("m2", " a", 10_400, 10_500, 0),
+                    word("m3", " reply.", 10_600, 11_000, 0),
+                    word("r4", " and", 20_000, 20_300, 1),
+                    word("r5", " then", 20_400, 20_700, 1),
+                    word("r6", " continued", 20_800, 21_200, 1),
+                ],
+                assignments: vec![],
+                synthetic_timing: Some(true),
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![],
+        });
+
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0].text, "we were talking");
+        assert_eq!(segments[1].text, "that's a reply.");
+        assert_eq!(segments[2].text, "and then continued");
     }
 }

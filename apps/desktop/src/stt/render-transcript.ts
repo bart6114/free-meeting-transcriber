@@ -10,6 +10,7 @@ import type {
 
 import type { SegmentWord } from "~/stt/live-segment";
 import type { TranscriptWordMetadata } from "~/stt/timing";
+import { getTranscriptTimingSource } from "~/stt/timing";
 
 export type RenderedTranscriptSegmentWithWordMetadata = Omit<
   RenderedTranscriptSegment,
@@ -232,6 +233,11 @@ function buildRenderTranscriptRequest(
       continue;
     }
 
+    const syntheticTiming = words.some((word) => {
+      const source = getTranscriptTimingSource(word as { metadata?: unknown });
+      return source === "synthetic_speech" || source === "synthetic_text";
+    });
+
     normalizedTranscripts.push({
       started_at:
         typeof transcript.started_at === "number"
@@ -239,6 +245,7 @@ function buildRenderTranscriptRequest(
           : null,
       words,
       assignments,
+      ...(syntheticTiming ? { synthetic_timing: true } : {}),
     });
   }
 

@@ -57,6 +57,11 @@ pub struct SegmentBuilderOptions {
     pub complete_channels: Option<Vec<ChannelProfile>>,
     pub min_segment_words: Option<usize>,
     pub min_segment_ms: Option<i64>,
+    /// Keep each channel's sentences contiguous when interleaving channels.
+    /// Used for transcripts with synthetic word timings, which are not
+    /// precise enough for word-level cross-channel ordering.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sentence_atomic: Option<bool>,
 }
 
 impl Default for SegmentBuilderOptions {
@@ -66,6 +71,7 @@ impl Default for SegmentBuilderOptions {
             complete_channels: Some(vec![ChannelProfile::DirectMic]),
             min_segment_words: Some(3),
             min_segment_ms: Some(1500),
+            sentence_atomic: None,
         }
     }
 }

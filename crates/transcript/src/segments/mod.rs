@@ -25,7 +25,10 @@ pub fn build_segments(
         return Vec::new();
     }
 
-    let words = normalize_words(final_words, partial_words);
+    let sentence_atomic = options
+        .and_then(|opts| opts.sentence_atomic)
+        .unwrap_or(false);
+    let words = normalize_words(final_words, partial_words, sentence_atomic);
     let mut speaker_state = create_speaker_state(assignments, &words, options);
 
     let frames = resolve_identities(&words, &mut speaker_state);

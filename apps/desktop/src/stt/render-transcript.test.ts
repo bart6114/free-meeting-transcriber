@@ -125,6 +125,42 @@ describe("buildRenderTranscriptRequestFromRows", () => {
     expect(request?.self_human_id).toBe("self");
   });
 
+  it("flags transcripts whose words carry synthetic timing metadata", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [
+          {
+            id: "synthetic-word",
+            text: " hello",
+            start_ms: 0,
+            end_ms: 100,
+            channel: 0,
+            metadata: { timing: { source: "synthetic_speech" } },
+          },
+        ],
+        speaker_hints: [],
+      },
+      {
+        started_at: 2_000,
+        words: [
+          {
+            id: "provider-word",
+            text: " world",
+            start_ms: 0,
+            end_ms: 100,
+            channel: 0,
+          },
+        ],
+        speaker_hints: [],
+      },
+    ]);
+
+    expect(
+      request?.transcripts.map((transcript) => transcript.synthetic_timing),
+    ).toEqual([true, undefined]);
+  });
+
   it("passes through all mapped participant ids for Rust-side resolution", () => {
     const request = createRequest(["early"], ["self", "remote", "third"]);
 
