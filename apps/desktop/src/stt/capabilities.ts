@@ -9,34 +9,10 @@ type LiveTranscriptionConfig = {
   transcriptionMode?: TranscriptionMode;
 };
 
-const SONIQO_PARAKEET_BATCH_LANGUAGE_CODES = new Set([
-  "bg",
-  "cs",
-  "da",
-  "de",
-  "el",
-  "en",
-  "es",
-  "et",
-  "fi",
-  "fr",
-  "hr",
-  "hu",
-  "it",
-  "lt",
-  "lv",
-  "mt",
-  "nl",
-  "pl",
-  "pt",
-  "ro",
-  "ru",
-  "sk",
-  "sl",
-  "sv",
-  "uk",
-]);
-const SONIQO_STREAMING_LANGUAGE_CODES = SONIQO_PARAKEET_BATCH_LANGUAGE_CODES;
+// Parakeet-EOU (the streaming model) has an English-only vocabulary; it decodes
+// other languages into gibberish. Must stay in sync with the authoritative Rust
+// check, `is_parakeet_eou_language` in crates/language/src/lib.rs.
+const SONIQO_STREAMING_LANGUAGE_CODES = new Set(["en"]);
 
 export function isSupportedLocalSttModel(
   model?: string | null,
@@ -142,23 +118,16 @@ export function getOnDeviceTranscriptionConfig(
     };
   }
 
-  const supportedLiveLanguages = languages.filter((language) =>
+  // Demote to batch when ANY configured language is outside the streaming
+  // model's support: the batch model covers more languages, and sending a
+  // truncated language list would bypass the Rust-side demotion check.
+  const supportsAllLive = languages.every((language) =>
     SONIQO_STREAMING_LANGUAGE_CODES.has(baseLanguageCode(language)),
   );
 
-  if (languages.length > 0 && supportedLiveLanguages.length === 0) {
-    return {
-      languages: [],
-      transcriptionMode: "live",
-    };
-  }
-
   return {
-    languages:
-      supportedLiveLanguages.length > 0
-        ? [supportedLiveLanguages[0]]
-        : [...languages],
-    transcriptionMode: "live",
+    languages: [...languages],
+    transcriptionMode: supportsAllLive ? "live" : "batch",
   };
 }
 

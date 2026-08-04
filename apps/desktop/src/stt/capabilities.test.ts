@@ -47,16 +47,16 @@ describe("getOnDeviceTranscriptionMode", () => {
     expect(getOnDeviceTranscriptionMode("soniqo-qwen3-small")).toBe("batch");
   });
 
-  test("keeps live mode when realtime local model has no Soniqo-supported language", () => {
+  test("demotes to batch when the realtime local model does not support a configured language", () => {
     expect(
       getOnDeviceTranscriptionMode("soniqo-parakeet-streaming", ["ko"]),
-    ).toBe("live");
+    ).toBe("batch");
   });
 
-  test("keeps European Soniqo streaming languages live", () => {
+  test("demotes European non-English languages to batch — Parakeet-EOU streaming is English-only", () => {
     expect(
       getOnDeviceTranscriptionMode("soniqo-parakeet-streaming", ["de"]),
-    ).toBe("live");
+    ).toBe("batch");
   });
 });
 
@@ -89,30 +89,48 @@ describe("isConfiguredSttModel", () => {
 });
 
 describe("getOnDeviceTranscriptionConfig", () => {
-  test("uses the first supported language for realtime local models", () => {
+  test("stays live for English-only configs, including regional variants", () => {
     expect(
-      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", ["en", "ko"]),
+      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", ["en-BE"]),
     ).toEqual({
-      languages: ["en"],
+      languages: ["en-BE"],
       transcriptionMode: "live",
     });
   });
 
-  test("keeps German live even when English is an additional language", () => {
+  test("stays live with no configured languages", () => {
     expect(
-      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", ["de", "en"]),
-    ).toEqual({
-      languages: ["de"],
-      transcriptionMode: "live",
-    });
-  });
-
-  test("drops unsupported Soniqo language hints instead of forcing batch", () => {
-    expect(
-      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", ["ko"]),
+      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", []),
     ).toEqual({
       languages: [],
       transcriptionMode: "live",
+    });
+  });
+
+  test("demotes to batch with the full language list when a secondary language is unsupported for streaming", () => {
+    expect(
+      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", ["en", "nl"]),
+    ).toEqual({
+      languages: ["en", "nl"],
+      transcriptionMode: "batch",
+    });
+  });
+
+  test("demotes to batch when the main language is unsupported for streaming", () => {
+    expect(
+      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", ["de", "en"]),
+    ).toEqual({
+      languages: ["de", "en"],
+      transcriptionMode: "batch",
+    });
+  });
+
+  test("demotes languages the batch model does not cover either — batch still beats gibberish streaming", () => {
+    expect(
+      getOnDeviceTranscriptionConfig("soniqo-parakeet-streaming", ["ko"]),
+    ).toEqual({
+      languages: ["ko"],
+      transcriptionMode: "batch",
     });
   });
 });
