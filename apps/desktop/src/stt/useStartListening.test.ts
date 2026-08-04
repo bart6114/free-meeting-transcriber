@@ -956,7 +956,7 @@ describe("useStartListening", () => {
     });
   });
 
-  test("keeps supported non-English realtime local models live", async () => {
+  test("demotes non-English main language to batch with the full language list", async () => {
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language" ? "de" : ["en"],
     );
@@ -976,12 +976,12 @@ describe("useStartListening", () => {
     });
 
     expect(startMock.mock.calls[0]?.[0]).toMatchObject({
-      languages: ["de"],
-      transcription_mode: "live",
+      languages: ["de", "en"],
+      transcription_mode: "batch",
     });
   });
 
-  test("keeps realtime local transcription live by filtering unsupported extra spoken languages", async () => {
+  test("demotes to batch instead of filtering unsupported extra spoken languages", async () => {
     useConfigValueMock.mockImplementation((key) =>
       key === "ai_language" ? "en" : ["ko"],
     );
@@ -1001,8 +1001,8 @@ describe("useStartListening", () => {
     });
 
     expect(startMock.mock.calls[0]?.[0]).toMatchObject({
-      languages: ["en"],
-      transcription_mode: "live",
+      languages: ["en", "ko"],
+      transcription_mode: "batch",
     });
   });
 
