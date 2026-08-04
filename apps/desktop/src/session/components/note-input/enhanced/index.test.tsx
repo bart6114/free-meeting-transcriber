@@ -167,11 +167,7 @@ describe("Enhanced", () => {
     expect(screen.queryByTestId("enhanced-editor")).toBeNull();
     expect(screen.getByRole("status")).not.toBeNull();
     expect(screen.getByText("Analyzing structure...")).not.toBeNull();
-    expect(
-      screen.getByText(
-        "Tip: The Free Meeting Transcriber team loves our users!",
-      ),
-    ).not.toBeNull();
+    expect(screen.queryByText(/^Tip:/)).toBeNull();
   });
 
   it("renders streamed summary in the generating view", () => {

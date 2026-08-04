@@ -53,21 +53,10 @@ export function StreamingView({
       <div
         role="status"
         aria-live="polite"
-        className="text-muted-foreground flex flex-col gap-0.5 pb-2 text-sm"
+        className="text-muted-foreground pb-2 text-sm"
       >
         <p className="leading-5">
           <Trans>Analyzing structure...</Trans>
-        </p>
-        <p className="flex items-start gap-1.5 pl-4 text-xs leading-5">
-          <span
-            aria-hidden="true"
-            className="border-muted-foreground/60 mt-[5px] h-2 w-2 shrink-0 rounded-bl-[2px] border-b border-l"
-          />
-          <span>
-            <Trans>
-              Tip: The Free Meeting Transcriber team loves our users!
-            </Trans>
-          </span>
         </p>
       </div>
     );

@@ -1265,10 +1265,6 @@ msgstr "Ticket"
 msgid "Timezone"
 msgstr "Timezone"
 
-#: src/session/components/note-input/enhanced/streaming.tsx
-msgid "Tip: The Free Meeting Transcriber team loves our users!"
-msgstr "Tip: The Free Meeting Transcriber team loves our users!"
-
 #: src/main/audio-import-dialog.tsx
 msgid "Transcribing"
 msgstr "Transcribing"
