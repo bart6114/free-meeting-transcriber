@@ -21,6 +21,21 @@ gh auth status
 
 Never tag or bump versions by hand — the tag for pushed work already exists.
 
+**All CI on the release commit must be green before triggering the release build.**
+Check every workflow run for the commit the target tag points at (bot bump commits
+carry `[skip ci]`, so the runs usually live on its parent — walk back to the first
+commit that has runs):
+
+```bash
+gh run list --commit $(git rev-parse <tag>^{commit}) \
+  --json name,status,conclusion \
+  --jq '.[] | "\(.name): \(.status) \(.conclusion // "")"'
+```
+
+Every run must show `completed success`. If any run failed, is still in progress,
+or the commit has no runs (check the parent), stop and resolve that first — do not
+`gh workflow run desktop-release` on a commit with red or pending CI.
+
 ## 2. Resolve the target tag
 
 User-specified, or the latest release:
