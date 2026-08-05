@@ -178,7 +178,7 @@ msgstr "Can transcribe while the meeting is happening."
 msgid "Cancel"
 msgstr "Cancel"
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Cancel date edit"
 msgstr "Cancel date edit"
 
@@ -304,7 +304,7 @@ msgstr "Customized"
 msgid "Dark"
 msgstr "Dark"
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Date and time are required"
 msgstr "Date and time are required"
 
@@ -383,7 +383,7 @@ msgstr "Duration"
 msgid "Each file becomes its own note and is transcribed and summarized one at a time."
 msgstr "Each file becomes its own note and is transcribed and summarized one at a time."
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Edit date"
 msgstr "Edit date"
 
@@ -400,7 +400,7 @@ msgstr "Emojis"
 msgid "Enable {0}"
 msgstr "Enable {0}"
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Enter a valid date and time"
 msgstr "Enter a valid date and time"
 
@@ -1013,7 +1013,7 @@ msgstr "Runs after the recording finishes, not during the meeting."
 msgid "Save"
 msgstr "Save"
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Save date"
 msgstr "Save date"
 
@@ -1296,7 +1296,7 @@ msgstr "Transcription model is needed to make Free Meeting Transcriber listen to
 msgid "Travel & Places"
 msgstr "Travel & Places"
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Unknown date"
 msgstr "Unknown date"
 

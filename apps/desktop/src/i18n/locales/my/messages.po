@@ -178,7 +178,7 @@ msgstr ""
 msgid "Cancel"
 msgstr ""
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Cancel date edit"
 msgstr ""
 
@@ -304,7 +304,7 @@ msgstr ""
 msgid "Dark"
 msgstr ""
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Date and time are required"
 msgstr ""
 
@@ -383,7 +383,7 @@ msgstr ""
 msgid "Each file becomes its own note and is transcribed and summarized one at a time."
 msgstr ""
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Edit date"
 msgstr ""
 
@@ -400,7 +400,7 @@ msgstr ""
 msgid "Enable {0}"
 msgstr ""
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Enter a valid date and time"
 msgstr ""
 
@@ -1013,7 +1013,7 @@ msgstr ""
 msgid "Save"
 msgstr ""
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Save date"
 msgstr ""
 
@@ -1296,7 +1296,7 @@ msgstr ""
 msgid "Travel & Places"
 msgstr ""
 
-#: src/session/components/outer-header/metadata/date.tsx
+#: src/session/components/session-date.tsx
 msgid "Unknown date"
 msgstr ""
 
