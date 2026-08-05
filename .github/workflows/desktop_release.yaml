@@ -38,8 +38,17 @@ jobs:
           echo "Building $tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
-  macos:
+  changelog:
     needs: resolve
+    permissions:
+      contents: write
+    uses: ./.github/workflows/changelog.yaml
+    with:
+      tag: ${{ needs.resolve.outputs.tag }}
+    secrets: inherit
+
+  macos:
+    needs: [resolve, changelog]
     runs-on: macos-latest
     permissions:
       contents: write
