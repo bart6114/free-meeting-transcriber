@@ -1,6 +1,6 @@
 {
   "name": "free-meeting-transcriber",
-  "version": "0.5.3",
+  "version": "0.5.4",
   "private": true,
   "scripts": {
     "fmt:check": "dprint check",
