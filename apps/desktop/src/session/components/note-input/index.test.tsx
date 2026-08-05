@@ -101,6 +101,10 @@ vi.mock("~/session/components/shared", () => ({
   useCurrentNoteTab: () => ({ type: "raw" }),
 }));
 
+vi.mock("~/session/components/title-input", () => ({
+  TitleInput: () => <input data-testid="title-input" />,
+}));
+
 vi.mock("~/shared/hooks/useScrollPreservation", () => ({
   useScrollPreservation: () => ({
     onBeforeTabChange: hoisted.onBeforeTabChange,
@@ -275,21 +279,11 @@ describe("NoteInput tab selection", () => {
     expect(screen.getByTestId("current-tab").textContent).toBe("transcript");
   });
 
-  it("shows the session title above the transcript view", () => {
+  it("shows an editable session title in the transcript view", () => {
     renderNoteInput({ currentTab: { type: "transcript" } });
 
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Stored title" }),
-    ).not.toBeNull();
+    expect(screen.getByTestId("title-input")).not.toBeNull();
     expect(screen.getByTestId("transcript")).not.toBeNull();
-  });
-
-  it("shows the Untitled placeholder in the transcript view when the title is empty", () => {
-    renderNoteInput({ currentTab: { type: "transcript" }, sessionTitle: "" });
-
-    expect(
-      screen.getByRole("heading", { level: 1, name: "Untitled" }),
-    ).not.toBeNull();
   });
 
   it("renders the title above the audio player above the transcript", () => {
@@ -298,7 +292,7 @@ describe("NoteInput tab selection", () => {
       topAudioPlayer: <div data-testid="top-audio-player" />,
     });
 
-    const title = screen.getByRole("heading", { level: 1 });
+    const title = screen.getByTestId("title-input");
     const player = screen.getByTestId("top-audio-player");
     const transcript = screen.getByTestId("transcript");
 
@@ -311,10 +305,10 @@ describe("NoteInput tab selection", () => {
     ).toBeTruthy();
   });
 
-  it("does not render a title heading in the memo view", () => {
+  it("does not render a standalone title in the memo view", () => {
     renderNoteInput();
 
-    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
+    expect(screen.queryByTestId("title-input")).toBeNull();
   });
 
   it("does not show the transcript spinner while a meeting is active", () => {

@@ -78,7 +78,7 @@ export const TitleInput = forwardRef<
           data-tauri-drag-region="false"
           className={cn([
             "flex w-full items-center justify-start",
-            variant === "breadcrumb" ? "h-5" : "h-8",
+            variant === "breadcrumb" ? "h-5" : "h-[1.875rem]",
           ])}
         >
           <span
@@ -86,7 +86,7 @@ export const TitleInput = forwardRef<
               "text-muted-foreground animate-pulse",
               variant === "breadcrumb"
                 ? "text-sm leading-5"
-                : "text-xl font-semibold tracking-tight",
+                : "text-2xl leading-[1.875rem] font-semibold",
             ])}
           >
             <Trans>Generating title...</Trans>
@@ -101,7 +101,7 @@ export const TitleInput = forwardRef<
           data-tauri-drag-region="false"
           className={cn([
             "flex w-full items-center justify-start overflow-hidden",
-            variant === "breadcrumb" ? "h-5" : "h-8",
+            variant === "breadcrumb" ? "h-5" : "h-[1.875rem]",
           ])}
         >
           <span
@@ -109,7 +109,7 @@ export const TitleInput = forwardRef<
               "animate-reveal-left whitespace-nowrap",
               variant === "breadcrumb"
                 ? "text-sm leading-5"
-                : "text-xl font-semibold tracking-tight",
+                : "text-2xl leading-[1.875rem] font-semibold",
             ])}
           >
             {generatedTitle}
@@ -314,6 +314,11 @@ const TitleInputInner = memo(
           const input = internalRef.current;
           if (!input) return;
 
+          if (!onTransferContentToEditor && !onFocusEditorAtStart) {
+            input.blur();
+            return;
+          }
+
           const cursorPos = input.selectionStart ?? input.value.length;
           const beforeCursor = input.value.slice(0, cursorPos);
           const afterCursor = input.value.slice(cursorPos);
@@ -368,7 +373,7 @@ const TitleInputInner = memo(
             "group/title-input relative flex max-w-full items-center overflow-hidden",
             variant === "breadcrumb"
               ? "h-5 text-sm leading-5"
-              : "h-8 text-xl font-semibold tracking-tight",
+              : "h-[1.875rem] text-2xl leading-[1.875rem] font-semibold",
           ])}
         >
           <input
@@ -411,7 +416,7 @@ const TitleInputInner = memo(
               "placeholder:text-muted-foreground text-left",
               variant === "breadcrumb"
                 ? "text-muted-foreground h-5 appearance-none p-0 text-sm leading-5 focus:underline"
-                : "text-xl font-semibold tracking-tight",
+                : "text-2xl leading-[1.875rem] font-semibold",
               variant === "breadcrumb" &&
                 (isTitleFocused
                   ? "overflow-x-auto whitespace-nowrap"
@@ -430,7 +435,7 @@ const TitleInputInner = memo(
                   "group-hover/title-input:animate-title-hover-scroll whitespace-nowrap group-hover/title-input:will-change-transform",
                   variant === "breadcrumb"
                     ? "text-sm leading-5"
-                    : "text-xl font-semibold tracking-tight",
+                    : "text-2xl leading-[1.875rem] font-semibold",
                 ])}
               >
                 {title}

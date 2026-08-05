@@ -109,13 +109,26 @@ describe("TitleInput", () => {
     const input = screen.getByPlaceholderText("Untitled");
     expect(input.parentElement?.className).toContain("relative");
     expect(input.parentElement?.className).toContain("max-w-full");
-    expect(input.parentElement?.className).toContain("text-xl");
+    expect(input.parentElement?.className).toContain("text-2xl");
     expect(input.parentElement?.className).toContain("font-semibold");
     expect(input.parentElement?.classList.contains("w-full")).toBe(false);
     expect(input.className).toContain("text-left");
     expect(
       screen.queryByRole("button", { name: "Regenerate title" }),
     ).toBeNull();
+  });
+
+  it("persists the full title on Enter when no editor callbacks are wired", () => {
+    renderTitleInput();
+
+    const input = screen.getByPlaceholderText("Untitled");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Weekly Sync" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    fireEvent.blur(input, { target: { value: "Weekly Sync" } });
+
+    expect(hoisted.setStoreTitle).toHaveBeenCalledWith("Weekly Sync");
+    expect(hoisted.clearLiveTitle).toHaveBeenCalled();
   });
 
   it("keeps the title field out of the header drag region", () => {
