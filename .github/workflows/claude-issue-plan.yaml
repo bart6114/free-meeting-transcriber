@@ -40,4 +40,4 @@ jobs:
 
             If the issue is not actionable (support question, spam, missing information), post a short comment saying what information is needed instead of a plan.
           claude_args: |
-            --allowedTools "Bash(gh issue view:*),Bash(gh issue comment:*)"
+            --allowedTools "Bash(gh issue view:*),Bash(gh issue comment:*),Write,Read,Glob,Grep"
