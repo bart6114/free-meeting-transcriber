@@ -869,6 +869,10 @@ describe("TimelineView", () => {
     mocks.configValue = "UTC";
     mocks.anchorNode = document.createElement("div");
     mocks.timelineSessionsTable = {
+      tomorrow: {
+        title: "Roadmap review",
+        created_at: "2024-01-16T12:00:00.000Z",
+      },
       yesterday: {
         title: "Design sync",
         created_at: "2024-01-14T12:00:00.000Z",
@@ -1000,7 +1004,7 @@ describe("TimelineView", () => {
     expect(isBefore(indicator, yesterdayHeading)).toBe(true);
   });
 
-  it("places the fallback now indicator after stale future buckets", () => {
+  it("hides the fallback now indicator once stale future buckets are past", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-15T23:58:00.000Z"));
     mocks.configValue = "UTC";
@@ -1017,20 +1021,94 @@ describe("TimelineView", () => {
       },
     };
 
-    const { rerender } = render(<TimelineView />);
+    const { container, rerender } = render(<TimelineView />);
+
+    expect(screen.getByTestId("current-time-indicator")).toBeTruthy();
 
     vi.setSystemTime(new Date("2024-01-16T00:01:00.000Z"));
     mocks.currentTimeMs = Date.now();
-    rerender(<TimelineView />);
+    // Re-render with a changed prop so React.memo doesn't bail out on an
+    // identical-props re-render — the fresh time above needs a new pass.
+    rerender(<TimelineView topChromeInset />);
 
-    const staleTomorrowHeading = screen.getByText("Tomorrow");
     const staleTomorrowItem = screen.getByTestId("timeline-item-soon");
     const yesterdayHeading = screen.getByText("Yesterday");
+    const anchor = container.querySelector(
+      "[data-sidebar-current-time-anchor]",
+    );
+
+    expect(screen.queryByTestId("current-time-indicator")).toBeNull();
+    expect(anchor).toBeTruthy();
+    expect(isBefore(staleTomorrowItem, anchor!)).toBe(true);
+    expect(isBefore(anchor!, yesterdayHeading)).toBe(true);
+    expect(mocks.registerAnchor).toHaveBeenCalledWith(anchor);
+  });
+
+  it("hides the now indicator when nothing in the timeline is upcoming", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
+    mocks.currentTimeMs = Date.now();
+    mocks.smartCurrentTimeMs = Date.now();
+    mocks.timelineSessionsTable = {
+      "past-note": {
+        title: "Design sync",
+        created_at: "2024-01-15T09:00:00.000Z",
+      },
+    };
+
+    const { container } = render(<TimelineView />);
+
+    expect(screen.getByText("Today")).toBeTruthy();
+    expect(screen.queryByTestId("current-time-indicator")).toBeNull();
+    const anchor = container.querySelector(
+      "[data-sidebar-current-time-anchor]",
+    );
+    expect(anchor).toBeTruthy();
+    expect(mocks.registerAnchor).toHaveBeenCalledWith(anchor);
+  });
+
+  it("shows the now indicator between future and past items today", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
+    mocks.currentTimeMs = Date.now();
+    mocks.smartCurrentTimeMs = Date.now();
+    mocks.timelineSessionsTable = {
+      "future-note": {
+        title: "Roadmap review",
+        created_at: "2024-01-15T15:00:00.000Z",
+      },
+      "past-note": {
+        title: "Design sync",
+        created_at: "2024-01-15T09:00:00.000Z",
+      },
+    };
+
+    render(<TimelineView />);
+
+    const futureItem = screen.getByTestId("timeline-item-future-note");
+    const pastItem = screen.getByTestId("timeline-item-past-note");
     const indicator = screen.getByTestId("current-time-indicator");
 
-    expect(isBefore(staleTomorrowHeading, staleTomorrowItem)).toBe(true);
-    expect(isBefore(staleTomorrowItem, indicator)).toBe(true);
-    expect(isBefore(indicator, yesterdayHeading)).toBe(true);
+    expect(isBefore(futureItem, indicator)).toBe(true);
+    expect(isBefore(indicator, pastItem)).toBe(true);
+  });
+
+  it("keeps the now indicator visible during an in-progress meeting", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
+    mocks.currentTimeMs = Date.now();
+    mocks.smartCurrentTimeMs = Date.now();
+    mocks.timelineSessionsTable = {
+      running: sessionRow({
+        title: "Team standup",
+        started_at: "2024-01-15T11:00:00.000Z",
+        ended_at: "2024-01-15T12:30:00.000Z",
+      }),
+    };
+
+    render(<TimelineView />);
+
+    expect(screen.getByTestId("current-time-indicator")).toBeTruthy();
   });
 });
 

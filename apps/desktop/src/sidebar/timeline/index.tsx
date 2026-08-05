@@ -32,6 +32,7 @@ import {
   calculateTodayIndicatorPlacement,
   deriveTimelineWindowData,
   getItemTimestamp,
+  hasFutureTimelineItems,
   type TimelineBucket,
   type TimelineIndicatorPlacement,
   type TimelineItem,
@@ -295,6 +296,13 @@ export const TimelineView = memo(function TimelineView({
     return getFallbackIndicatorIndex(buckets, Date.now());
   }, [buckets, hasToday, indicatorTimeMs]);
 
+  const hasFutureItems = useMemo(
+    () => hasFutureTimelineItems(buckets, Date.now()),
+    [buckets, indicatorTimeMs],
+  );
+  const suppressCurrentTimeIndicator =
+    hasActiveVisibleSession || !hasFutureItems;
+
   const handleDeleteSelected = useCallback(() => {
     const sessionIds = selectedIds
       .filter((key) => key.startsWith("session-"))
@@ -378,9 +386,9 @@ export const TimelineView = memo(function TimelineView({
           const shouldPlaceIndicatorBefore =
             !hasToday && indicatorIndex === index;
           const shouldRenderIndicatorBefore =
-            shouldPlaceIndicatorBefore && !hasActiveVisibleSession;
+            shouldPlaceIndicatorBefore && !suppressCurrentTimeIndicator;
           const shouldRenderIndicatorAnchorBefore =
-            shouldPlaceIndicatorBefore && hasActiveVisibleSession;
+            shouldPlaceIndicatorBefore && suppressCurrentTimeIndicator;
           const isTopIndicator = shouldRenderIndicatorBefore && index === 0;
 
           return (
@@ -417,7 +425,7 @@ export const TimelineView = memo(function TimelineView({
                   registerIndicator={setCurrentTimeIndicatorRef}
                   selectedSessionId={selectedSessionId}
                   selectedNodeRef={scrollSelectedSessionIntoView}
-                  suppressCurrentTimeIndicator={hasActiveVisibleSession}
+                  suppressCurrentTimeIndicator={suppressCurrentTimeIndicator}
                   timezone={timezone}
                   selectedIds={selectedIds}
                   getFlatItemKeys={getFlatItemKeys}
@@ -468,7 +476,7 @@ export const TimelineView = memo(function TimelineView({
         })}
         {!hasToday &&
           (indicatorIndex === -1 || indicatorIndex === buckets.length) &&
-          (hasActiveVisibleSession ? (
+          (suppressCurrentTimeIndicator ? (
             <CurrentTimeAnchor registerIndicator={setCurrentTimeIndicatorRef} />
           ) : (
             <CurrentTimeIndicator

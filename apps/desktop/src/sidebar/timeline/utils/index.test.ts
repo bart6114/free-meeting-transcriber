@@ -6,8 +6,10 @@ import {
   deriveTimelineWindowData,
   filterTimelineTablesUpToTomorrow,
   getBucketInfo,
+  hasFutureTimelineItems,
   hasTimelineItemsAfterTomorrow,
   isTimelineItemInFuture,
+  type TimelineBucket,
   type TimelineSessionsTable,
 } from ".";
 
@@ -127,6 +129,62 @@ describe("timeline utils", () => {
           created_at: "2024-01-14T12:00:00.000Z",
         },
       }),
+    ).toBe(false);
+  });
+
+  test("hasFutureTimelineItems detects a future-starting item", () => {
+    expect(
+      hasFutureTimelineItems(
+        bucketsWith({
+          title: "Future Session",
+          created_at: "2024-01-14T12:00:00.000Z",
+          event_json: JSON.stringify({
+            started_at: "2024-01-16T11:00:00.000Z",
+          }),
+        }),
+        SYSTEM_TIME.getTime(),
+      ),
+    ).toBe(true);
+  });
+
+  test("hasFutureTimelineItems counts an in-progress event as future-facing", () => {
+    expect(
+      hasFutureTimelineItems(
+        bucketsWith({
+          title: "Running Meeting",
+          created_at: "2024-01-15T11:30:00.000Z",
+          event_json: JSON.stringify({
+            started_at: "2024-01-15T11:30:00.000Z",
+            ended_at: "2024-01-15T12:30:00.000Z",
+          }),
+        }),
+        SYSTEM_TIME.getTime(),
+      ),
+    ).toBe(true);
+  });
+
+  test("hasFutureTimelineItems returns false for past-only items", () => {
+    expect(
+      hasFutureTimelineItems(
+        bucketsWith({
+          title: "Past Session",
+          created_at: "2024-01-14T12:00:00.000Z",
+        }),
+        SYSTEM_TIME.getTime(),
+      ),
+    ).toBe(false);
+  });
+
+  test("hasFutureTimelineItems ignores unparseable timestamps and empty buckets", () => {
+    expect(hasFutureTimelineItems([], SYSTEM_TIME.getTime())).toBe(false);
+    expect(
+      hasFutureTimelineItems(
+        bucketsWith({
+          title: "Broken Session",
+          created_at: "not-a-date",
+        }),
+        SYSTEM_TIME.getTime(),
+      ),
     ).toBe(false);
   });
 
@@ -288,3 +346,17 @@ describe("timeline utils", () => {
     ]);
   });
 });
+
+function bucketsWith(data: {
+  title: string;
+  created_at: string;
+  event_json?: string;
+}): TimelineBucket[] {
+  return [
+    {
+      label: "Today",
+      precision: "time",
+      items: [{ type: "session", id: "session-1", data }],
+    },
+  ];
+}
