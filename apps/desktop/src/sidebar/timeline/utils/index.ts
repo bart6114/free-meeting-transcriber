@@ -235,6 +235,26 @@ export function isTimelineItemInFuture(item: TimelineItem): boolean {
   return timestamp.getTime() > Date.now();
 }
 
+export function hasFutureTimelineItems(
+  buckets: TimelineBucket[],
+  nowMs: number,
+): boolean {
+  return buckets.some((bucket) =>
+    bucket.items.some((item) => {
+      const { start, end } = getItemTimeRange(item);
+      if (!start) {
+        return false;
+      }
+
+      if (start.getTime() > nowMs) {
+        return true;
+      }
+
+      return Boolean(end && end.getTime() > nowMs);
+    }),
+  );
+}
+
 function getTomorrowUpperBound(timezone?: string): number {
   const dayAfterTomorrow = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000);
   return startOfDay(toTZ(dayAfterTomorrow, timezone)).getTime();
