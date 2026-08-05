@@ -157,9 +157,11 @@ function createEditorRef() {
 function renderNoteInput({
   currentTab = { type: "raw" },
   handleTabChange = vi.fn(),
+  sessionTitle = "Stored title",
 }: {
   currentTab?: EditorView;
   handleTabChange?: (view: EditorView) => void;
+  sessionTitle?: string;
 } = {}) {
   return {
     handleTabChange,
@@ -174,7 +176,7 @@ function renderNoteInput({
           type: "sessions",
         }}
         rawMd="stored memo"
-        sessionTitle="Stored title"
+        sessionTitle={sessionTitle}
         editorTabs={hoisted.editorTabs}
         currentTab={currentTab}
         handleTabChange={handleTabChange}
@@ -268,6 +270,29 @@ describe("NoteInput tab selection", () => {
     );
 
     expect(screen.getByTestId("current-tab").textContent).toBe("transcript");
+  });
+
+  it("shows the session title above the transcript view", () => {
+    renderNoteInput({ currentTab: { type: "transcript" } });
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Stored title" }),
+    ).not.toBeNull();
+    expect(screen.getByTestId("transcript")).not.toBeNull();
+  });
+
+  it("shows the Untitled placeholder in the transcript view when the title is empty", () => {
+    renderNoteInput({ currentTab: { type: "transcript" }, sessionTitle: "" });
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Untitled" }),
+    ).not.toBeNull();
+  });
+
+  it("does not render a title heading in the memo view", () => {
+    renderNoteInput();
+
+    expect(screen.queryByRole("heading", { level: 1 })).toBeNull();
   });
 
   it("does not show the transcript spinner while a meeting is active", () => {

@@ -347,7 +347,20 @@ const NoteInputContent = forwardRef<
               />
             )}
             {renderedCurrentTab.type === "transcript" && (
-              <Transcript sessionId={sessionId} scrollRef={scrollRef} />
+              <div className="flex h-full min-h-0 flex-col">
+                <h1
+                  data-session-transcript-title
+                  className={cn([
+                    "mb-4 min-h-6 shrink-0 text-2xl leading-[1.875rem] font-semibold break-words",
+                    !sessionTitle.trim() && "text-muted-foreground",
+                  ])}
+                >
+                  {sessionTitle.trim() || "Untitled"}
+                </h1>
+                <div className="min-h-0 flex-1">
+                  <Transcript sessionId={sessionId} scrollRef={scrollRef} />
+                </div>
+              </div>
             )}
           </div>
         </div>
