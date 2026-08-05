@@ -21,6 +21,7 @@ import { SearchBar } from "./search/bar";
 import { useSearch } from "./search/context";
 import { Transcript } from "./transcript";
 
+import { SessionDate } from "~/session/components/session-date";
 import { useCurrentNoteTab } from "~/session/components/shared";
 import { TitleInput } from "~/session/components/title-input";
 import { useScrollPreservation } from "~/shared/hooks/useScrollPreservation";
@@ -332,6 +333,11 @@ const NoteInputContent = forwardRef<
                 : "overflow-auto pb-6",
             ])}
           >
+            {isEditableTab && (
+              <div className="mb-0.5">
+                <SessionDate sessionId={sessionId} />
+              </div>
+            )}
             {renderedCurrentTab.type === "enhanced" && (
               <Enhanced
                 ref={internalEditorRef}
