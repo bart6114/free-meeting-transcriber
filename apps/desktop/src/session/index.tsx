@@ -219,35 +219,30 @@ function TabContentNoteInner({
           />
         }
       >
-        <div className="flex h-full min-h-0 flex-col">
-          {showTopAudioPlayer ? (
-            <div
-              data-session-top-audio-player
-              className="shrink-0 px-1 pt-1 pb-2"
-            >
-              <div className="border-border/70 bg-card/80 overflow-hidden rounded-[22px] border">
-                <AudioPlayer.Timeline contentClassName="py-1.5 pr-3 pl-1" />
-              </div>
-            </div>
-          ) : null}
-          <div className="min-h-0 flex-1">
-            {session && rawMd !== null ? (
-              <NoteInput
-                ref={noteInputRef}
-                tab={tab}
-                rawMd={rawMd}
-                sessionTitle={session.title}
-                editorTabs={editorTabs}
-                currentTab={currentView}
-                handleTabChange={handleTabChange}
-                sessionMode={sessionMode}
-                hideHeader
-              />
-            ) : (
-              <SessionContentLoading />
-            )}
-          </div>
-        </div>
+        {session && rawMd !== null ? (
+          <NoteInput
+            ref={noteInputRef}
+            tab={tab}
+            rawMd={rawMd}
+            sessionTitle={session.title}
+            editorTabs={editorTabs}
+            currentTab={currentView}
+            handleTabChange={handleTabChange}
+            sessionMode={sessionMode}
+            hideHeader
+            topAudioPlayer={
+              showTopAudioPlayer ? (
+                <div data-session-top-audio-player className="shrink-0 pb-2">
+                  <div className="border-border/70 bg-card/80 overflow-hidden rounded-[22px] border">
+                    <AudioPlayer.Timeline contentClassName="py-1.5 pr-3 pl-1" />
+                  </div>
+                </div>
+              ) : null
+            }
+          />
+        ) : (
+          <SessionContentLoading />
+        )}
       </SessionSurface>
     </>
   );

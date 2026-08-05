@@ -158,10 +158,12 @@ function renderNoteInput({
   currentTab = { type: "raw" },
   handleTabChange = vi.fn(),
   sessionTitle = "Stored title",
+  topAudioPlayer,
 }: {
   currentTab?: EditorView;
   handleTabChange?: (view: EditorView) => void;
   sessionTitle?: string;
+  topAudioPlayer?: React.ReactNode;
 } = {}) {
   return {
     handleTabChange,
@@ -180,6 +182,7 @@ function renderNoteInput({
         editorTabs={hoisted.editorTabs}
         currentTab={currentTab}
         handleTabChange={handleTabChange}
+        topAudioPlayer={topAudioPlayer}
       />,
     ),
   };
@@ -287,6 +290,25 @@ describe("NoteInput tab selection", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: "Untitled" }),
     ).not.toBeNull();
+  });
+
+  it("renders the title above the audio player above the transcript", () => {
+    renderNoteInput({
+      currentTab: { type: "transcript" },
+      topAudioPlayer: <div data-testid="top-audio-player" />,
+    });
+
+    const title = screen.getByRole("heading", { level: 1 });
+    const player = screen.getByTestId("top-audio-player");
+    const transcript = screen.getByTestId("transcript");
+
+    expect(
+      title.compareDocumentPosition(player) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      player.compareDocumentPosition(transcript) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("does not render a title heading in the memo view", () => {

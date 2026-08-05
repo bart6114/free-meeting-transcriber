@@ -1,6 +1,7 @@
 import {
   forwardRef,
   type MouseEventHandler,
+  type ReactNode,
   type UIEventHandler,
   useCallback,
   useDeferredValue,
@@ -46,6 +47,7 @@ type NoteInputProps = {
   handleTabChange?: (view: TabEditorView) => void;
   hideHeader?: boolean;
   sessionMode?: SessionMode;
+  topAudioPlayer?: ReactNode;
 };
 
 export function shouldShowTranscriptTabSpinner(sessionMode: SessionMode) {
@@ -140,6 +142,7 @@ const NoteInputContent = forwardRef<
       commitTabChange,
       hideHeader = false,
       sessionMode,
+      topAudioPlayer,
     },
     ref,
   ) => {
@@ -357,6 +360,7 @@ const NoteInputContent = forwardRef<
                 >
                   {sessionTitle.trim() || "Untitled"}
                 </h1>
+                {topAudioPlayer}
                 <div className="min-h-0 flex-1">
                   <Transcript sessionId={sessionId} scrollRef={scrollRef} />
                 </div>
