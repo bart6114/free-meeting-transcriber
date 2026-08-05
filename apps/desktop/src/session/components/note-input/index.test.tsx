@@ -97,6 +97,10 @@ vi.mock("./transcript", () => ({
   Transcript: () => <div data-testid="transcript" />,
 }));
 
+vi.mock("~/session/components/session-date", () => ({
+  SessionDate: () => <div data-testid="session-date" />,
+}));
+
 vi.mock("~/session/components/shared", () => ({
   useCurrentNoteTab: () => ({ type: "raw" }),
 }));

@@ -1,11 +1,10 @@
 import { useLingui } from "@lingui/react/macro";
-import { ChevronDownIcon, SquareIcon } from "lucide-react";
+import { SquareIcon } from "lucide-react";
 import { useCallback } from "react";
 
 import { cn } from "@hypr/utils";
 
 import { RecordingIcon, useHasTranscript } from "../shared";
-import { MetadataButton } from "./metadata";
 import { OverflowButton } from "./overflow";
 
 import { useAudioPlayer } from "~/audio-player";
@@ -149,43 +148,23 @@ function HeaderMeetingControl({
 
   return (
     <div className="mr-1 flex min-w-0 shrink-0 items-center gap-2">
-      <div className="border-border bg-card text-foreground flex h-7 max-w-56 shrink-0 items-center overflow-hidden rounded-md border">
-        <button
-          type="button"
-          data-tauri-drag-region="false"
-          aria-label={action.label}
-          title={action.title}
-          disabled={disabled}
-          onClick={action.onClick}
-          className={cn([
-            "flex h-full min-w-0 items-center gap-1.5 py-0 pr-1.5 pl-2.5",
-            "text-sm font-medium",
-            "hover:bg-accent transition-colors",
-            disabled && "cursor-default opacity-60 hover:bg-transparent",
-          ])}
-        >
-          {action.icon}
-          <span className="truncate">{action.label}</span>
-        </button>
-        <MetadataButton
-          sessionId={sessionId}
-          renderTrigger={({ open, label: metadataLabel }) => (
-            <button
-              type="button"
-              data-tauri-drag-region="false"
-              aria-label={metadataLabel}
-              title={metadataLabel}
-              className={cn([
-                "text-muted-foreground flex h-full w-5 shrink-0 items-center justify-center",
-                "hover:bg-accent hover:text-foreground transition-colors",
-                open && "bg-accent text-foreground",
-              ])}
-            >
-              <ChevronDownIcon size={14} />
-            </button>
-          )}
-        />
-      </div>
+      <button
+        type="button"
+        data-tauri-drag-region="false"
+        aria-label={action.label}
+        title={action.title}
+        disabled={disabled}
+        onClick={action.onClick}
+        className={cn([
+          "border-border bg-card text-foreground flex h-7 max-w-56 min-w-0 shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-0",
+          "text-sm font-medium",
+          "hover:bg-accent transition-colors",
+          disabled && "hover:bg-card cursor-default opacity-60",
+        ])}
+      >
+        {action.icon}
+        <span className="truncate">{action.label}</span>
+      </button>
     </div>
   );
 }

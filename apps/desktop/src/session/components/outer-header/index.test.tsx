@@ -1,5 +1,4 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactElement } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EditorView } from "~/store/zustand/tabs/schema";
@@ -25,21 +24,6 @@ const mocks = vi.hoisted(() => ({
     allowListening?: boolean;
     standaloneWindow?: boolean;
   }>,
-}));
-
-vi.mock("./metadata", () => ({
-  MetadataButton: ({
-    renderTrigger,
-  }: {
-    renderTrigger?: (props: { open: boolean; label: string }) => ReactElement;
-  }) =>
-    renderTrigger ? (
-      renderTrigger({ open: false, label: "Open note metadata" })
-    ) : (
-      <button type="button" aria-label="Open note metadata">
-        Metadata
-      </button>
-    ),
 }));
 
 vi.mock("./overflow", () => ({
@@ -356,9 +340,6 @@ describe("OuterHeader", () => {
     fireEvent.click(screen.getByRole("button", { name: "Record" }));
 
     expect(mocks.startListening).toHaveBeenCalledTimes(1);
-    expect(
-      screen.getByRole("button", { name: "Open note metadata" }),
-    ).not.toBeNull();
   });
 
   it("shows resume when an inactive session already has a transcript", () => {
@@ -420,9 +401,6 @@ describe("OuterHeader", () => {
     expect(stopButton.querySelector("svg")?.getAttribute("class")).toContain(
       "text-recording",
     );
-    expect(
-      screen.getByRole("button", { name: "Open note metadata" }),
-    ).not.toBeNull();
     expect(mocks.stopListening).toHaveBeenCalledTimes(1);
   });
 });

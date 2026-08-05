@@ -1,6 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import { useForm } from "@tanstack/react-form";
-import { CheckIcon, PencilIcon, XIcon } from "lucide-react";
+import { CheckIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@hypr/ui/components/ui/button";
@@ -10,7 +10,7 @@ import { format, safeFormat, safeParseDate } from "@hypr/utils";
 
 import { useSession, useUpdateSession } from "~/session/queries";
 
-export function DateEditor({ sessionId }: { sessionId: string }) {
+export function SessionDate({ sessionId }: { sessionId: string }) {
   const { t } = useLingui();
   const [isEditing, setIsEditing] = useState(false);
   // Shown between closing the editor and the live query re-emitting, so the
@@ -31,21 +31,15 @@ export function DateEditor({ sessionId }: { sessionId: string }) {
 
   if (!isEditing) {
     return (
-      <div className="flex h-7 items-center justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-muted-foreground text-sm">{noteDate}</div>
-        </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="text-muted-foreground hover:bg-accent hover:text-foreground size-7 rounded-full"
-          onClick={() => setIsEditing(true)}
-          aria-label={t`Edit date`}
-        >
-          <PencilIcon size={16} />
-        </Button>
-      </div>
+      <button
+        type="button"
+        aria-label={t`Edit date`}
+        title={t`Edit date`}
+        onClick={() => setIsEditing(true)}
+        className="text-muted-foreground hover:text-foreground flex h-6 w-fit items-center text-xs transition-colors"
+      >
+        {noteDate}
+      </button>
     );
   }
 
@@ -59,7 +53,7 @@ export function DateEditor({ sessionId }: { sessionId: string }) {
         setIsEditing(false);
         setPendingCreatedAt(nextCreatedAt);
         void commit.catch((error) => {
-          console.error("[metadata] failed to update session date", error);
+          console.error("[session-date] failed to update session date", error);
           sonnerToast.error("Could not update the note date.");
           setPendingCreatedAt(null);
         });
@@ -121,14 +115,14 @@ function EditableDateForm({
   });
 
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex w-fit flex-col gap-1">
       <form.Field name="createdAt">
         {(field) => (
-          <div className="flex h-7 items-center gap-0">
+          <div className="flex h-6 items-center gap-0">
             <Input
               autoFocus
               type="datetime-local"
-              className="h-7 flex-1 border-0 px-0 py-0 shadow-none focus-visible:ring-0"
+              className="h-6 w-fit border-0 px-0 py-0 text-xs shadow-none focus-visible:ring-0"
               value={field.state.value}
               onChange={(e) => field.handleChange(e.target.value)}
               onKeyDown={(e) => {
@@ -149,11 +143,11 @@ function EditableDateForm({
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-7 shrink-0 rounded-full"
+                className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-6 shrink-0 rounded-full"
                 onClick={onCancel}
                 aria-label={t`Cancel date edit`}
               >
-                <XIcon size={16} />
+                <XIcon size={14} />
               </Button>
             )}
 
@@ -163,12 +157,12 @@ function EditableDateForm({
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="text-muted-foreground hover:bg-brand/10 hover:text-brand size-7 shrink-0 rounded-full"
+                  className="text-muted-foreground hover:bg-brand/10 hover:text-brand size-6 shrink-0 rounded-full"
                   onClick={() => void form.handleSubmit()}
                   disabled={!canSubmit}
                   aria-label={t`Save date`}
                 >
-                  <CheckIcon size={16} />
+                  <CheckIcon size={14} />
                 </Button>
               )}
             </form.Subscribe>
