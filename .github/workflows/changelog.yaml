@@ -110,6 +110,8 @@ jobs:
                  ---
                - Desktop-user-facing content only: skip chore/ci/infra/internal/release-bot
                  commits entirely. If a change only makes sense to a developer, leave it out.
+               - Never use em dashes (—) anywhere in the file; rephrase or use a
+                 comma, period, or parentheses instead.
                - Use "## New" / "## Fixes" style sections like the existing files.
                - Only use the custom <banner> tag (per AGENTS.md) for genuinely
                  important announcements.
