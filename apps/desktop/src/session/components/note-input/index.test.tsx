@@ -101,6 +101,14 @@ vi.mock("~/session/components/session-date", () => ({
   SessionDate: () => <div data-testid="session-date" />,
 }));
 
+vi.mock("~/session/components/session-people", () => ({
+  SessionPeople: () => <div data-testid="session-people" />,
+  useSessionPeopleTitleTrailer: () => ({
+    element: document.createElement("div"),
+    portal: null,
+  }),
+}));
+
 vi.mock("~/session/components/shared", () => ({
   useCurrentNoteTab: () => ({ type: "raw" }),
 }));

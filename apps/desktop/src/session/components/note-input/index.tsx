@@ -22,6 +22,10 @@ import { useSearch } from "./search/context";
 import { Transcript } from "./transcript";
 
 import { SessionDate } from "~/session/components/session-date";
+import {
+  SessionPeople,
+  useSessionPeopleTitleTrailer,
+} from "~/session/components/session-people";
 import { useCurrentNoteTab } from "~/session/components/shared";
 import { TitleInput } from "~/session/components/title-input";
 import { useScrollPreservation } from "~/shared/hooks/useScrollPreservation";
@@ -300,6 +304,8 @@ const NoteInputContent = forwardRef<
       internalEditorRef.current?.commands.focusAtTrailingEmptyLine();
     };
 
+    const peopleTrailer = useSessionPeopleTitleTrailer(sessionId);
+
     return (
       <div className="-mx-2 flex h-full flex-col">
         {!hideHeader && (
@@ -338,6 +344,7 @@ const NoteInputContent = forwardRef<
                 <SessionDate sessionId={sessionId} />
               </div>
             )}
+            {peopleTrailer.portal}
             {renderedCurrentTab.type === "enhanced" && (
               <Enhanced
                 ref={internalEditorRef}
@@ -345,6 +352,7 @@ const NoteInputContent = forwardRef<
                 sessionTitle={sessionTitle}
                 enhancedNoteId={renderedCurrentTab.id}
                 onNavigateToTitle={onNavigateToTitle}
+                titleTrailerElement={peopleTrailer.element}
               />
             )}
             {renderedCurrentTab.type === "raw" && (
@@ -354,12 +362,19 @@ const NoteInputContent = forwardRef<
                 rawMd={rawMd}
                 sessionTitle={sessionTitle}
                 onNavigateToTitle={onNavigateToTitle}
+                titleTrailerElement={peopleTrailer.element}
               />
             )}
             {renderedCurrentTab.type === "transcript" && (
               <div className="flex h-full min-h-0 flex-col">
                 <div data-session-transcript-title className="mb-4 shrink-0">
+                  <div className="mb-0.5">
+                    <SessionDate sessionId={sessionId} />
+                  </div>
                   <TitleInput tab={tab} />
+                  {/* mt-2 = the editor title's 0.25rem margin-bottom plus the
+                      trailer row's mt-1, so the title→pills gap matches. */}
+                  <SessionPeople sessionId={sessionId} className="mt-2" />
                 </div>
                 {topAudioPlayer}
                 <div className="min-h-0 flex-1">

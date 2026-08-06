@@ -44,6 +44,7 @@ export const RawEditor = forwardRef<
     showFormatToolbar?: boolean;
     onViewReady?: (view: EditorView) => void;
     onViewDisposed?: (view: EditorView) => void;
+    titleTrailerElement?: HTMLElement;
   }
 >(
   (
@@ -57,6 +58,7 @@ export const RawEditor = forwardRef<
       showFormatToolbar = true,
       onViewReady,
       onViewDisposed,
+      titleTrailerElement,
     },
     ref,
   ) => {
@@ -153,6 +155,7 @@ export const RawEditor = forwardRef<
           showFormatToolbar={showFormatToolbar}
           onViewReady={onViewReady}
           onViewDisposed={onViewDisposed}
+          titleTrailerElement={titleTrailerElement}
         />
       </AudioDropTarget>
     );

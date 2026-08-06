@@ -39,6 +39,7 @@ const EnhancedEditorInner = forwardRef<
     onNavigateToTitle?: (pixelWidth?: number) => void;
     onViewReady?: (view: EditorView) => void;
     onViewDisposed?: (view: EditorView) => void;
+    titleTrailerElement?: HTMLElement;
   }
 >(
   (
@@ -51,6 +52,7 @@ const EnhancedEditorInner = forwardRef<
       onNavigateToTitle,
       onViewReady,
       onViewDisposed,
+      titleTrailerElement,
     },
     ref,
   ) => {
@@ -123,6 +125,7 @@ const EnhancedEditorInner = forwardRef<
             onViewReady={onViewReady}
             onViewDisposed={onViewDisposed}
             syncContentWhenFocused={!persistChanges}
+            titleTrailerElement={titleTrailerElement}
           />
         </div>
       </AudioDropTarget>

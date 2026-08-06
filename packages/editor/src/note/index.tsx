@@ -93,7 +93,11 @@ import {
   useLinkedItemOpenBehavior,
 } from "./linked-item-open-behavior";
 import { schema } from "./schema";
-import { normalizeTitleHeadingDoc, titleHeadingPlugin } from "./title-layout";
+import {
+  normalizeTitleHeadingDoc,
+  titleHeadingPlugin,
+  titleTrailerPlugin,
+} from "./title-layout";
 import {
   focusTrailingEmptyLine,
   trailingEmptyLineClickPlugin,
@@ -187,6 +191,9 @@ export interface NoteEditorProps {
   onViewDisposed?: (view: EditorView) => void;
   syncContentWhenFocused?: boolean;
   enforceTitleHeading?: boolean;
+  /** Host-owned element rendered as a widget between the title (first node)
+   * and the body. Fixed at mount; update its children, not the element. */
+  titleTrailerElement?: HTMLElement;
   /** Fixed at mount: plugins are not reconfigurable afterwards. */
   commentAnchorsEnabled?: boolean;
   onCommentAnchorsEvent?: (event: CommentAnchorsEvent) => void;
@@ -583,6 +590,7 @@ export const NoteEditor = forwardRef<NoteEditorRef, NoteEditorProps>(
       onViewDisposed,
       syncContentWhenFocused = false,
       enforceTitleHeading = true,
+      titleTrailerElement,
       commentAnchorsEnabled = false,
       onCommentAnchorsEvent,
     } = props;
@@ -700,6 +708,9 @@ export const NoteEditor = forwardRef<NoteEditorRef, NoteEditorProps>(
         docChangeListenerPlugin((doc) => onUpdateRef.current(doc)),
         buildInputRules(),
         ...(enforceTitleHeading ? [titleHeadingPlugin()] : []),
+        ...(titleTrailerElement
+          ? [titleTrailerPlugin(titleTrailerElement)]
+          : []),
         taskIdentityPlugin(),
         buildKeymap(onNavigateToTitle),
         trailingEmptyLineClickPlugin(),
@@ -737,6 +748,7 @@ export const NoteEditor = forwardRef<NoteEditorRef, NoteEditorProps>(
         onNavigateToTitle,
         onLinkOpen,
         enforceTitleHeading,
+        titleTrailerElement,
         readOnly,
         setCompositionActive,
         commentAnchorsEnabled,

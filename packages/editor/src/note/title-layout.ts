@@ -1,9 +1,11 @@
 import { type Node as PMNode } from "prosemirror-model";
 import { Plugin, PluginKey } from "prosemirror-state";
+import { Decoration, DecorationSet } from "prosemirror-view";
 
 import { schema } from "./schema";
 
 const titleHeadingPluginKey = new PluginKey("titleHeading");
+const titleTrailerPluginKey = new PluginKey("titleTrailer");
 
 export function normalizeTitleHeadingDoc(doc: PMNode) {
   const first = doc.firstChild;
@@ -75,6 +77,33 @@ export function titleHeadingPlugin() {
       }
 
       return tr;
+    },
+  });
+}
+
+/// Renders a host-owned element as a non-editable widget between the title
+/// (first node) and the body, so chrome like a participants row can sit
+/// "below the title" even though the title lives inside the document.
+export function titleTrailerPlugin(element: HTMLElement) {
+  element.contentEditable = "false";
+
+  return new Plugin({
+    key: titleTrailerPluginKey,
+    props: {
+      decorations(state) {
+        const first = state.doc.firstChild;
+        if (!first) {
+          return null;
+        }
+
+        return DecorationSet.create(state.doc, [
+          Decoration.widget(first.nodeSize, element, {
+            key: "title-trailer",
+            side: -1,
+            ignoreSelection: true,
+          }),
+        ]);
+      },
     },
   });
 }

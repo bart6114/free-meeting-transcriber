@@ -102,3 +102,26 @@ describe("titleHeadingPlugin", () => {
     expect(result.state.doc.firstChild?.attrs.level).toBe(1);
   });
 });
+
+describe("titleTrailerPlugin", () => {
+  it("places the host element as a widget directly after the title node", async () => {
+    const { titleTrailerPlugin } = await import("./title-layout");
+    const element = document.createElement("div");
+    const plugin = titleTrailerPlugin(element);
+    const doc = schema.node("doc", null, [
+      schema.node("heading", { level: 1 }, [schema.text("Planning")]),
+      schema.node("paragraph", null, [schema.text("Body")]),
+    ]);
+    const state = EditorState.create({ doc, plugins: [plugin] });
+
+    expect(element.contentEditable).toBe("false");
+
+    const decorations = plugin.props.decorations?.call(plugin, state);
+    expect(decorations).toBeTruthy();
+    const found = (
+      decorations as import("prosemirror-view").DecorationSet
+    ).find();
+    expect(found).toHaveLength(1);
+    expect(found[0]?.from).toBe(doc.firstChild!.nodeSize);
+  });
+});

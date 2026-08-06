@@ -24,6 +24,7 @@ export const Enhanced = forwardRef<
     onNavigateToTitle?: (pixelWidth?: number) => void;
     onViewReady?: (view: EditorView) => void;
     onViewDisposed?: (view: EditorView) => void;
+    titleTrailerElement?: HTMLElement;
   }
 >(
   (
@@ -34,6 +35,7 @@ export const Enhanced = forwardRef<
       onNavigateToTitle,
       onViewReady,
       onViewDisposed,
+      titleTrailerElement,
     },
     ref,
   ) => {
@@ -94,6 +96,7 @@ export const Enhanced = forwardRef<
         onNavigateToTitle={onNavigateToTitle}
         onViewReady={onViewReady}
         onViewDisposed={onViewDisposed}
+        titleTrailerElement={titleTrailerElement}
       />
     );
   },
