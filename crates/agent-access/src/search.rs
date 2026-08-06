@@ -8,6 +8,7 @@ use specta::Type;
 
 use hypr_vault_read::{SessionMeta, TranscriptWithData};
 
+use crate::render::object_hint_value;
 use crate::{
     Error, Pagination, Result, load_summaries_sync, occurred_at, pagination, run_blocking,
     sort_metas_recent_first, vault_error,
@@ -75,8 +76,6 @@ pub struct SearchHit {
     pub speaker_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_ms: Option<i64>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub word_offset: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -390,7 +389,6 @@ fn push_transcript_hit(
     let mut hit = base_hit(meta, "transcript");
     hit.snippet = snippet;
     hit.start_ms = Some(record.start_ms);
-    hit.word_offset = Some(record.global_offset);
     if let Some(person_id) = &record.speaker_id {
         hit.speaker = Some(ctx.display_name(person_id));
         hit.speaker_id = Some(person_id.clone());
@@ -410,7 +408,6 @@ fn base_hit(meta: &SessionMeta, kind: &str) -> SearchHit {
         speaker: None,
         speaker_id: None,
         start_ms: None,
-        word_offset: None,
     }
 }
 
@@ -484,16 +481,6 @@ fn attribute_speakers(transcript: &TranscriptWithData) -> Vec<Option<String>> {
             by_channel.get(&channels[index]).cloned()
         })
         .collect()
-}
-
-fn object_hint_value(value: &Value) -> Option<Value> {
-    match value {
-        Value::String(raw) => serde_json::from_str::<Value>(raw)
-            .ok()
-            .filter(Value::is_object),
-        Value::Object(_) => Some(value.clone()),
-        _ => None,
-    }
 }
 
 /// Byte range (in `text`) of the first occurrence of the first term, provided every
@@ -693,7 +680,6 @@ mod tests {
         assert_eq!(page.hits[1].snippet, "We reviewed the budget baseline.");
         assert_eq!(page.hits[2].document_id.as_deref(), Some("doc-1"));
         assert_eq!(page.hits[2].document_title.as_deref(), Some("Recap"));
-        assert_eq!(page.hits[3].word_offset, Some(1));
         assert_eq!(page.hits[3].start_ms, Some(1000));
         assert!(page.pagination.next_offset.is_none());
 
@@ -748,7 +734,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn transcript_word_offset_round_trips_into_get_meeting_transcript() {
+    async fn transcript_hit_start_ms_locates_the_match_in_the_rendered_transcript() {
         let vault = tempfile::tempdir().unwrap();
         seed_session(vault.path(), "m1", "Sync", "2026-07-13");
         write_transcript(
@@ -763,20 +749,17 @@ mod tests {
         );
 
         let page = search(vault.path(), query("charlie")).await;
-        let offset = page.hits[0].word_offset.unwrap();
-        assert_eq!(offset, 2);
+        assert_eq!(page.hits[0].start_ms, Some(2000));
 
         let transcript = crate::get_meeting_transcript(
             vault.path(),
             GetMeetingTranscriptInput {
                 meeting_id: "m1".to_string(),
-                offset: Some(offset),
-                limit: Some(1),
             },
         )
         .await
         .unwrap();
-        assert_eq!(transcript.text, "charlie");
+        assert!(transcript.text.contains("charlie"));
     }
 
     #[tokio::test]
@@ -818,7 +801,7 @@ mod tests {
             assert_eq!(hit.speaker.as_deref(), Some("Bob Peters"));
             assert_eq!(hit.speaker_id.as_deref(), Some("bob_peters"));
             assert_eq!(hit.snippet, "remote greetings");
-            assert_eq!(hit.word_offset, Some(1));
+            assert_eq!(hit.start_ms, Some(1000));
         }
 
         let page = search(
@@ -843,7 +826,7 @@ mod tests {
         )
         .await;
         assert_eq!(page.hits.len(), 1);
-        assert_eq!(page.hits[0].word_offset, Some(0));
+        assert_eq!(page.hits[0].start_ms, Some(0));
         assert_eq!(page.hits[0].speaker, None);
 
         // A meeting containing the term but not the speaker stays gated out.
@@ -1005,9 +988,9 @@ mod tests {
         assert_eq!(
             page.hits
                 .iter()
-                .map(|hit| hit.word_offset.unwrap())
+                .map(|hit| hit.start_ms.unwrap())
                 .collect::<Vec<_>>(),
-            vec![0, 120, 250],
+            vec![0, 120_000, 250_000],
             "close repeats collapse into one hit, capped at three per meeting",
         );
     }

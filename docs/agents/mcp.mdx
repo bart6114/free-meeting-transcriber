@@ -39,6 +39,6 @@ For a custom vault path:
 
 Start with `list_meetings`, then pass the returned `id` to `get_meeting`. Only call `get_meeting_transcript` if notes and summaries do not contain the required evidence.
 
-Transcript pages default to 200 words and cap at 500 words. Continue from `pagination.next_offset` only when the next page is necessary.
+`get_meeting_transcript` returns the whole meeting as `[HH:MM:SS] Speaker: ...` lines, so one call is enough.
 
 See the [MCP reference](/reference/mcp) for exact parameters and resources.

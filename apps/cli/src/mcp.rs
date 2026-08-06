@@ -19,14 +19,8 @@ struct FmtrMcpServer {
 
 #[derive(Debug, PartialEq, Eq)]
 enum ResourceRequest {
-    Meeting {
-        meeting_id: String,
-    },
-    Transcript {
-        meeting_id: String,
-        offset: u32,
-        limit: u32,
-    },
+    Meeting { meeting_id: String },
+    Transcript { meeting_id: String },
 }
 
 impl FmtrMcpServer {
@@ -78,7 +72,7 @@ impl FmtrMcpServer {
     }
 
     #[tool(
-        description = "Get a bounded page of transcript words and readable text for a Free Meeting Transcriber meeting. Pass pagination.next_offset as offset to continue.",
+        description = "Get the full transcript of a Free Meeting Transcriber meeting as readable text: one '[HH:MM:SS] Speaker: ...' line per speaker turn, timed from the start of the meeting.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -97,7 +91,7 @@ impl FmtrMcpServer {
     }
 
     #[tool(
-        description = "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a word_offset usable as get_meeting_transcript's offset.",
+        description = "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a start_ms that matches the transcript's [HH:MM:SS] timestamps.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -131,7 +125,7 @@ impl ServerHandler for FmtrMcpServer {
             env!("CARGO_PKG_VERSION"),
         ))
         .with_instructions(
-            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a word_offset that continues in get_meeting_transcript. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Call get_meeting_transcript for the full transcript as speaker-labeled '[HH:MM:SS] Speaker: ...' lines. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a start_ms that lines up with the transcript's timestamps. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
         )
     }
 
@@ -201,10 +195,10 @@ impl ServerHandler for FmtrMcpServer {
             .with_mime_type("text/markdown")
             .no_annotation(),
             RawResourceTemplate::new(
-                "fmtr://meetings/{meeting_id}/transcript{?offset,limit}",
+                "fmtr://meetings/{meeting_id}/transcript",
                 "Free Meeting Transcriber meeting transcript",
             )
-            .with_description("A bounded page of meeting transcript text")
+            .with_description("The full speaker-labeled meeting transcript")
             .with_mime_type("text/plain")
             .no_annotation(),
         ]))
@@ -225,22 +219,14 @@ impl ServerHandler for FmtrMcpServer {
                 ResourceContents::text(meeting.to_markdown(), params.uri)
                     .with_mime_type("text/markdown")
             }
-            ResourceRequest::Transcript {
-                meeting_id,
-                offset,
-                limit,
-            } => {
-                let page = access::get_meeting_transcript(
+            ResourceRequest::Transcript { meeting_id } => {
+                let transcript = access::get_meeting_transcript(
                     &self.vault,
-                    access::GetMeetingTranscriptInput {
-                        meeting_id,
-                        offset: Some(offset),
-                        limit: Some(limit),
-                    },
+                    access::GetMeetingTranscriptInput { meeting_id },
                 )
                 .await
                 .map_err(command_error)?;
-                ResourceContents::text(page.text, params.uri).with_mime_type("text/plain")
+                ResourceContents::text(transcript.text, params.uri).with_mime_type("text/plain")
             }
         };
 
@@ -285,30 +271,9 @@ fn parse_resource_uri(uri: &str) -> std::result::Result<ResourceRequest, McpErro
         ("meetings", [meeting_id]) => Ok(ResourceRequest::Meeting {
             meeting_id: (*meeting_id).to_string(),
         }),
-        ("meetings", [meeting_id, "transcript"]) => {
-            let mut offset = 0;
-            let mut limit = access::DEFAULT_TRANSCRIPT_LIMIT;
-            for (key, value) in url.query_pairs() {
-                match key.as_ref() {
-                    "offset" => {
-                        offset = value.parse().map_err(|_| {
-                            McpError::invalid_params("transcript offset must be an integer", None)
-                        })?;
-                    }
-                    "limit" => {
-                        limit = value.parse::<u32>().map_err(|_| {
-                            McpError::invalid_params("transcript limit must be an integer", None)
-                        })?;
-                    }
-                    _ => {}
-                }
-            }
-            Ok(ResourceRequest::Transcript {
-                meeting_id: (*meeting_id).to_string(),
-                offset,
-                limit: limit.clamp(1, access::MAX_TRANSCRIPT_LIMIT),
-            })
-        }
+        ("meetings", [meeting_id, "transcript"]) => Ok(ResourceRequest::Transcript {
+            meeting_id: (*meeting_id).to_string(),
+        }),
         _ => Err(McpError::invalid_params("unsupported resource URI", None)),
     }
 }
@@ -359,7 +324,7 @@ mod tests {
     }
 
     #[test]
-    fn parses_supported_resource_uris_and_bounds_transcript_limit() {
+    fn parses_supported_resource_uris() {
         assert_eq!(
             parse_resource_uri("fmtr://meetings/meeting-1").unwrap(),
             ResourceRequest::Meeting {
@@ -367,11 +332,9 @@ mod tests {
             }
         );
         assert_eq!(
-            parse_resource_uri("fmtr://meetings/meeting-1/transcript?offset=4&limit=900").unwrap(),
+            parse_resource_uri("fmtr://meetings/meeting-1/transcript").unwrap(),
             ResourceRequest::Transcript {
                 meeting_id: "meeting-1".to_string(),
-                offset: 4,
-                limit: access::MAX_TRANSCRIPT_LIMIT,
             }
         );
         assert!(parse_resource_uri("file:///tmp/meeting").is_err());
@@ -522,7 +485,7 @@ mod tests {
                 ),
                 (
                     "Free Meeting Transcriber meeting transcript".to_string(),
-                    "fmtr://meetings/{meeting_id}/transcript{?offset,limit}".to_string(),
+                    "fmtr://meetings/{meeting_id}/transcript".to_string(),
                     None,
                 ),
             ]

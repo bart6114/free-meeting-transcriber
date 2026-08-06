@@ -25,7 +25,7 @@ fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 | `meetings search [QUERY]` | `--speaker TEXT`, `--kind title\|note\|summary\|transcript`, `--limit 1..50`, `--offset NUMBER` | Full-text hits across titles, notes, summaries, and transcript words, newest meetings first. Requires a query and/or `--speaker`; `--speaker` limits hits to meetings where that person spoke. `--kind` is repeatable and defaults to all. |
 | `meetings get ID` | — | Metadata, canonical note, summaries, and action items. |
 | `meetings note ID` | `--kind note\|summary\|all` | The selected note documents. Defaults to `note`. |
-| `meetings transcript ID` | `--limit 1..500`, `--offset NUMBER` | A bounded transcript word page. Defaults to 200 words from offset 0. |
+| `meetings transcript ID` | — | The full transcript as `[HH:MM:SS] Speaker: ...` lines, one per speaker turn. |
 | `meetings export ID` | `--format markdown\|json`, `--output FILE`, `--force` | A complete meeting export, including transcripts. Defaults to Markdown on stdout. Existing files require `--force`. |
 
 ## JSON response contract

@@ -2,10 +2,7 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-use hypr_agent_access::{
-    DEFAULT_SEARCH_LIMIT, DEFAULT_TRANSCRIPT_LIMIT, MAX_SEARCH_LIMIT, MAX_TRANSCRIPT_LIMIT,
-    SearchKind,
-};
+use hypr_agent_access::{DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, SearchKind};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -92,14 +89,8 @@ pub enum MeetingCommand {
         #[arg(long, value_enum, default_value_t = DocumentKind::Note)]
         kind: DocumentKind,
     },
-    /// Show a bounded page of a meeting transcript
-    Transcript {
-        id: String,
-        #[arg(long, default_value_t = DEFAULT_TRANSCRIPT_LIMIT, value_parser = clap::value_parser!(u32).range(1..=MAX_TRANSCRIPT_LIMIT as i64), help = "Maximum transcript words (1-500)")]
-        limit: u32,
-        #[arg(long, default_value_t = 0, help = "Word offset")]
-        offset: u32,
-    },
+    /// Show the full speaker-labeled meeting transcript
+    Transcript { id: String },
     /// Export a meeting to Markdown or JSON
     Export {
         id: String,
@@ -197,28 +188,15 @@ mod tests {
     }
 
     #[test]
-    fn parses_transcript_pagination() {
-        let Command::Meetings { command } = Args::parse_from([
-            "fmtr",
-            "meetings",
-            "transcript",
-            "meeting-1",
-            "--offset",
-            "25",
-            "--limit",
-            "100",
-        ])
-        .command
+    fn parses_transcript_command() {
+        let Command::Meetings { command } =
+            Args::parse_from(["fmtr", "meetings", "transcript", "meeting-1"]).command
         else {
             panic!("expected meetings command");
         };
         assert!(matches!(
             command,
-            MeetingCommand::Transcript {
-                offset: 25,
-                limit: 100,
-                ..
-            }
+            MeetingCommand::Transcript { id } if id == "meeting-1"
         ));
     }
 

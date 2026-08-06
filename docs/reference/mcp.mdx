@@ -27,7 +27,7 @@ Full-text search across meeting titles, notes, summaries, and transcript words. 
 | `limit` | integer | `20` | Clamped to `1..50`. |
 | `offset` | integer | `0` | Number of hits to skip. |
 
-Hits are ordered by meeting recency and carry `meeting_id`, `kind`, and a `snippet` around the first match. Transcript hits add the resolved `speaker`, `speaker_id`, `start_ms`, and a `word_offset` usable as `get_meeting_transcript`'s `offset`. At most three transcript hits per meeting are returned.
+Hits are ordered by meeting recency and carry `meeting_id`, `kind`, and a `snippet` around the first match. Transcript hits add the resolved `speaker`, `speaker_id`, and `start_ms`, which lines up with the `[HH:MM:SS]` timestamps in `get_meeting_transcript`'s text. At most three transcript hits per meeting are returned.
 
 ### `get_meeting`
 
@@ -38,16 +38,14 @@ Accepts required string `meeting_id`. Returns meeting metadata, the canonical no
 | Parameter | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `meeting_id` | string | required | A returned Free Meeting Transcriber meeting ID. |
-| `offset` | integer | `0` | Word offset. |
-| `limit` | integer | `200` | Clamped to `1..500`. |
 
-The result includes `meeting_id`, `text`, `words`, and a `pagination` object. Pagination contains `offset`, `limit`, `returned`, `total`, and `next_offset`. A missing `pagination.next_offset` means the page reached the end.
+Returns `meeting_id` and `text`: the full transcript rendered the way the desktop transcript view shows it — one `[HH:MM:SS] Speaker: ...` line per speaker turn, timed from the start of the meeting, with speaker names resolved through the people registry (unknown voices fall back to `Speaker N`). Word-level detail (ids, timestamps, channels) is available via `fmtr meetings export --format json`.
 
 ## Resources
 
 | URI | MIME type | Content |
 | --- | --- | --- |
 | `fmtr://meetings/{meeting_id}` | `text/markdown` | Meeting detail without transcript text. |
-| `fmtr://meetings/{meeting_id}/transcript{?offset,limit}` | `text/plain` | A bounded transcript page. |
+| `fmtr://meetings/{meeting_id}/transcript` | `text/plain` | The full speaker-labeled transcript. |
 
 Resource listing returns recent meeting resources in pages of 20. Its cursor is a numeric result offset.

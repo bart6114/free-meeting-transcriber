@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+hypr-transcript = { workspace = true }
 hypr-vault-read = { workspace = true }
 
 chrono = { workspace = true }

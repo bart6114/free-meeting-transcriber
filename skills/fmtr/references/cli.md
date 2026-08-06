@@ -12,17 +12,17 @@ fmtr --json meetings note MEETING_ID --kind summary
 
 `doctor` exits with status 1 when its response contains `ready: false`.
 
-Search across titles, notes, summaries, and transcript words (query and/or `--speaker` required; transcript hits return a `word_offset` for `meetings transcript --offset`):
+Search across titles, notes, summaries, and transcript words (query and/or `--speaker` required; transcript hits return a `start_ms` matching the transcript's timestamps):
 
 ```bash
 fmtr --json meetings search "budget forecast" --limit 20
 fmtr --json meetings search --speaker "bob" --kind transcript
 ```
 
-Read transcripts in bounded word pages:
+Read the full speaker-labeled transcript (`[HH:MM:SS] Speaker: ...` lines):
 
 ```bash
-fmtr --json meetings transcript MEETING_ID --limit 200 --offset 0
+fmtr --json meetings transcript MEETING_ID
 ```
 
 JSON success responses contain `schema_version`, `command`, `data`, and optional `pagination`. Continue from `pagination.next_offset` only when more context is necessary.

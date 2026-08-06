@@ -1,5 +1,6 @@
 #![forbid(unsafe_code)]
 
+mod render;
 mod search;
 
 pub use search::{
@@ -16,8 +17,6 @@ use specta::Type;
 
 pub const DEFAULT_LIST_LIMIT: u32 = 20;
 pub const MAX_LIST_LIMIT: u32 = 200;
-pub const DEFAULT_TRANSCRIPT_LIMIT: u32 = 200;
-pub const MAX_TRANSCRIPT_LIMIT: u32 = 500;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
@@ -58,11 +57,6 @@ pub struct GetMeetingInput {
 pub struct GetMeetingTranscriptInput {
     #[schemars(description = "Free Meeting Transcriber meeting id")]
     pub meeting_id: String,
-    #[schemars(description = "Word offset; defaults to 0")]
-    pub offset: Option<u32>,
-    #[schemars(description = "Maximum words; defaults to 200 and is capped at 500")]
-    #[schemars(range(min = 1, max = 500))]
-    pub limit: Option<u32>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -95,13 +89,11 @@ pub struct MeetingPage {
     pub pagination: Pagination,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
-pub struct TranscriptPage {
+pub struct MeetingTranscript {
     pub meeting_id: String,
     pub text: String,
-    pub words: Vec<Value>,
-    pub pagination: Pagination,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -182,7 +174,7 @@ pub async fn get_meeting(vault: &Path, input: GetMeetingInput) -> Result<Meeting
 pub async fn get_meeting_transcript(
     vault: &Path,
     input: GetMeetingTranscriptInput,
-) -> Result<TranscriptPage> {
+) -> Result<MeetingTranscript> {
     run_blocking("load transcript", vault, move |vault| {
         get_meeting_transcript_sync(vault, input)
     })
@@ -362,7 +354,7 @@ fn load_summaries_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Document>> 
 fn get_meeting_transcript_sync(
     vault: &Path,
     input: GetMeetingTranscriptInput,
-) -> Result<TranscriptPage> {
+) -> Result<MeetingTranscript> {
     let exists = hypr_vault_read::meta::read_session_meta(vault, &input.meeting_id)
         .map_err(vault_error("load meeting"))?
         .is_some();
@@ -370,28 +362,31 @@ fn get_meeting_transcript_sync(
         return Err(Error::NotFound(format!("meeting '{}'", input.meeting_id)));
     }
 
-    let transcripts = load_transcripts_sync(vault, &input.meeting_id)?;
-    Ok(transcript_page(
-        &input.meeting_id,
-        &transcripts,
-        input.offset.unwrap_or(0),
-        input
-            .limit
-            .unwrap_or(DEFAULT_TRANSCRIPT_LIMIT)
-            .clamp(1, MAX_TRANSCRIPT_LIMIT),
-    ))
+    let transcripts = load_raw_transcripts_sync(vault, &input.meeting_id)?;
+    Ok(MeetingTranscript {
+        text: render::render_meeting_transcript(vault, &transcripts),
+        meeting_id: input.meeting_id,
+    })
+}
+
+fn load_raw_transcripts_sync(
+    vault: &Path,
+    meeting_id: &str,
+) -> Result<Vec<hypr_vault_read::TranscriptWithData>> {
+    let file = hypr_vault_read::transcript::read_transcript_json(vault, meeting_id)
+        .map_err(vault_error("load transcript"))?;
+    let mut transcripts = file.transcripts;
+    transcripts.sort_by(|a, b| {
+        (a.started_at.round() as i64, &a.id).cmp(&(b.started_at.round() as i64, &b.id))
+    });
+    Ok(transcripts)
 }
 
 fn load_transcripts_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Transcript>> {
-    let file = hypr_vault_read::transcript::read_transcript_json(vault, meeting_id)
-        .map_err(vault_error("load transcript"))?;
-    let mut transcripts = file
-        .transcripts
+    Ok(load_raw_transcripts_sync(vault, meeting_id)?
         .into_iter()
         .map(Transcript::from)
-        .collect::<Vec<_>>();
-    transcripts.sort_by(|a, b| (a.started_at_ms, &a.id).cmp(&(b.started_at_ms, &b.id)));
-    Ok(transcripts)
+        .collect())
 }
 
 // Matches the retired SQL ordering: most recent first by started_at (falling back to
@@ -523,45 +518,6 @@ impl From<hypr_vault_read::TranscriptWithData> for Transcript {
     }
 }
 
-fn transcript_page(
-    meeting_id: &str,
-    transcripts: &[Transcript],
-    offset: u32,
-    limit: u32,
-) -> TranscriptPage {
-    let mut words = Vec::new();
-    for transcript in transcripts {
-        for word in &transcript.words {
-            let mut word = word.clone();
-            if let Some(object) = word.as_object_mut() {
-                object.insert(
-                    "transcript_id".to_string(),
-                    Value::String(transcript.id.clone()),
-                );
-            }
-            words.push(word);
-        }
-    }
-
-    let total_words = words.len();
-    let offset_usize = offset as usize;
-    let limit = limit.clamp(1, MAX_TRANSCRIPT_LIMIT);
-    let words = words
-        .into_iter()
-        .skip(offset_usize)
-        .take(limit as usize)
-        .collect::<Vec<_>>();
-    let text = transcript_page_text(&words);
-    let has_more = offset_usize.saturating_add(words.len()) < total_words;
-
-    TranscriptPage {
-        meeting_id: meeting_id.to_string(),
-        text,
-        pagination: pagination(offset, limit, words.len(), Some(total_words), has_more),
-        words,
-    }
-}
-
 fn render_transcripts(transcripts: &[Transcript]) -> String {
     transcripts
         .iter()
@@ -579,34 +535,6 @@ fn transcript_text(words: &[Value]) -> String {
         .filter(|text| !text.is_empty())
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-fn transcript_page_text(words: &[Value]) -> String {
-    let mut segments = Vec::new();
-    let mut transcript_id = None;
-    let mut segment = Vec::new();
-
-    for word in words {
-        let next_transcript_id = word.get("transcript_id").and_then(Value::as_str);
-        if transcript_id.is_some() && transcript_id != next_transcript_id {
-            segments.push(segment.join(" "));
-            segment.clear();
-        }
-        transcript_id = next_transcript_id;
-
-        if let Some(text) = word.get("text").and_then(Value::as_str) {
-            let text = text.trim();
-            if !text.is_empty() {
-                segment.push(text);
-            }
-        }
-    }
-
-    if !segment.is_empty() {
-        segments.push(segment.join(" "));
-    }
-
-    segments.join("\n\n")
 }
 
 fn push_section(sections: &mut Vec<String>, title: &str, body: &str) {
@@ -715,20 +643,6 @@ mod tests {
         assert_eq!(transcript_text(words.as_array().unwrap()), "Hello world.");
     }
 
-    #[test]
-    fn transcript_page_text_preserves_transcript_boundaries() {
-        let words = serde_json::json!([
-            {"text": "First segment", "transcript_id": "transcript-1"},
-            {"text": "continues.", "transcript_id": "transcript-1"},
-            {"text": "Second segment.", "transcript_id": "transcript-2"}
-        ]);
-
-        assert_eq!(
-            transcript_page_text(words.as_array().unwrap()),
-            "First segment continues.\n\nSecond segment."
-        );
-    }
-
     #[tokio::test]
     async fn operations_return_curated_meeting_data() {
         let vault = tempfile::tempdir().unwrap();
@@ -778,15 +692,12 @@ mod tests {
             vault.path(),
             GetMeetingTranscriptInput {
                 meeting_id: "meeting-1".to_string(),
-                offset: Some(1),
-                limit: Some(1),
             },
         )
         .await
         .unwrap();
-        assert_eq!(transcript.text, "two");
-        assert_eq!(transcript.pagination.total, Some(2));
-        assert_eq!(transcript.words[0]["transcript_id"], "transcript-1");
+        assert_eq!(transcript.meeting_id, "meeting-1");
+        assert_eq!(transcript.text, "[00:00:00] Speaker 1: one two");
     }
 
     #[tokio::test]
@@ -858,8 +769,6 @@ mod tests {
             vault.path(),
             GetMeetingTranscriptInput {
                 meeting_id: "ghost".to_string(),
-                offset: None,
-                limit: None,
             },
         )
         .await

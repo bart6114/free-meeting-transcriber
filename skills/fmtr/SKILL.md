@@ -25,9 +25,7 @@ See [CLI commands](references/cli.md) and [MCP tools](references/mcp.md).
 
 ## Keep context bounded
 
-- Request transcript pages with a focused limit. Both transports default to 200 words and cap each page at 500 words.
-- Follow `next_offset` only when more transcript context is required.
-- Stop paging once the answer has enough evidence.
+- Transcripts return in full as speaker-labeled text; request one only when notes and summaries are not enough.
 - Do not export an entire meeting when one meeting detail or note will answer the request.
 
 ## Handle data safely

@@ -111,25 +111,13 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             output::emit(&text);
             Ok(())
         }
-        MeetingCommand::Transcript { id, limit, offset } => {
-            let page = get_meeting_transcript(
-                vault,
-                GetMeetingTranscriptInput {
-                    meeting_id: id,
-                    offset: Some(offset),
-                    limit: Some(limit),
-                },
-            )
-            .await?;
+        MeetingCommand::Transcript { id } => {
+            let transcript =
+                get_meeting_transcript(vault, GetMeetingTranscriptInput { meeting_id: id }).await?;
             let rendered = if json {
-                let content = serde_json::json!({
-                    "meeting_id": &page.meeting_id,
-                    "text": &page.text,
-                    "words": &page.words,
-                });
-                output::json("meetings.transcript", &content, Some(&page.pagination))?
+                output::json("meetings.transcript", &transcript, None)?
             } else {
-                page.text
+                transcript.text
             };
             output::emit(&rendered);
             Ok(())

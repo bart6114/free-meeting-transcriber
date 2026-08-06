@@ -1,10 +1,9 @@
 ---
 source: apps/cli/src/mcp.rs
-assertion_line: 449
 expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": info.protocol_version, \"instructions\":\n    info.instructions, \"tools\": tools, \"resource_templates\": templates,\n}))"
 ---
 {
-  "instructions": "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a word_offset that continues in get_meeting_transcript. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+  "instructions": "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Call get_meeting_transcript for the full transcript as speaker-labeled '[HH:MM:SS] Speaker: ...' lines. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a start_ms that lines up with the transcript's timestamps. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
   "protocol_version": "2024-11-05",
   "resource_templates": [
     {
@@ -14,10 +13,10 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
       "uriTemplate": "fmtr://meetings/{meeting_id}"
     },
     {
-      "description": "A bounded page of meeting transcript text",
+      "description": "The full speaker-labeled meeting transcript",
       "mimeType": "text/plain",
       "name": "Free Meeting Transcriber meeting transcript",
-      "uriTemplate": "fmtr://meetings/{meeting_id}/transcript{?offset,limit}"
+      "uriTemplate": "fmtr://meetings/{meeting_id}/transcript"
     }
   ],
   "tools": [
@@ -52,32 +51,13 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Get a bounded page of transcript words and readable text for a Free Meeting Transcriber meeting. Pass pagination.next_offset as offset to continue.",
+      "description": "Get the full transcript of a Free Meeting Transcriber meeting as readable text: one '[HH:MM:SS] Speaker: ...' line per speaker turn, timed from the start of the meeting.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
-          "limit": {
-            "description": "Maximum words; defaults to 200 and is capped at 500",
-            "format": "uint32",
-            "maximum": 500,
-            "minimum": 1,
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
           "meeting_id": {
             "description": "Free Meeting Transcriber meeting id",
             "type": "string"
-          },
-          "offset": {
-            "description": "Word offset; defaults to 0",
-            "format": "uint32",
-            "minimum": 0,
-            "type": [
-              "integer",
-              "null"
-            ]
           }
         },
         "required": [
@@ -138,7 +118,7 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a word_offset usable as get_meeting_transcript's offset.",
+      "description": "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a start_ms that matches the transcript's [HH:MM:SS] timestamps.",
       "inputSchema": {
         "$defs": {
           "SearchKind": {

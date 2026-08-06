@@ -1,6 +1,5 @@
 ---
 source: apps/cli/src/cli.rs
-assertion_line: 288
 expression: canonicalize_json(contract)
 ---
 {
@@ -207,7 +206,7 @@ expression: canonicalize_json(contract)
           "synopsis": "fmtr meetings note [--kind] [-h] <id>"
         },
         {
-          "about": "Show a bounded page of a meeting transcript",
+          "about": "Show the full speaker-labeled meeting transcript",
           "arguments": [
             {
               "name": "ID",
@@ -217,29 +216,13 @@ expression: canonicalize_json(contract)
           "name": "fmtr meetings transcript",
           "options": [
             {
-              "default": "200",
-              "flags": "--limit",
-              "help": "Maximum transcript words (1-500)",
-              "is_flag": false,
-              "required": false,
-              "value_name": "LIMIT"
-            },
-            {
-              "default": "0",
-              "flags": "--offset",
-              "help": "Word offset",
-              "is_flag": false,
-              "required": false,
-              "value_name": "OFFSET"
-            },
-            {
               "flags": "-h, --help",
               "help": "Print help",
               "is_flag": false,
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings transcript [--limit] [--offset] [-h] <id>"
+          "synopsis": "fmtr meetings transcript [-h] <id>"
         },
         {
           "about": "Export a meeting to Markdown or JSON",
