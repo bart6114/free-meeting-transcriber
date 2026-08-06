@@ -70,6 +70,7 @@ impl SessionStore {
         }
 
         self.index_refresh_templates().await;
+        self.index_refresh_people().await;
 
         Ok(report)
     }

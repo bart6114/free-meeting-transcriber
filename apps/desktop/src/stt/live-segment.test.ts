@@ -31,14 +31,29 @@ describe("SegmentKeyUtils", () => {
     expect(SegmentKeyUtils.renderLabel(key, ctx)).toBe("Me");
   });
 
-  it("does not label assigned direct-mic segments as self when the name is unavailable", () => {
+  it("renders an assigned but unresolved human id as the raw id", () => {
     const key: Parameters<typeof SegmentKeyUtils.renderLabel>[0] = {
       channel: "DirectMic",
       speaker_index: 1,
-      speaker_human_id: "remote",
+      speaker_human_id: "bob_peters",
     };
 
-    expect(SegmentKeyUtils.renderLabel(key, ctx)).toBe("Speaker 2");
+    expect(SegmentKeyUtils.renderLabel(key, ctx)).toBe("bob_peters");
+  });
+
+  it("never leaks the raw self id for heuristic self-assigned segments", () => {
+    const selfUuid = "8b9f4a2e-usr-uuid";
+    const uuidCtx: RenderLabelContext = {
+      getSelfHumanId: () => selfUuid,
+      getHumanName: () => undefined,
+    };
+    const key: Parameters<typeof SegmentKeyUtils.renderLabel>[0] = {
+      channel: "DirectMic",
+      speaker_index: null,
+      speaker_human_id: selfUuid,
+    };
+
+    expect(SegmentKeyUtils.renderLabel(key, uuidCtx)).toBe("You");
   });
 
   it("caps unknown speaker labels when a participant max is provided", () => {

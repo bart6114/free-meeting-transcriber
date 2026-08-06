@@ -23,6 +23,11 @@ vi.mock("~/stt/queries", () => ({
     getHumanName: (humanId: string) => labelState.names[humanId],
     getParticipantHumanIds: () => labelState.participantIds,
   }),
+  useTranscript: () => null,
+}));
+
+vi.mock("~/stt/contexts", () => ({
+  useListener: () => false,
 }));
 
 beforeEach(() => {

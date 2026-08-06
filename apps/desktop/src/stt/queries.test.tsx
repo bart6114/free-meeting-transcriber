@@ -38,6 +38,12 @@ const mocks = vi.hoisted(() => ({
       { status: "ok"; data: null } | { status: "error"; error: string }
     > => Promise.resolve({ status: "ok", data: null }),
   ),
+  peopleList: vi.fn(
+    (): Promise<
+      | { status: "ok"; data: Array<{ id: string; name: string }> }
+      | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: [] }),
+  ),
 }));
 
 vi.mock("~/types/tauri.gen", () => ({
@@ -46,6 +52,7 @@ vi.mock("~/types/tauri.gen", () => ({
     sessionTranscripts: mocks.sessionTranscripts,
     transcriptGet: mocks.transcriptGet,
     sessionReplaceTranscripts: mocks.sessionReplaceTranscripts,
+    peopleList: mocks.peopleList,
   },
   events: {
     indexChanged: {
@@ -195,6 +202,50 @@ describe("transcript queries", () => {
     expect(result.current?.getHumanName("Alice")).toBe("Alice");
     expect(result.current?.getHumanName("self")).toBeUndefined();
     expect(result.current?.getParticipantHumanIds?.()).toEqual([]);
+  });
+
+  it("resolves people-registry names ahead of raw hint values", async () => {
+    mocks.peopleList.mockResolvedValue({
+      status: "ok",
+      data: [{ id: "bob_peters", name: "Bob Peters" }],
+    });
+    mocks.transcriptGet.mockResolvedValue({
+      status: "ok",
+      data: {
+        id: "transcript-1",
+        user_id: "self",
+        session_id: "session-1",
+        started_at: 1000,
+        ended_at: null,
+        words: [],
+        speaker_hints: [
+          {
+            id: "hint-1",
+            word_id: "word-1",
+            type: "speaker_label",
+            value: "bob_peters",
+          },
+          {
+            id: "hint-2",
+            word_id: "word-2",
+            type: "speaker_label",
+            value: "kim",
+          },
+        ],
+      },
+    });
+
+    const { result } = renderHook(
+      () => useTranscriptLabelContext("transcript-1"),
+      { wrapper: createWrapper() },
+    );
+
+    await waitFor(() =>
+      expect(result.current?.getHumanName("bob_peters")).toBe("Bob Peters"),
+    );
+    // Legacy hint value with no registry entry still renders as itself.
+    expect(result.current?.getHumanName("kim")).toBe("kim");
+    expect(result.current?.getHumanName("unknown")).toBeUndefined();
   });
 
   it("writes a new transcript through the store", async () => {

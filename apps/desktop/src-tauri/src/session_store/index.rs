@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
-use super::{EnhancedDoc, SessionMeta, SessionStore, TaskItem, TemplateItem};
+use super::{EnhancedDoc, PersonItem, SessionMeta, SessionStore, TaskItem, TemplateItem};
 use hypr_fs_format::TranscriptWithData;
 
 /// Which index map changed. Serialized as the lowercase strings the frontend matches
@@ -42,6 +42,7 @@ pub enum IndexEntity {
     Transcripts,
     Tasks,
     Templates,
+    People,
 }
 
 /// Emitted (coalesced) to every webview as the `index-changed` event.
@@ -99,6 +100,7 @@ pub struct VaultIndex {
     /// Session id (or `VAULT_TASKS_KEY`) -> that file's tasks.
     pub tasks: HashMap<String, Vec<TaskItem>>,
     pub templates: HashMap<String, TemplateItem>,
+    pub people: HashMap<String, PersonItem>,
 }
 
 pub(crate) type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
@@ -429,6 +431,11 @@ impl SessionStore {
         index.templates.remove(template_id);
     }
 
+    pub(super) fn index_upsert_person(&self, person: &PersonItem) {
+        let mut index = self.index.write().unwrap();
+        index.people.insert(person.id.clone(), person.clone());
+    }
+
     /// Removes every trace of a session (delete path). Returns which entities
     /// actually held something, so the caller only notifies what changed.
     pub(super) fn index_remove_session(&self, session_id: &str) -> Vec<(IndexEntity, String)> {
@@ -494,6 +501,41 @@ impl SessionStore {
             changed
         };
         self.notify_index_changed(IndexEntity::Templates, changed_ids);
+    }
+
+    /// Reload the people map from the vault-root `people.json` and notify changed person
+    /// ids -- also the `vault_watch` entry point for external `people.json` edits. A
+    /// missing file reads as empty, so an external delete notifies every removed id.
+    pub(crate) async fn index_refresh_people(&self) {
+        let people = match self.list_people().await {
+            Ok(people) => people,
+            Err(error) => {
+                tracing::warn!(%error, "index: failed to rescan people; keeping current entries");
+                return;
+            }
+        };
+
+        let new_map: HashMap<String, PersonItem> = people
+            .into_iter()
+            .map(|person| (person.id.clone(), person))
+            .collect();
+
+        let changed_ids: Vec<String> = {
+            let mut index = self.index.write().unwrap();
+            let mut changed: Vec<String> = index
+                .people
+                .keys()
+                .chain(new_map.keys())
+                .filter(|id| index.people.get(*id) != new_map.get(*id))
+                .cloned()
+                .collect::<HashSet<String>>()
+                .into_iter()
+                .collect();
+            changed.sort();
+            index.people = new_map;
+            changed
+        };
+        self.notify_index_changed(IndexEntity::People, changed_ids);
     }
 
     /// `None` on read/parse failure (keep the old entry); a missing file is an empty
@@ -566,12 +608,13 @@ pub(crate) const COALESCE_WINDOW: std::time::Duration = std::time::Duration::fro
 
 /// Stable emission order so bursts serialize deterministically (and tests can assert
 /// exact sequences).
-const ENTITY_ORDER: [IndexEntity; 5] = [
+const ENTITY_ORDER: [IndexEntity; 6] = [
     IndexEntity::Sessions,
     IndexEntity::Docs,
     IndexEntity::Transcripts,
     IndexEntity::Tasks,
     IndexEntity::Templates,
+    IndexEntity::People,
 ];
 
 /// One coalesced flush: group a drained batch by entity, dedupe ids preserving
@@ -1305,6 +1348,38 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn index_refresh_people_ingests_external_edits_and_deletions() {
+        let (store, vault) = test_store().await;
+        std::fs::write(
+            vault.path().join("people.json"),
+            serde_json::json!({ "people": [{ "id": "kim", "name": "Kim" }] }).to_string(),
+        )
+        .unwrap();
+
+        store.index_refresh_people().await;
+
+        {
+            let index = store.index.read().unwrap();
+            assert_eq!(index.people.get("kim").unwrap().name, "Kim");
+        }
+        let changes = drain_changes(&store);
+        assert_eq!(
+            changes,
+            vec![(IndexEntity::People, vec!["kim".to_string()])]
+        );
+
+        std::fs::remove_file(vault.path().join("people.json")).unwrap();
+        store.index_refresh_people().await;
+
+        assert!(store.index.read().unwrap().people.is_empty());
+        let changes = drain_changes(&store);
+        assert_eq!(
+            changes,
+            vec![(IndexEntity::People, vec!["kim".to_string()])]
+        );
+    }
+
     // -- coalescing --
 
     #[tokio::test]
@@ -1391,6 +1466,7 @@ mod tests {
             (IndexEntity::Transcripts, "transcripts"),
             (IndexEntity::Tasks, "tasks"),
             (IndexEntity::Templates, "templates"),
+            (IndexEntity::People, "people"),
         ] {
             assert_eq!(
                 serde_json::to_value(entity).unwrap(),

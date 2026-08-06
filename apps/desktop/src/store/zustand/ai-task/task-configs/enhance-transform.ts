@@ -9,6 +9,7 @@ import { sessionEventSchema } from "@hypr/store";
 import type { TaskArgsMap, TaskArgsMapTransformed, TaskConfig } from ".";
 import { collectEnhanceImageContext } from "./enhance-images";
 
+import { listPeople } from "~/people/queries";
 import {
   loadSessionContentSnapshot,
   type SessionContentSnapshot,
@@ -213,9 +214,13 @@ async function getTranscriptSegments(
       speaker_hints: transcript.speaker_hints,
     }),
   );
+  const people = await listPeople().catch(() => []);
   const request = buildRenderTranscriptRequestFromRows(transcriptRows, {
     selfHumanId: snapshot.ownerUserId || undefined,
-    humans: [],
+    humans: people.map((person) => ({
+      human_id: person.id,
+      name: person.name,
+    })),
   });
   if (!request) {
     return [];

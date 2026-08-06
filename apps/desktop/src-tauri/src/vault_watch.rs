@@ -106,6 +106,9 @@ pub enum WatchAction {
     /// An external edit under `templates/` -- rescans the in-memory templates index
     /// (Phase E1; templates have no SQL half to refresh).
     RefreshTemplates,
+    /// An external edit of the vault-root `people.json` -- rescans the in-memory
+    /// people index (same shape as templates: file-canonical, no per-id granularity).
+    RefreshPeople,
 }
 
 /// Pure routing decision: given a vault-relative path and whether its
@@ -134,6 +137,10 @@ pub fn classify_event(relative: &str, journal_match: bool) -> WatchAction {
         return WatchAction::RefreshTemplates;
     }
 
+    if is_people_path(relative) {
+        return WatchAction::RefreshPeople;
+    }
+
     match session_id_for_relative_path(relative) {
         Some(id) => WatchAction::Refresh(id),
         None => WatchAction::Ignore,
@@ -145,6 +152,10 @@ pub fn classify_event(relative: &str, journal_match: bool) -> WatchAction {
 /// small enough that per-file granularity isn't worth the bookkeeping.
 fn is_templates_path(relative: &str) -> bool {
     relative == "templates" || relative.starts_with("templates/")
+}
+
+fn is_people_path(relative: &str) -> bool {
+    relative == "people.json"
 }
 
 /// Extracts `<id>` from a `sessions/<id>` or `sessions/<id>/...` relative
@@ -243,6 +254,7 @@ async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> Refr
                 plan.session_ids.insert(id);
             }
             WatchAction::RefreshTemplates => plan.templates = true,
+            WatchAction::RefreshPeople => plan.people = true,
             WatchAction::Ignore => {}
         }
     }
@@ -253,6 +265,7 @@ async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> Refr
 struct RefreshPlan {
     session_ids: HashSet<String>,
     templates: bool,
+    people: bool,
 }
 
 /// Refreshes every id in `ids`, one at a time. A failure on one session is
@@ -279,6 +292,10 @@ async fn handle_batch(store: &SessionStore, changed: &HashSet<String>) {
     if plan.templates {
         store.index_refresh_templates().await;
         tracing::info!("vault watch: refreshed templates index from external change");
+    }
+    if plan.people {
+        store.index_refresh_people().await;
+        tracing::info!("vault watch: refreshed people index from external change");
     }
 }
 
@@ -420,6 +437,29 @@ mod tests {
         assert!(matches!(
             classify_event(".trash/2026-07-26/templates/t-1.json", false),
             WatchAction::Ignore
+        ));
+    }
+
+    /// External edits of the vault-root `people.json` refresh the in-memory people
+    /// index. Own writes still win, trashed copies stay ignored, and a session-local
+    /// file that happens to be named `people.json` refreshes its session instead.
+    #[test]
+    fn people_path_refreshes_people_unless_own_write_or_trash() {
+        assert!(matches!(
+            classify_event("people.json", false),
+            WatchAction::RefreshPeople
+        ));
+        assert!(matches!(
+            classify_event("people.json", true),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event(".trash/2026-08-06/people.json", false),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event("sessions/s1/people.json", false),
+            WatchAction::Refresh(id) if id == "s1"
         ));
     }
 

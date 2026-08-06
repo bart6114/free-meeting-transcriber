@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 
+import { usePeople } from "~/people/queries";
 import { useIndexQuery } from "~/shared/index-query";
 import { DEFAULT_USER_ID } from "~/shared/utils";
 import { enqueueDatabaseWrite } from "~/shared/write-queue";
@@ -91,6 +92,7 @@ export function useTranscriptLabelContext(
   transcriptId: string,
 ): RenderLabelContext | undefined {
   const transcript = useTranscript(transcriptId);
+  const people = usePeople();
   const assignedSpeakerLabels = useMemo(
     () =>
       transcript
@@ -104,14 +106,18 @@ export function useTranscriptLabelContext(
   return useMemo(() => {
     if (!transcript) return undefined;
 
+    // People registry first; a hint value with no registry entry (legacy hints,
+    // deleted people.json) still renders as itself rather than "Speaker N".
+    const nameById = new Map(people.map((person) => [person.id, person.name]));
     const labels = new Set(assignedSpeakerLabels);
     return {
       getSelfHumanId: () => transcript.ownerUserId || undefined,
       getHumanName: (speakerLabel) =>
-        labels.has(speakerLabel) ? speakerLabel : undefined,
+        nameById.get(speakerLabel) ??
+        (labels.has(speakerLabel) ? speakerLabel : undefined),
       getParticipantHumanIds: () => EMPTY_IDS,
     };
-  }, [assignedSpeakerLabels, transcript]);
+  }, [assignedSpeakerLabels, people, transcript]);
 }
 
 // `source`/`provider`/`model`/`language` are accepted for caller compatibility but not yet

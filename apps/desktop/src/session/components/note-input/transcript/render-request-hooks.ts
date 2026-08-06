@@ -2,6 +2,7 @@ import { useMemo } from "react";
 
 import type { RenderTranscriptRequest } from "@hypr/plugin-transcription";
 
+import { usePeople } from "~/people/queries";
 import {
   type TranscriptRecord,
   useSessionTranscripts,
@@ -44,6 +45,7 @@ function useRenderData(transcripts: readonly TranscriptRecord[]): {
   transcriptRows: TranscriptRowWithId[];
 } {
   const selfHumanId = transcripts[0]?.ownerUserId;
+  const people = usePeople();
 
   const transcriptRows = useMemo(() => {
     return transcripts.map((transcript) => ({
@@ -56,13 +58,18 @@ function useRenderData(transcripts: readonly TranscriptRecord[]): {
     }));
   }, [transcripts]);
 
+  const humans = useMemo(
+    () => people.map((person) => ({ human_id: person.id, name: person.name })),
+    [people],
+  );
+
   const request = useMemo(
     () =>
       buildRenderTranscriptRequestFromRows(
         transcriptRows.map((transcriptRow) => transcriptRow.row),
-        { humans: [], selfHumanId },
+        { humans, selfHumanId },
       ),
-    [selfHumanId, transcriptRows],
+    [humans, selfHumanId, transcriptRows],
   );
 
   return { request, transcriptRows };

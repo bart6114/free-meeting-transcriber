@@ -581,6 +581,8 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::template_get::<tauri::Wry>,
             session_store::commands::template_upsert::<tauri::Wry>,
             session_store::commands::template_delete::<tauri::Wry>,
+            session_store::commands::people_list::<tauri::Wry>,
+            session_store::commands::people_ensure::<tauri::Wry>,
             session_store::commands::session_list_tasks::<tauri::Wry>,
             session_store::commands::session_replace_tasks::<tauri::Wry>,
             session_store::commands::session_remove_tasks::<tauri::Wry>,

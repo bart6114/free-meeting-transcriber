@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::{
-    FinalizedWord, IdentityAssignment, SegmentBuilderOptions, SegmentKey, SegmentWord,
-    SpeakerLabelContext, SpeakerLabeler, WordState, build_segments,
+    ChannelProfile, FinalizedWord, IdentityAssignment, IdentityScope, SegmentBuilderOptions,
+    SegmentKey, SegmentWord, SpeakerLabelContext, SpeakerLabeler, WordState, build_segments,
     channel_assignments_for_participants, render_speaker_label, segment_options_for_participants,
 };
 
@@ -76,14 +76,39 @@ pub fn render_transcript_segments(
             .unwrap_or(0);
         let synthetic_timing = transcript.synthetic_timing.unwrap_or(false);
 
-        let (words, mut assignments) =
+        let (words, transcript_assignments) =
             offset_transcript_data(transcript.words, transcript.assignments, offset);
-        let channel_assignments =
+
+        // Channels named by the transcript's own (hint-derived, user-explicit) channel
+        // assignments must always render, so they extend the participant-heuristic
+        // complete_channels rather than being gated by it.
+        let explicit_channels: Vec<ChannelProfile> = transcript_assignments
+            .iter()
+            .filter_map(|assignment| match assignment.scope {
+                IdentityScope::Channel { channel } => Some(channel),
+                _ => None,
+            })
+            .collect();
+
+        // Heuristics first: identity maps are last-insert-wins, and explicit
+        // assignments must beat the participant heuristic on conflict.
+        let mut assignments =
             channel_assignments_for_participants(&participant_human_ids, self_human_id.as_deref());
-        assignments.extend(channel_assignments);
+        assignments.extend(transcript_assignments);
+
+        let mut complete_channels = segment_options
+            .complete_channels
+            .clone()
+            .unwrap_or_default();
+        for channel in explicit_channels {
+            if !complete_channels.contains(&channel) {
+                complete_channels.push(channel);
+            }
+        }
 
         let options = SegmentBuilderOptions {
             sentence_atomic: Some(synthetic_timing),
+            complete_channels: Some(complete_channels),
             ..segment_options.clone()
         };
         let segments = build_segments(&words, &[], &assignments, Some(&options));
@@ -511,6 +536,96 @@ mod tests {
         assert_eq!(segments[0].start_ms, 0);
         assert_eq!(segments[1].text, "later");
         assert_eq!(segments[1].start_ms, 4_100);
+    }
+
+    #[test]
+    fn applies_explicit_channel_assignment_without_participants() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![
+                    word("w1", " remote", 0, 100, 1),
+                    word("w2", " reply", 120, 220, 1),
+                ],
+                assignments: vec![channel_assignment("remote", ChannelProfile::RemoteParty)],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![RenderTranscriptHuman {
+                human_id: "remote".to_string(),
+                name: "Remote".to_string(),
+            }],
+        });
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].speaker_label, "Remote");
+        assert_eq!(segments[0].key.speaker_human_id.as_deref(), Some("remote"));
+    }
+
+    #[test]
+    fn explicit_channel_assignment_beats_participant_heuristic() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![word("w1", " hello", 0, 100, 0)],
+                assignments: vec![channel_assignment("bob_peters", ChannelProfile::DirectMic)],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: Some("self".to_string()),
+            humans: vec![RenderTranscriptHuman {
+                human_id: "bob_peters".to_string(),
+                name: "Bob Peters".to_string(),
+            }],
+        });
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].speaker_label, "Bob Peters");
+        assert_eq!(
+            segments[0].key.speaker_human_id.as_deref(),
+            Some("bob_peters")
+        );
+    }
+
+    #[test]
+    fn applies_explicit_assignment_on_mixed_capture_channel() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![word("w1", " imported", 0, 100, 2)],
+                assignments: vec![channel_assignment("kim", ChannelProfile::MixedCapture)],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![],
+        });
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].speaker_label, "kim");
+        assert_eq!(segments[0].key.speaker_human_id.as_deref(), Some("kim"));
+    }
+
+    #[test]
+    fn renders_raw_human_id_when_no_matching_human() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![word("w1", " remote", 0, 100, 1)],
+                assignments: vec![channel_assignment(
+                    "bob_peters",
+                    ChannelProfile::RemoteParty,
+                )],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![],
+        });
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!(segments[0].speaker_label, "bob_peters");
     }
 
     #[test]

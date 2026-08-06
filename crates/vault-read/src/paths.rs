@@ -40,6 +40,10 @@ pub fn vault_tasks_path() -> PathBuf {
     PathBuf::from("tasks.json")
 }
 
+pub fn people_path() -> PathBuf {
+    PathBuf::from("people.json")
+}
+
 pub fn audio_dir(id: &str) -> PathBuf {
     session_dir(id).join("audio")
 }
@@ -84,6 +88,7 @@ mod tests {
             PathBuf::from("sessions/s1/tasks.json")
         );
         assert_eq!(vault_tasks_path(), PathBuf::from("tasks.json"));
+        assert_eq!(people_path(), PathBuf::from("people.json"));
         assert_eq!(audio_dir("s1"), PathBuf::from("sessions/s1/audio"));
         assert_eq!(templates_root(), PathBuf::from("templates"));
         assert_eq!(template_path("t-1"), PathBuf::from("templates/t-1.json"));

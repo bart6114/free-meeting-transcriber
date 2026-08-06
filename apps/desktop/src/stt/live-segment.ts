@@ -131,6 +131,10 @@ export const SegmentKeyUtils = {
       if (human) {
         return human;
       }
+      // An unresolved id still labels the segment (hints store ids; the raw value
+      // is the designed fallback) — except the self heuristic's id, which is the
+      // owner UUID and must render as "You", never leak raw.
+      return assignedHumanId === ctx.getSelfHumanId() ? "You" : assignedHumanId;
     }
 
     if (ctx && key.channel === "DirectMic" && assignedHumanId == null) {

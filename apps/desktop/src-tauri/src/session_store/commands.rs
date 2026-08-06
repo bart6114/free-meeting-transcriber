@@ -5,8 +5,9 @@ use tauri::{AppHandle, Manager};
 use hypr_fs_format::TranscriptWithData;
 
 use super::{
-    EnhancedDoc, EnhancedDocPatch, RebuildReport, SessionListEntry, SessionMeta, SessionMetaPatch,
-    SessionRecord, SessionStore, TaskInput, TaskItem, TemplateInput, TemplateItem, TranscriptDelta,
+    EnhancedDoc, EnhancedDocPatch, PersonItem, RebuildReport, SessionListEntry, SessionMeta,
+    SessionMetaPatch, SessionRecord, SessionStore, TaskInput, TaskItem, TemplateInput,
+    TemplateItem, TranscriptDelta,
 };
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
@@ -223,6 +224,24 @@ pub async fn template_delete<R: tauri::Runtime>(
 ) -> Result<(), String> {
     store(&app)?
         .delete_template(&id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn people_list<R: tauri::Runtime>(app: AppHandle<R>) -> Result<Vec<PersonItem>, String> {
+    store(&app)?.list_people().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn people_ensure<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Result<PersonItem, String> {
+    store(&app)?
+        .ensure_person(&name)
         .await
         .map_err(|e| e.to_string())
 }
