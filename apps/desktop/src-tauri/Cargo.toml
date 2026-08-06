@@ -45,7 +45,6 @@ tauri-plugin-importer = { workspace = true }
 tauri-plugin-js = { workspace = true }
 tauri-plugin-local-llm = { workspace = true }
 tauri-plugin-local-stt = { workspace = true }
-tauri-plugin-mcp = { workspace = true }
 tauri-plugin-messenger = { workspace = true }
 tauri-plugin-misc = { workspace = true }
 tauri-plugin-notification = { workspace = true }

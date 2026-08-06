@@ -3976,7 +3976,6 @@ dependencies = [
  "tauri-plugin-js",
  "tauri-plugin-local-llm",
  "tauri-plugin-local-stt",
- "tauri-plugin-mcp",
  "tauri-plugin-messenger",
  "tauri-plugin-misc",
  "tauri-plugin-notification",
@@ -16014,20 +16013,6 @@ dependencies = [
  "transcribe-whisper-local",
  "whisper-local",
  "whisper-local-model",
-]
-
-[[package]]
-name = "tauri-plugin-mcp"
-version = "0.1.0"
-dependencies = [
- "serde",
- "specta",
- "specta-typescript",
- "tauri",
- "tauri-plugin",
- "tauri-specta",
- "thiserror 2.0.18",
- "tokio",
 ]
 
 [[package]]

@@ -191,7 +191,6 @@ tauri-plugin-importer = { path = "plugins/importer" }
 tauri-plugin-js = { path = "plugins/js" }
 tauri-plugin-local-llm = { path = "plugins/local-llm" }
 tauri-plugin-local-stt = { path = "plugins/local-stt" }
-tauri-plugin-mcp = { path = "plugins/mcp" }
 tauri-plugin-messenger = { path = "plugins/messenger" }
 tauri-plugin-misc = { path = "plugins/misc" }
 tauri-plugin-network = { path = "plugins/network" }
