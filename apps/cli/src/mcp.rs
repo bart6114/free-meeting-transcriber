@@ -95,6 +95,25 @@ impl FmtrMcpServer {
             .map_err(command_error)?;
         structured(&page)
     }
+
+    #[tool(
+        description = "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a word_offset usable as get_meeting_transcript's offset.",
+        annotations(
+            read_only_hint = true,
+            destructive_hint = false,
+            idempotent_hint = true,
+            open_world_hint = false
+        )
+    )]
+    async fn search_meetings(
+        &self,
+        Parameters(input): Parameters<access::SearchMeetingsInput>,
+    ) -> std::result::Result<CallToolResult, McpError> {
+        let page = access::search_meetings(&self.vault, input)
+            .await
+            .map_err(command_error)?;
+        structured(&page)
+    }
 }
 
 #[tool_handler]
@@ -112,7 +131,7 @@ impl ServerHandler for FmtrMcpServer {
             env!("CARGO_PKG_VERSION"),
         ))
         .with_instructions(
-            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a word_offset that continues in get_meeting_transcript. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
         )
     }
 
@@ -309,6 +328,7 @@ fn command_error(error: access::Error) -> McpError {
         access::Error::NotFound(what) => {
             McpError::invalid_params(format!("{what} not found"), None)
         }
+        access::Error::InvalidInput(reason) => McpError::invalid_params(reason, None),
         other => internal_error(other),
     }
 }
@@ -391,6 +411,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn search_tool_returns_structured_hits_and_rejects_empty_input() {
+        let vault = seed_vault_with_meeting();
+        let server = FmtrMcpServer::new(vault.path().to_path_buf());
+
+        let result = server
+            .search_meetings(Parameters(access::SearchMeetingsInput {
+                query: Some("planning".to_string()),
+                ..Default::default()
+            }))
+            .await
+            .unwrap();
+
+        let page = result.structured_content.unwrap();
+        assert_eq!(page["hits"][0]["meeting_id"], "meeting-1");
+        assert_eq!(page["hits"][0]["kind"], "title");
+
+        let error = server
+            .search_meetings(Parameters(access::SearchMeetingsInput::default()))
+            .await
+            .unwrap_err();
+        assert_eq!(error.code, rmcp::model::ErrorCode::INVALID_PARAMS);
+    }
+
+    #[tokio::test]
     async fn client_server_handshake_lists_tools_and_resources() {
         let vault = seed_vault_with_meeting();
         let (server_transport, client_transport) = tokio::io::duplex(64 * 1024);
@@ -419,7 +463,12 @@ mod tests {
         tool_names.sort();
         assert_eq!(
             tool_names,
-            ["get_meeting", "get_meeting_transcript", "list_meetings",]
+            [
+                "get_meeting",
+                "get_meeting_transcript",
+                "list_meetings",
+                "search_meetings",
+            ]
         );
         let mcp_docs = include_str!("../../../docs/reference/mcp.mdx");
         let mcp_skill = include_str!("../../../skills/fmtr/references/mcp.md");

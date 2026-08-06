@@ -1,5 +1,12 @@
 #![forbid(unsafe_code)]
 
+mod search;
+
+pub use search::{
+    DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, SearchHit, SearchKind, SearchMeetingsInput, SearchPage,
+    search_meetings,
+};
+
 use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
@@ -16,6 +23,8 @@ pub const MAX_TRANSCRIPT_LIMIT: u32 = 500;
 pub enum Error {
     #[error("{0} not found")]
     NotFound(String),
+    #[error("{0}")]
+    InvalidInput(String),
     #[error("{action} failed: {reason}")]
     Vault {
         action: &'static str,
@@ -235,13 +244,7 @@ fn list_meetings_sync(vault: &Path, input: ListMeetingsInput) -> Result<MeetingP
         });
     }
 
-    // Matches the retired SQL ordering: most recent first by started_at (falling back to
-    // created_at when a session never started), then created_at, then id.
-    metas.sort_by(|a, b| {
-        let a_key = (occurred_at(a), a.created_at.as_str(), a.id.as_str());
-        let b_key = (occurred_at(b), b.created_at.as_str(), b.id.as_str());
-        b_key.cmp(&a_key)
-    });
+    sort_metas_recent_first(&mut metas);
 
     let mut meetings = metas
         .into_iter()
@@ -276,9 +279,46 @@ fn get_meeting_sync(vault: &Path, meeting_id: &str) -> Result<Meeting> {
             updated_at: file_updated_at(vault, &hypr_vault_read::paths::note_path(meeting_id)),
         });
 
-    // The old session_documents read returned both legacy single-slot docs
-    // (`sessions/<id>/<kind>.md`, indexed with id `<id>:<kind>`) and per-doc enhanced files,
-    // filtered to the summary/template_output kinds and ordered by (sort_order, id).
+    let summaries = load_summaries_sync(vault, meeting_id)?;
+
+    let mut tasks = hypr_vault_read::tasks::read_session_tasks(vault, meeting_id)
+        .map_err(vault_error("load meeting"))?;
+    tasks.sort_by(|a, b| {
+        (a.source_order, &a.created_at, &a.id).cmp(&(b.source_order, &b.created_at, &b.id))
+    });
+    let action_items = tasks
+        .into_iter()
+        .map(|task| ActionItem {
+            id: task.id,
+            assignee_human_id: task.assignee,
+            status: task.status,
+            text: task.text,
+            due_at: task.due_at,
+            completed_at: None,
+        })
+        .collect();
+
+    Ok(Meeting {
+        updated_at: file_updated_at(vault, &hypr_vault_read::paths::meta_path(meeting_id)),
+        id: meta.id,
+        title: meta.title,
+        kind: "meeting".to_string(),
+        status: "active".to_string(),
+        created_at: meta.created_at,
+        started_at: meta.started_at.unwrap_or_default(),
+        ended_at: meta.ended_at.unwrap_or_default(),
+        timezone: String::new(),
+        language: String::new(),
+        note,
+        summaries,
+        action_items,
+    })
+}
+
+// The old session_documents read returned both legacy single-slot docs
+// (`sessions/<id>/<kind>.md`, indexed with id `<id>:<kind>`) and per-doc enhanced files,
+// filtered to the summary/template_output kinds and ordered by (sort_order, id).
+fn load_summaries_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Document>> {
     let mut summaries = Vec::new();
     for doc in hypr_vault_read::meta::list_legacy_docs(vault, meeting_id)
         .map_err(vault_error("load meeting"))?
@@ -316,39 +356,7 @@ fn get_meeting_sync(vault: &Path, meeting_id: &str) -> Result<Meeting> {
         });
     }
     summaries.sort_by(|a, b| (a.sort_order, &a.id).cmp(&(b.sort_order, &b.id)));
-
-    let mut tasks = hypr_vault_read::tasks::read_session_tasks(vault, meeting_id)
-        .map_err(vault_error("load meeting"))?;
-    tasks.sort_by(|a, b| {
-        (a.source_order, &a.created_at, &a.id).cmp(&(b.source_order, &b.created_at, &b.id))
-    });
-    let action_items = tasks
-        .into_iter()
-        .map(|task| ActionItem {
-            id: task.id,
-            assignee_human_id: task.assignee,
-            status: task.status,
-            text: task.text,
-            due_at: task.due_at,
-            completed_at: None,
-        })
-        .collect();
-
-    Ok(Meeting {
-        updated_at: file_updated_at(vault, &hypr_vault_read::paths::meta_path(meeting_id)),
-        id: meta.id,
-        title: meta.title,
-        kind: "meeting".to_string(),
-        status: "active".to_string(),
-        created_at: meta.created_at,
-        started_at: meta.started_at.unwrap_or_default(),
-        ended_at: meta.ended_at.unwrap_or_default(),
-        timezone: String::new(),
-        language: String::new(),
-        note,
-        summaries,
-        action_items,
-    })
+    Ok(summaries)
 }
 
 fn get_meeting_transcript_sync(
@@ -384,6 +392,16 @@ fn load_transcripts_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Transcrip
         .collect::<Vec<_>>();
     transcripts.sort_by(|a, b| (a.started_at_ms, &a.id).cmp(&(b.started_at_ms, &b.id)));
     Ok(transcripts)
+}
+
+// Matches the retired SQL ordering: most recent first by started_at (falling back to
+// created_at when a session never started), then created_at, then id.
+fn sort_metas_recent_first(metas: &mut [hypr_vault_read::SessionMeta]) {
+    metas.sort_by(|a, b| {
+        let a_key = (occurred_at(a), a.created_at.as_str(), a.id.as_str());
+        let b_key = (occurred_at(b), b.created_at.as_str(), b.id.as_str());
+        b_key.cmp(&a_key)
+    });
 }
 
 fn occurred_at(meta: &hypr_vault_read::SessionMeta) -> &str {

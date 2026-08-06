@@ -4,7 +4,8 @@ use crate::cli::{DocumentKind, ExportFormat, MeetingCommand};
 use crate::{Result, output};
 use hypr_agent_access::{
     Document, GetMeetingInput, GetMeetingTranscriptInput, ListMeetingsInput, MeetingListItem,
-    get_meeting, get_meeting_export, get_meeting_transcript, list_meetings,
+    SearchHit, SearchMeetingsInput, get_meeting, get_meeting_export, get_meeting_transcript,
+    list_meetings, search_meetings,
 };
 
 pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()> {
@@ -27,6 +28,32 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                 output::json("meetings.list", &page.meetings, Some(&page.pagination))?
             } else {
                 render_list(&page.meetings)
+            };
+            output::emit(&rendered);
+            Ok(())
+        }
+        MeetingCommand::Search {
+            query,
+            speaker,
+            kind,
+            limit,
+            offset,
+        } => {
+            let page = search_meetings(
+                vault,
+                SearchMeetingsInput {
+                    query,
+                    speaker,
+                    kinds: (!kind.is_empty()).then(|| kind.into_iter().map(Into::into).collect()),
+                    limit: Some(limit),
+                    offset: Some(offset),
+                },
+            )
+            .await?;
+            let rendered = if json {
+                output::json("meetings.search", &page.hits, Some(&page.pagination))?
+            } else {
+                render_search(&page.hits)
             };
             output::emit(&rendered);
             Ok(())
@@ -162,6 +189,32 @@ fn render_list(meetings: &[MeetingListItem]) -> String {
                 title_width,
             ),
             meeting.id,
+        ));
+    }
+    lines.join("\n")
+}
+
+fn render_search(hits: &[SearchHit]) -> String {
+    if hits.is_empty() {
+        return "No matches found.".to_string();
+    }
+
+    let mut lines = vec![format!(
+        "{:<10}  {:<10}  {:<26}  SNIPPET",
+        "DATE", "KIND", "ID"
+    )];
+    for hit in hits {
+        let speaker = hit
+            .speaker
+            .as_deref()
+            .map(|speaker| format!("{speaker}: "))
+            .unwrap_or_default();
+        lines.push(format!(
+            "{:<10}  {:<10}  {:<26}  {speaker}{}",
+            truncate(&hit.occurred_at, 10),
+            hit.kind,
+            truncate(&hit.meeting_id, 26),
+            truncate(&hit.snippet, 100),
         ));
     }
     lines.join("\n")

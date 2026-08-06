@@ -21,6 +21,9 @@ impl From<hypr_agent_access::Error> for Error {
     fn from(error: hypr_agent_access::Error) -> Self {
         match error {
             hypr_agent_access::Error::NotFound(what) => Self::NotFound(what),
+            hypr_agent_access::Error::InvalidInput(reason) => {
+                Self::operation("search meetings", reason)
+            }
             hypr_agent_access::Error::Vault { action, reason } => Self::operation(action, reason),
         }
     }

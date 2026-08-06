@@ -1,5 +1,6 @@
 ---
 source: apps/cli/src/cli.rs
+assertion_line: 288
 expression: canonicalize_json(contract)
 ---
 {
@@ -98,6 +99,62 @@ expression: canonicalize_json(contract)
             }
           ],
           "synopsis": "fmtr meetings list [-q] [--limit] [--offset] [-h]"
+        },
+        {
+          "about": "Search across meeting titles, notes, summaries, and transcripts",
+          "arguments": [
+            {
+              "help": "Case-insensitive terms that must all occur",
+              "name": "QUERY",
+              "required": false
+            }
+          ],
+          "name": "fmtr meetings search",
+          "options": [
+            {
+              "flags": "--speaker",
+              "help": "Person id or name substring; limits hits to meetings where that person spoke",
+              "is_flag": false,
+              "required": false,
+              "value_name": "SPEAKER"
+            },
+            {
+              "flags": "--kind",
+              "help": "Restrict to a source; repeatable, defaults to all",
+              "is_flag": false,
+              "possible_values": [
+                "title",
+                "note",
+                "summary",
+                "transcript"
+              ],
+              "required": false,
+              "value_name": "KIND"
+            },
+            {
+              "default": "20",
+              "flags": "--limit",
+              "help": "Maximum hits (1-50)",
+              "is_flag": false,
+              "required": false,
+              "value_name": "LIMIT"
+            },
+            {
+              "default": "0",
+              "flags": "--offset",
+              "help": "Number of hits to skip",
+              "is_flag": false,
+              "required": false,
+              "value_name": "OFFSET"
+            },
+            {
+              "flags": "-h, --help",
+              "help": "Print help",
+              "is_flag": false,
+              "required": false
+            }
+          ],
+          "synopsis": "fmtr meetings search [--speaker] [--kind] [--limit] [--offset] [-h] [query]"
         },
         {
           "about": "Show meeting metadata, notes, summaries, and action items",

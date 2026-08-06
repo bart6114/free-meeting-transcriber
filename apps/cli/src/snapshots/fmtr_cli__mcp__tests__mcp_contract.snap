@@ -1,9 +1,10 @@
 ---
 source: apps/cli/src/mcp.rs
+assertion_line: 449
 expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": info.protocol_version, \"instructions\":\n    info.instructions, \"tools\": tools, \"resource_templates\": templates,\n}))"
 ---
 {
-  "instructions": "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+  "instructions": "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Request transcript pages with get_meeting_transcript and continue with pagination.next_offset; each page is capped at 500 words. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a word_offset that continues in get_meeting_transcript. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
   "protocol_version": "2024-11-05",
   "resource_templates": [
     {
@@ -129,6 +130,77 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "type": "object"
       },
       "name": "list_meetings"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": true,
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a word_offset usable as get_meeting_transcript's offset.",
+      "inputSchema": {
+        "$defs": {
+          "SearchKind": {
+            "enum": [
+              "title",
+              "note",
+              "summary",
+              "transcript"
+            ],
+            "type": "string"
+          }
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "properties": {
+          "kinds": {
+            "description": "Sources to search (title, note, summary, transcript); defaults to all. Ignored when speaker is set: speaker search is transcript-only",
+            "items": {
+              "$ref": "#/$defs/SearchKind"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "limit": {
+            "description": "Maximum hits; defaults to 20 and is capped at 50",
+            "format": "uint32",
+            "maximum": 50,
+            "minimum": 1,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "offset": {
+            "description": "Number of hits to skip; defaults to 0",
+            "format": "uint32",
+            "minimum": 0,
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "query": {
+            "description": "Case-insensitive search terms; every whitespace-separated term must occur. Required unless speaker is set",
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "speaker": {
+            "description": "Case-insensitive person id or name substring; limits results to meetings where that person spoke. The query matches anywhere in those transcripts; without query, lists meetings where they spoke",
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "title": "SearchMeetingsInput",
+        "type": "object"
+      },
+      "name": "search_meetings"
     }
   ]
 }

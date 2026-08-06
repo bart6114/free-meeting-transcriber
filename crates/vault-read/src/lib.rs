@@ -6,12 +6,14 @@
 pub mod enhanced;
 pub mod meta;
 pub mod paths;
+pub mod people;
 pub mod strip;
 pub mod tasks;
 pub mod transcript;
 
 pub use enhanced::{ENHANCED_KINDS, EnhancedDoc, parse_enhanced_file, render_enhanced_file};
 pub use meta::{LegacyDoc, SessionMeta};
+pub use people::{Person, read_people};
 pub use strip::strip_leading_frontmatter;
 pub use tasks::{TaskItem, TasksFile};
 

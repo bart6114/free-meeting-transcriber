@@ -2,7 +2,10 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand, ValueEnum};
 
-use hypr_agent_access::{DEFAULT_TRANSCRIPT_LIMIT, MAX_TRANSCRIPT_LIMIT};
+use hypr_agent_access::{
+    DEFAULT_SEARCH_LIMIT, DEFAULT_TRANSCRIPT_LIMIT, MAX_SEARCH_LIMIT, MAX_TRANSCRIPT_LIMIT,
+    SearchKind,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -60,6 +63,27 @@ pub enum MeetingCommand {
         #[arg(long, default_value_t = 0, help = "Number of results to skip")]
         offset: u32,
     },
+    /// Search across meeting titles, notes, summaries, and transcripts
+    #[command(group = clap::ArgGroup::new("criteria").required(true).multiple(true).args(["query", "speaker"]))]
+    Search {
+        /// Case-insensitive terms that must all occur
+        query: Option<String>,
+        #[arg(
+            long,
+            help = "Person id or name substring; limits hits to meetings where that person spoke"
+        )]
+        speaker: Option<String>,
+        #[arg(
+            long,
+            value_enum,
+            help = "Restrict to a source; repeatable, defaults to all"
+        )]
+        kind: Vec<SearchKindArg>,
+        #[arg(long, default_value_t = DEFAULT_SEARCH_LIMIT, value_parser = clap::value_parser!(u32).range(1..=MAX_SEARCH_LIMIT as i64), help = "Maximum hits (1-50)")]
+        limit: u32,
+        #[arg(long, default_value_t = 0, help = "Number of hits to skip")]
+        offset: u32,
+    },
     /// Show meeting metadata, notes, summaries, and action items
     Get { id: String },
     /// Show the note or generated summaries for a meeting
@@ -86,6 +110,25 @@ pub enum MeetingCommand {
         #[arg(long, requires = "output", help = "Replace an existing output file")]
         force: bool,
     },
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum SearchKindArg {
+    Title,
+    Note,
+    Summary,
+    Transcript,
+}
+
+impl From<SearchKindArg> for SearchKind {
+    fn from(kind: SearchKindArg) -> Self {
+        match kind {
+            SearchKindArg::Title => Self::Title,
+            SearchKindArg::Note => Self::Note,
+            SearchKindArg::Summary => Self::Summary,
+            SearchKindArg::Transcript => Self::Transcript,
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, ValueEnum)]
@@ -177,6 +220,40 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn parses_search_filters_and_requires_query_or_speaker() {
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr",
+            "meetings",
+            "search",
+            "--speaker",
+            "bob",
+            "--kind",
+            "transcript",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::Search {
+            query,
+            speaker,
+            kind,
+            limit,
+            offset,
+        } = command
+        else {
+            panic!("expected search command");
+        };
+        assert_eq!(query, None);
+        assert_eq!(speaker.as_deref(), Some("bob"));
+        assert_eq!(kind, vec![SearchKindArg::Transcript]);
+        assert_eq!(limit, 20);
+        assert_eq!(offset, 0);
+
+        assert!(Args::try_parse_from(["fmtr", "meetings", "search"]).is_err());
     }
 
     #[test]

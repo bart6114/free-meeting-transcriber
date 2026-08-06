@@ -15,6 +15,20 @@ Run the server with `fmtr mcp`. It uses the MCP `2024-11-05` protocol over stdio
 | `limit` | integer | `20` | Clamped to `1..200`. |
 | `offset` | integer | `0` | Number of results to skip. |
 
+### `search_meetings`
+
+Full-text search across meeting titles, notes, summaries, and transcript words. At least one of `query` and `speaker` is required.
+
+| Parameter | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `query` | string | — | Case-insensitive terms; every whitespace-separated term must occur. |
+| `speaker` | string | — | Person ID or name substring. Limits results to meetings where that person spoke; the query matches anywhere in those transcripts. Without `query` it lists those meetings. |
+| `kinds` | array | all | Any of `title`, `note`, `summary`, `transcript`. Ignored when `speaker` is set. |
+| `limit` | integer | `20` | Clamped to `1..50`. |
+| `offset` | integer | `0` | Number of hits to skip. |
+
+Hits are ordered by meeting recency and carry `meeting_id`, `kind`, and a `snippet` around the first match. Transcript hits add the resolved `speaker`, `speaker_id`, `start_ms`, and a `word_offset` usable as `get_meeting_transcript`'s `offset`. At most three transcript hits per meeting are returned.
+
 ### `get_meeting`
 
 Accepts required string `meeting_id`. Returns meeting metadata, the canonical note, summaries, and action items. Transcript words are intentionally separate.
