@@ -85,10 +85,20 @@ magick "$T/update_base.png" \
      -draw 'polygon 712,780 848,780 780,872' \) \
   -compose DstOut -composite -compose Over "$T/update.png"
 
+# crop away the transparent canvas padding (macOS scales the whole canvas to
+# menu-bar height, so padding shrinks the glyph). One union bbox across all
+# states keeps the mug the same size/position when the icon changes state.
+bbox=$(magick "$T"/{default,rec0,rec1,rec2,rec3,degraded,update}.png \
+  -background none -flatten -format '%@' info:)
+w=${bbox%%x*} rest=${bbox#*x} h=${rest%%+*}
+side=$(( w > h ? w : h ))
+
 for pair in default:tray_default rec0:tray_recording_0 rec1:tray_recording_1 \
   rec2:tray_recording_2 rec3:tray_recording_3 degraded:tray_degraded update:tray_update; do
   src=${pair%%:*} dst=${pair##*:}
-  magick "$T/$src.png" -resize 160x160 "icons/$dst.png"
+  magick "$T/$src.png" -crop "$bbox" +repage \
+    -background none -gravity center -extent "${side}x${side}" \
+    -resize 160x160 "icons/$dst.png"
 done
 
 echo "tray icons regenerated"
