@@ -12,58 +12,40 @@ final class FloatingBarManager {
   private var displayChangeObserver: Any?
   private var followActiveScreenTimer: Timer?
   private var isApplyingExternalState = false
-  private var hoverShrinkWorkItem: DispatchWorkItem?
+  private var frameUpdateScheduled = false
   private var cancellables = Set<AnyCancellable>()
 
   private init() {
     model.$isExpanded
       .removeDuplicates()
-      .sink { [weak self] isExpanded in
-        guard let self, let panel = self.panel else { return }
-        guard !self.isApplyingExternalState else { return }
-        let layout = self.layout(isExpanded: isExpanded)
-        let didResize = self.resize(panel, to: layout)
-        if !didResize {
-          self.position(panel, force: true, layout: layout)
-        }
+      .sink { [weak self] _ in
+        guard let self, !self.isApplyingExternalState else { return }
+        self.scheduleFrameUpdate()
       }
       .store(in: &cancellables)
+  }
 
-    model.$isPillHovered
-      .removeDuplicates()
-      .sink { [weak self] hovered in
-        guard let self else { return }
-        self.hoverShrinkWorkItem?.cancel()
-        self.hoverShrinkWorkItem = nil
+  // Every panel frame change funnels through one coalesced main-queue hop so
+  // it lands after SwiftUI has committed the layout for the current model
+  // state. Applying frames synchronously from event handlers paints a stale
+  // frame with the pill at the left edge of the freshly widened window.
+  private func scheduleFrameUpdate() {
+    guard !frameUpdateScheduled else { return }
+    frameUpdateScheduled = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      self.frameUpdateScheduled = false
+      self.applyFrame()
+    }
+  }
 
-        guard let panel = self.panel, !self.model.isExpanded else {
-          self.model.pillHoverDisplayed = hovered
-          return
-        }
-
-        if hovered {
-          self.model.pillHoverDisplayed = true
-          // Grow the window one tick after SwiftUI commits the hover layout;
-          // resizing in the same pass paints a stale frame with the pill
-          // shifted to the left edge of the wider window.
-          DispatchQueue.main.async { [weak self] in
-            guard let self, let panel = self.panel else { return }
-            guard self.model.isPillHovered, !self.model.isExpanded else { return }
-            _ = self.resize(panel, to: self.layout(isExpanded: false))
-          }
-        } else {
-          // Delay the shrink so the pill's collapse animation isn't clipped.
-          let workItem = DispatchWorkItem { [weak self] in
-            guard let self, !self.model.isPillHovered else { return }
-            self.model.pillHoverDisplayed = false
-            guard let panel = self.panel, !self.model.isExpanded else { return }
-            _ = self.resize(panel, to: self.layout(isExpanded: false))
-          }
-          self.hoverShrinkWorkItem = workItem
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: workItem)
-        }
-      }
-      .store(in: &cancellables)
+  private func applyFrame() {
+    guard let panel else { return }
+    let layout = currentLayout
+    let didResize = resize(panel, to: layout)
+    if !didResize {
+      position(panel, force: true, layout: layout)
+    }
   }
 
   func show() {
@@ -113,11 +95,7 @@ final class FloatingBarManager {
     DispatchQueue.main.async { [weak self] in
       guard let self, let panel = self.panel else { return }
       self.stopFollowingActiveScreen()
-      self.hoverShrinkWorkItem?.cancel()
-      self.hoverShrinkWorkItem = nil
       self.model.startedAt = nil
-      self.model.isPillHovered = false
-      self.model.pillHoverDisplayed = false
       panel.orderOut(nil)
       self.panel = nil
       self.placement.resetActiveScreen()
@@ -139,12 +117,7 @@ final class FloatingBarManager {
       self.settingsModel.apply(floatingBarState: state)
       self.model.isExpanded = false
       self.isApplyingExternalState = false
-      if let panel = self.panel {
-        let didResize = self.resize(panel)
-        if !didResize {
-          self.position(panel, force: true)
-        }
-      }
+      self.scheduleFrameUpdate()
     }
   }
 
@@ -238,16 +211,14 @@ final class FloatingBarManager {
   private func layout(isExpanded: Bool) -> FloatingBarWindowLayout {
     FloatingBarWindowLayout(
       isExpanded: isExpanded,
-      showsExpand: model.liveCaptionToggleVisible,
-      pillHovered: model.pillHoverDisplayed
+      showsExpand: model.liveCaptionToggleVisible
     )
   }
 
   private func size(for layout: FloatingBarWindowLayout) -> NSSize {
     FloatingBarLayout.containerSize(
       isExpanded: layout.isExpanded,
-      showsExpand: layout.showsExpand,
-      pillHovered: layout.pillHovered
+      showsExpand: layout.showsExpand
     )
   }
 
@@ -255,10 +226,8 @@ final class FloatingBarManager {
     let candidates = [
       FloatingBarWindowLayout(isExpanded: true, showsExpand: true),
       FloatingBarWindowLayout(isExpanded: true, showsExpand: false),
-      FloatingBarWindowLayout(isExpanded: false, showsExpand: true, pillHovered: true),
-      FloatingBarWindowLayout(isExpanded: false, showsExpand: true, pillHovered: false),
-      FloatingBarWindowLayout(isExpanded: false, showsExpand: false, pillHovered: true),
-      FloatingBarWindowLayout(isExpanded: false, showsExpand: false, pillHovered: false),
+      FloatingBarWindowLayout(isExpanded: false, showsExpand: true),
+      FloatingBarWindowLayout(isExpanded: false, showsExpand: false),
     ]
 
     return candidates.first { candidate in
@@ -268,8 +237,8 @@ final class FloatingBarManager {
     }
   }
 
-  // Anchor at the pill's top-right corner so hover growth extends leftward and
-  // the resting pill never moves.
+  // Anchor at the pill's top-right corner so layout changes keep the resting
+  // pill in place.
   private func controlAnchorOffset(for layout: FloatingBarWindowLayout) -> NSPoint {
     if layout.isExpanded {
       return NSPoint(
@@ -281,7 +250,7 @@ final class FloatingBarManager {
     return NSPoint(
       x: FloatingBarLayout.inset
         + FloatingBarLayout.compactPillWidth(
-          hovered: layout.pillHovered, showsExpand: layout.showsExpand),
+          hovered: true, showsExpand: layout.showsExpand),
       y: FloatingBarLayout.inset + FloatingBarLayout.compactHeight
     )
   }
@@ -290,8 +259,7 @@ final class FloatingBarManager {
     guard followActiveScreenTimer == nil else { return }
 
     let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
-      guard let self, let panel = self.panel else { return }
-      self.position(panel)
+      self?.scheduleFrameUpdate()
     }
     RunLoop.main.add(timer, forMode: .common)
     followActiveScreenTimer = timer
@@ -301,8 +269,7 @@ final class FloatingBarManager {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      guard let self, let panel = self.panel else { return }
-      self.position(panel, force: true)
+      self?.scheduleFrameUpdate()
     }
   }
 
@@ -321,5 +288,4 @@ final class FloatingBarManager {
 private struct FloatingBarWindowLayout {
   let isExpanded: Bool
   let showsExpand: Bool
-  var pillHovered: Bool = false
 }

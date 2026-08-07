@@ -5,7 +5,7 @@ enum FloatingBarLayout {
   static let inset: CGFloat = 4
   static let screenMargin: CGFloat = 8
   static let compactHeight: CGFloat = 38
-  static let compactRestWidth: CGFloat = 78
+  static let compactRestWidth: CGFloat = 112
   static let compactControlSize: CGFloat = 26
   static let compactControlGap: CGFloat = 2
   static let compactContentSpacing: CGFloat = 8
@@ -48,7 +48,10 @@ enum FloatingBarLayout {
       + compactTrailingPadding
   }
 
-  static func containerSize(isExpanded: Bool, showsExpand: Bool, pillHovered: Bool) -> NSSize {
+  // The compact window is always sized for the fully hovered pill; hover only
+  // animates content inside it. Resizing the window on hover repaints one
+  // frame with stale content at the new origin, which reads as a jump.
+  static func containerSize(isExpanded: Bool, showsExpand: Bool) -> NSSize {
     if isExpanded {
       return NSSize(
         width: expandedWidth + inset * 2,
@@ -56,7 +59,7 @@ enum FloatingBarLayout {
     }
 
     return NSSize(
-      width: compactPillWidth(hovered: pillHovered, showsExpand: showsExpand) + inset * 2,
+      width: compactPillWidth(hovered: true, showsExpand: showsExpand) + inset * 2,
       height: compactHeight + inset * 2)
   }
 }
@@ -82,15 +85,9 @@ struct FloatingBarView: View {
     }
     .padding(FloatingBarLayout.inset)
     // Fill whatever size the panel currently has and pin content to the
-    // trailing edge, so the pill never shifts while the window and SwiftUI
-    // commit their resizes on different frames.
+    // trailing edge; hover and drag are scoped to the visible surfaces so the
+    // window's empty leading strip stays inert.
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-    .contentShape(Rectangle())
-    .simultaneousGesture(dragClickSuppressor)
-    .onHover {
-      isBarHovered = $0
-      model.isPillHovered = $0
-    }
   }
 
   private var compactPill: some View {
@@ -107,12 +104,9 @@ struct FloatingBarView: View {
 
     // Content is laid out at full hover width and right-aligned; the animated
     // frame + clip reveal it leftward, so the trace's older samples appear as
-    // the pill grows.
+    // the pill grows. The stop button is trailing so it never moves and stays
+    // clickable without hovering first.
     return HStack(spacing: FloatingBarLayout.compactContentSpacing) {
-      floatingControls(isExpanded: false)
-        .opacity(isBarHovered ? 1 : 0)
-        .allowsHitTesting(isBarHovered)
-
       ElapsedTimeText(startedAt: model.startedAt, color: primaryContentColor)
         .frame(width: FloatingBarLayout.compactTimerWidth)
         .opacity(isBarHovered ? 1 : 0)
@@ -138,11 +132,26 @@ struct FloatingBarView: View {
           )
         }
       }
+
+      floatingControls(isExpanded: false)
     }
     .padding(.leading, FloatingBarLayout.compactLeadingPadding)
     .padding(.trailing, FloatingBarLayout.compactTrailingPadding)
     .fixedSize(horizontal: true, vertical: false)
     .frame(width: width, height: FloatingBarLayout.compactHeight, alignment: .trailing)
+    // Fade the ink out ahead of the left border so clipped trace columns
+    // don't poke through the rounded edge while the pill is contracted.
+    .mask(
+      HStack(spacing: 0) {
+        LinearGradient(
+          colors: [.clear, .black],
+          startPoint: .leading,
+          endPoint: .trailing
+        )
+        .frame(width: FloatingBarLayout.compactLeadingPadding)
+        Rectangle()
+      }
+    )
     .background(
       ZStack {
         VisualEffectBlur(colorScheme: model.colorScheme, cornerRadius: radius)
@@ -159,6 +168,9 @@ struct FloatingBarView: View {
         .padding(1)
     )
     .clipShape(pillShape)
+    .contentShape(pillShape)
+    .simultaneousGesture(dragClickSuppressor)
+    .onHover { isBarHovered = $0 }
     .animation(.spring(response: 0.32, dampingFraction: 0.8), value: isBarHovered)
   }
 
@@ -291,6 +303,9 @@ struct FloatingBarView: View {
         .padding(1)
     )
     .clipShape(surfaceShape)
+    .contentShape(Rectangle())
+    .simultaneousGesture(dragClickSuppressor)
+    .onHover { isBarHovered = $0 }
     .animation(.easeOut(duration: 0.12), value: isBarHovered)
   }
 
