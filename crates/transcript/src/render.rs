@@ -233,13 +233,15 @@ pub fn stable_segment_id(key: &SegmentKey, words: &[SegmentWord]) -> String {
         })
         .unwrap_or_else(|| "none".to_string());
 
+    // Deliberately excludes speaker_human_id: the id doubles as the React key and
+    // identity-cache key, and a speaker rename must not remount the segment.
+    // The word anchors already make the id unique.
     format!(
-        "{}:{}:{}:{}:{}",
+        "{}:{}:{}:{}",
         key.channel as i32,
         key.speaker_index
             .map(|value| value.to_string())
             .unwrap_or_else(|| "none".to_string()),
-        key.speaker_human_id.as_deref().unwrap_or("none"),
         first_anchor,
         last_anchor
     )
@@ -325,6 +327,37 @@ mod tests {
                 speaker_index,
             },
         }
+    }
+
+    #[test]
+    fn speaker_assignment_keeps_segment_ids_stable() {
+        let render = |assignments: Vec<IdentityAssignment>| {
+            render_transcript_segments(RenderTranscriptRequest {
+                transcripts: vec![RenderTranscriptInput {
+                    started_at: Some(0),
+                    words: vec![
+                        word("w1", " remote", 0, 100, 1),
+                        word("w2", " reply", 120, 220, 1),
+                    ],
+                    assignments,
+                    synthetic_timing: None,
+                }],
+                participant_human_ids: vec![],
+                self_human_id: None,
+                humans: vec![],
+            })
+        };
+
+        let before = render(vec![]);
+        let after = render(vec![channel_assignment(
+            "christel",
+            ChannelProfile::RemoteParty,
+        )]);
+
+        assert_eq!(before.len(), 1);
+        assert_eq!(after.len(), 1);
+        assert_ne!(before[0].speaker_label, after[0].speaker_label);
+        assert_eq!(before[0].id, after[0].id);
     }
 
     #[test]

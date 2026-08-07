@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 
 import { TRANSCRIPT_RENDER_CACHE_TIME_MS } from "../cache";
@@ -39,6 +39,9 @@ export function useRenderedTranscriptData(transcriptId: string): {
       return renderTranscriptSegments(request);
     },
     enabled: !!request,
+    // Keep the previous segments on screen while a changed request re-renders,
+    // so a speaker rename doesn't blank the transcript and remount every segment.
+    placeholderData: keepPreviousData,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: TRANSCRIPT_RENDER_CACHE_TIME_MS,
   });

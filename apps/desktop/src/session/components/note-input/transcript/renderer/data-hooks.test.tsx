@@ -1,3 +1,4 @@
+import { keepPreviousData } from "@tanstack/react-query";
 import { renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -11,7 +12,8 @@ const mocks = vi.hoisted(() => ({
   useTranscriptRenderData: vi.fn(),
 }));
 
-vi.mock("@tanstack/react-query", () => ({
+vi.mock("@tanstack/react-query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQuery: mocks.useQuery,
 }));
 
@@ -53,6 +55,7 @@ describe("useRenderedTranscriptData", () => {
           "request-key",
         ],
         enabled: true,
+        placeholderData: keepPreviousData,
         staleTime: Number.POSITIVE_INFINITY,
         gcTime: TRANSCRIPT_RENDER_CACHE_TIME_MS,
       }),
