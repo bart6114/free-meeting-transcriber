@@ -445,6 +445,14 @@ msgstr ""
 msgid "File format"
 msgstr ""
 
+#: src/session/components/outer-header/index.tsx
+msgid "Finalizing"
+msgstr ""
+
+#: src/session/components/outer-header/index.tsx
+msgid "Finalizing transcript"
+msgstr ""
+
 #: src/shared/open-note-dialog.tsx
 msgid "Find a note..."
 msgstr ""
@@ -1266,6 +1274,7 @@ msgid "Timezone"
 msgstr ""
 
 #: src/main/audio-import-dialog.tsx
+#: src/session/components/outer-header/index.tsx
 msgid "Transcribing"
 msgstr ""
 
