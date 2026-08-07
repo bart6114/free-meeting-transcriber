@@ -5,19 +5,21 @@ enum FloatingBarLayout {
   static let inset: CGFloat = 4
   static let screenMargin: CGFloat = 8
   static let compactHeight: CGFloat = 38
-  static let compactStopWidth: CGFloat = 62
-  static let compactSoloStopWidth: CGFloat = 68
-  static let compactIconSize: CGFloat = 30
-  static let compactGap: CGFloat = 3
+  static let compactRestWidth: CGFloat = 78
+  static let compactControlSize: CGFloat = 26
+  static let compactControlGap: CGFloat = 2
+  static let compactContentSpacing: CGFloat = 8
+  static let compactLeadingPadding: CGFloat = 12
+  static let compactTrailingPadding: CGFloat = 13
+  static let compactTimerWidth: CGFloat = 48
+  static let compactTraceWidth: CGFloat = 110
+  static let compactTraceHeight: CGFloat = 20
   static let compactHorizontalPadding: CGFloat = 4
   static let compactCornerControlFactor: CGFloat = 0.55228475
   static let expandedWidth: CGFloat = 360
   static let expandedHeight: CGFloat = 430
   static let expandedCornerRadius: CGFloat = 21
   static let expandedPadding: CGFloat = 12
-  static let waveformWidth: CGFloat = 26
-  static let waveformHeight: CGFloat = 20
-  static let stopSquareSize: CGFloat = 9
   static let hoverHandleGap: CGFloat = 2
   static let hoverHandleTopPadding: CGFloat = 7
   static let hoverHandleHeight: CGFloat = 12
@@ -30,17 +32,23 @@ enum FloatingBarLayout {
 
   static func compactControlsWidth(showsExpand: Bool) -> CGFloat {
     if showsExpand {
-      return compactStopWidth + compactGap + compactIconSize
+      return compactControlSize * 2 + compactControlGap
     }
 
-    return compactSoloStopWidth
+    return compactControlSize
   }
 
-  static func compactWidth(showsExpand: Bool) -> CGFloat {
-    compactControlsWidth(showsExpand: showsExpand) + compactHorizontalPadding * 2
+  static func compactPillWidth(hovered: Bool, showsExpand: Bool) -> CGFloat {
+    guard hovered else { return compactRestWidth }
+
+    return compactLeadingPadding
+      + compactControlsWidth(showsExpand: showsExpand)
+      + compactContentSpacing + compactTimerWidth
+      + compactContentSpacing + compactTraceWidth
+      + compactTrailingPadding
   }
 
-  static func containerSize(isExpanded: Bool, showsExpand: Bool) -> NSSize {
+  static func containerSize(isExpanded: Bool, showsExpand: Bool, pillHovered: Bool) -> NSSize {
     if isExpanded {
       return NSSize(
         width: expandedWidth + inset * 2,
@@ -48,8 +56,8 @@ enum FloatingBarLayout {
     }
 
     return NSSize(
-      width: compactWidth(showsExpand: showsExpand) + inset * 2,
-      height: compactHeight + hoverHandleReservedHeight + inset * 2)
+      width: compactPillWidth(hovered: pillHovered, showsExpand: showsExpand) + inset * 2,
+      height: compactHeight + inset * 2)
   }
 }
 
@@ -59,7 +67,6 @@ struct FloatingBarView: View {
   let panelOrigin: () -> NSPoint?
   let movePanel: (NSPoint) -> Void
   @State private var isBarHovered = false
-  @State private var isStopHovered = false
   @State private var shouldAutoScrollTranscript = true
   @State private var suppressNextClick = false
   @State private var dragStart: FloatingBarDragStart?
@@ -74,65 +81,73 @@ struct FloatingBarView: View {
       }
     }
     .padding(FloatingBarLayout.inset)
-    .frame(
-      width: containerSize.width,
-      height: containerSize.height,
-      alignment: .bottomTrailing
-    )
+    // Fill whatever size the panel currently has and pin content to the
+    // trailing edge, so the pill never shifts while the window and SwiftUI
+    // commit their resizes on different frames.
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
     .contentShape(Rectangle())
     .simultaneousGesture(dragClickSuppressor)
-    .onHover { isBarHovered = $0 }
+    .onHover {
+      isBarHovered = $0
+      model.isPillHovered = $0
+    }
   }
 
   private var compactPill: some View {
-    let height =
-      FloatingBarLayout.compactHeight
-      + (isBarHovered ? FloatingBarLayout.hoverHandleReservedHeight : 0)
-    let width = FloatingBarLayout.compactWidth(showsExpand: model.liveCaptionToggleVisible)
     let radius = FloatingBarLayout.compactHeight / 2
     let pillShape = FloatingBarSurfaceShape(
       topRadius: radius,
       bottomRadius: radius,
       cornerControlFactor: FloatingBarLayout.compactCornerControlFactor
     )
-
-    return ZStack(alignment: .bottom) {
-      if isBarHovered {
-        FloatingBarHoverHandle(
-          color: dragHandleDotColor,
-          width: width
-        )
-        .frame(height: FloatingBarLayout.hoverHandleHeight)
-        .padding(.top, FloatingBarLayout.hoverHandleTopPadding)
-        .frame(
-          width: width,
-          height: FloatingBarLayout.hoverHandleReservedHeight,
-          alignment: .top
-        )
-        .frame(maxHeight: .infinity, alignment: .top)
-        .accessibilityHidden(true)
-        .transition(.opacity)
-      }
-
-      floatingControls(isExpanded: false)
-        .frame(
-          width: FloatingBarLayout.compactControlsWidth(
-            showsExpand: model.liveCaptionToggleVisible),
-          height: FloatingBarLayout.compactHeight
-        )
-        .frame(
-          width: width,
-          height: FloatingBarLayout.compactHeight
-        )
-    }
-    .frame(
-      width: width,
-      height: height,
-      alignment: .bottom
+    let width = FloatingBarLayout.compactPillWidth(
+      hovered: isBarHovered,
+      showsExpand: model.liveCaptionToggleVisible
     )
+
+    // Content is laid out at full hover width and right-aligned; the animated
+    // frame + clip reveal it leftward, so the trace's older samples appear as
+    // the pill grows.
+    return HStack(spacing: FloatingBarLayout.compactContentSpacing) {
+      floatingControls(isExpanded: false)
+        .opacity(isBarHovered ? 1 : 0)
+        .allowsHitTesting(isBarHovered)
+
+      ElapsedTimeText(startedAt: model.startedAt, color: primaryContentColor)
+        .frame(width: FloatingBarLayout.compactTimerWidth)
+        .opacity(isBarHovered ? 1 : 0)
+
+      Group {
+        if model.status == .error {
+          ErrorMark(color: errorAccentColor)
+            .frame(
+              width: FloatingBarLayout.compactTraceWidth,
+              height: FloatingBarLayout.compactTraceHeight,
+              alignment: .trailing
+            )
+        } else {
+          InkTrace(
+            buffer: model.traceBuffer,
+            amplitude: model.amplitude,
+            inkColor: primaryContentColor,
+            playheadColor: accentColor
+          )
+          .frame(
+            width: FloatingBarLayout.compactTraceWidth,
+            height: FloatingBarLayout.compactTraceHeight
+          )
+        }
+      }
+    }
+    .padding(.leading, FloatingBarLayout.compactLeadingPadding)
+    .padding(.trailing, FloatingBarLayout.compactTrailingPadding)
+    .fixedSize(horizontal: true, vertical: false)
+    .frame(width: width, height: FloatingBarLayout.compactHeight, alignment: .trailing)
     .background(
-      pillShape
-        .fill(isBarHovered ? envelopeSurfaceColor : surfaceColor)
+      ZStack {
+        VisualEffectBlur(colorScheme: model.colorScheme, cornerRadius: radius)
+        pillShape.fill(surfaceTintColor)
+      }
     )
     .overlay(
       pillShape
@@ -144,7 +159,7 @@ struct FloatingBarView: View {
         .padding(1)
     )
     .clipShape(pillShape)
-    .animation(.easeOut(duration: 0.12), value: isBarHovered)
+    .animation(.spring(response: 0.32, dampingFraction: 0.8), value: isBarHovered)
   }
 
   private var expandedPanel: some View {
@@ -258,8 +273,13 @@ struct FloatingBarView: View {
       alignment: .bottom
     )
     .background(
-      surfaceShape
-        .fill(surfaceColor)
+      ZStack {
+        VisualEffectBlur(
+          colorScheme: model.colorScheme,
+          cornerRadius: FloatingBarLayout.expandedCornerRadius
+        )
+        surfaceShape.fill(surfaceTintColor)
+      }
     )
     .overlay(
       surfaceShape
@@ -275,11 +295,14 @@ struct FloatingBarView: View {
   }
 
   private func floatingControls(isExpanded: Bool) -> some View {
-    HStack(spacing: FloatingBarLayout.compactGap) {
-      audioControl(
-        width: model.liveCaptionToggleVisible
-          ? FloatingBarLayout.compactStopWidth : FloatingBarLayout.compactSoloStopWidth,
-        height: FloatingBarLayout.compactIconSize
+    HStack(spacing: FloatingBarLayout.compactControlGap) {
+      FloatingIconButton(
+        systemName: "stop.fill",
+        accessibilityLabel: "Stop recording",
+        color: accentColor,
+        hoverFill: accentColor.opacity(0.16),
+        size: FloatingBarLayout.compactControlSize,
+        action: { performClick(RustBridge.stopListening) }
       )
 
       if model.liveCaptionToggleVisible {
@@ -289,83 +312,23 @@ struct FloatingBarView: View {
           accessibilityLabel: isExpanded ? "Collapse live transcript" : "Expand live transcript",
           color: primaryContentColor,
           hoverFill: controlHoverFill,
-          size: FloatingBarLayout.compactIconSize,
+          size: FloatingBarLayout.compactControlSize,
           action: { performClick { setExpanded(!isExpanded) } }
         )
       }
     }
   }
 
-  private func audioControl(width: CGFloat, height: CGFloat) -> some View {
-    Button(action: { performClick(RustBridge.stopListening) }) {
-      Group {
-        if isStopHovered {
-          HStack(spacing: 6) {
-            Image(systemName: "stop.fill")
-              .font(.system(size: FloatingBarLayout.stopSquareSize, weight: .bold))
-            Text("Stop")
-              .font(.system(size: 12, weight: .semibold))
-          }
-          .foregroundStyle(stopColor)
-        } else if model.status == .error {
-          ErrorMark(color: errorAccentColor)
-            .frame(
-              width: FloatingBarLayout.waveformWidth,
-              height: FloatingBarLayout.waveformHeight
-            )
-        } else {
-          DancingBars(color: accentColor, amplitude: model.amplitude)
-            .frame(
-              width: FloatingBarLayout.waveformWidth,
-              height: FloatingBarLayout.waveformHeight
-            )
-        }
-      }
-      .frame(width: width, height: height)
-      .background(
-        Capsule(style: .continuous)
-          .fill(isStopHovered ? accentColor.opacity(0.18) : controlHoverFill)
-      )
-      .contentShape(Capsule(style: .continuous))
-    }
-    .buttonStyle(.plain)
-    .accessibilityLabel("Stop listening")
-    .onHover { isStopHovered = $0 }
-  }
-
-  private var containerSize: NSSize {
-    FloatingBarLayout.containerSize(
-      isExpanded: model.isExpanded,
-      showsExpand: model.liveCaptionToggleVisible
-    )
-  }
-
   private var accentColor: Color {
     model.status == .error ? errorAccentColor : normalAccentColor
   }
 
-  private var surfaceColor: Color {
+  private var surfaceTintColor: Color {
     if model.colorScheme == .dark {
-      return Color(red: 0.43, green: 0.44, blue: 0.40).opacity(primarySurfaceOpacity)
+      return Color.black.opacity(0.14)
     }
 
-    return Color(red: 0.86, green: 0.85, blue: 0.82).opacity(primarySurfaceOpacity)
-  }
-
-  private var envelopeSurfaceColor: Color {
-    if model.colorScheme == .dark {
-      return Color(red: 0.43, green: 0.44, blue: 0.40).opacity(envelopeSurfaceOpacity)
-    }
-
-    return Color(red: 0.86, green: 0.85, blue: 0.82).opacity(envelopeSurfaceOpacity)
-  }
-
-  private var primarySurfaceOpacity: Double {
-    settings.floatingBarOpacity * 0.82
-  }
-
-  private var envelopeSurfaceOpacity: Double {
-    min(settings.floatingBarOpacity * 1.08, FloatingOverlayOpacity.maxFloatingBar)
+    return Color.white.opacity(0.28)
   }
 
   private var primaryContentColor: Color {
@@ -374,10 +337,6 @@ struct FloatingBarView: View {
     }
 
     return Color(red: 0.12, green: 0.11, blue: 0.10)
-  }
-
-  private var secondaryContentColor: Color {
-    primaryContentColor.opacity(model.colorScheme == .dark ? 0.66 : 0.46)
   }
 
   private var controlHoverFill: Color {
@@ -396,24 +355,16 @@ struct FloatingBarView: View {
     primaryContentColor.opacity(model.colorScheme == .dark ? 0.48 : 0.36)
   }
 
-  private var dragHandleSurfaceColor: Color {
-    if model.colorScheme == .dark {
-      return Color(red: 0.34, green: 0.35, blue: 0.32).opacity(settings.floatingBarOpacity)
-    }
-
-    return Color(red: 0.72, green: 0.72, blue: 0.68).opacity(settings.floatingBarOpacity)
-  }
-
-  private var stopColor: Color {
-    normalAccentColor
-  }
-
   private var errorAccentColor: Color {
     Color(red: 1, green: 0.25, blue: 0.24)
   }
 
   private var normalAccentColor: Color {
-    Color(red: 1, green: 0.20, blue: 0.30)
+    if model.colorScheme == .dark {
+      return Color(red: 1, green: 0.27, blue: 0.23)
+    }
+
+    return Color(red: 0.88, green: 0.21, blue: 0.17)
   }
 
   private var dragClickSuppressor: some Gesture {
@@ -842,39 +793,138 @@ private struct ErrorMark: View {
   }
 }
 
-private struct DancingBars: View {
-  let color: Color
-  let amplitude: Double
+final class InkTraceBuffer {
+  static let capacity = 110
+  static let sampleInterval: TimeInterval = 1.0 / 30.0
 
-  private let barCount = 5
-  private let barWidth: CGFloat = 3
-  private let barSpacing: CGFloat = 2
-  private let minHeight: CGFloat = 4
-  private let maxHeight: CGFloat = 20
+  private var samples = [Double](repeating: 0, count: InkTraceBuffer.capacity)
+  private var head = 0
+  private var lastSampleTime: TimeInterval = 0
+
+  func push(_ value: Double, at time: TimeInterval) {
+    guard time - lastSampleTime >= Self.sampleInterval else { return }
+    lastSampleTime = time
+    samples[head] = value
+    head = (head + 1) % Self.capacity
+  }
+
+  func newestFirst() -> [Double] {
+    var ordered = [Double](repeating: 0, count: Self.capacity)
+    for index in 0..<Self.capacity {
+      ordered[index] = samples[(head - 1 - index + Self.capacity * 2) % Self.capacity]
+    }
+    return ordered
+  }
+}
+
+private struct InkTrace: View {
+  let buffer: InkTraceBuffer
+  let amplitude: Double
+  let inkColor: Color
+  let playheadColor: Color
 
   var body: some View {
     TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: false)) { timeline in
-      HStack(spacing: barSpacing) {
-        let t = timeline.date.timeIntervalSinceReferenceDate
-        ForEach(0..<barCount, id: \.self) { index in
-          Capsule(style: .continuous)
-            .fill(color)
-            .frame(width: barWidth, height: barHeight(index: index, time: t))
+      Canvas { context, size in
+        let clamped = min(max(amplitude, 0), 1)
+        buffer.push(clamped, at: timeline.date.timeIntervalSinceReferenceDate)
+
+        let samples = buffer.newestFirst()
+        let mid = size.height / 2
+        let playheadX = size.width - 2.5
+        let maxHalf = mid * 0.92
+
+        for (age, sample) in samples.enumerated() {
+          let x = playheadX - 3 - CGFloat(age)
+          guard x >= 1 else { break }
+          let half = max(0.9, CGFloat(Self.boosted(sample)) * maxHalf)
+          let alpha = 0.9 - 0.65 * Double(age) / Double(InkTraceBuffer.capacity - 1)
+          var column = Path()
+          column.move(to: CGPoint(x: x, y: mid - half))
+          column.addLine(to: CGPoint(x: x, y: mid + half))
+          context.stroke(
+            column,
+            with: .color(inkColor.opacity(alpha)),
+            style: StrokeStyle(lineWidth: 1.2, lineCap: .round)
+          )
         }
+
+        let radius = 1.7 + CGFloat(Self.boosted(clamped)) * 1.3
+        context.fill(
+          Path(
+            ellipseIn: CGRect(
+              x: playheadX - radius,
+              y: mid - radius,
+              width: radius * 2,
+              height: radius * 2
+            )),
+          with: .color(playheadColor)
+        )
       }
-      .frame(maxHeight: .infinity, alignment: .center)
     }
   }
 
-  private func barHeight(index: Int, time: TimeInterval) -> CGFloat {
-    let normalized = min(max(amplitude, 0), 1)
-    let center = Double(barCount - 1) / 2
-    let distance = abs(Double(index) - center) / max(center, 1)
-    let envelope = 1 - distance * 0.42
-    let phase = time * 8.5 + Double(index) * 0.68
-    let wave = sin(phase) * 0.5 + 0.5
-    let drive = 0.4 + normalized * 0.9
-    let height = maxHeight * CGFloat(drive * envelope * (0.4 + wave * 0.6))
-    return max(minHeight, min(maxHeight, height))
+  // Raw amplitude sits around 0.05-0.3 for normal speech; compress the range
+  // so speech reads clearly while true silence still draws flat.
+  private static func boosted(_ value: Double) -> Double {
+    let gated = max(0, value - 0.015) / 0.985
+    return min(1, pow(gated, 0.4))
+  }
+}
+
+private struct ElapsedTimeText: View {
+  let startedAt: Date?
+  let color: Color
+
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 1)) { timeline in
+      Text(Self.formatted(from: startedAt, to: timeline.date))
+        .font(.system(size: 11.5, weight: .medium).monospacedDigit())
+        .foregroundStyle(color)
+        .lineLimit(1)
+    }
+  }
+
+  private static func formatted(from start: Date?, to now: Date) -> String {
+    let total = start.map { max(0, Int(now.timeIntervalSince($0))) } ?? 0
+    let hours = total / 3600
+    let minutes = (total % 3600) / 60
+    let seconds = total % 60
+    if hours > 0 {
+      return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+    }
+    return String(format: "%d:%02d", minutes, seconds)
+  }
+}
+
+private struct VisualEffectBlur: NSViewRepresentable {
+  let colorScheme: FloatingBarColorScheme
+  let cornerRadius: CGFloat
+
+  func makeNSView(context: Context) -> NSVisualEffectView {
+    let view = NSVisualEffectView()
+    view.blendingMode = .behindWindow
+    view.material = .hudWindow
+    view.state = .active
+    view.maskImage = Self.maskImage(cornerRadius: cornerRadius)
+    return view
+  }
+
+  func updateNSView(_ view: NSVisualEffectView, context: Context) {
+    view.appearance = NSAppearance(named: colorScheme == .dark ? .darkAqua : .aqua)
+  }
+
+  // behindWindow blur ignores layer masks; maskImage is the supported clip.
+  private static func maskImage(cornerRadius: CGFloat) -> NSImage {
+    let edge = cornerRadius * 2 + 1
+    let image = NSImage(size: NSSize(width: edge, height: edge), flipped: false) { rect in
+      NSColor.black.setFill()
+      NSBezierPath(roundedRect: rect, xRadius: cornerRadius, yRadius: cornerRadius).fill()
+      return true
+    }
+    image.capInsets = NSEdgeInsets(
+      top: cornerRadius, left: cornerRadius, bottom: cornerRadius, right: cornerRadius)
+    image.resizingMode = .stretch
+    return image
   }
 }

@@ -22,10 +22,7 @@ let package = Package(
       dependencies: [
         .product(name: "SwiftRs", package: "swift-rs")
       ],
-      path: "src",
-      resources: [
-        .process("Resources")
-      ]
+      path: "src"
     )
   ]
 )

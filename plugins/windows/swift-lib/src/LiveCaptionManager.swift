@@ -72,7 +72,6 @@ final class LiveCaptionManager {
     }
 
     stopFollowingActiveScreen()
-    FloatingOverlaySettingsPanelManager.shared.hide()
     panel.orderOut(nil)
     self.panel = nil
     panelDelegate.resetActiveScreen()
