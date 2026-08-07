@@ -131,7 +131,7 @@ describe("OuterHeader", () => {
     expect(titleSlot?.className).not.toContain("right-[153px]");
   });
 
-  it("hides the finalizing header button while the sidebar is collapsed", () => {
+  it("shows a disabled finalizing state while the sidebar is collapsed", () => {
     mocks.leftsidebar.expanded = false;
     mocks.sessionModes = { "session-1": "finalizing" };
 
@@ -146,7 +146,8 @@ describe("OuterHeader", () => {
     const title = screen.getByText("Session title");
     const titleSlot = title.parentElement?.parentElement;
 
-    expect(screen.queryByRole("button", { name: "Finalizing" })).toBeNull();
+    const finalizingButton = screen.getByRole("button", { name: "Finalizing" });
+    expect((finalizingButton as HTMLButtonElement).disabled).toBe(true);
     expect(titleSlot?.className).toContain("right-[140px]");
     expect(titleSlot?.className).not.toContain("right-[153px]");
   });
@@ -393,6 +394,49 @@ describe("OuterHeader", () => {
     expect(resumeButton.title).toBe("Resume listening");
     expect(screen.queryByRole("button", { name: "Record" })).toBeNull();
     expect(mocks.startListening).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows transcribing instead of stop while post-capture transcription runs", () => {
+    mocks.sessionModes = { "session-1": "running_batch" };
+
+    render(
+      <OuterHeader
+        sessionId="session-1"
+        currentView={{ type: "raw" } as EditorView}
+        title={<span>Session title</span>}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: "Stop" })).toBeNull();
+    const transcribingButton = screen.getByRole("button", {
+      name: "Transcribing",
+    });
+
+    expect(transcribingButton.title).toBe("Stop transcription");
+    fireEvent.click(transcribingButton);
+
+    expect(mocks.stopTranscription).toHaveBeenCalledTimes(1);
+    expect(mocks.stopListening).not.toHaveBeenCalled();
+  });
+
+  it("disables the record button while a stopped session is finalizing", () => {
+    mocks.sessionModes = { "session-1": "finalizing" };
+
+    render(
+      <OuterHeader
+        sessionId="session-1"
+        currentView={{ type: "raw" } as EditorView}
+        title={<span>Session title</span>}
+      />,
+    );
+
+    const finalizingButton = screen.getByRole("button", { name: "Finalizing" });
+
+    expect((finalizingButton as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(finalizingButton);
+
+    expect(mocks.stopListening).not.toHaveBeenCalled();
+    expect(mocks.startListening).not.toHaveBeenCalled();
   });
 
   it("shows stop while a session is actively listening", () => {

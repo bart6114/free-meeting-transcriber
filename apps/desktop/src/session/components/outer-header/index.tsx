@@ -2,6 +2,7 @@ import { useLingui } from "@lingui/react/macro";
 import { SquareIcon } from "lucide-react";
 import { useCallback } from "react";
 
+import { Spinner } from "@hypr/ui/components/ui/spinner";
 import { cn } from "@hypr/utils";
 
 import { RecordingIcon, useHasTranscript } from "../shared";
@@ -129,12 +130,21 @@ function HeaderMeetingControl({
 
     if (sessionMode === "running_batch") {
       return {
-        label: t`Stop`,
+        label: t`Transcribing`,
         title: t`Stop transcription`,
-        icon: <SquareIcon className="text-recording size-3 fill-current" />,
+        icon: <Spinner size={12} />,
         onClick: () => {
           void stopTranscription(sessionId);
         },
+      };
+    }
+
+    if (sessionMode === "finalizing") {
+      return {
+        label: t`Finalizing`,
+        title: t`Finalizing transcript`,
+        icon: <Spinner size={12} />,
+        onClick: undefined,
       };
     }
 
