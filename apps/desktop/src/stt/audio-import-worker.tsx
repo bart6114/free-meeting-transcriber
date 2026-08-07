@@ -150,10 +150,7 @@ function ItemPipeline({
         file_type: "audio",
       });
       void queryClient.invalidateQueries({
-        queryKey: ["audio", sessionId, "exist"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["audio", sessionId, "url"],
+        queryKey: ["audio", sessionId],
       });
 
       clearBatchSession(sessionId);

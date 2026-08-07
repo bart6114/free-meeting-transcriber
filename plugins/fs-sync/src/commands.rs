@@ -258,6 +258,16 @@ pub(crate) async fn audio_metadata<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub(crate) async fn audio_peaks<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    session_id: String,
+) -> Result<Option<crate::audio::AudioPeaks>, String> {
+    let session_dir = resolve_session_dir(&app, &session_id)?;
+    spawn_blocking!({ crate::audio::peaks(&session_dir).map_err(|e| e.to_string()) })
+}
+
+#[tauri::command]
+#[specta::specta]
 pub(crate) async fn audio_delete_orphaned_expired<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     known_session_ids: Vec<String>,

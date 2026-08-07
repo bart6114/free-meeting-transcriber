@@ -30,10 +30,7 @@ export function TaskManager() {
       const deletedSessionIds = await cleanupExpiredAudio(audioRetention);
       for (const sessionId of deletedSessionIds) {
         void queryClient.invalidateQueries({
-          queryKey: ["audio", sessionId, "exist"],
-        });
-        void queryClient.invalidateQueries({
-          queryKey: ["audio", sessionId, "url"],
+          queryKey: ["audio", sessionId],
         });
       }
     },

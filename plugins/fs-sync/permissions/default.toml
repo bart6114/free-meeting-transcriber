@@ -13,6 +13,7 @@ permissions = [
     "allow-audio-exist",
     "allow-audio-delete",
     "allow-audio-metadata",
+    "allow-audio-peaks",
     "allow-audio-delete-orphaned-expired",
     "allow-audio-import",
     "allow-audio-import-data",

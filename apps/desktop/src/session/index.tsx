@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import React, { useEffect, useRef } from "react";
 
@@ -46,9 +46,11 @@ export function TabContentNote({
 }) {
   const sessionMode = useListener((state) => state.getSessionMode(tab.id));
   const audioExists = AudioPlayer.useAudioExists(tab.id);
+  const queryClient = useQueryClient();
+  const isCapturing = sessionMode === "active" || sessionMode === "finalizing";
 
   const audioUrlQuery = useQuery({
-    enabled: sessionMode !== "active" && sessionMode !== "finalizing",
+    enabled: !isCapturing,
     queryKey: ["audio", tab.id, "url"],
     queryFn: () => fsSyncCommands.audioPath(tab.id),
     select: (result) => {
@@ -58,7 +60,20 @@ export function TabContentNote({
       return convertFileSrc(result.data);
     },
   });
-  const audioUrl = audioUrlQuery.data;
+  // While capturing, cached url/peaks describe the previous recording; withholding the
+  // url tears the player down so nothing renders (or precomputes peaks) against a file
+  // that is about to be replaced.
+  const audioUrl = isCapturing ? null : audioUrlQuery.data;
+
+  const wasCapturingRef = useRef(false);
+  useEffect(() => {
+    // A finished recording replaces the audio file at an unchanged path, so the audio
+    // queries (exist/url/peaks) must be told rather than left to focus-driven refetches.
+    if (wasCapturingRef.current && !isCapturing) {
+      void queryClient.invalidateQueries({ queryKey: ["audio", tab.id] });
+    }
+    wasCapturingRef.current = isCapturing;
+  }, [isCapturing, queryClient, tab.id]);
 
   return (
     <>

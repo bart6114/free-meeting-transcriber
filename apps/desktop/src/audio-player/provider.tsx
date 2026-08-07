@@ -99,6 +99,24 @@ export function useAudioTime(): TimeSnapshot {
   return useSyncExternalStore(timeStore.subscribe, timeStore.getSnapshot);
 }
 
+// Precomputed on the Rust side and cached beside the recording. Rendering from these peaks
+// lets WaveSurfer skip fetching + WebAudio-decoding the whole file in the webview (seconds
+// for an hour-long recording); playback still streams through the media element.
+function useAudioPeaks(sessionId: string, enabled: boolean) {
+  const peaksQuery = useQuery({
+    enabled,
+    queryKey: ["audio", sessionId, "peaks"],
+    queryFn: () => fsSyncCommands.audioPeaks(sessionId),
+    select: (result) => (result.status === "error" ? null : result.data),
+    retry: false,
+  });
+
+  return {
+    peaks: peaksQuery.data ?? null,
+    peaksResolved: peaksQuery.isFetched || !enabled,
+  };
+}
+
 function useAudioExistence(sessionId: string) {
   const audioExists = useQuery({
     queryKey: ["audio", sessionId, "exist"],
@@ -140,13 +158,16 @@ export function AudioPlayerProvider({
   const stopRequestedRef = useRef(false);
   const { audioExists: audioExistsValue, audioExistsResolved } =
     useAudioExistence(sessionId);
+  const { peaks, peaksResolved } = useAudioPeaks(sessionId, Boolean(url));
 
   const registerContainer = useCallback((el: HTMLDivElement | null) => {
     setContainer((prev) => (prev === el ? prev : el));
   }, []);
 
   useEffect(() => {
-    if (!container || !url) {
+    // Waiting for peaksResolved avoids a race where WaveSurfer starts the expensive
+    // fetch+decode fallback that precomputed peaks exist to skip.
+    if (!container || !url || !peaksResolved) {
       return;
     }
 
@@ -175,7 +196,12 @@ export function AudioPlayerProvider({
         { waveColor: "#e8d5d5", progressColor: "#c9a3a3", overlay: true },
         { waveColor: "#d5dde8", progressColor: "#a3b3c9", overlay: true },
       ],
+      ...(peaks ? { peaks: peaks.channels, duration: peaks.durationSec } : {}),
     });
+
+    if (peaks) {
+      store.setTotal(peaks.durationSec);
+    }
 
     const syncCurrentTime = (currentTime: number, force = false) => {
       if (
@@ -258,7 +284,7 @@ export function AudioPlayerProvider({
       audio.src = "";
       audio.load();
     };
-  }, [container, url]);
+  }, [container, url, peaks, peaksResolved]);
 
   const start = useCallback(() => {
     if (wavesurfer) {
@@ -338,10 +364,7 @@ export function AudioPlayerProvider({
       stop();
       timeStoreRef.current.reset();
       void queryClient.invalidateQueries({
-        queryKey: ["audio", sessionId, "exist"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["audio", sessionId, "url"],
+        queryKey: ["audio", sessionId],
       });
     },
   });

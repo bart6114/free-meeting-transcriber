@@ -211,10 +211,7 @@ export function useUploadFile(sessionId: string) {
               file_type: "audio",
             });
             void queryClient.invalidateQueries({
-              queryKey: ["audio", sessionId, "exist"],
-            });
-            void queryClient.invalidateQueries({
-              queryKey: ["audio", sessionId, "url"],
+              queryKey: ["audio", sessionId],
             });
           }),
         ),
