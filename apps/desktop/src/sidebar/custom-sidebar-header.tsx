@@ -36,7 +36,7 @@ export function CustomSidebarHeader({
   return (
     <div
       data-tauri-drag-region
-      className="-mt-11 flex h-12 shrink-0 items-start py-0 pt-[9px] pr-1 pl-[76px]"
+      className="-mt-11 flex h-12 shrink-0 items-start py-0 pt-[9px] pr-1 pl-[var(--traffic-lights-inset)]"
     >
       <div
         data-tauri-drag-region

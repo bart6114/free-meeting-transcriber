@@ -42,7 +42,8 @@ export function OuterHeader({
       className={cn([
         "relative flex w-full items-center",
         "h-12",
-        showSidebarTimelineHeaderGutter && "pl-[156px]",
+        showSidebarTimelineHeaderGutter &&
+          "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
       ])}
     >
       {title ? (
@@ -53,12 +54,12 @@ export function OuterHeader({
             centerTitle && "justify-center",
             "right-[140px]",
             standaloneWindow
-              ? "left-[76px]"
+              ? "left-[var(--traffic-lights-inset)]"
               : showSidebarTimelineHeaderGutter
-                ? "left-[104px]"
+                ? "left-[calc(var(--traffic-lights-inset)_+_28px)]"
                 : showExpandedSidebarTimelineHeader
                   ? "left-0"
-                  : "left-[114px]",
+                  : "left-[calc(var(--traffic-lights-inset)_+_38px)]",
           ])}
         >
           <div

@@ -66,8 +66,12 @@ describe("TabContentChangelog", () => {
     });
     const titleSlot = heading.parentElement;
 
-    expect(getHeader().className).toContain("pl-[156px]");
-    expect(titleSlot?.className).toContain("left-[104px]");
+    expect(getHeader().className).toContain(
+      "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
+    );
+    expect(titleSlot?.className).toContain(
+      "left-[calc(var(--traffic-lights-inset)_+_28px)]",
+    );
     expect(titleSlot?.className).not.toContain("-translate-y-1");
     expect(titleSlot?.className).toContain("right-[70px]");
     expect(titleSlot?.className).toContain("justify-start");
@@ -78,7 +82,9 @@ describe("TabContentChangelog", () => {
   it("does not add the collapsed sidebar gutter while the left sidebar is expanded", () => {
     render(<TabContentChangelog tab={buildChangelogTab()} />);
 
-    expect(getHeader().className).not.toContain("pl-[156px]");
+    expect(getHeader().className).not.toContain(
+      "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
+    );
   });
 
   it("uses the left-edge title slot while the sidebar is expanded", () => {

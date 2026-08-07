@@ -7,6 +7,16 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Space reserved for the macOS traffic lights; collapses when the window is
+   fullscreen and the system hides them (data-fullscreen set by main-app-layout). */
+:root {
+  --traffic-lights-inset: 76px;
+}
+
+:root[data-fullscreen] {
+  --traffic-lights-inset: 12px;
+}
+
 .undo-delete-toast-gauge {
   animation: undo-delete-toast-gauge var(--undo-delete-duration) linear
     forwards;

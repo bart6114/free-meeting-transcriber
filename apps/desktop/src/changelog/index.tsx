@@ -133,7 +133,8 @@ function ChangelogHeader({
       data-tauri-drag-region
       className={cn([
         "relative flex h-12 w-full items-center",
-        showSidebarTimelineHeaderGutter && "pl-[156px]",
+        showSidebarTimelineHeaderGutter &&
+          "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
       ])}
     >
       <div
@@ -143,7 +144,7 @@ function ChangelogHeader({
           showExpandedSidebarTimelineHeader
             ? "right-[70px] left-0 justify-start"
             : showSidebarTimelineHeaderGutter
-              ? "right-[70px] left-[104px] justify-start"
+              ? "right-[70px] left-[calc(var(--traffic-lights-inset)_+_28px)] justify-start"
               : "left-1/2 w-[min(640px,calc(100%_-_160px))] -translate-x-1/2 justify-center",
         ])}
       >

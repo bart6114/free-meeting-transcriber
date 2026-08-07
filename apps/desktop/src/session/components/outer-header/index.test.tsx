@@ -167,13 +167,17 @@ describe("OuterHeader", () => {
     const titleSlot = titleWrapper?.parentElement;
     const header = titleSlot?.parentElement;
 
-    expect(header?.className).toContain("pl-[156px]");
+    expect(header?.className).toContain(
+      "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
+    );
     expect(header?.className).toContain("h-12");
     expect(header?.className).not.toContain("pb-1");
     expect(titleWrapper?.classList.contains("w-full")).toBe(false);
     expect(titleWrapper?.className).toContain("max-w-full");
     expect(titleWrapper?.className).not.toContain("max-w-[680px]");
-    expect(titleSlot?.className).toContain("left-[104px]");
+    expect(titleSlot?.className).toContain(
+      "left-[calc(var(--traffic-lights-inset)_+_28px)]",
+    );
     expect(titleSlot?.className).not.toContain("-translate-y-1");
     expect(titleSlot?.className).toContain("right-[140px]");
     expect(screen.queryByRole("button", { name: "Show sidebar" })).toBeNull();
@@ -231,7 +235,9 @@ describe("OuterHeader", () => {
     expect(screen.queryByRole("button", { name: "Go back" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Go forward" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Stop listening" })).toBeNull();
-    expect(container.firstElementChild?.className).not.toContain("pl-[156px]");
+    expect(container.firstElementChild?.className).not.toContain(
+      "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
+    );
   });
 
   it("keeps the session header at 48px tall", () => {
@@ -297,7 +303,9 @@ describe("OuterHeader", () => {
     const title = screen.getByText("Session title");
     const titleSlot = title.parentElement?.parentElement;
 
-    expect(titleSlot?.className).toContain("left-[76px]");
+    expect(titleSlot?.className).toContain(
+      "left-[var(--traffic-lights-inset)]",
+    );
     expect(titleSlot?.className).toContain("right-[140px]");
     expect(titleSlot?.className).not.toContain("right-[153px]");
     expect(screen.queryByRole("button", { name: "Stop listening" })).toBeNull();
@@ -323,8 +331,12 @@ describe("OuterHeader", () => {
     const titleSlot = title.parentElement?.parentElement;
     const header = container.firstElementChild;
 
-    expect(header?.className).not.toContain("pl-[156px]");
-    expect(titleSlot?.className).toContain("left-[76px]");
+    expect(header?.className).not.toContain(
+      "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
+    );
+    expect(titleSlot?.className).toContain(
+      "left-[var(--traffic-lights-inset)]",
+    );
     expect(titleSlot?.className).toContain("right-[140px]");
   });
 

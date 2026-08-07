@@ -474,7 +474,7 @@ export function ClassicMainBody() {
     <div
       data-tauri-drag-region
       data-sidebar-timeline-header
-      className="flex h-9 shrink-0 items-start pt-[9px] pr-1 pl-[76px]"
+      className="flex h-9 shrink-0 items-start pt-[9px] pr-1 pl-[var(--traffic-lights-inset)]"
       onWheelCapture={handleSidebarTimelineHeaderWheel}
     >
       {showSidebarTimeline ? (
@@ -513,7 +513,7 @@ export function ClassicMainBody() {
         >
           <div
             data-tauri-drag-region
-            className="flex h-full min-w-0 items-start pt-[9px] pr-1 pl-[76px]"
+            className="flex h-full min-w-0 items-start pt-[9px] pr-1 pl-[var(--traffic-lights-inset)]"
           >
             <SidebarTimelineChromeWithUpcomingMeeting
               currentSessionId={currentSessionId}
@@ -540,7 +540,7 @@ export function ClassicMainBody() {
         <div data-tauri-drag-region className="relative h-10 shrink-0">
           <div
             data-tauri-drag-region
-            className="flex h-full min-w-0 items-start pt-1 pl-[76px]"
+            className="flex h-full min-w-0 items-start pt-1 pl-[var(--traffic-lights-inset)]"
           />
         </div>
       )}
@@ -553,7 +553,7 @@ export function ClassicMainBody() {
         >
           <div
             data-tauri-drag-region
-            className="flex h-full min-w-0 items-start pt-[9px] pl-[76px]"
+            className="flex h-full min-w-0 items-start pt-[9px] pl-[var(--traffic-lights-inset)]"
           >
             <LeftSurfaceChromeButton
               ariaLabel="Go back"
