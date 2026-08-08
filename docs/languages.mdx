@@ -1,26 +1,24 @@
 ---
-title: "Use multiple languages"
-description: "Choose the language for AI output and tell transcription which languages to expect."
+title: "Languages"
+description: "Set the language for summaries and the languages spoken in meetings."
 ---
 
-Free Meeting Transcriber separates the language used for summaries from the languages it should expect in a conversation.
+Free Meeting Transcriber keeps summary language and spoken languages as separate settings.
 
-## Choose the main language
+## Set the main language
 
 Open **Settings → App → Language & Region** and choose **Main language**.
 
-Free Meeting Transcriber uses the main language for summaries and other AI-generated text. It is also always included as a transcription language.
-
-Changing the main language does not translate an existing transcript. Regenerate a summary to apply the new output language to an older meeting.
+This language is used for generated summaries and titles. It is also included in the list passed to transcription. Changing it does not translate an existing transcript. Regenerate a summary if you want an older meeting summarized in the new language.
 
 ## Add spoken languages
 
-Under **Additional spoken languages**, add other languages people may use in the same meeting. This gives transcription more context for multilingual conversations.
+Use **Additional spoken languages** when people may switch languages during a meeting. The app passes the full selection to the transcription model.
 
-The on-device transcription models support about 25 mostly European languages. Live transcription is English-only; meetings in other supported languages are transcribed after the recording stops.
+Language support depends on the downloaded model. The live streaming model supports English. When your selected languages are not supported live, the app records first and transcribes after you stop. The model picker warns you when a model cannot handle the selected languages.
 
-## Improve names and jargon
+## Names and specialist terms
 
-Language selection does not teach the model company-specific terminology. You can collect names, acronyms, and product terms under **Settings → Dictionary**.
+Language settings do not teach the model names or company jargon. Add those under **Settings → Dictionary**.
 
-For summary structure and wording, use [Customize meeting summaries](/customize-summaries).
+Use [Customize meeting summaries](/customize-summaries) to control summary structure and wording.

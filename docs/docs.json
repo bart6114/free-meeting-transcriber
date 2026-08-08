@@ -1,11 +1,11 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
+  "theme": "linden",
   "name": "Free Meeting Transcriber",
   "colors": {
-    "primary": "#f59e0b",
-    "light": "#fbbf24",
-    "dark": "#d97706"
+    "primary": "#c38b22",
+    "light": "#e2a936",
+    "dark": "#9a6918"
   },
   "favicon": "/favicon.svg",
   "navigation": {

@@ -1,29 +1,27 @@
 ---
-title: "Installation"
-description: "Install the current Free Meeting Transcriber CLI and point it at local meeting data."
+title: "Install the CLI"
+description: "Install fmtr and connect it to your local vault."
 ---
 
-## Current availability
+The `fmtr` executable contains both the command-line interface and the MCP server.
 
-The CLI includes the `fmtr mcp` server in the same executable.
+## Install it from the desktop app
 
-<Warning>
-  Homebrew, standalone release binaries, and Windows package-manager distribution are forthcoming. Do not rely on those channels yet.
-</Warning>
+On macOS, open **Settings → Developers** and click **Install**. The app installs the bundled command at `~/.local/bin/fmtr`.
 
-## Install from the desktop app
-
-On macOS, open **Settings → Developers** and select **Install**. Free Meeting Transcriber installs the bundled command at `~/.local/bin/fmtr` without sending data anywhere.
-
-If your shell cannot find `fmtr`, add `~/.local/bin` to `PATH`:
+If your shell cannot find it, add that directory to `PATH`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-## Build from source
+<Note>
+  The app uses `fmtr-dev` and `fmtr-staging` for development and staging builds, so those channels do not overwrite the stable command.
+</Note>
 
-To build the CLI yourself instead:
+## Build it from source
+
+You can install the CLI directly from the repository:
 
 ```bash
 git clone https://github.com/bart6114/free-meeting-transcriber.git
@@ -32,23 +30,26 @@ cargo install --locked --path apps/cli
 fmtr --version
 ```
 
-`cargo` installs the executable into its configured binary directory, normally `~/.cargo/bin`. Add that directory to `PATH` if your shell cannot find `fmtr`.
+Cargo normally writes commands to `~/.cargo/bin`. Add that directory to `PATH` if needed.
 
-## Connect to local data
+There is no published Homebrew formula, standalone CLI download, or Windows package at this time.
 
-By default, the CLI looks for the `free-meeting-transcriber` vault in your operating system's application-data directory, following the `vault_path` redirect in its `global.json` when the vault has been relocated.
+## Connect to the vault
 
-Open the desktop app once before using the CLI. For a custom vault location, pass a global option or environment variable:
+Open the desktop app at least once before using the CLI. By default, `fmtr` looks in Free Meeting Transcriber's application-data directory. If you moved the vault in the app, the CLI follows the `vault_path` value in `global.json`.
+
+You can override the path for one command:
 
 ```bash
 fmtr --vault-path /path/to/vault --json meetings list
+```
+
+Or set it in the environment:
+
+```bash
 FMTR_VAULT_PATH=/path/to/vault fmtr --json meetings list
 ```
 
-If you have a Free Meeting Transcriber vault directory, you can equivalently use:
+`--base /path/to/vault` is an older equivalent, but `--vault-path` is clearer and takes precedence when both are present.
 
-```bash
-fmtr --base /path/to/vault --json meetings list
-```
-
-The CLI reads vault files without modifying them. It does not create a vault or migrate data.
+The CLI reads the vault. It does not create, migrate, or edit meeting data. The export command can write a separate output file when you ask it to.

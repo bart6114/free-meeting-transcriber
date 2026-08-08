@@ -1,13 +1,11 @@
 ---
 title: "MCP for agents"
-description: "Connect an MCP client to local Free Meeting Transcriber meeting context over stdio."
+description: "Connect an MCP client to local meeting notes over stdio."
 ---
 
-The MCP server runs inside the `fmtr` executable and communicates over standard input and output. It does not open a port or send meeting data to a hosted service.
+The MCP server is part of the `fmtr` executable. It communicates through standard input and output. It does not open a network port or send meeting data to a hosted service.
 
 ## Configure a client
-
-Use this generic MCP configuration:
 
 ```json
 {
@@ -20,7 +18,7 @@ Use this generic MCP configuration:
 }
 ```
 
-If `fmtr` is not on the client's `PATH`, use the executable's absolute path as `command`. Restart the client after changing its configuration.
+Use the absolute path to `fmtr` if the client cannot find it on `PATH`. Restart the client after changing its MCP configuration.
 
 For a custom vault path:
 
@@ -35,10 +33,10 @@ For a custom vault path:
 }
 ```
 
-## Use tools deliberately
+## Recommended order
 
-Start with `list_meetings`, then pass the returned `id` to `get_meeting`. Only call `get_meeting_transcript` if notes and summaries do not contain the required evidence.
+Start with `list_meetings` or `search_meetings`. Pass a returned `id` to `get_meeting`. Call `get_meeting_transcript` only if the meeting detail does not contain enough evidence.
 
-`get_meeting_transcript` returns the whole meeting as `[HH:MM:SS] Speaker: ...` lines, so one call is enough.
+`get_meeting_transcript` returns the complete transcript as `[HH:MM:SS] Speaker: ...` lines.
 
-See the [MCP reference](/reference/mcp) for exact parameters and resources.
+See the [MCP reference](/reference/mcp) for exact parameters and resource URIs.

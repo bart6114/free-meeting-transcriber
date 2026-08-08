@@ -1,55 +1,51 @@
 ---
-title: "Transcription and AI"
-description: "Choose how Free Meeting Transcriber turns audio into text and text into useful notes."
+title: "Transcription and summaries"
+description: "Set up local transcription and, if you want it, AI-generated summaries."
 ---
 
-Free Meeting Transcriber uses two model settings:
+Free Meeting Transcriber has two separate model settings:
 
-- **Transcription** turns meeting audio into a transcript. It always runs on-device.
-- **Intelligence** creates summaries and note titles. Choose a local server or a provider with your own API key.
+- **Transcription** turns audio into text on your Mac.
+- **Intelligence** writes summaries and note titles. It can use a local model or a provider you configure with your own API key.
 
-Open **Settings → Transcription** or **Settings → Intelligence** to choose a model.
+Open **Settings → Transcription** or **Settings → Intelligence** to change the active model.
 
-## Choose a setup
+## Transcription
 
-<CardGroup cols={2}>
-  <Card title="On-device transcription" icon="laptop">
-    Download a supported local model from Transcription. Local models are available on supported Apple Silicon Macs.
-  </Card>
-  <Card title="Your API key" icon="key">
-    For Intelligence, configure a provider, enter its API key, then select it under Model being used.
-  </Card>
-  <Card title="Local language model" icon="server">
-    Connect LM Studio or Ollama to generate summaries on your computer.
-  </Card>
-</CardGroup>
+Transcription is on-device only. Download a model from **Settings → Transcription**, wait for it to finish, then select it under **Model being used**.
 
-Models labeled **Live** show text during the meeting; live transcription is currently English-only, and other languages are transcribed after the recording. Models labeled **After recording** always transcribe after you stop.
+A model marked **Live** can show text during a meeting. The streaming model supports English. If your language selection is not supported live, the app falls back to transcription after the recording. Models marked **After recording** always wait until you stop.
 
-To keep transcription and summaries on your computer, follow [Use Free Meeting Transcriber offline](/offline).
+## Intelligence
+
+You do not need an Intelligence model to record, write notes, or transcribe. Configure one only if you want generated summaries and titles.
+
+For a hosted provider, open **Configure Providers**, add the API key, then select one of that provider's models. The API key is stored in the macOS login Keychain.
+
+You can also run summaries locally with LM Studio or Ollama.
 
 ## LM Studio
 
 1. Install [LM Studio](https://lmstudio.ai/download) and download a model.
 2. Start its local server on port `1234` and enable CORS.
-3. In Free Meeting Transcriber, open **Settings → Intelligence → Configure Providers → LM Studio**.
+3. Open **Settings → Intelligence → Configure Providers → LM Studio**.
 4. Select the LM Studio model under **Model being used**.
 
 ## Ollama
 
 1. Install [Ollama](https://ollama.com/download).
-2. Start it and pull a model:
+2. Start it and download a model:
 
    ```bash
    ollama serve
    ollama pull llama3.2
    ```
 
-3. In Free Meeting Transcriber, open **Settings → Intelligence → Configure Providers → Ollama**.
+3. Open **Settings → Intelligence → Configure Providers → Ollama**.
 4. Select the Ollama model under **Model being used**.
 
-## What leaves your computer
+## What leaves your Mac
 
-Your app data remains local. Local transcription and local Intelligence providers process content on your computer. If you select a remote API-key provider, Free Meeting Transcriber sends the text needed for that request to the selected provider.
+Recording and transcription stay local. A local Intelligence provider also keeps summary processing on your Mac. If you select a remote Intelligence provider, the app sends the prompt and meeting context needed for that request to that provider.
 
-See [Data, privacy, and retention](/data-and-privacy) for a feature-by-feature explanation.
+See [Data, privacy, and retention](/data-and-privacy) for more detail.

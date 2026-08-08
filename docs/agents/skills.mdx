@@ -1,28 +1,26 @@
 ---
 title: "Free Meeting Transcriber skill"
-description: "Teach a compatible agent when and how to use Free Meeting Transcriber's MCP and CLI surfaces."
+description: "Install the repository skill that teaches agents to use fmtr safely."
 ---
 
-The public Free Meeting Transcriber skill gives agents one transport-agnostic workflow:
+The public skill gives compatible agents a simple workflow:
 
-1. Prefer connected Free Meeting Transcriber MCP tools.
+1. Use connected Free Meeting Transcriber MCP tools when available.
 2. Fall back to `fmtr --json` when MCP is unavailable.
-3. Resolve meeting IDs from search results.
-4. Fetch meeting detail before transcript text.
-5. Keep transcript reads bounded and never crawl or modify the vault files directly.
+3. Resolve meeting IDs from list or search results.
+4. Read meeting details before requesting the full transcript.
+5. Never crawl or modify vault files directly.
 
-## Canonical source
+## Source
 
-- Repository package: [`skills/fmtr`](https://github.com/bart6114/free-meeting-transcriber/tree/main/skills/fmtr)
+The maintained package is [`skills/fmtr`](https://github.com/bart6114/free-meeting-transcriber/tree/main/skills/fmtr). It includes references for setup, CLI commands, MCP tools, and errors.
 
-The repository package includes concise references for setup, CLI commands, MCP tools, and errors.
+## Install it
 
-## Install in an agent
-
-For a filesystem-based agent, copy the complete `skills/fmtr` directory into that agent's skills directory. Keep the directory name `fmtr` so relative reference links continue to work.
+For an agent that loads skills from the filesystem, copy the complete `skills/fmtr` directory into that agent's skills directory. Keep the directory name `fmtr` so its relative links continue to work.
 
 <Note>
-  Agent skill locations and installer commands vary by client. Follow your agent's skill installation instructions rather than copying only `SKILL.md`.
+  Skill locations differ between clients. Follow your agent's installation instructions and copy the whole directory, not just `SKILL.md`.
 </Note>
 
-The contributor skills under `.agents/skills` are internal repository workflows. They are not part of the public Free Meeting Transcriber skill.
+The skills under `.agents/skills` are contributor workflows for this repository. They are not part of the public `fmtr` skill.

@@ -3,8 +3,8 @@
 ## Scope
 
 - This is the Mintlify project source. It is not currently published for
-  this fork — there is no hosted docs site — but the content is kept as the
-  source of truth for CLI/MCP behavior.
+  this fork. There is no hosted docs site, but the content is kept as the
+  source of truth for CLI and MCP behavior.
 - Write for Free Meeting Transcriber users, developers, and agents using the
   CLI or MCP server.
 - Configuration lives in `docs.json`; content pages are MDX.
@@ -24,8 +24,8 @@
 - Put the result before implementation detail.
 - Use `Free Meeting Transcriber` for the product and `fmtr` for the executable.
 - Use root-relative links between Mintlify pages. Do not reference a public
-  docs URL in external instructions or agent metadata — none is published for
-  this fork; point to the GitHub repository instead.
+  docs URL in external instructions or agent metadata. None is published for
+  this fork, so point to the GitHub repository instead.
 
 ## Accuracy boundaries
 
@@ -33,7 +33,7 @@
 - Mark planned features and distribution channels as forthcoming.
 - Never describe Homebrew or Windows binaries as available until release automation publishes them.
 - Never tell agents to crawl or modify the vault files directly; agents go through the CLI or MCP server.
-- Keep transcript examples bounded. CLI and MCP transcript pages default to 200 words and cap at 500 words.
+- Make it clear that CLI and MCP transcript commands return the complete transcript and can produce large responses.
 
 ## Verification
 

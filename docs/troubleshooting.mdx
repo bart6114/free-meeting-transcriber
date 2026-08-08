@@ -1,43 +1,43 @@
 ---
 title: "Troubleshooting"
-description: "Fix the most common recording, transcription, and summary problems."
+description: "Check the usual causes of missing audio, transcripts, and summaries."
 ---
 
 ## Audio is missing
 
-Open **Settings → Permissions** and confirm:
+Open **Settings → Permissions** and check both audio permissions:
 
-- **Microphone** is allowed so Free Meeting Transcriber can hear you.
-- **System Audio** is allowed so Free Meeting Transcriber can hear the other people on the call.
+- **Microphone** captures your voice.
+- **System audio** captures the other people on the call.
 
-If a permission is denied, open it in macOS Settings from the permission row, then restart Free Meeting Transcriber.
+If macOS shows either permission as denied, use the button beside it to open System Settings. Restart Free Meeting Transcriber after changing the permission.
 
 ## The transcript is not live
 
-Open **Settings → Transcription** and check the selected model. **Live** models transcribe during the meeting. **After recording** models wait until you stop.
+Open **Settings → Transcription** and inspect the selected model. A model marked **After recording** does not produce text until you stop. The live streaming model supports English, so other selected languages also cause the app to transcribe after recording.
 
-If transcription fails, confirm the model is downloaded and supports your spoken languages. See [Use multiple languages](/languages) for what each model supports.
+If no transcript appears at all, confirm that the model download finished and that it supports the selected spoken languages. See [Languages](/languages).
 
 ## No summary appears
 
-A summary needs an Intelligence model. Open **Settings → Intelligence**, then select a local model or configure a provider with your own API key.
+Summaries need an Intelligence model and enough transcript text. Open **Settings → Intelligence** and select a model.
 
-For LM Studio and Ollama, confirm the local server is running. See [Transcription and AI](/ai-setup).
+For LM Studio or Ollama, make sure the local server is running and the selected model is available. See [Transcription and summaries](/ai-setup).
 
 ## A recording disappeared
 
-Open **Settings → App → Meetings** and check **Audio file retention**. Free Meeting Transcriber can delete audio immediately or after a selected period while keeping the note and transcript.
+Check **Settings → App → Meetings → Audio file retention**. The app can remove audio immediately or after a set period while keeping the note and transcript.
 
-See [Data, privacy, and retention](/data-and-privacy#choose-how-long-audio-is-kept) for every retention option.
+See [Data, privacy, and retention](/data-and-privacy#audio-retention) for the available values.
 
 ## An imported file does nothing
 
 Audio imports accept WAV, MP3, OGG, MP4, M4A, FLAC, WebM, and AAC. Transcript imports accept SRT and VTT.
 
-For audio, confirm that a Transcription model is selected and that a local provider is running. See [Import audio or a transcript](/import-recordings).
+For audio, make sure a downloaded Transcription model is selected. See [Import audio or a transcript](/import-recordings).
 
 ## Get more help
 
-[Open a GitHub issue](https://github.com/bart6114/free-meeting-transcriber/issues).
+[Open a GitHub issue](https://github.com/bart6114/free-meeting-transcriber/issues) and include the app version, what you expected, and what happened.
 
-For CLI and MCP errors, use the [error reference](/reference/errors).
+For CLI and MCP failures, use the [error reference](/reference/errors).

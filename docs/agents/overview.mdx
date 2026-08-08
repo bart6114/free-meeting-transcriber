@@ -1,35 +1,35 @@
 ---
-title: "Agent overview"
-description: "Give an agent useful Free Meeting Transcriber context without exposing storage internals or unbounded transcripts."
+title: "Agent access"
+description: "Give an agent read-only access to local meeting notes through MCP or the CLI."
 ---
 
-Free Meeting Transcriber offers two local, read-only agent transports. They share the same meeting model.
+Free Meeting Transcriber has two local, read-only interfaces for agents. Both read the same vault.
 
-| Transport | Choose it when | Output |
+| Interface | Use it when | Output |
 | --- | --- | --- |
-| MCP | The agent supports a local stdio MCP server | Structured tool results and contextual resources |
-| CLI | The agent can run shell commands but MCP is unavailable | JSON with `--json`, or human-readable text |
+| MCP | The client can run a local stdio MCP server | Structured tool results and resources |
+| CLI | The agent can run shell commands | JSON with `--json`, or readable terminal output |
 
-## Recommended agent flow
+## A reliable workflow
 
-1. List recent meetings or search by a short title fragment.
-2. Use a returned meeting ID. Never infer or invent one.
-3. Fetch the meeting detail before requesting transcript text.
-4. Read transcript pages only until the task has enough evidence.
+1. List recent meetings or search with a short phrase.
+2. Take the meeting ID from the result. Do not guess it.
+3. Read meeting details before fetching a transcript.
+4. Fetch the transcript only when the notes and summaries are not enough.
 
-Prefer MCP when it is connected because tools carry their input schemas and results directly. The CLI provides the same bounded transcript workflow when an agent only has shell access.
+MCP is usually easier because the client receives tool schemas directly. The CLI is a useful fallback when MCP is not available.
 
-## Safety boundary
+## Read-only means read-only
 
-Agents should use the CLI or MCP server rather than crawling the vault files directly. Those interfaces apply Free Meeting Transcriber's rules for canonical notes, generated summaries, and transcript text.
+Use these interfaces instead of crawling the vault. They apply the same rules for canonical notes, summaries, speaker names, and transcript rendering.
 
-All current Free Meeting Transcriber data operations are read-only. An agent cannot update a note, action item, or meeting through these interfaces. CLI export may create a separate file; replacing an existing file requires `--force`.
+Neither interface can edit a note, action item, or meeting. The CLI export command is the one exception to in-place read-only behavior: it can create a separate file, and it only replaces an existing file when `--force` is passed.
 
 <CardGroup cols={2}>
-  <Card title="CLI for agents" icon="terminal" href="/agents/cli">
-    Use JSON output and resolve meeting IDs deliberately.
+  <Card title="Use the CLI" icon="terminal" href="/agents/cli">
+    Run commands with JSON output.
   </Card>
-  <Card title="MCP for agents" icon="plug" href="/agents/mcp">
-    Configure the stdio server and use bounded transcript pages.
+  <Card title="Use MCP" icon="plug" href="/agents/mcp">
+    Connect a local stdio server.
   </Card>
 </CardGroup>

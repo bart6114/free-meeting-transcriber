@@ -1,33 +1,29 @@
 ---
 title: "Data, privacy, and retention"
-description: "Understand what stays on your computer, what can leave it, and how long audio is kept."
+description: "See where your files live and when meeting text can leave your Mac."
 ---
 
-Free Meeting Transcriber stores its app data on your computer and captures meetings without adding a bot to the call. Data leaves your computer only when you use a connected feature that needs it.
+Free Meeting Transcriber has no account or cloud backend. It records without adding a bot to the call, and the vault on your Mac is the source of truth.
 
-## What stays on your computer
+## Files in the vault
 
-Your notes, local transcripts, settings, recordings you choose to keep, and downloaded local models are stored locally. You can write notes, record audio, and use configured local models without sending meeting content anywhere.
+The app stores notes, transcripts, settings, retained recordings, people, and templates as files in the vault. The default vault is in the app's data directory. You can change its location under **Settings → App → Storage**.
 
-Your data lives in plain files in the vault folder you chose during setup. You can edit those files with other tools; Free Meeting Transcriber picks up external changes and moves the previous version to the vault's `.trash/` folder before overwriting anything. Use the export tools when you need a portable copy.
+You can inspect and edit the vault with other tools. The app watches for external changes and refreshes its in-memory index. If the app is about to overwrite a version it did not write, it first moves that version into the vault's `.trash/` folder.
 
-## When content is sent elsewhere
+Downloaded transcription models are also local, but they are managed separately from meeting files.
 
-Transcription always runs on your computer. A remote **Intelligence** provider receives the text and instructions needed to create a summary.
+## Remote Intelligence providers
 
-Your own API-key providers and local providers are separate choices, and API keys are stored in the macOS keychain, not in the vault. Review the provider's own retention and training policies before sending sensitive content.
+Transcription runs on your Mac. Meeting content only leaves the app when you ask a remote Intelligence provider to generate a summary or title. That request includes the prompt and the meeting context needed to produce the result.
 
-## Keep a meeting fully local
+API keys are stored in the macOS login Keychain. Review a provider's retention and training policy before using it with sensitive meetings.
 
-1. Select an on-device model under **Settings → Transcription**.
-2. Select LM Studio or Ollama under **Settings → Intelligence**.
-3. Avoid remote API-key providers for that content.
+For fully local summaries, use LM Studio or Ollama. See [Use the app offline](/offline).
 
-See [Use Free Meeting Transcriber offline](/offline) for the full setup.
+## Audio retention
 
-## Choose how long audio is kept
-
-Open **Settings → App → Meetings → Audio file retention**. Choose:
+Open **Settings → App → Meetings → Audio file retention** and choose one of these values:
 
 - **Don't save**
 - **1 day**
@@ -36,12 +32,12 @@ Open **Settings → App → Meetings → Audio file retention**. Choose:
 - **1 month**
 - **Forever**
 
-Deleting retained audio does not remove the meeting note or transcript. If you need the recording later, open the meeting's **•••** menu, choose **Show in Finder**, and copy the audio before its retention period ends.
+Removing retained audio does not remove the memo, summary, or transcript. To copy a recording before it expires, open the meeting's **•••** menu and choose **Show in Finder**.
 
-## Usage analytics
+## Telemetry
 
-This build of Free Meeting Transcriber never sends usage analytics or telemetry, regardless of the **Share usage data** setting under **Settings → App**.
+This fork does not send usage analytics or telemetry. The **Share usage data** control is still visible in Settings, but the analytics plugin is a local no-op in this build.
 
 <Warning>
-  Recording-consent rules depend on where you and the other participants are located. Make sure you have permission before recording.
+  Recording-consent rules vary by location. Make sure you have permission before recording.
 </Warning>

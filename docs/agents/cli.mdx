@@ -1,58 +1,53 @@
 ---
 title: "CLI for agents"
-description: "Use structured Free Meeting Transcriber CLI output as an agent-friendly MCP fallback."
+description: "Use fmtr JSON output when MCP is not available."
 ---
 
-Pass the global `--json` flag when an agent consumes CLI output.
+Pass the global `--json` flag when software consumes CLI output. A successful response contains `schema_version`, `command`, `data`, and, for paginated commands, `pagination`.
 
-Every successful JSON response contains `schema_version`, `command`, `data`, and optional `pagination`. Read meeting results from `data` and continue from `pagination.next_offset` only when needed.
-
-## Resolve meeting context
+## Find the meeting first
 
 ```bash
 fmtr --json meetings list --query "weekly planning" --limit 10
 fmtr --json meetings get MEETING_ID
 ```
 
-Search is case-insensitive across meeting titles and IDs. If several results match, ask the user which meeting they mean.
+List filtering matches titles and IDs without regard to case. For full-text search across notes, summaries, and transcripts, use `meetings search`. If several meetings match the user's request, ask which one they mean.
 
-## Read the smallest useful surface
+## Read only what you need
 
 ```bash
 fmtr --json meetings note MEETING_ID --kind note
 fmtr --json meetings note MEETING_ID --kind summary
 ```
 
-Use `meetings get` when action items matter. Use `meetings note` when note content alone is enough.
+Use `meetings get` when you also need metadata or action items.
 
 ## Transcripts
 
 ```bash
-fmtr --json meetings transcript MEETING_ID --limit 200 --offset 0
+fmtr --json meetings transcript MEETING_ID
 ```
 
-Transcript limits are measured in words. The default is 200 and the maximum is 500. Continue from `pagination.next_offset` only when the next page is necessary.
+This returns the complete speaker-labeled transcript in one response. Transcripts can be large, so do not request one unless the task needs it.
 
-## Diagnose setup
+## Check the setup
 
 ```bash
 fmtr --json doctor
 ```
 
-The report includes the CLI version, an overall `ready` flag, and vault health: the resolved vault path, whether it exists and is a directory, and the session count.
-The command exits with status 1 when `ready` is false while preserving the diagnostic report on standard output.
+The report includes the CLI version, a `ready` flag, the resolved vault path, path health, and the number of sessions. It exits with status 1 when `ready` is false, while still writing the report to standard output.
 
-When the vault lives somewhere non-standard, point the CLI at it with the global `--vault-path DIR` flag or the `FMTR_VAULT_PATH` environment variable.
+For a non-default vault, use `--vault-path DIR` or `FMTR_VAULT_PATH`.
 
-## Exports
-
-Only export a complete meeting when the user explicitly requests a file:
+## Export only when asked
 
 ```bash
 fmtr meetings export MEETING_ID --format markdown --output meeting.md
 fmtr meetings export MEETING_ID --format json --output meeting.json
 ```
 
-Export refuses to replace an existing file. Use `--force` only after the user explicitly approves overwriting that exact path.
+Export refuses to replace an existing file. Pass `--force` only when the user has approved overwriting that exact path.
 
-See the [CLI reference](/reference/cli) for every option.
+See the [CLI reference](/reference/cli) for the full command contract.

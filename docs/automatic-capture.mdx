@@ -1,26 +1,22 @@
 ---
-title: "Automate meeting capture"
-description: "Use microphone detection and automatic stopping without losing control."
+title: "Meeting detection and controls"
+description: "Get a reminder when a call starts and stop recording when it ends."
 ---
 
-Free Meeting Transcriber can remind you when another meeting app uses your microphone and stop listening when the call ends.
+Free Meeting Transcriber does not start recording on its own. It can notice sustained microphone use, show a reminder, and stop an active recording after the meeting app releases the microphone.
 
-## Detect meetings
+## Turn on meeting reminders
 
-Open **Settings → Notifications** and enable **Microphone detection**. Free Meeting Transcriber watches for sustained microphone activity and notifies you that a meeting may have started.
+Open **Settings → Notifications** and enable **Microphone detection**. Choose how long the microphone must be active before the notification appears. The available delay is between 5 seconds and 2 minutes.
 
-Microphone detection is a reminder; it does not start recording by itself. Choose a detection delay from 5 seconds to 2 minutes, and exclude apps that should not trigger a meeting prompt.
-
-Accessibility permission lets Free Meeting Transcriber read meeting controls and participant status from meeting apps. You can manage it under **Settings → Permissions**.
+You can exclude apps that use the microphone but should not trigger a meeting reminder. The same page has a setting to respect macOS Do Not Disturb.
 
 ## Stop when the call ends
 
-Under **Settings → App → Meetings**, enable **Stop when meeting ends**. Free Meeting Transcriber stops listening when the meeting app releases the microphone.
+Open **Settings → App → Meetings** and enable **Stop when meeting ends**. This uses microphone activity from the meeting app to decide when to stop.
 
-If you switch audio devices or use an app with unusual microphone behavior, check that the recording is still active before closing the meeting.
+This is a convenience, not something to trust blindly. If you switch devices or use an app with unusual microphone behavior, check that the recording is still active.
 
-## Keep controls nearby
+## Keep the controls visible
 
-Enable **Show floating bar** under **Settings → App → Meetings** to keep compact recording controls visible while Free Meeting Transcriber listens.
-
-Microphone notifications can also respect your system's Do Not Disturb mode from **Settings → Notifications**.
+Enable **Show floating bar** under **Settings → App → Meetings**. A small recording control stays available while the app is listening.

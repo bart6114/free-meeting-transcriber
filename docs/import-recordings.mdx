@@ -1,30 +1,29 @@
 ---
 title: "Import audio or a transcript"
-description: "Turn an existing recording or subtitle file into a Free Meeting Transcriber meeting note."
+description: "Create a note from an audio recording, SRT file, or VTT file."
 ---
 
-You can use Free Meeting Transcriber with a conversation that was recorded elsewhere. Import audio to create a new transcript, or import an existing transcript to create a summary.
+You do not have to record a conversation in Free Meeting Transcriber. You can bring in audio recorded elsewhere or start with an existing subtitle file.
 
-## Import audio
+## Import one audio file
 
 1. Create a **New Note** or open an empty note.
 2. Open the **•••** menu and choose **Upload audio**.
-3. Select a supported audio file.
-4. Leave Free Meeting Transcriber open while it imports and transcribes the recording.
+3. Select the recording and leave the app running while it is processed.
 
-You can also drag one audio file onto an open note.
+You can also drop one audio file onto an open note.
 
-Free Meeting Transcriber accepts WAV, MP3, OGG, MP4, M4A, FLAC, WebM, and AAC files. It uses your selected **Transcription** model, so configure that model before importing.
+Supported file extensions are WAV, MP3, OGG, MP4, M4A, FLAC, WebM, and AAC. Audio imports use the selected on-device Transcription model.
 
-## Import many files at once
+## Import several recordings
 
 1. Open an empty tab and choose **Import Audio**.
-2. Drop audio files or a whole folder onto the dialog, or use **Choose files**. Folders are scanned for audio files, including subfolders.
-3. Untick any files you don't want, then press **Import**.
+2. Drop audio files or a folder into the dialog. Dropped folders are scanned recursively. You can also use **Choose files**.
+3. Clear the checkbox for anything you do not want to import, then click **Import**.
 
-Each file becomes its own note, dated from the recording, and the queue imports, transcribes, and summarizes them one at a time. A progress indicator in the sidebar shows how far along the queue is; failed files can be retried from the dialog.
+Each file gets its own note. The app processes the queue one file at a time. Use the sidebar progress item to reopen the queue, inspect a failure, or retry it.
 
-When transcription finishes, Free Meeting Transcriber creates a summary if an **Intelligence** model is configured.
+The note date comes from available recording metadata or the file's modification date. A summary is generated when an Intelligence model is configured and the transcript is long enough.
 
 ## Import a transcript
 
@@ -32,10 +31,10 @@ When transcription finishes, Free Meeting Transcriber creates a summary if an **
 2. Open the **•••** menu and choose **Upload transcript**.
 3. Select a WebVTT (`.vtt`) or SubRip (`.srt`) file.
 
-Free Meeting Transcriber adds the timed text to the note and generates a summary when an Intelligence model is available. Importing a transcript does not create an audio recording.
+The timed text becomes the note's transcript. No audio file is created. If an Intelligence model is configured, the app also tries to generate a summary.
 
-## If an import does not start
+## If nothing happens
 
-Confirm that the file uses one of the supported formats and that a Transcription model is selected for audio imports. For local or bring-your-own-key providers, make sure the provider is running and configured.
+Check the file extension and make sure a downloaded Transcription model is selected for audio imports. For summaries through LM Studio or Ollama, make sure the local server is running.
 
-See [Transcription and AI](/ai-setup) for model setup or [Troubleshooting](/troubleshooting) for common failures.
+See [Transcription and AI](/ai-setup) for model setup or [Troubleshooting](/troubleshooting) for common problems.

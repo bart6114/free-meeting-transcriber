@@ -1,34 +1,30 @@
 ---
 title: "Customize meeting summaries"
-description: "Choose a named format or customize how Auto writes meeting summaries."
+description: "Choose a summary template or change the prompt used by Auto."
 ---
 
-Use a named template when you want fixed sections. Customize Auto when you want to control Free Meeting Transcriber's default summary prompt.
+Summary generation is optional. When you use it, you can either let Auto decide the structure or choose a template with fixed sections.
 
-## Choose a template
+## Use a template
 
-Open a meeting and use the template picker beside **Summary**. Create your own templates to emphasize decisions, action items, a one-on-one format, or another structure.
+Open a meeting and use the picker beside **Summary**. You can create templates for decisions, action items, one-on-ones, or any other structure you use regularly.
 
-Changing the selected template does not rewrite an existing summary automatically. Regenerate the summary to apply the new template.
+Selecting another template does not change a summary that already exists. Regenerate the summary when you want to apply the new selection.
 
-## Customize Auto
+## Change the Auto prompt
 
-1. Open **Settings → Templates**.
+1. Open **Templates**.
 2. Select **Auto**.
-3. Edit the prompt, then click **Save**.
+3. Edit the prompt and click **Save**.
 
-The editor shows the complete system prompt used by Auto. Use the **Current date** and **Language** chips wherever those values should appear.
+This is the complete system prompt used by Auto. The **Current date** and **Language** buttons insert variables that are filled in when the prompt runs.
 
-Meeting notes, transcript, session details, and participants are always sent separately. Editing the Auto prompt cannot remove that source material.
+The app supplies meeting notes, transcript text, session details, and participants separately. Removing those words from the prompt does not stop that context from being sent to the selected Intelligence provider.
 
-The Auto prompt applies only when **Auto** is selected. Named templates continue to use their configured sections and do not inherit the Auto customization. Use **Reset to default** to restore the built-in prompt.
+The custom prompt only affects Auto. Named templates keep their own sections. Use **Reset to default** to restore the built-in prompt.
 
-## Improve names and specialized terms
+## Add names and jargon
 
-Under **Settings → Dictionary**, collect names, acronyms, product names, and other terms that transcription often gets wrong.
+Open **Settings → Dictionary** to add names, acronyms, product names, and other terms that transcription often misses.
 
-The dictionary does not replace choosing the correct spoken languages. See [Languages](/languages) for multilingual meetings.
-
-## Apply your changes
-
-New summaries use the currently selected format. Regenerate an older summary when you want it to use the latest template or Auto prompt.
+Dictionary terms help recognition, but they do not change which spoken languages a model supports. See [Languages](/languages) when a meeting uses more than one language.

@@ -1,35 +1,31 @@
 ---
-title: "Use Free Meeting Transcriber offline"
-description: "Prepare local transcription and intelligence models before working without a network connection."
+title: "Use the app offline"
+description: "Prepare local models before you disconnect."
 ---
 
-Free Meeting Transcriber can record meetings and manage notes without an internet connection. To transcribe and summarize offline, configure local models before you disconnect.
+You can record meetings and work with notes without an internet connection. Transcription also works offline once its model has been downloaded.
 
-## What works without the internet
+## What works offline
 
 - Create and edit notes.
 - Record and play meeting audio.
-- Export memos, summaries, and transcripts already on your computer.
-- Transcribe with a downloaded on-device model on a supported Apple Silicon Mac.
-- Generate summaries with a local LM Studio or Ollama server.
+- Export existing memos, summaries, and transcripts.
+- Transcribe with a downloaded on-device model.
+- Generate summaries through a local LM Studio or Ollama server.
 
-Remote API-key Intelligence providers need a network connection.
+A remote Intelligence provider still needs internet access.
 
-## Prepare offline transcription
+## Prepare transcription
 
 1. Open **Settings → Transcription**.
-2. Download a supported on-device model.
+2. Download a model.
 3. Select it under **Model being used**.
-4. Run a short test recording before going offline.
+4. Make a short test recording before you disconnect.
 
-The model's **Live** or **After recording** label tells you when text will appear. On-device model availability depends on your Mac and the current Free Meeting Transcriber release.
+Do the download in advance. The model files are not bundled with the app.
 
-## Prepare offline summaries
+## Prepare local summaries
 
-Use [LM Studio](https://lmstudio.ai/download) or [Ollama](https://ollama.com/download) as your local Intelligence provider. Download the model in advance, start the local server, and select that model in **Settings → Intelligence**.
+Set up [LM Studio](https://lmstudio.ai/download) or [Ollama](https://ollama.com/download), download a language model, and select it in **Settings → Intelligence**. The local server needs to be running, but it does not need an internet connection once the model is available.
 
-Free Meeting Transcriber must be able to reach the local server while you work. The server can run on the same computer without internet access.
-
-## Check that nothing uses a remote provider
-
-Transcription always runs on-device. Before a sensitive meeting, confirm that **Settings → Intelligence → Model being used** points to LM Studio or Ollama rather than a remote API-key provider. See [Data, privacy, and retention](/data-and-privacy) for what each provider receives.
+If you want a meeting to remain fully local, check that the active Intelligence model belongs to LM Studio or Ollama. Transcription is already local.

@@ -13,7 +13,7 @@ fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 | --- | --- | --- |
 | `--base DIR` | `FMTR_BASE` | Use `DIR` as the vault directory. |
 | `--vault-path DIR` | `FMTR_VAULT_PATH` | Use an explicit vault directory. |
-| `--json` | — | Emit a versioned JSON response or machine-readable JSON error. |
+| `--json` | None | Emit a versioned JSON response or machine-readable JSON error. |
 
 `--vault-path` takes precedence over `--base`. Without either option, the CLI uses Free Meeting Transcriber's platform application-data directory, following the `vault_path` redirect in its `global.json` when the vault has been relocated.
 
@@ -23,9 +23,9 @@ fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 | --- | --- | --- |
 | `meetings list` | `--query TEXT`, `--limit 1..200`, `--offset NUMBER` | Meetings ordered by the application query layer. Defaults to 20 results. |
 | `meetings search [QUERY]` | `--speaker TEXT`, `--kind title\|note\|summary\|transcript`, `--limit 1..50`, `--offset NUMBER` | Full-text hits across titles, notes, summaries, and transcript words, newest meetings first. Requires a query and/or `--speaker`; `--speaker` limits hits to meetings where that person spoke. `--kind` is repeatable and defaults to all. |
-| `meetings get ID` | — | Metadata, canonical note, summaries, and action items. |
+| `meetings get ID` | None | Metadata, canonical note, summaries, and action items. |
 | `meetings note ID` | `--kind note\|summary\|all` | The selected note documents. Defaults to `note`. |
-| `meetings transcript ID` | — | The full transcript as `[HH:MM:SS] Speaker: ...` lines, one per speaker turn. |
+| `meetings transcript ID` | None | The full transcript as `[HH:MM:SS] Speaker: ...` lines, one per speaker turn. |
 | `meetings export ID` | `--format markdown\|json`, `--output FILE`, `--force` | A complete meeting export, including transcripts. Defaults to Markdown on stdout. Existing files require `--force`. |
 
 ## JSON response contract

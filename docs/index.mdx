@@ -1,53 +1,71 @@
 ---
 title: "Free Meeting Transcriber"
-description: "Record a meeting, take notes, and leave with a clear summary."
+description: "Local meeting transcription and plain Markdown notes, without accounts or subscriptions."
 ---
 
-Free Meeting Transcriber records your microphone and computer audio without joining the call as a bot. Each meeting stays together as an editable memo, transcript, and summary.
+<div className="not-prose my-8 flex justify-center">
+  <a
+    href="https://github.com/bart6114/free-meeting-transcriber/releases/download/updater/FreeMeetingTranscriber_latest_aarch64.dmg"
+    className="group flex min-w-72 items-center justify-between gap-6 rounded-2xl border border-[#efc86f] px-6 py-4 text-white no-underline transition hover:-translate-y-0.5"
+    style={{
+      background: "linear-gradient(135deg, #e2a936 0%, #c38b22 55%, #9a6918 100%)",
+      boxShadow: "0 14px 35px rgba(154, 105, 24, 0.3)",
+    }}
+  >
+    <span className="flex flex-col">
+      <span className="text-base font-semibold">Download for macOS</span>
+      <span className="text-xs text-amber-50/80">Apple Silicon · Signed and notarized</span>
+    </span>
+    <span className="text-xl transition-transform group-hover:translate-y-0.5">↓</span>
+  </a>
+</div>
+
+I wanted a meeting notetaker that would transcribe locally, keep my notes in ordinary files, and stay out of the way. Free Meeting Transcriber is the result.
+
+It records your microphone and system audio without sending a bot into the call. There is no account, subscription, cloud backend, or telemetry. Your vault stays on your Mac and remains useful outside the app. If you want generated summaries, connect your own hosted provider or a local model.
 
 <CardGroup cols={2}>
   <Card title="Try your first meeting" icon="play" href="/quickstart">
-    Set up Free Meeting Transcriber and test it with the welcome note.
+    Install the app, download a transcription model, and make a short test recording.
   </Card>
   <Card title="Record a meeting" icon="microphone" href="/meetings">
     Create a note and click Record.
   </Card>
   <Card title="Review and export" icon="file-lines" href="/notes">
-    Work with your memo, summary, transcript, and exports.
+    Edit the memo or summary, check the transcript, and export what you need.
   </Card>
-  <Card title="Choose your AI" icon="sparkles" href="/ai-setup">
-    Use your own provider or local models.
+  <Card title="Set up summaries" icon="sparkles" href="/ai-setup">
+    Bring your own provider or run a model locally.
   </Card>
 </CardGroup>
 
-## Popular questions
+## Common questions
 
 <CardGroup cols={2}>
-  <Card title="Can I use Free Meeting Transcriber offline?" icon="wifi-slash" href="/offline">
-    Record, transcribe, and summarize with local models.
+  <Card title="Can I use it offline?" icon="wifi-slash" href="/offline">
+    Yes. Download the models before you disconnect.
   </Card>
-  <Card title="Where is my data stored?" icon="hard-drive" href="/data-and-privacy">
-    See what stays local and what your chosen providers receive.
+  <Card title="Where is my data?" icon="hard-drive" href="/data-and-privacy">
+    Meeting data is stored in files inside your local vault.
   </Card>
   <Card title="Can I import a recording?" icon="file-arrow-up" href="/import-recordings">
-    Create a meeting note from audio, SRT, or VTT files.
+    Import audio, SRT, or VTT files.
   </Card>
-  <Card title="How do I improve summaries?" icon="wand-magic-sparkles" href="/customize-summaries">
-    Use templates, instructions, languages, and your dictionary.
+  <Card title="Can I change the summary?" icon="wand-magic-sparkles" href="/customize-summaries">
+    Use a template or edit the Auto prompt.
   </Card>
 </CardGroup>
 
-[Browse all common questions →](/help)
+[See all common questions →](/help)
 
 ## The short version
 
 1. Create a note.
 2. Click **Record**.
-3. Take rough notes in **Memos** while Free Meeting Transcriber listens.
-4. Stop listening, then review **Summary** and **Transcript**.
-
-Your app data is stored locally. If you choose a remote language-model provider, the content needed for that feature is sent to that provider.
+3. Write anything you want to remember in **Memos**.
+4. Click **Stop listening** and review the transcript.
+5. If you configured Intelligence, review the generated summary.
 
 <Note>
-  New to Free Meeting Transcriber? Open the **Welcome to Free Meeting Transcriber** note, click **Record**, and say a few sentences out loud to see transcription in action.
+  For a quick check, open the **Welcome to Free Meeting Transcriber** note, click **Record**, and say a few sentences.
 </Note>
