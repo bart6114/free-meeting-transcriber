@@ -8,47 +8,50 @@
   <a href="https://github.com/bart6114/free-meeting-transcriber/releases/download/updater/FreeMeetingTranscriber_latest_aarch64.dmg"><img src="https://img.shields.io/badge/Download_for_macOS-Apple_Silicon-1b2a6b?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS (Apple Silicon)" /></a>
 </p>
 
-So this is my fork of [anarlog](https://github.com/fastrepl/anarlog). I built
-it because I needed it: a meeting notetaker that transcribes on-device and
-writes plain markdown files to disk, without all the "let's capture customers"
-cruft. No cloud backend, no accounts, no billing, no telemetry, no upsells.
-Actually free as in beer.
+I wanted a meeting notetaker that did a few things well: transcribe locally,
+keep my notes as ordinary Markdown files, and stay out of the way. I couldn't
+find one without accounts, subscriptions, or a cloud service in the middle, so
+I built this fork of [anarlog](https://github.com/fastrepl/anarlog).
 
-Bring your own LLM for summaries and chat (OpenAI, Anthropic, Gemini,
-OpenRouter, Ollama, LM Studio, or anything OpenAI-compatible).
+There is no backend, account, billing, telemetry, or premium tier. Your notes
+live on your computer and remain usable without this app. If you want AI-generated
+summaries, connect your own LLM—OpenAI, Anthropic, Gemini, OpenRouter, Ollama,
+LM Studio, or another OpenAI-compatible provider.
 
-Fair warning: this scratches my own itch. If it's useful to you too, great.
+This is software I built for my own day-to-day use. It may be rough around the
+edges, but if you want the same kind of tool, I hope it is useful to you too.
 
-## How to use it
+## Getting started
 
-Hit the download button above (macOS on Apple Silicon, signed and notarized).
-It always points at the newest published build; older versions live on the
-[releases page](https://github.com/bart6114/free-meeting-transcriber/releases).
-Or build it yourself (see Development below).
+Download the signed and notarized Apple Silicon build using the button above.
+That link always points to the latest published version; previous versions are
+available on the [releases page](https://github.com/bart6114/free-meeting-transcriber/releases).
+You can also build it from source using the instructions below.
 
-Run it, join a meeting, it records and transcribes locally, and your notes
-end up as markdown on disk. That's it, really.
+Open the app, start a session, and join your meeting. The app records and
+transcribes on your Mac, then saves the notes as Markdown in your vault.
 
-## Why
+## What matters here
 
-- **Your data, your disk.** Every meeting is a `.md` file you can inspect,
-  search, and sync however you like (Dropbox, iCloud, Syncthing, git).
-- **Local transcription.** Audio never leaves your machine.
-- **Bring your own AI.** Any LLM provider, including local models via Ollama
-  or LM Studio.
-- **No accounts, no tracking.** There's nothing to sign up for and nobody to
-  phone home to.
-- **CLI + MCP included.** The bundled `fmtr` CLI and MCP server give scripts
-  and coding agents read-only access to your meeting notes.
+- **The files are yours.** Each meeting is stored as Markdown that you can read,
+  search, edit, back up, or sync with whatever you already use.
+- **Transcription stays local.** Your meeting audio does not need to be sent to
+  a transcription service.
+- **AI is optional and bring-your-own.** Use a hosted provider or run a local
+  model with Ollama or LM Studio.
+- **No account or tracking.** Install the app and use it. There is nothing to
+  sign up for.
+- **CLI and MCP support.** The included `fmtr` CLI and MCP server can give your
+  scripts and coding agents read-only access to meeting notes.
 
 ## Development
 
-It's a pnpm-workspace monorepo: a Tauri desktop app (`apps/desktop/`) plus a
-Rust CLI (`apps/cli/`). There is no database. The markdown files in your vault
-directory are the only source of truth (vault format lives in
-`crates/vault-read/`), with Zustand for UI state and TipTap for the editor.
+This is a pnpm workspace containing a Tauri desktop app (`apps/desktop/`) and a
+Rust CLI (`apps/cli/`). There is no database: the files in the vault are the
+source of truth. The vault format lives in `crates/vault-read/`; the interface
+uses Zustand for state and TipTap for editing.
 
-Let's get it running:
+To run it locally:
 
 ```sh
 pnpm install
@@ -56,11 +59,11 @@ pnpm -F @hypr/desktop tauri:dev   # run the desktop app
 cargo build -p fmtr-cli            # build the fmtr CLI
 ```
 
-See [AGENTS.md](./AGENTS.md) for the fuller dev guidance (formatting,
-typechecking, code-style conventions).
+See [AGENTS.md](./AGENTS.md) for development notes, including formatting,
+typechecking, and code-style conventions.
 
 ## License
 
-MIT. See [LICENSE](./LICENSE) for the full license and copyright history,
-which includes the upstream
-[anarlog](https://github.com/fastrepl/anarlog) copyright.
+MIT. See [LICENSE](./LICENSE) for the complete license and copyright history,
+including the original [anarlog](https://github.com/fastrepl/anarlog)
+copyright.
