@@ -103,7 +103,7 @@ pub struct VaultIndex {
     pub people: HashMap<String, PersonItem>,
 }
 
-pub type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
+pub(crate) type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
 pub type IndexChangeReceiver = tokio::sync::mpsc::UnboundedReceiver<(IndexEntity, Vec<String>)>;
 
 // -- queries ---------------------------------------------------------------------

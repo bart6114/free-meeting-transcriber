@@ -276,13 +276,6 @@ fn sha256(bytes: &[u8]) -> String {
 // (fmtr CLI/MCP); see `hypr_vault_read::strip_leading_frontmatter` for the full rationale.
 pub(crate) use hypr_vault_read::strip_leading_frontmatter;
 
-/// Shared test constructor: a store over `vault`. Files (plus the in-memory index they
-/// hydrate) are the only store there is.
-#[cfg(test)]
-pub(crate) async fn new_test_store(vault: std::path::PathBuf) -> SessionStore {
-    SessionStore::new(vault)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
