@@ -48,7 +48,7 @@ fmtr --json import recording.m4a --title "Weekly sync"
 fmtr --json import recording.m4a --transcribe
 ```
 
-Transcribe a meeting's audio with the on-device model configured in the desktop app (replaces the meeting's transcript; requires the model to be downloaded via the desktop app first; progress goes to stderr):
+Transcribe a meeting's audio with the on-device model configured in the desktop app (replaces the meeting's transcript; requires the model to be downloaded via the desktop app first; progress goes to stderr; honors the app's audio retention setting — with retention "none", the recording is deleted once the transcript is saved):
 
 ```bash
 fmtr --json transcribe MEETING_ID

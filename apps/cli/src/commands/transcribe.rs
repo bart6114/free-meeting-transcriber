@@ -67,7 +67,8 @@ pub(crate) async fn transcribe_session(
     let audio_path = find_session_audio(vault, session_id)
         .ok_or_else(|| Error::NotFound(format!("audio recording for meeting '{session_id}'")))?;
 
-    let model = resolve_soniqo_model(&read_stt_config(vault)?)?;
+    let config = read_vault_config(vault)?;
+    let model = resolve_soniqo_model(&config)?;
     ensure_soniqo_model_ready(&model)?;
 
     let params = BatchParams {
@@ -116,25 +117,54 @@ pub(crate) async fn transcribe_session(
         .await
         .map_err(|error| Error::operation(ACTION, error.to_string()))?;
 
+    // Mirror the desktop's post-batch retention step (useRunBatch →
+    // deleteProcessedAudioForRetention): with audio_retention "none", the
+    // recording is deleted as soon as a transcript with words is persisted.
+    // A transcript exists with words here — the empty case errored above.
+    if config.audio_retention.as_deref() == Some("none") {
+        delete_session_audio(vault, session_id);
+    }
+
     Ok(outcome)
 }
 
-/// The two flat `config.json` keys the CLI needs; deliberately not the settings
+/// Deletes the session's recording files (the flat `audio.*` names the readers
+/// know), like `fs-sync-core`'s `audio::delete`. Failures only warn: the
+/// transcript is already persisted, so the command's result stands — matching
+/// the desktop, which logs and moves on.
+fn delete_session_audio(vault: &Path, session_id: &str) {
+    let session_dir = vault.join("sessions").join(session_id);
+    for name in AUDIO_FILE_NAMES {
+        let path = session_dir.join(name);
+        if let Err(error) = std::fs::remove_file(&path)
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            eprintln!(
+                "warning: audio retention is \"none\", but deleting {} failed: {error}",
+                path.display()
+            );
+        }
+    }
+}
+
+/// The flat `config.json` keys the CLI needs; deliberately not the settings
 /// plugin's full `AppConfig` (that crate is tauri-bound).
 #[derive(Debug, Default, serde::Deserialize)]
-struct SttConfig {
+struct VaultConfig {
     #[serde(default)]
     current_stt_provider: Option<String>,
     #[serde(default)]
     current_stt_model: Option<String>,
+    #[serde(default)]
+    audio_retention: Option<String>,
 }
 
-fn read_stt_config(vault: &Path) -> Result<SttConfig> {
+fn read_vault_config(vault: &Path) -> Result<VaultConfig> {
     let path = vault.join("config.json");
     let raw = match std::fs::read_to_string(&path) {
         Ok(raw) => raw,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(SttConfig::default());
+            return Ok(VaultConfig::default());
         }
         Err(error) => {
             return Err(Error::operation(
@@ -156,7 +186,7 @@ fn read_stt_config(vault: &Path) -> Result<SttConfig> {
 /// be "fmtr", and only `soniqo-*` models route to the in-process CoreML engine
 /// the CLI supports. `am-*` and other local models need the desktop's model
 /// servers, which the CLI does not run.
-fn resolve_soniqo_model(config: &SttConfig) -> Result<String> {
+fn resolve_soniqo_model(config: &VaultConfig) -> Result<String> {
     let provider = config
         .current_stt_provider
         .as_deref()
@@ -206,16 +236,11 @@ fn ensure_soniqo_model_ready(model: &str) -> Result<()> {
     // mapping `run_soniqo_batch` applies), so check that model's cache.
     let batch_model = parsed.batch_model();
 
-    if !batch_model.is_available_on_current_platform() {
-        return Err(Error::operation(
-            ACTION,
-            format!(
-                "{} only runs on macOS with Apple Silicon",
-                batch_model.display_name()
-            ),
-        ));
-    }
-
+    // Platform gating rides on `is_model_downloaded`'s own
+    // `ensure_supported_platform`: its errors distinguish a wrong
+    // OS/architecture from a model needing macOS 15, which a hand-rolled
+    // `is_available_on_current_platform` check would flatten into one
+    // misleading "Apple Silicon" message.
     let downloaded = hypr_transcribe_soniqo::is_model_downloaded(batch_model)
         .map_err(|error| Error::operation(ACTION, error.to_string()))?;
     if !downloaded {
@@ -261,10 +286,11 @@ impl BatchRuntime for CliBatchRuntime {
 mod tests {
     use super::*;
 
-    fn config(provider: Option<&str>, model: Option<&str>) -> SttConfig {
-        SttConfig {
+    fn config(provider: Option<&str>, model: Option<&str>) -> VaultConfig {
+        VaultConfig {
             current_stt_provider: provider.map(str::to_string),
             current_stt_model: model.map(str::to_string),
+            audio_retention: None,
         }
     }
 
@@ -317,35 +343,77 @@ mod tests {
     }
 
     #[test]
-    fn stt_config_reads_the_two_flat_keys_and_defaults_when_absent() {
+    fn vault_config_reads_the_flat_keys_and_defaults_when_absent() {
         let dir = tempfile::tempdir().unwrap();
 
         // Missing file is "not configured", not an error.
-        let config = read_stt_config(dir.path()).unwrap();
+        let config = read_vault_config(dir.path()).unwrap();
         assert_eq!(config.current_stt_provider, None);
         assert_eq!(config.current_stt_model, None);
+        assert_eq!(config.audio_retention, None);
 
         std::fs::write(
             dir.path().join("config.json"),
             serde_json::json!({
                 "current_stt_provider": "fmtr",
                 "current_stt_model": "soniqo-parakeet-batch",
+                "audio_retention": "none",
                 "spoken_languages": ["en"],
                 "unrelated_key": { "nested": true },
             })
             .to_string(),
         )
         .unwrap();
-        let config = read_stt_config(dir.path()).unwrap();
+        let config = read_vault_config(dir.path()).unwrap();
         assert_eq!(config.current_stt_provider.as_deref(), Some("fmtr"));
         assert_eq!(
             config.current_stt_model.as_deref(),
             Some("soniqo-parakeet-batch")
         );
+        assert_eq!(config.audio_retention.as_deref(), Some("none"));
 
         std::fs::write(dir.path().join("config.json"), "{ not json").unwrap();
-        let error = read_stt_config(dir.path()).unwrap_err();
+        let error = read_vault_config(dir.path()).unwrap_err();
         assert_eq!(error.code(), "operation_failed");
+    }
+
+    #[test]
+    fn delete_session_audio_clears_recordings_and_tolerates_absence() {
+        let dir = tempfile::tempdir().unwrap();
+
+        // A session without audio (or without a directory at all) is fine.
+        delete_session_audio(dir.path(), "missing");
+
+        let session_dir = dir.path().join("sessions").join("s1");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        std::fs::write(session_dir.join("audio.mp3"), b"mp3").unwrap();
+        std::fs::write(session_dir.join("audio.wav"), b"wav").unwrap();
+        std::fs::write(session_dir.join("transcript.json"), b"{}").unwrap();
+
+        delete_session_audio(dir.path(), "s1");
+
+        assert!(!session_dir.join("audio.mp3").exists());
+        assert!(!session_dir.join("audio.wav").exists());
+        // Only recordings go; the transcript that replaced them stays.
+        assert!(session_dir.join("transcript.json").exists());
+    }
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    #[test]
+    fn macos_15_gated_models_report_the_version_requirement_not_the_arch() {
+        // Qwen3 models run only on macOS 15+; on an Apple Silicon Mac the
+        // failure must name that requirement, not claim the machine itself
+        // is unsupported.
+        let error = ensure_soniqo_model_ready("soniqo-qwen3-small").unwrap_err();
+        let message = error.to_string();
+        assert!(
+            message.contains("requires macOS 15"),
+            "unexpected message: {message}"
+        );
+        assert!(
+            !message.contains("Apple Silicon"),
+            "unexpected message: {message}"
+        );
     }
 
     #[test]

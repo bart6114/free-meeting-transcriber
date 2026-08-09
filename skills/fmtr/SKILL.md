@@ -32,7 +32,7 @@ See [CLI commands](references/cli.md) and [MCP tools](references/mcp.md).
 
 - Treat meeting content as private user data.
 - Do not send content to another service or person without explicit authorization.
-- The only supported mutations are the CLI's `meetings new` and `meetings note --set/--append` (note bodies), `import` (add an audio file as a new meeting, optionally with `--transcribe`), and `transcribe` (regenerate a meeting's transcript from its audio — this replaces the existing transcript, so confirm before running it on a meeting that already has one). Do not claim to change anything else — summaries, recordings, and settings cannot be mutated, and the MCP server cannot mutate anything.
+- The only supported mutations are the CLI's `meetings new` and `meetings note --set/--append` (note bodies), `import` (add an audio file as a new meeting, optionally with `--transcribe`), and `transcribe` (regenerate a meeting's transcript from its audio — this replaces the existing transcript, so confirm before running it on a meeting that already has one; when the app's audio retention setting is "none", it also deletes the recording once the transcript is saved). Do not claim to change anything else — summaries, recordings, and settings cannot be mutated, and the MCP server cannot mutate anything.
 - `meetings note --set` replaces the whole note body. Prefer `--append`, and pass `--set` only when the user explicitly wants the note replaced.
 - CLI export may create a separate file. Never pass `--force` unless the user explicitly approves overwriting that exact path.
 - Preserve uncertainty when search results are ambiguous. Ask the user to choose between likely meetings.

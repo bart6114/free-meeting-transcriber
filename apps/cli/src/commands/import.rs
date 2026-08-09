@@ -64,10 +64,16 @@ pub async fn run(
         )
     })
     .await
-    .map_err(|error| Error::operation("import audio", error.to_string()))?
+    // Both arms name the session: it already exists at this point, so the
+    // partial import stays identifiable instead of an anonymous orphan —
+    // whether the converter failed cleanly or panicked (JoinError).
     .map_err(|error| {
-        // The session already exists at this point; name it so the partial
-        // import is identifiable instead of an anonymous orphan.
+        Error::operation(
+            "import audio",
+            format!("meeting {session_id} was created, but converting its audio failed: {error}"),
+        )
+    })?
+    .map_err(|error| {
         Error::operation(
             "import audio",
             format!("meeting {session_id} was created, but converting its audio failed: {error}"),
