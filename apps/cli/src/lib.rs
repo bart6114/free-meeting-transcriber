@@ -24,8 +24,15 @@ pub async fn run(args: Args) -> Result<u8> {
         cli::Command::Meetings { command } => {
             commands::meetings::run(&vault, command, args.json).await?
         }
-        cli::Command::Import { file, title } => {
-            commands::import::run(&vault, file, title, args.json).await?
+        cli::Command::Import {
+            file,
+            title,
+            transcribe,
+        } => {
+            return commands::import::run(&vault, file, title, transcribe, args.json).await;
+        }
+        cli::Command::Transcribe { id } => {
+            commands::transcribe::run(&vault, &id, args.json).await?
         }
         cli::Command::Mcp => mcp::serve(vault).await?,
     }
@@ -200,6 +207,7 @@ mod tests {
             command: cli::Command::Import {
                 file: audio_path,
                 title: None,
+                transcribe: false,
             },
         })
         .await
@@ -247,6 +255,7 @@ mod tests {
             command: cli::Command::Import {
                 file: text_path,
                 title: None,
+                transcribe: false,
             },
         })
         .await
@@ -270,6 +279,7 @@ mod tests {
             command: cli::Command::Import {
                 file: dir.path().join("missing.wav"),
                 title: None,
+                transcribe: false,
             },
         })
         .await
@@ -278,6 +288,154 @@ mod tests {
         assert_eq!(error.code(), "not_found");
         assert_eq!(error.exit_code(), 2);
         assert!(!vault.join("sessions").exists());
+    }
+
+    #[tokio::test]
+    async fn transcribe_fails_cleanly_when_the_meeting_does_not_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir_all(vault.join("sessions")).unwrap();
+
+        let error = run(Args {
+            base: None,
+            vault_path: Some(vault),
+            json: false,
+            command: cli::Command::Transcribe {
+                id: "missing".to_string(),
+            },
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "not_found");
+        assert_eq!(error.exit_code(), 2);
+    }
+
+    #[tokio::test]
+    async fn transcribe_fails_cleanly_when_the_meeting_has_no_audio() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session(&vault, "meeting-1", None);
+
+        let error = run(Args {
+            base: None,
+            vault_path: Some(vault),
+            json: false,
+            command: cli::Command::Transcribe {
+                id: "meeting-1".to_string(),
+            },
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "not_found");
+        assert!(error.to_string().contains("audio recording"));
+    }
+
+    #[tokio::test]
+    async fn transcribe_fails_cleanly_without_a_configured_stt_model() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session(&vault, "meeting-1", None);
+        std::fs::write(vault.join("sessions/meeting-1/audio.mp3"), b"mp3").unwrap();
+
+        let error = run(Args {
+            base: None,
+            vault_path: Some(vault),
+            json: false,
+            command: cli::Command::Transcribe {
+                id: "meeting-1".to_string(),
+            },
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "operation_failed");
+        assert!(
+            error
+                .to_string()
+                .contains("no speech-to-text model is configured"),
+            "unexpected message: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn transcribe_rejects_a_provider_the_cli_does_not_support() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session(&vault, "meeting-1", None);
+        std::fs::write(vault.join("sessions/meeting-1/audio.mp3"), b"mp3").unwrap();
+        std::fs::write(
+            vault.join("config.json"),
+            serde_json::json!({
+                "current_stt_provider": "deepgram",
+                "current_stt_model": "nova-3",
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let error = run(Args {
+            base: None,
+            vault_path: Some(vault),
+            json: false,
+            command: cli::Command::Transcribe {
+                id: "meeting-1".to_string(),
+            },
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "operation_failed");
+        assert!(error.to_string().contains("not supported by the CLI"));
+    }
+
+    #[tokio::test]
+    async fn import_transcribe_reports_the_meeting_id_when_transcription_fails() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir_all(&vault).unwrap();
+        // A provider the CLI cannot serve makes the chained transcription fail
+        // deterministically without touching any model cache.
+        std::fs::write(
+            vault.join("config.json"),
+            serde_json::json!({
+                "current_stt_provider": "deepgram",
+                "current_stt_model": "nova-3",
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let audio_path = dir.path().join("standup.wav");
+        write_test_wav(&audio_path);
+
+        let exit_code = run(Args {
+            base: None,
+            vault_path: Some(vault.clone()),
+            json: true,
+            command: cli::Command::Import {
+                file: audio_path,
+                title: None,
+                transcribe: true,
+            },
+        })
+        .await
+        .unwrap();
+
+        // Partial failure: the import stuck, the exit code did not stay 0.
+        assert_eq!(exit_code, 1);
+        let sessions = std::fs::read_dir(vault.join("sessions"))
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(sessions.len(), 1);
+        assert!(
+            std::fs::metadata(sessions[0].path().join("audio.mp3"))
+                .unwrap()
+                .len()
+                > 0
+        );
+        assert!(!sessions[0].path().join("transcript.json").exists());
     }
 
     #[tokio::test]

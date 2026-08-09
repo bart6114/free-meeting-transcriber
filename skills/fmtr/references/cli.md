@@ -41,11 +41,20 @@ fmtr --json meetings note MEETING_ID --set notes.md
 echo "Follow-up" | fmtr --json meetings note MEETING_ID --append -
 ```
 
-Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; transcription does not run):
+Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; add `--transcribe` to transcribe right after the import):
 
 ```bash
 fmtr --json import recording.m4a --title "Weekly sync"
+fmtr --json import recording.m4a --transcribe
 ```
+
+Transcribe a meeting's audio with the on-device model configured in the desktop app (replaces the meeting's transcript; requires the model to be downloaded via the desktop app first; progress goes to stderr):
+
+```bash
+fmtr --json transcribe MEETING_ID
+```
+
+If `import --transcribe` exits non-zero but prints a meeting id, the import succeeded and only the transcription failed — fix the reported problem (usually a missing model or configuration) and run `fmtr transcribe MEETING_ID`.
 
 Export is intended for an explicit user request to save or transfer a complete meeting:
 

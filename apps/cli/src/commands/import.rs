@@ -7,7 +7,16 @@ use hypr_vault_write::SessionStore;
 /// re-encodes all of them to the vault's 16 kHz `audio.mp3`.
 const SUPPORTED_EXTENSIONS: [&str; 8] = ["wav", "mp3", "ogg", "mp4", "m4a", "flac", "webm", "aac"];
 
-pub async fn run(vault: &Path, file: PathBuf, title: Option<String>, json: bool) -> Result<()> {
+/// Returns the process exit code: 0 on success, and the transcription error's
+/// exit code when `--transcribe` fails after a successful import (the meeting
+/// id is still reported so the partial result stays identifiable).
+pub async fn run(
+    vault: &Path,
+    file: PathBuf,
+    title: Option<String>,
+    transcribe: bool,
+    json: bool,
+) -> Result<u8> {
     // Validate the input before touching the vault, so a bad file creates nothing.
     let extension = file
         .extension()
@@ -65,20 +74,44 @@ pub async fn run(vault: &Path, file: PathBuf, title: Option<String>, json: bool)
         )
     })?;
 
+    let mut data = serde_json::json!({
+        "id": session_id,
+        "title": meta.title,
+        "created_at": meta.created_at,
+        "audio": audio_path,
+    });
+
+    let mut exit_code = 0u8;
+    if transcribe {
+        match super::transcribe::transcribe_session(vault, &store, &session_id).await {
+            Ok(outcome) => {
+                data["transcript"] = serde_json::json!({
+                    "id": outcome.transcript_id,
+                    "words": outcome.words,
+                });
+            }
+            Err(error) => {
+                // The import itself succeeded; report the meeting id on stdout
+                // (plain or embedded in the JSON payload with the error) and
+                // exit non-zero so callers see the partial failure.
+                data["transcript"] = serde_json::Value::Null;
+                data["transcript_error"] = serde_json::json!({
+                    "code": error.code(),
+                    "message": error.to_string(),
+                });
+                eprintln!(
+                    "error: meeting {session_id} was imported, but transcription failed: {error}"
+                );
+                exit_code = error.exit_code();
+            }
+        }
+    }
+
     let rendered = if json {
-        output::json(
-            "import",
-            &serde_json::json!({
-                "id": session_id,
-                "title": meta.title,
-                "created_at": meta.created_at,
-                "audio": audio_path,
-            }),
-            None,
-        )?
+        output::json("import", &data, None)?
     } else {
         session_id
     };
     output::emit(&rendered);
-    Ok(())
+    Ok(exit_code)
 }

@@ -1,6 +1,7 @@
 pub mod doctor;
 pub mod import;
 pub mod meetings;
+pub mod transcribe;
 
 use std::path::Path;
 

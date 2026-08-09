@@ -1,6 +1,7 @@
 mod accumulator;
 mod progressive;
 mod simple;
+pub mod transcript;
 
 use std::sync::Arc;
 

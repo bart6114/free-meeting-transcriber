@@ -329,13 +329,39 @@ expression: canonicalize_json(contract)
           "value_name": "TITLE"
         },
         {
+          "flags": "--transcribe",
+          "help": "Transcribe the audio with the configured on-device model after importing",
+          "is_flag": true,
+          "required": false
+        },
+        {
           "flags": "-h, --help",
           "help": "Print help",
           "is_flag": false,
           "required": false
         }
       ],
-      "synopsis": "fmtr import [--title] [-h] <file>"
+      "synopsis": "fmtr import [--title] [--transcribe] [-h] <file>"
+    },
+    {
+      "about": "Transcribe a meeting's audio with the configured on-device model",
+      "arguments": [
+        {
+          "help": "Meeting id whose audio should be transcribed",
+          "name": "ID",
+          "required": true
+        }
+      ],
+      "name": "fmtr transcribe",
+      "options": [
+        {
+          "flags": "-h, --help",
+          "help": "Print help",
+          "is_flag": false,
+          "required": false
+        }
+      ],
+      "synopsis": "fmtr transcribe [-h] <id>"
     },
     {
       "about": "Run the read-only Free Meeting Transcriber MCP server over stdio",

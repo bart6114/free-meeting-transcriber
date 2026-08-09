@@ -1,11 +1,11 @@
 ---
 name: fmtr
-description: Query local Free Meeting Transcriber meetings, notes, summaries, transcripts, and action items, create and edit meeting notes, or import audio recordings. Use when a user asks about their Free Meeting Transcriber meeting data or wants meeting context for another task.
+description: Query local Free Meeting Transcriber meetings, notes, summaries, transcripts, and action items, create and edit meeting notes, or import and transcribe audio recordings. Use when a user asks about their Free Meeting Transcriber meeting data or wants meeting context for another task.
 ---
 
 # Free Meeting Transcriber
 
-Use Free Meeting Transcriber's data surfaces. For reading, prefer the MCP server when its tools are connected; otherwise use the `fmtr` CLI with `--json`. Writing (creating a meeting note, editing a note body, importing an audio file) is CLI-only — the MCP server is read-only.
+Use Free Meeting Transcriber's data surfaces. For reading, prefer the MCP server when its tools are connected; otherwise use the `fmtr` CLI with `--json`. Writing (creating a meeting note, editing a note body, importing or transcribing an audio file) is CLI-only — the MCP server is read-only.
 
 ## Choose a transport
 
@@ -32,7 +32,7 @@ See [CLI commands](references/cli.md) and [MCP tools](references/mcp.md).
 
 - Treat meeting content as private user data.
 - Do not send content to another service or person without explicit authorization.
-- The only supported mutations are the CLI's `meetings new` and `meetings note --set/--append` (note bodies) and `import` (add an audio file as a new meeting). Do not claim to change anything else — transcripts, summaries, recordings, and settings cannot be mutated, and the MCP server cannot mutate anything.
+- The only supported mutations are the CLI's `meetings new` and `meetings note --set/--append` (note bodies), `import` (add an audio file as a new meeting, optionally with `--transcribe`), and `transcribe` (regenerate a meeting's transcript from its audio — this replaces the existing transcript, so confirm before running it on a meeting that already has one). Do not claim to change anything else — summaries, recordings, and settings cannot be mutated, and the MCP server cannot mutate anything.
 - `meetings note --set` replaces the whole note body. Prefer `--append`, and pass `--set` only when the user explicitly wants the note replaced.
 - CLI export may create a separate file. Never pass `--force` unless the user explicitly approves overwriting that exact path.
 - Preserve uncertainty when search results are ambiguous. Ask the user to choose between likely meetings.
