@@ -1,6 +1,6 @@
 # Plan: shared vault write path + CLI write commands
 
-Status: proposed (2026-08-09, revised after codebase audit)
+Status: implemented (2026-08-09) — all three phases landed on this branch
 
 ## Goal
 
