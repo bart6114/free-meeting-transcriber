@@ -1,0 +1,26 @@
+[package]
+name = "vault-write"
+version = "0.1.0"
+edition = "2024"
+
+[features]
+default = []
+tauri-events = ["dep:tauri-specta"]
+
+[dependencies]
+hypr-fs-format = { workspace = true }
+hypr-fs-sync-core = { workspace = true }
+hypr-vault-read = { workspace = true }
+
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+specta = { workspace = true, features = ["derive", "serde_json"] }
+tauri-specta = { workspace = true, optional = true, features = ["derive"] }
+tokio = { workspace = true, features = ["macros", "rt", "sync", "time"] }
+
+chrono = { workspace = true }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
