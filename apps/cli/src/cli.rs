@@ -45,6 +45,13 @@ pub enum Command {
         #[command(subcommand)]
         command: MeetingCommand,
     },
+    /// Import an audio file into a new meeting and print its id
+    Import {
+        /// Audio file to import (wav, mp3, ogg, mp4, m4a, flac, webm, or aac)
+        file: PathBuf,
+        #[arg(long, help = "Title for the new meeting; defaults to the file name")]
+        title: Option<String>,
+    },
     /// Run the read-only Free Meeting Transcriber MCP server over stdio
     Mcp,
 }
@@ -327,6 +334,26 @@ mod tests {
                 ..
             }
         ));
+    }
+
+    #[test]
+    fn parses_import_command_with_optional_title() {
+        let Command::Import { file, title } =
+            Args::parse_from(["fmtr", "import", "meeting.m4a"]).command
+        else {
+            panic!("expected import command");
+        };
+        assert_eq!(file, Path::new("meeting.m4a"));
+        assert_eq!(title, None);
+
+        let Command::Import { title, .. } =
+            Args::parse_from(["fmtr", "import", "meeting.m4a", "--title", "Weekly sync"]).command
+        else {
+            panic!("expected import command");
+        };
+        assert_eq!(title.as_deref(), Some("Weekly sync"));
+
+        assert!(Args::try_parse_from(["fmtr", "import"]).is_err());
     }
 
     #[test]

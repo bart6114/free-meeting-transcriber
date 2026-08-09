@@ -4942,10 +4942,12 @@ name = "fmtr-cli"
 version = "0.1.0"
 dependencies = [
  "agent-access",
+ "audio-norm",
  "chrono",
  "clap",
  "cli-docs",
  "dirs 6.0.0",
+ "hound",
  "insta",
  "rmcp",
  "serde",

@@ -7,7 +7,7 @@ use hypr_agent_access::{
     SearchHit, SearchMeetingsInput, get_meeting, get_meeting_export, get_meeting_transcript,
     list_meetings, search_meetings,
 };
-use hypr_vault_write::{SessionMeta, SessionStore};
+use hypr_vault_write::SessionStore;
 
 pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()> {
     match command {
@@ -73,45 +73,8 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             // Read the body before touching the vault, so a bad --note path creates nothing.
             let body = note.as_deref().map(read_body).transpose()?;
             let store = SessionStore::new(vault.to_path_buf());
-
-            // Same id format the desktop app generates (`crypto.randomUUID()`). A collision
-            // is practically impossible, but never clobber an existing session: retry a few
-            // times, then give up rather than overwrite.
-            let mut session_id = None;
-            for _ in 0..5 {
-                let candidate = uuid::Uuid::new_v4().to_string();
-                let occupied = vault.join("sessions").join(&candidate).exists()
-                    || store
-                        .read_meta(&candidate)
-                        .await
-                        .map_err(|error| Error::operation("create meeting", error.to_string()))?
-                        .is_some();
-                if !occupied {
-                    session_id = Some(candidate);
-                    break;
-                }
-            }
-            let session_id = session_id.ok_or_else(|| {
-                Error::operation("create meeting", "could not generate an unused meeting id")
-            })?;
-
-            // Millisecond RFC3339 UTC, matching the desktop's `new Date().toISOString()`.
-            let created_at =
-                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-            let meta = SessionMeta {
-                id: session_id.clone(),
-                title,
-                started_at: None,
-                ended_at: None,
-                created_at: created_at.clone(),
-                tags: Vec::new(),
-                event: None,
-                folder: None,
-            };
-            store
-                .write_meta(&meta)
-                .await
-                .map_err(|error| Error::operation("create meeting", error.to_string()))?;
+            let meta = super::create_session(vault, &store, "create meeting", title).await?;
+            let session_id = meta.id.clone();
             if let Some(body) = body {
                 // The meta write above already created the session; name it in the
                 // error so a partial failure leaves an identifiable meeting instead
@@ -132,7 +95,7 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                     &serde_json::json!({
                         "id": session_id,
                         "title": meta.title,
-                        "created_at": created_at,
+                        "created_at": meta.created_at,
                     }),
                     None,
                 )?

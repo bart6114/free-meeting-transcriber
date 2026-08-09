@@ -311,6 +311,33 @@ expression: canonicalize_json(contract)
       "synopsis": "fmtr meetings [-h] <command>"
     },
     {
+      "about": "Import an audio file into a new meeting and print its id",
+      "arguments": [
+        {
+          "help": "Audio file to import (wav, mp3, ogg, mp4, m4a, flac, webm, or aac)",
+          "name": "FILE",
+          "required": true
+        }
+      ],
+      "name": "fmtr import",
+      "options": [
+        {
+          "flags": "--title",
+          "help": "Title for the new meeting; defaults to the file name",
+          "is_flag": false,
+          "required": false,
+          "value_name": "TITLE"
+        },
+        {
+          "flags": "-h, --help",
+          "help": "Print help",
+          "is_flag": false,
+          "required": false
+        }
+      ],
+      "synopsis": "fmtr import [--title] [-h] <file>"
+    },
+    {
       "about": "Run the read-only Free Meeting Transcriber MCP server over stdio",
       "name": "fmtr mcp",
       "options": [

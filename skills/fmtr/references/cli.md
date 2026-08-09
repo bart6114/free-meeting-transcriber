@@ -41,6 +41,12 @@ fmtr --json meetings note MEETING_ID --set notes.md
 echo "Follow-up" | fmtr --json meetings note MEETING_ID --append -
 ```
 
+Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; transcription does not run):
+
+```bash
+fmtr --json import recording.m4a --title "Weekly sync"
+```
+
 Export is intended for an explicit user request to save or transfer a complete meeting:
 
 ```bash
