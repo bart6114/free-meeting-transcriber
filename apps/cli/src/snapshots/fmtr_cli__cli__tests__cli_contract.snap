@@ -175,7 +175,34 @@ expression: canonicalize_json(contract)
           "synopsis": "fmtr meetings get [-h] <id>"
         },
         {
-          "about": "Show the note or generated summaries for a meeting",
+          "about": "Create a meeting note and print its id",
+          "name": "fmtr meetings new",
+          "options": [
+            {
+              "flags": "--title",
+              "help": "Title for the new meeting",
+              "is_flag": false,
+              "required": true,
+              "value_name": "TITLE"
+            },
+            {
+              "flags": "--note",
+              "help": "Initial note body read from FILE, or '-' for stdin",
+              "is_flag": false,
+              "required": false,
+              "value_name": "FILE"
+            },
+            {
+              "flags": "-h, --help",
+              "help": "Print help",
+              "is_flag": false,
+              "required": false
+            }
+          ],
+          "synopsis": "fmtr meetings new <--title> [--note] [-h]"
+        },
+        {
+          "about": "Show the note or generated summaries for a meeting, or edit the note",
           "arguments": [
             {
               "name": "ID",
@@ -197,13 +224,27 @@ expression: canonicalize_json(contract)
               "value_name": "KIND"
             },
             {
+              "flags": "--set",
+              "help": "Replace the note body with FILE, or '-' for stdin",
+              "is_flag": false,
+              "required": false,
+              "value_name": "FILE"
+            },
+            {
+              "flags": "--append",
+              "help": "Append FILE (or '-' for stdin) to the note body",
+              "is_flag": false,
+              "required": false,
+              "value_name": "FILE"
+            },
+            {
               "flags": "-h, --help",
               "help": "Print help",
               "is_flag": false,
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings note [--kind] [-h] <id>"
+          "synopsis": "fmtr meetings note [--kind] [--set] [--append] [-h] <id>"
         },
         {
           "about": "Show the full speaker-labeled meeting transcript",

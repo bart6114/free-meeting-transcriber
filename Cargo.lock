@@ -4942,6 +4942,7 @@ name = "fmtr-cli"
 version = "0.1.0"
 dependencies = [
  "agent-access",
+ "chrono",
  "clap",
  "cli-docs",
  "dirs 6.0.0",
@@ -4953,7 +4954,9 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "url",
+ "uuid",
  "vault-read",
+ "vault-write",
 ]
 
 [[package]]

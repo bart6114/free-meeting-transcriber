@@ -83,11 +83,35 @@ pub enum MeetingCommand {
     },
     /// Show meeting metadata, notes, summaries, and action items
     Get { id: String },
-    /// Show the note or generated summaries for a meeting
+    /// Create a meeting note and print its id
+    New {
+        #[arg(long, help = "Title for the new meeting")]
+        title: String,
+        #[arg(
+            long,
+            value_name = "FILE",
+            help = "Initial note body read from FILE, or '-' for stdin"
+        )]
+        note: Option<PathBuf>,
+    },
+    /// Show the note or generated summaries for a meeting, or edit the note
     Note {
         id: String,
-        #[arg(long, value_enum, default_value_t = DocumentKind::Note)]
+        #[arg(long, value_enum, default_value_t = DocumentKind::Note, conflicts_with_all = ["set", "append"])]
         kind: DocumentKind,
+        #[arg(
+            long,
+            value_name = "FILE",
+            help = "Replace the note body with FILE, or '-' for stdin"
+        )]
+        set: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "FILE",
+            conflicts_with = "set",
+            help = "Append FILE (or '-' for stdin) to the note body"
+        )]
+        append: Option<PathBuf>,
     },
     /// Show the full speaker-labeled meeting transcript
     Transcript { id: String },
@@ -139,6 +163,8 @@ pub enum ExportFormat {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
     use clap::CommandFactory;
 
@@ -232,6 +258,75 @@ mod tests {
         assert_eq!(offset, 0);
 
         assert!(Args::try_parse_from(["fmtr", "meetings", "search"]).is_err());
+    }
+
+    #[test]
+    fn parses_new_command_with_note_source() {
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr", "meetings", "new", "--title", "Planning", "--note", "-",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::New { title, note } = command else {
+            panic!("expected new command");
+        };
+        assert_eq!(title, "Planning");
+        assert_eq!(note.as_deref(), Some(Path::new("-")));
+
+        assert!(Args::try_parse_from(["fmtr", "meetings", "new"]).is_err());
+    }
+
+    #[test]
+    fn note_edit_flags_are_mutually_exclusive_and_conflict_with_kind() {
+        assert!(
+            Args::try_parse_from([
+                "fmtr",
+                "meetings",
+                "note",
+                "meeting-1",
+                "--set",
+                "a.md",
+                "--append",
+                "b.md",
+            ])
+            .is_err()
+        );
+        assert!(
+            Args::try_parse_from([
+                "fmtr",
+                "meetings",
+                "note",
+                "meeting-1",
+                "--kind",
+                "summary",
+                "--set",
+                "a.md",
+            ])
+            .is_err()
+        );
+
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr",
+            "meetings",
+            "note",
+            "meeting-1",
+            "--append",
+            "extra.md",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        assert!(matches!(
+            command,
+            MeetingCommand::Note {
+                set: None,
+                append: Some(_),
+                ..
+            }
+        ));
     }
 
     #[test]

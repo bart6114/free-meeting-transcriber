@@ -24,7 +24,8 @@ fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 | `meetings list` | `--query TEXT`, `--limit 1..200`, `--offset NUMBER` | Meetings ordered by the application query layer. Defaults to 20 results. |
 | `meetings search [QUERY]` | `--speaker TEXT`, `--kind title\|note\|summary\|transcript`, `--limit 1..50`, `--offset NUMBER` | Full-text hits across titles, notes, summaries, and transcript words, newest meetings first. Requires a query and/or `--speaker`; `--speaker` limits hits to meetings where that person spoke. `--kind` is repeatable and defaults to all. |
 | `meetings get ID` | None | Metadata, canonical note, summaries, and action items. |
-| `meetings note ID` | `--kind note\|summary\|all` | The selected note documents. Defaults to `note`. |
+| `meetings new` | `--title TEXT`, `--note FILE` | Creates a meeting note in the vault and prints its id. `--note` seeds the note body from `FILE`, or from stdin when `FILE` is `-`. |
+| `meetings note ID` | `--kind note\|summary\|all`, `--set FILE`, `--append FILE` | The selected note documents. Defaults to `note`. With `--set` or `--append` (mutually exclusive, and incompatible with `--kind`), replaces or extends the note body from `FILE` or stdin (`-`); fails when the meeting does not exist. |
 | `meetings transcript ID` | None | The full transcript as `[HH:MM:SS] Speaker: ...` lines, one per speaker turn. |
 | `meetings export ID` | `--format markdown\|json`, `--output FILE`, `--force` | A complete meeting export, including transcripts. Defaults to Markdown on stdout. Existing files require `--force`. |
 

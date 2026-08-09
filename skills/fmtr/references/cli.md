@@ -27,6 +27,20 @@ fmtr --json meetings transcript MEETING_ID
 
 JSON success responses contain `schema_version`, `command`, `data`, and optional `pagination`. Continue from `pagination.next_offset` only when more context is necessary.
 
+Create a meeting note (prints the new meeting id; `--note` seeds the body from a file, or stdin with `-`):
+
+```bash
+fmtr --json meetings new --title "Weekly sync" --note notes.md
+echo "Agenda" | fmtr --json meetings new --title "Weekly sync" --note -
+```
+
+Edit an existing meeting's note (`--set` replaces, `--append` adds after a separating newline; exactly one of the two, fails if the meeting does not exist):
+
+```bash
+fmtr --json meetings note MEETING_ID --set notes.md
+echo "Follow-up" | fmtr --json meetings note MEETING_ID --append -
+```
+
 Export is intended for an explicit user request to save or transfer a complete meeting:
 
 ```bash
