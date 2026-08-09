@@ -140,6 +140,32 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn new_command_creates_nothing_when_the_note_source_is_unreadable() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir_all(&vault).unwrap();
+
+        let error = run(Args {
+            base: None,
+            vault_path: Some(vault.clone()),
+            json: false,
+            command: cli::Command::Meetings {
+                command: cli::MeetingCommand::New {
+                    title: "Kickoff".to_string(),
+                    note: Some(dir.path().join("missing.md")),
+                },
+            },
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "operation_failed");
+        // The body is read before the vault is touched, so a bad --note path
+        // must not leave a session behind.
+        assert!(!vault.join("sessions").exists());
+    }
+
+    #[tokio::test]
     async fn note_set_replaces_and_append_concatenates_with_a_newline() {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path().join("vault");

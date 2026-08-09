@@ -3,7 +3,7 @@ source: apps/cli/src/cli.rs
 expression: canonicalize_json(contract)
 ---
 {
-  "about": "Query local Free Meeting Transcriber meeting data",
+  "about": "Query and edit local Free Meeting Transcriber meeting data",
   "global_options": [
     {
       "flags": "--base",
@@ -53,7 +53,7 @@ expression: canonicalize_json(contract)
       "synopsis": "fmtr doctor [-h]"
     },
     {
-      "about": "Browse and export meetings",
+      "about": "Browse, create, edit, and export meetings",
       "name": "fmtr meetings",
       "options": [
         {

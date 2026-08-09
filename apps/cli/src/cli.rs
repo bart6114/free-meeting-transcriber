@@ -8,7 +8,7 @@ use hypr_agent_access::{DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, SearchKind};
 #[command(
     name = "fmtr",
     version,
-    about = "Query local Free Meeting Transcriber meeting data"
+    about = "Query and edit local Free Meeting Transcriber meeting data"
 )]
 pub struct Args {
     #[arg(
@@ -40,7 +40,7 @@ pub struct Args {
 pub enum Command {
     /// Check the local CLI and vault access without changing data
     Doctor,
-    /// Browse and export meetings
+    /// Browse, create, edit, and export meetings
     Meetings {
         #[command(subcommand)]
         command: MeetingCommand,

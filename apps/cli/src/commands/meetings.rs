@@ -113,10 +113,17 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                 .await
                 .map_err(|error| Error::operation("create meeting", error.to_string()))?;
             if let Some(body) = body {
-                store
-                    .write_note(&session_id, &body)
-                    .await
-                    .map_err(|error| Error::operation("write note", error.to_string()))?;
+                // The meta write above already created the session; name it in the
+                // error so a partial failure leaves an identifiable meeting instead
+                // of an anonymous orphan (recover with `meetings note ID --set`).
+                store.write_note(&session_id, &body).await.map_err(|error| {
+                    Error::operation(
+                        "write note",
+                        format!(
+                            "meeting {session_id} was created, but writing its note failed: {error}"
+                        ),
+                    )
+                })?;
             }
 
             let rendered = if json {
