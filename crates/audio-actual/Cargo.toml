@@ -28,7 +28,7 @@ tokio-util = { workspace = true }
 
 cpal = { workspace = true }
 dasp = { workspace = true }
-rodio = { workspace = true }
+rodio = { workspace = true, features = ["playback"] }
 
 ebur128 = "0.1.10"
 ringbuf = { workspace = true }
@@ -49,5 +49,5 @@ hound = { workspace = true }
 hypr-audio-utils = { workspace = true }
 hypr-data = { workspace = true }
 hypr-resampler = { workspace = true }
-rodio = { workspace = true }
+rodio = { workspace = true, features = ["playback"] }
 serial_test = { workspace = true }

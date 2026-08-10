@@ -12971,7 +12971,6 @@ dependencies = [
  "num-rational",
  "rand 0.10.1",
  "rand_distr 0.6.0",
- "rtrb",
  "symphonia",
  "thiserror 2.0.18",
 ]
@@ -13088,12 +13087,6 @@ checksum = "27344601ef27460e82d6a4e1ecb9e7e99f518122095f3c51296da8e9be2b9d83"
 dependencies = [
  "cc",
 ]
-
-[[package]]
-name = "rtrb"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7204ed6420f698836b76d4d5c2ec5dec7585fd5c3a788fd1cde855d1de598239"
 
 [[package]]
 name = "rubato"
