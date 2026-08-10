@@ -509,15 +509,13 @@ async fn start_external_server<R: Runtime, T: Manager<R>>(
 
     let app_handle = manager.app_handle().clone();
     let cmd_builder = external::CommandBuilder::new(move || {
-        let mut cmd = app_handle
+        let cmd = app_handle
             .sidecar2()
             .sidecar("fmtr-sidecar-stt")?
             .args(["serve", "--any-token"]);
 
         #[cfg(debug_assertions)]
-        {
-            cmd = cmd.args(["-v", "-d"]);
-        }
+        let cmd = cmd.args(["-v", "-d"]);
 
         Ok(cmd)
     });
