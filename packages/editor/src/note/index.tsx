@@ -104,7 +104,11 @@ import {
 } from "./trailing-empty-line-click";
 
 export type { MentionConfig, FileHandlerConfig, PlaceholderFunction };
-export { normalizePortableAttachmentUrls } from "./portable-attachments";
+export {
+  normalizePortableAttachmentUrls,
+  parsePortableAttachmentSrc,
+  toPortableAttachmentSrc,
+} from "./portable-attachments";
 export { schema };
 export {
   type CommentAnchorInput,

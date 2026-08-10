@@ -446,6 +446,7 @@ function getAttachmentFilename(src: string): string | undefined {
 
   const normalized = normalizePathLike(trimmed);
   if (
+    !normalized.startsWith("attachments/") &&
     !normalized.includes("/attachments/") &&
     !normalized.includes("\\attachments\\")
   ) {

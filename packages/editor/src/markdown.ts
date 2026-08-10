@@ -19,6 +19,11 @@ import {
   parseImageTitleMetadata,
   serializeMarkdownImage,
 } from "./image-markdown";
+import {
+  isLocalFileUrl,
+  parsePortableAttachmentSrc,
+  toPortableAttachmentSrc,
+} from "./note/portable-attachments";
 
 // ---------------------------------------------------------------------------
 // Schema – mirrors the editor schema by node/mark names and attrs.
@@ -784,6 +789,24 @@ function clipPlugin(md: MarkdownIt) {
   );
 }
 
+// Attachment-backed nodes persist as vault-relative `attachments/<id>` srcs so
+// the markdown stays valid when the vault moves between machines. A remote src
+// (e.g. https) still wins; device-local URLs are never written out.
+function serializedAttachmentSrc(attrs: {
+  src?: string | null;
+  attachmentId?: string | null;
+}): string | null {
+  const { src, attachmentId } = attrs;
+  if (
+    typeof attachmentId === "string" &&
+    attachmentId.length > 0 &&
+    (!src || isLocalFileUrl(src))
+  ) {
+    return toPortableAttachmentSrc(attachmentId);
+  }
+  return src ?? null;
+}
+
 function fileAttachmentPlugin(md: MarkdownIt) {
   md.block.ruler.before(
     "paragraph",
@@ -798,7 +821,8 @@ function fileAttachmentPlugin(md: MarkdownIt) {
       const max = state.eMarks[startLine];
       const line = state.src.slice(pos, max);
 
-      // [name](asset://localhost/...) with balanced parens in the URL
+      // [name](asset://localhost/...) or [name](attachments/...) with
+      // balanced parens in the URL
       if (!line.startsWith("[")) return false;
 
       const closeBracket = line.indexOf("](");
@@ -808,8 +832,12 @@ function fileAttachmentPlugin(md: MarkdownIt) {
       if (name.includes("]")) return false;
 
       const urlStart = closeBracket + 2;
-      const PREFIX = "asset://localhost/";
-      if (!line.startsWith(PREFIX, urlStart)) return false;
+      if (
+        !line.startsWith("asset://localhost/", urlStart) &&
+        !line.startsWith("attachments/", urlStart)
+      ) {
+        return false;
+      }
 
       let depth = 1;
       let i = urlStart;
@@ -1010,11 +1038,13 @@ function getParser(): MarkdownParser {
       getAttrs: (tok) => {
         const rawTitle = tok.attrGet("title") || undefined;
         const metadata = parseImageTitleMetadata(rawTitle);
+        const src = tok.attrGet("src");
+        const attachmentId = parsePortableAttachmentSrc(src);
         return {
-          src: tok.attrGet("src"),
+          src: attachmentId ? null : src,
           alt: (tok.children?.[0] && tok.children[0].content) || "",
           title: metadata.title,
-          attachmentId: null,
+          attachmentId,
           editorWidth: metadata.editorWidth ?? DEFAULT_EDITOR_WIDTH,
         };
       },
@@ -1054,14 +1084,18 @@ function getParser(): MarkdownParser {
     },
     file_attachment: {
       node: "fileAttachment",
-      getAttrs: (tok) => ({
-        attachmentId: null,
-        name: tok.attrGet("name") ?? "",
-        mimeType: "",
-        src: tok.attrGet("src"),
-        path: null,
-        size: null,
-      }),
+      getAttrs: (tok) => {
+        const src = tok.attrGet("src");
+        const attachmentId = parsePortableAttachmentSrc(src);
+        return {
+          attachmentId,
+          name: tok.attrGet("name") ?? "",
+          mimeType: "",
+          src: attachmentId ? null : src,
+          path: null,
+          size: null,
+        };
+      },
     },
     mention: {
       node: "mention-@",
@@ -1298,7 +1332,7 @@ function getSerializer(): MarkdownSerializer {
       image(state, node) {
         state.write(
           serializeMarkdownImage({
-            src: node.attrs.src,
+            src: serializedAttachmentSrc(node.attrs),
             alt: node.attrs.alt,
             title: node.attrs.title,
             editorWidth: node.attrs.editorWidth,
@@ -1328,7 +1362,7 @@ function getSerializer(): MarkdownSerializer {
 
       fileAttachment(state, node) {
         const name = node.attrs.name || "file";
-        const src = (node.attrs.src || "")
+        const src = (serializedAttachmentSrc(node.attrs) || "")
           .replace(/\(/g, "%28")
           .replace(/\)/g, "%29");
         state.write(`[${name}](${src})`);

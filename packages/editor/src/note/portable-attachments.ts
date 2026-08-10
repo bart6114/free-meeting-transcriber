@@ -32,7 +32,7 @@ function normalizeNode(node: AttachmentContent): AttachmentContent {
   return { ...node, attrs, ...(content ? { content } : {}) };
 }
 
-function isLocalFileUrl(value: unknown): boolean {
+export function isLocalFileUrl(value: unknown): boolean {
   return (
     typeof value === "string" &&
     (value.startsWith("asset:") ||
@@ -40,4 +40,29 @@ function isLocalFileUrl(value: unknown): boolean {
       value.startsWith("http://asset.localhost/") ||
       value.startsWith("https://asset.localhost/"))
   );
+}
+
+// Parens are additionally encoded so the src never breaks markdown link syntax.
+export function toPortableAttachmentSrc(attachmentId: string): string {
+  const encoded = encodeURIComponent(attachmentId)
+    .replace(/\(/g, "%28")
+    .replace(/\)/g, "%29");
+  return `attachments/${encoded}`;
+}
+
+export function parsePortableAttachmentSrc(src: unknown): string | null {
+  if (typeof src !== "string") {
+    return null;
+  }
+
+  const match = src.match(/^(?:\.\/)?attachments\/([^/\\]+)$/);
+  if (!match) {
+    return null;
+  }
+
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
 }

@@ -9,6 +9,7 @@ import {
   md2json,
   parseJsonContent,
 } from "./markdown";
+import { normalizePortableAttachmentUrls } from "./note/portable-attachments";
 import { schema as noteSchema } from "./note/schema";
 
 describe("json2md", () => {
@@ -881,5 +882,134 @@ describe("fileAttachment round-trip", () => {
     );
     expect(attachments).toHaveLength(1);
     expect(attachments[0].attrs?.name).toBe("CE2 (Group 5) PPT.pdf");
+  });
+});
+
+describe("attachment-backed nodes persist portably", () => {
+  test("serializes an image with an attachmentId but no src to a vault-relative src", () => {
+    const md = json2md({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: { attachmentId: "diagram.png", alt: "Diagram" },
+        },
+      ],
+    });
+
+    expect(md).toBe(
+      '![Diagram](attachments/diagram.png "char-editor-width=80")',
+    );
+  });
+
+  test("replaces a device-local image src with the vault-relative form", () => {
+    const md = json2md({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: {
+            attachmentId: "diagram.png",
+            src: "asset://localhost/%2Fdevice-a%2Fattachments%2Fdiagram.png",
+            alt: "Diagram",
+          },
+        },
+      ],
+    });
+
+    expect(md).toBe(
+      '![Diagram](attachments/diagram.png "char-editor-width=80")',
+    );
+  });
+
+  test("keeps a remote image src even when an attachmentId exists", () => {
+    const md = json2md({
+      type: "doc",
+      content: [
+        {
+          type: "image",
+          attrs: {
+            attachmentId: "diagram.png",
+            src: "https://example.com/diagram.png",
+            alt: "Diagram",
+          },
+        },
+      ],
+    });
+
+    expect(md).toBe(
+      '![Diagram](https://example.com/diagram.png "char-editor-width=80")',
+    );
+  });
+
+  test("restores the attachmentId when parsing a vault-relative image src", () => {
+    const json = md2json("![Diagram](attachments/diagram%20%281%29.png)");
+
+    expect(json.content![0].type).toBe("image");
+    expect(json.content![0].attrs?.attachmentId).toBe("diagram (1).png");
+    expect(json.content![0].attrs?.src).toBeNull();
+  });
+
+  test("round-trips a freshly pasted image through the persist path", () => {
+    // Mirrors the desktop save flow: normalize the editor doc, write markdown,
+    // then parse the markdown back as if the app restarted.
+    const md = json2md(
+      normalizePortableAttachmentUrls({
+        type: "doc",
+        content: [
+          {
+            type: "image",
+            attrs: {
+              attachmentId: "screenshot 1 (copy).png",
+              src: "asset://localhost/%2Fdevice-a%2Fattachments%2Fscreenshot.png",
+              alt: "Screenshot",
+              editorWidth: 42,
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(md).toBe(
+      '![Screenshot](attachments/screenshot%201%20%28copy%29.png "char-editor-width=42")',
+    );
+
+    const parsed = md2json(md);
+    expect(parsed.content![0].type).toBe("image");
+    expect(parsed.content![0].attrs?.attachmentId).toBe(
+      "screenshot 1 (copy).png",
+    );
+    expect(parsed.content![0].attrs?.src).toBeNull();
+    expect(parsed.content![0].attrs?.editorWidth).toBe(42);
+  });
+
+  test("round-trips a fileAttachment through the persist path", () => {
+    const md = json2md(
+      normalizePortableAttachmentUrls({
+        type: "doc",
+        content: [
+          {
+            type: "fileAttachment",
+            attrs: {
+              attachmentId: "notes (final).pdf",
+              name: "notes (final).pdf",
+              src: "file:///device-a/attachments/notes.pdf",
+              path: "/device-a/attachments/notes.pdf",
+            },
+          },
+        ],
+      }),
+    );
+
+    expect(md).toBe("[notes (final).pdf](attachments/notes%20%28final%29.pdf)");
+
+    const parsed = md2json(md);
+    const attachments = parsed.content!.filter(
+      (n) => n.type === "fileAttachment",
+    );
+    expect(attachments).toHaveLength(1);
+    expect(attachments[0].attrs?.attachmentId).toBe("notes (final).pdf");
+    expect(attachments[0].attrs?.name).toBe("notes (final).pdf");
+    expect(attachments[0].attrs?.src).toBeNull();
   });
 });

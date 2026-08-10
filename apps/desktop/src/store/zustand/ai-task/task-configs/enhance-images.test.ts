@@ -83,6 +83,33 @@ describe("enhance image context", () => {
     ).toEqual([{ filename: "diagram.png" }]);
   });
 
+  it("extracts markdown image filenames from vault-relative attachment srcs", () => {
+    expect(
+      collectImageReferences(
+        "![screenshot](attachments/screenshot%201%20%28copy%29.png)",
+      ),
+    ).toEqual([{ filename: "screenshot 1 (copy).png" }]);
+  });
+
+  it("reads attachments referenced by vault-relative markdown srcs", async () => {
+    const images = await collectEnhanceImageContext(
+      "session-1",
+      "notes\n\n![diagram](attachments/diagram.png)",
+    );
+
+    expect(images).toEqual([
+      {
+        base64: "aGVsbG8=",
+        mimeType: "image/png",
+        filename: "diagram.png",
+      },
+    ]);
+    expect(fsSyncMocks.attachmentRead).toHaveBeenCalledWith(
+      "session-1",
+      "diagram.png",
+    );
+  });
+
   it("does not treat remote markdown images as local attachments", () => {
     expect(
       collectImageReferences("![diagram](https://example.com/diagram.png)"),

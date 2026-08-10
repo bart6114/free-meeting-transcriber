@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import { normalizePortableAttachmentUrls } from "./portable-attachments";
+import {
+  normalizePortableAttachmentUrls,
+  parsePortableAttachmentSrc,
+  toPortableAttachmentSrc,
+} from "./portable-attachments";
 
 describe("normalizePortableAttachmentUrls", () => {
   it("removes device-local image and file locations while keeping identities", () => {
@@ -77,5 +81,35 @@ describe("normalizePortableAttachmentUrls", () => {
     };
 
     expect(normalizePortableAttachmentUrls(document)).toEqual(document);
+  });
+});
+
+describe("portable attachment srcs", () => {
+  it("round-trips attachment ids with spaces and parentheses", () => {
+    const id = "screenshot 1 (copy).png";
+    const src = toPortableAttachmentSrc(id);
+
+    expect(src).toBe("attachments/screenshot%201%20%28copy%29.png");
+    expect(parsePortableAttachmentSrc(src)).toBe(id);
+  });
+
+  it("accepts a ./ prefix", () => {
+    expect(parsePortableAttachmentSrc("./attachments/diagram.png")).toBe(
+      "diagram.png",
+    );
+  });
+
+  it("rejects srcs that are not vault-relative attachment paths", () => {
+    expect(parsePortableAttachmentSrc(null)).toBeNull();
+    expect(parsePortableAttachmentSrc("")).toBeNull();
+    expect(parsePortableAttachmentSrc("attachments/")).toBeNull();
+    expect(
+      parsePortableAttachmentSrc("https://example.com/attachments/a.png"),
+    ).toBeNull();
+    expect(
+      parsePortableAttachmentSrc("asset://localhost/attachments/a.png"),
+    ).toBeNull();
+    expect(parsePortableAttachmentSrc("/vault/attachments/a.png")).toBeNull();
+    expect(parsePortableAttachmentSrc("attachments/nested/a.png")).toBeNull();
   });
 });
