@@ -572,9 +572,7 @@ mod tests {
     /// Drains everything currently queued on the store's change bus. The bus is the
     /// observable that replaced the SQL dirty queue: a no-op rescan must leave it
     /// empty, a genuine change must land on it.
-    fn drain_changes(
-        store: &SessionStore,
-    ) -> Vec<(crate::IndexEntity, Vec<String>)> {
+    fn drain_changes(store: &SessionStore) -> Vec<(crate::IndexEntity, Vec<String>)> {
         let mut rx = store
             .take_index_change_receiver()
             .expect("receiver taken once per drain");
@@ -626,8 +624,7 @@ mod tests {
         let changes = drain_changes(&store);
         assert!(
             changes.iter().any(|(entity, ids)| {
-                *entity == crate::IndexEntity::Sessions
-                    && ids.contains(&"s1".to_string())
+                *entity == crate::IndexEntity::Sessions && ids.contains(&"s1".to_string())
             }),
             "a genuine change must still notify, not just no-ops getting skipped: {changes:?}"
         );
@@ -964,8 +961,11 @@ mod tests {
 
         {
             let mut index = store.index.write().unwrap();
-            index.docs.entry("s1".to_string()).or_default().push(
-                crate::EnhancedDoc {
+            index
+                .docs
+                .entry("s1".to_string())
+                .or_default()
+                .push(crate::EnhancedDoc {
                     id: "legacy-uuid".to_string(),
                     session_id: "s1".to_string(),
                     kind: "summary".to_string(),
@@ -973,8 +973,7 @@ mod tests {
                     template_id: String::new(),
                     sort_order: 0,
                     markdown: "{}".to_string(),
-                },
-            );
+                });
         }
 
         store.rebuild_index().await.unwrap();

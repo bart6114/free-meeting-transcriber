@@ -641,10 +641,7 @@ fn coalesce(batch: Vec<(IndexEntity, Vec<String>)>) -> Vec<IndexChanged> {
 /// The dispatcher loop, generic over the emit sink for testability: block on the
 /// first change, wait `COALESCE_WINDOW`, drain whatever else arrived, emit one event
 /// per entity. Ends when the store (all senders) is dropped.
-pub async fn run_index_change_dispatcher(
-    mut rx: IndexChangeReceiver,
-    emit: impl Fn(IndexChanged),
-) {
+pub async fn run_index_change_dispatcher(mut rx: IndexChangeReceiver, emit: impl Fn(IndexChanged)) {
     while let Some(first) = rx.recv().await {
         tokio::time::sleep(COALESCE_WINDOW).await;
         let mut batch = vec![first];
