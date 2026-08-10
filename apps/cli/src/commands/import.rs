@@ -14,6 +14,7 @@ pub async fn run(
     vault: &Path,
     file: PathBuf,
     title: Option<String>,
+    into: Option<String>,
     transcribe: bool,
     json: bool,
 ) -> Result<u8> {
@@ -37,14 +38,38 @@ pub async fn run(
         return Err(Error::NotFound(format!("audio file {}", file.display())));
     }
 
-    let title = title.unwrap_or_else(|| {
-        file.file_stem()
-            .map(|stem| stem.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    });
-
     let store = SessionStore::new(vault.to_path_buf());
-    let meta = super::create_session(vault, &store, "import audio", title).await?;
+    // `--into` targets an existing meeting; otherwise a new session is created,
+    // titled after the file when no `--title` is given (clap rejects
+    // `--into --title` together, so `title` is None on this branch).
+    let (meta, created) = match into {
+        Some(id) => {
+            let meta = store
+                .read_meta(&id)
+                .await
+                .map_err(|error| Error::operation("import audio", error.to_string()))?
+                .ok_or_else(|| Error::NotFound(format!("meeting '{id}'")))?;
+            if let Some(existing) = super::transcribe::find_session_audio(vault, &id) {
+                return Err(Error::operation(
+                    "import audio",
+                    format!(
+                        "meeting {id} already has a recording ({}); the CLI never replaces existing audio",
+                        existing.display()
+                    ),
+                ));
+            }
+            (meta, false)
+        }
+        None => {
+            let title = title.unwrap_or_else(|| {
+                file.file_stem()
+                    .map(|stem| stem.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            });
+            let meta = super::create_session(vault, &store, "import audio", title).await?;
+            (meta, true)
+        }
+    };
     let session_id = meta.id.clone();
 
     // Same layout and conversion as the desktop import path (fs-sync-core's
@@ -54,6 +79,21 @@ pub async fn run(
     let tmp_path = session_dir.join("audio.mp3.tmp");
     let target_path = session_dir.join("audio.mp3");
     let source_path = file.clone();
+    // Both arms name the session so a partial import stays identifiable —
+    // whether the converter failed cleanly or panicked (JoinError). A freshly
+    // created session additionally reports that it now exists as an orphan.
+    let convert_failed = |error: String| {
+        Error::operation(
+            "import audio",
+            if created {
+                format!(
+                    "meeting {session_id} was created, but converting its audio failed: {error}"
+                )
+            } else {
+                format!("converting audio for meeting {session_id} failed: {error}")
+            },
+        )
+    };
     let audio_path = tokio::task::spawn_blocking(move || {
         hypr_audio_norm::normalize_file(
             &source_path,
@@ -64,21 +104,8 @@ pub async fn run(
         )
     })
     .await
-    // Both arms name the session: it already exists at this point, so the
-    // partial import stays identifiable instead of an anonymous orphan —
-    // whether the converter failed cleanly or panicked (JoinError).
-    .map_err(|error| {
-        Error::operation(
-            "import audio",
-            format!("meeting {session_id} was created, but converting its audio failed: {error}"),
-        )
-    })?
-    .map_err(|error| {
-        Error::operation(
-            "import audio",
-            format!("meeting {session_id} was created, but converting its audio failed: {error}"),
-        )
-    })?;
+    .map_err(|error| convert_failed(error.to_string()))?
+    .map_err(|error| convert_failed(error.to_string()))?;
 
     let mut data = serde_json::json!({
         "id": session_id,

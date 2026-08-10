@@ -41,11 +41,12 @@ fmtr --json meetings note MEETING_ID --set notes.md
 echo "Follow-up" | fmtr --json meetings note MEETING_ID --append -
 ```
 
-Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; add `--transcribe` to transcribe right after the import):
+Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; add `--transcribe` to transcribe right after the import). With `--into MEETING_ID` the audio goes into that existing meeting instead — e.g. a note created with `meetings new` — keeping its title (`--title` is rejected alongside `--into`) and failing if the meeting already has a recording:
 
 ```bash
 fmtr --json import recording.m4a --title "Weekly sync"
 fmtr --json import recording.m4a --transcribe
+fmtr --json import recording.m4a --into MEETING_ID --transcribe
 ```
 
 Transcribe a meeting's audio with the on-device model configured in the desktop app (replaces the meeting's transcript; requires the model to be downloaded via the desktop app first; progress goes to stderr; honors the app's audio retention setting — with retention "none", the recording is deleted once the transcript is saved):

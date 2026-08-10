@@ -99,8 +99,8 @@ pub(crate) async fn transcribe_session(
             created_at: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             started_at_ms: chrono::Utc::now().timestamp_millis() as f64,
             // The desktop snapshots the note into the transcript as a
-            // prosemirror-JSON string; the CLI leaves the snapshot empty (the
-            // import flow has no note yet anyway).
+            // prosemirror-JSON string; the CLI has no markdown-to-prosemirror
+            // converter, so it leaves the snapshot empty even when a note exists.
             memo_md: String::new(),
         },
         &mut new_id,
@@ -256,7 +256,7 @@ fn ensure_soniqo_model_ready(model: &str) -> Result<()> {
     Ok(())
 }
 
-fn find_session_audio(vault: &Path, session_id: &str) -> Option<PathBuf> {
+pub(crate) fn find_session_audio(vault: &Path, session_id: &str) -> Option<PathBuf> {
     let session_dir = vault.join("sessions").join(session_id);
     AUDIO_FILE_NAMES
         .iter()

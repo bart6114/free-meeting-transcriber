@@ -27,9 +27,10 @@ pub async fn run(args: Args) -> Result<u8> {
         cli::Command::Import {
             file,
             title,
+            into,
             transcribe,
         } => {
-            return commands::import::run(&vault, file, title, transcribe, args.json).await;
+            return commands::import::run(&vault, file, title, into, transcribe, args.json).await;
         }
         cli::Command::Transcribe { id } => {
             commands::transcribe::run(&vault, &id, args.json).await?
@@ -207,6 +208,7 @@ mod tests {
             command: cli::Command::Import {
                 file: audio_path,
                 title: None,
+                into: None,
                 transcribe: false,
             },
         })
@@ -241,6 +243,112 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn import_into_normalizes_audio_into_the_existing_meeting() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session(&vault, "meeting-1", Some("Agenda: launch date."));
+        let audio_path = dir.path().join("standup.wav");
+        write_test_wav(&audio_path);
+
+        run(Args {
+            base: None,
+            vault_path: Some(vault.clone()),
+            json: true,
+            command: cli::Command::Import {
+                file: audio_path,
+                title: None,
+                into: Some("meeting-1".to_string()),
+                transcribe: false,
+            },
+        })
+        .await
+        .unwrap();
+
+        // No second session appeared; the audio landed in the target session
+        // and the meeting's own metadata and note stayed untouched.
+        let sessions = std::fs::read_dir(vault.join("sessions"))
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(sessions.len(), 1);
+        let session_dir = vault.join("sessions/meeting-1");
+        assert!(
+            std::fs::metadata(session_dir.join("audio.mp3"))
+                .unwrap()
+                .len()
+                > 0
+        );
+        assert!(!session_dir.join("audio.mp3.tmp").exists());
+        let meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(session_dir.join("_meta.json")).unwrap())
+                .unwrap();
+        assert_eq!(meta["title"], "Planning");
+        assert_eq!(
+            std::fs::read_to_string(session_dir.join("_memo.md")).unwrap(),
+            "Agenda: launch date."
+        );
+    }
+
+    #[tokio::test]
+    async fn import_into_fails_cleanly_when_the_meeting_does_not_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir_all(vault.join("sessions")).unwrap();
+        let audio_path = dir.path().join("standup.wav");
+        write_test_wav(&audio_path);
+
+        let error = run(Args {
+            base: None,
+            vault_path: Some(vault.clone()),
+            json: false,
+            command: cli::Command::Import {
+                file: audio_path,
+                title: None,
+                into: Some("missing".to_string()),
+                transcribe: false,
+            },
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "not_found");
+        assert_eq!(error.exit_code(), 2);
+        assert!(!vault.join("sessions/missing").exists());
+    }
+
+    #[tokio::test]
+    async fn import_into_refuses_to_replace_an_existing_recording() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session(&vault, "meeting-1", None);
+        std::fs::write(vault.join("sessions/meeting-1/audio.mp3"), b"mp3").unwrap();
+        let audio_path = dir.path().join("standup.wav");
+        write_test_wav(&audio_path);
+
+        let error = run(Args {
+            base: None,
+            vault_path: Some(vault.clone()),
+            json: false,
+            command: cli::Command::Import {
+                file: audio_path,
+                title: None,
+                into: Some("meeting-1".to_string()),
+                transcribe: false,
+            },
+        })
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "operation_failed");
+        assert!(error.to_string().contains("already has a recording"));
+        // The stub recording survives untouched.
+        assert_eq!(
+            std::fs::read(vault.join("sessions/meeting-1/audio.mp3")).unwrap(),
+            b"mp3"
+        );
+    }
+
+    #[tokio::test]
     async fn import_rejects_unsupported_formats_without_creating_anything() {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path().join("vault");
@@ -255,6 +363,7 @@ mod tests {
             command: cli::Command::Import {
                 file: text_path,
                 title: None,
+                into: None,
                 transcribe: false,
             },
         })
@@ -279,6 +388,7 @@ mod tests {
             command: cli::Command::Import {
                 file: dir.path().join("missing.wav"),
                 title: None,
+                into: None,
                 transcribe: false,
             },
         })
@@ -416,6 +526,7 @@ mod tests {
             command: cli::Command::Import {
                 file: audio_path,
                 title: None,
+                into: None,
                 transcribe: true,
             },
         })

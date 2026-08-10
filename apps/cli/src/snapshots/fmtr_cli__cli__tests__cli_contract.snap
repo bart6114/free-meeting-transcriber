@@ -311,7 +311,7 @@ expression: canonicalize_json(contract)
       "synopsis": "fmtr meetings [-h] <command>"
     },
     {
-      "about": "Import an audio file into a new meeting and print its id",
+      "about": "Import an audio file into a new or existing meeting and print its id",
       "arguments": [
         {
           "help": "Audio file to import (wav, mp3, ogg, mp4, m4a, flac, webm, or aac)",
@@ -329,6 +329,13 @@ expression: canonicalize_json(contract)
           "value_name": "TITLE"
         },
         {
+          "flags": "--into",
+          "help": "Import into this existing meeting instead of creating a new one; fails if it already has a recording",
+          "is_flag": false,
+          "required": false,
+          "value_name": "MEETING_ID"
+        },
+        {
           "flags": "--transcribe",
           "help": "Transcribe the audio with the configured on-device model after importing",
           "is_flag": true,
@@ -341,7 +348,7 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "fmtr import [--title] [--transcribe] [-h] <file>"
+      "synopsis": "fmtr import [--title] [--into] [--transcribe] [-h] <file>"
     },
     {
       "about": "Transcribe a meeting's audio with the configured on-device model",

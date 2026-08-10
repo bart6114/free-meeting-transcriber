@@ -433,7 +433,7 @@ mod tests {
                 "search_meetings",
             ]
         );
-        let mcp_docs = include_str!("../../../docs/reference/mcp.mdx");
+        let mcp_docs = include_str!("../../../docs/src/content/docs/reference/mcp.mdx");
         let mcp_skill = include_str!("../../../skills/fmtr/references/mcp.md");
         for tool_name in &tool_names {
             assert!(

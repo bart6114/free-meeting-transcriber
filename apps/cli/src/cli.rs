@@ -45,12 +45,19 @@ pub enum Command {
         #[command(subcommand)]
         command: MeetingCommand,
     },
-    /// Import an audio file into a new meeting and print its id
+    /// Import an audio file into a new or existing meeting and print its id
     Import {
         /// Audio file to import (wav, mp3, ogg, mp4, m4a, flac, webm, or aac)
         file: PathBuf,
         #[arg(long, help = "Title for the new meeting; defaults to the file name")]
         title: Option<String>,
+        #[arg(
+            long,
+            value_name = "MEETING_ID",
+            conflicts_with = "title",
+            help = "Import into this existing meeting instead of creating a new one; fails if it already has a recording"
+        )]
+        into: Option<String>,
         #[arg(
             long,
             help = "Transcribe the audio with the configured on-device model after importing"
@@ -351,6 +358,7 @@ mod tests {
         let Command::Import {
             file,
             title,
+            into,
             transcribe,
         } = Args::parse_from(["fmtr", "import", "meeting.m4a"]).command
         else {
@@ -358,6 +366,7 @@ mod tests {
         };
         assert_eq!(file, Path::new("meeting.m4a"));
         assert_eq!(title, None);
+        assert_eq!(into, None);
         assert!(!transcribe);
 
         let Command::Import { title, .. } =
@@ -368,6 +377,30 @@ mod tests {
         assert_eq!(title.as_deref(), Some("Weekly sync"));
 
         assert!(Args::try_parse_from(["fmtr", "import"]).is_err());
+    }
+
+    #[test]
+    fn parses_import_into_and_rejects_combining_it_with_title() {
+        let Command::Import { into, .. } =
+            Args::parse_from(["fmtr", "import", "meeting.m4a", "--into", "meeting-1"]).command
+        else {
+            panic!("expected import command");
+        };
+        assert_eq!(into.as_deref(), Some("meeting-1"));
+
+        // The target meeting already has a title; the two flags are exclusive.
+        assert!(
+            Args::try_parse_from([
+                "fmtr",
+                "import",
+                "meeting.m4a",
+                "--into",
+                "meeting-1",
+                "--title",
+                "Weekly sync",
+            ])
+            .is_err()
+        );
     }
 
     #[test]
@@ -398,7 +431,7 @@ mod tests {
 
     #[test]
     fn public_docs_and_skill_cover_the_command_contract() {
-        let docs = include_str!("../../../docs/reference/cli.mdx");
+        let docs = include_str!("../../../docs/src/content/docs/reference/cli.mdx");
         let skill = concat!(
             include_str!("../../../skills/fmtr/references/cli.md"),
             include_str!("../../../skills/fmtr/references/setup.md"),
