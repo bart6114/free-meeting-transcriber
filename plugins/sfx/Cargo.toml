@@ -17,7 +17,7 @@ specta-typescript = { workspace = true }
 tauri = { workspace = true, features = ["test"] }
 tauri-specta = { workspace = true, features = ["derive", "typescript"] }
 
-rodio = { workspace = true }
+rodio = { workspace = true, features = ["playback"] }
 
 serde = { workspace = true }
 specta = { workspace = true }
