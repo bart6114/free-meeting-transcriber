@@ -10,7 +10,7 @@ Files in the user's vault directory are the only source of truth — there is no
 - Typecheck (TS): `pnpm -r typecheck`
 - Typecheck (Rust): `cargo check`
 - Desktop dev: `pnpm -F @hypr/desktop tauri:dev`
-- Dev docs: `docs/` (Mintlify project source; not currently published)
+- Docs site: `docs/` (Astro Starlight; published at https://freemeetingtranscriber.com via Cloudflare Workers static assets)
 
 ## Shared cargo target cache
 

@@ -1,5 +1,6 @@
 packages:
   - apps/*
+  - docs
   - packages/*
   - plugins/*
   - examples/plugins/*
@@ -35,3 +36,4 @@ allowBuilds:
   puppeteer: true
   sharp: true
   unix-dgram: true
+  workerd: true

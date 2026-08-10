@@ -3,6 +3,8 @@ title: "Agent access"
 description: "Give an agent read-only access to local meeting notes through MCP or the CLI."
 ---
 
+import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
 Free Meeting Transcriber has two local, read-only interfaces for agents. Both read the same vault.
 
 | Interface | Use it when | Output |
@@ -25,11 +27,7 @@ Use these interfaces instead of crawling the vault. They apply the same rules fo
 
 Neither interface can edit a note, action item, or meeting. The CLI export command is the one exception to in-place read-only behavior: it can create a separate file, and it only replaces an existing file when `--force` is passed.
 
-<CardGroup cols={2}>
-  <Card title="Use the CLI" icon="terminal" href="/agents/cli">
-    Run commands with JSON output.
-  </Card>
-  <Card title="Use MCP" icon="plug" href="/agents/mcp">
-    Connect a local stdio server.
-  </Card>
-</CardGroup>
+<CardGrid>
+  <LinkCard title="Use the CLI" href="/agents/cli" description="Run commands with JSON output." />
+  <LinkCard title="Use MCP" href="/agents/mcp" description="Connect a local stdio server." />
+</CardGrid>

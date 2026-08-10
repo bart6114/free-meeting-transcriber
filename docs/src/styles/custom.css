@@ -1,0 +1,57 @@
+/* Brand accent palette (gold, matches the previous Mintlify colors). */
+:root {
+  --sl-color-accent-low: #3b2a09;
+  --sl-color-accent: #c38b22;
+  --sl-color-accent-high: #ecd0a2;
+}
+
+:root[data-theme="light"] {
+  --sl-color-accent-low: #f7e8ca;
+  --sl-color-accent: #9a6918;
+  --sl-color-accent-high: #4c3407;
+}
+
+.download-cta {
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.download-cta a {
+  display: flex;
+  min-width: 18rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  border: 1px solid #efc86f;
+  border-radius: 1rem;
+  padding: 1rem 1.5rem;
+  color: #fff;
+  text-decoration: none;
+  background: linear-gradient(135deg, #e2a936 0%, #c38b22 55%, #9a6918 100%);
+  box-shadow: 0 14px 35px rgba(154, 105, 24, 0.3);
+  transition: transform 0.15s ease;
+}
+
+.download-cta a:hover {
+  transform: translateY(-2px);
+}
+
+.download-cta .cta-label {
+  display: flex;
+  flex-direction: column;
+}
+
+.download-cta .cta-title {
+  font-size: var(--sl-text-base);
+  font-weight: 600;
+}
+
+.download-cta .cta-subtitle {
+  font-size: var(--sl-text-xs);
+  color: rgba(255, 248, 235, 0.8);
+}
+
+.download-cta .cta-arrow {
+  font-size: var(--sl-text-xl);
+}

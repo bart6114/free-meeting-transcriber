@@ -2,12 +2,13 @@
 
 ## Scope
 
-- This is the Mintlify project source. It is not currently published for
-  this fork. There is no hosted docs site, but the content is kept as the
-  source of truth for CLI and MCP behavior.
+- This is an Astro Starlight project, published at
+  https://freemeetingtranscriber.com through a Cloudflare Worker serving the
+  static build (`.github/workflows/docs_deploy.yaml`).
 - Write for Free Meeting Transcriber users, developers, and agents using the
   CLI or MCP server.
-- Configuration lives in `docs.json`; content pages are MDX.
+- Site configuration (sidebar, theme, plugins) lives in `astro.config.mjs`;
+  content pages are MDX under `src/content/docs/`.
 - The public agent skill is maintained in `../skills/fmtr/`.
 
 ## Sources of truth
@@ -23,9 +24,9 @@
 - Keep headings and sentences concise.
 - Put the result before implementation detail.
 - Use `Free Meeting Transcriber` for the product and `fmtr` for the executable.
-- Use root-relative links between Mintlify pages. Do not reference a public
-  docs URL in external instructions or agent metadata. None is published for
-  this fork, so point to the GitHub repository instead.
+- Use root-relative links between docs pages (e.g. `/quickstart`).
+- Use Starlight components: `:::note` / `:::caution` asides, and `Steps`,
+  `CardGrid`, `LinkCard` from `@astrojs/starlight/components`.
 
 ## Accuracy boundaries
 
@@ -37,7 +38,8 @@
 
 ## Verification
 
-- Check `docs.json` after adding or moving a page.
+- Update the `sidebar` in `astro.config.mjs` after adding or moving a page.
 - Run `pnpm exec dprint fmt docs skills` from the repository root.
 - Run `pnpm exec dprint check docs skills` before submitting.
-- Run `mint validate` and `mint broken-links --check-anchors --check-redirects` from `docs/` before deploying.
+- Run `pnpm -F @hypr/docs build` before deploying — the build fails on broken
+  internal links (starlight-links-validator) and invalid MDX.

@@ -31,3 +31,8 @@ internal
 .codex-security-artifacts-*/
 .codex-security-work-ledger-*.jsonl
 .claude/launch.json
+
+# Astro (docs site)
+docs/dist/
+docs/.astro/
+.wrangler/
