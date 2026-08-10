@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -27,6 +28,15 @@ vi.mock("~/session/attachments", () => ({
 
 import { useFileUpload } from "./useFileUpload";
 
+function renderUploadHook(sessionId: string) {
+  const queryClient = new QueryClient();
+  return renderHook(() => useFileUpload(sessionId), {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
+}
+
 function uploadFile() {
   const bytes = new TextEncoder().encode("image bytes").buffer;
   return {
@@ -54,7 +64,7 @@ describe("useFileUpload", () => {
 
   it("hashes, saves, and catalogs the final physical attachment before returning", async () => {
     const file = uploadFile();
-    const { result } = renderHook(() => useFileUpload("session-1"));
+    const { result } = renderUploadHook("session-1");
     let uploaded: Awaited<ReturnType<typeof result.current>> | undefined;
 
     await act(async () => {
@@ -85,7 +95,7 @@ describe("useFileUpload", () => {
   it("removes the exact newly saved file when catalog persistence fails", async () => {
     const catalogError = new Error("catalog unavailable");
     mocks.catalogLocalNoteAttachment.mockRejectedValue(catalogError);
-    const { result } = renderHook(() => useFileUpload("session-1"));
+    const { result } = renderUploadHook("session-1");
 
     await expect(result.current(uploadFile())).rejects.toBe(catalogError);
     expect(mocks.attachmentRemove).toHaveBeenCalledWith(
@@ -96,7 +106,7 @@ describe("useFileUpload", () => {
 
   it("does not write a file when checksum generation fails", async () => {
     mocks.sha256Hex.mockRejectedValue(new Error("checksum unavailable"));
-    const { result } = renderHook(() => useFileUpload("session-1"));
+    const { result } = renderUploadHook("session-1");
 
     await expect(result.current(uploadFile())).rejects.toThrow(
       "checksum unavailable",
