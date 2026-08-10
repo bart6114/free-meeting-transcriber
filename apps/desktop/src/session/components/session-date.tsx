@@ -114,11 +114,28 @@ function EditableDateForm({
     },
   });
 
+  const commitOnBlur = () => {
+    const value = form.state.values.createdAt;
+    if (toIsoString(value) && value !== toDatetimeLocalValue(createdAt)) {
+      void form.handleSubmit();
+    } else {
+      onCancel?.();
+    }
+  };
+
   return (
     <div className="flex w-fit flex-col gap-1">
       <form.Field name="createdAt">
         {(field) => (
-          <div className="flex h-6 items-center gap-0">
+          <div
+            className="flex h-6 items-center gap-0"
+            onBlur={(e) => {
+              if (e.currentTarget.contains(e.relatedTarget)) {
+                return;
+              }
+              commitOnBlur();
+            }}
+          >
             <Input
               autoFocus
               type="datetime-local"
@@ -144,6 +161,10 @@ function EditableDateForm({
                 variant="ghost"
                 size="icon"
                 className="text-muted-foreground hover:bg-destructive/10 hover:text-destructive size-6 shrink-0 rounded-full"
+                // Buttons don't take focus on click in WebKit, so without this
+                // the input's blur would fire with relatedTarget null and
+                // commit before the cancel click lands.
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={onCancel}
                 aria-label={t`Cancel date edit`}
               >
@@ -158,6 +179,7 @@ function EditableDateForm({
                   variant="ghost"
                   size="icon"
                   className="text-muted-foreground hover:bg-brand/10 hover:text-brand size-6 shrink-0 rounded-full"
+                  onMouseDown={(e) => e.preventDefault()}
                   onClick={() => void form.handleSubmit()}
                   disabled={!canSubmit}
                   aria-label={t`Save date`}

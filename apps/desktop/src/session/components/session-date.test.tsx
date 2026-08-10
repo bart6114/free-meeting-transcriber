@@ -82,6 +82,50 @@ describe("SessionDate", () => {
     expect(document.querySelector("input[type='datetime-local']")).toBeNull();
   });
 
+  it("saves the edited date when focus leaves the editor", async () => {
+    render(<SessionDate sessionId="session-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit date" }));
+
+    const input = document.querySelector("input[type='datetime-local']");
+    fireEvent.change(input!, { target: { value: "2026-08-01T10:30" } });
+    fireEvent.blur(input!, { relatedTarget: null });
+
+    await waitFor(() => {
+      expect(mocks.updateSession).toHaveBeenCalledTimes(1);
+    });
+    expect(document.querySelector("input[type='datetime-local']")).toBeNull();
+  });
+
+  it("closes without saving when focus leaves with no change", () => {
+    render(<SessionDate sessionId="session-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit date" }));
+
+    const input = document.querySelector("input[type='datetime-local']");
+    fireEvent.blur(input!, { relatedTarget: null });
+
+    expect(mocks.updateSession).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Edit date" })).not.toBeNull();
+  });
+
+  it("stays open when focus moves within the editor", () => {
+    render(<SessionDate sessionId="session-1" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit date" }));
+
+    const input = document.querySelector("input[type='datetime-local']");
+    fireEvent.change(input!, { target: { value: "2026-08-01T10:30" } });
+    fireEvent.blur(input!, {
+      relatedTarget: screen.getByRole("button", { name: "Save date" }),
+    });
+
+    expect(mocks.updateSession).not.toHaveBeenCalled();
+    expect(
+      document.querySelector("input[type='datetime-local']"),
+    ).not.toBeNull();
+  });
+
   it("closes the editor without saving on cancel", () => {
     render(<SessionDate sessionId="session-1" />);
 
