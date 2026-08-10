@@ -52,4 +52,4 @@ FMTR_VAULT_PATH=/path/to/vault fmtr --json meetings list
 
 `--base /path/to/vault` is an older equivalent, but `--vault-path` is clearer and takes precedence when both are present.
 
-The CLI reads the vault. It does not create, migrate, or edit meeting data. The export command can write a separate output file when you ask it to.
+The CLI reads and writes the vault: `fmtr meetings new`, `fmtr import`, and `fmtr meetings note --set` create and edit meeting data in the same format the desktop app writes, and `fmtr transcribe` replaces a meeting's transcript. The MCP server stays read-only. See the [CLI reference](/reference/cli) for every command.

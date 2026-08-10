@@ -16,6 +16,8 @@ Transcription is on-device only. Download a model from **Settings → Transcript
 
 A model marked **Live** can show text during a meeting. The streaming model supports English. If your language selection is not supported live, the app falls back to transcription after the recording. Models marked **After recording** always wait until you stop.
 
+A downloaded on-device Soniqo model also powers transcription from the terminal: `fmtr transcribe MEETING_ID` uses it without opening the app. The CLI never downloads models itself, so complete the download here first. See the [CLI reference](/reference/cli).
+
 ## Intelligence
 
 You do not need an Intelligence model to record, write notes, or transcribe. Configure one only if you want generated summaries and titles.

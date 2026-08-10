@@ -5,11 +5,12 @@ description: "Install the repository skill that teaches agents to use fmtr safel
 
 The public skill gives compatible agents a simple workflow:
 
-1. Use connected Free Meeting Transcriber MCP tools when available.
+1. Use connected Free Meeting Transcriber MCP tools for reading when available.
 2. Fall back to `fmtr --json` when MCP is unavailable.
 3. Resolve meeting IDs from list or search results.
 4. Read meeting details before requesting the full transcript.
-5. Never crawl or modify vault files directly.
+5. Write only through the CLI — create meetings, edit note bodies, import and transcribe audio — because the MCP server is read-only.
+6. Never crawl or modify vault files directly.
 
 ## Source
 

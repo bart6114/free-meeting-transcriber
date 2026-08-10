@@ -1,11 +1,11 @@
 ---
 title: "Agent access"
-description: "Give an agent read-only access to local meeting notes through MCP or the CLI."
+description: "Give an agent access to local meeting notes through the read-only MCP server or the read-write CLI."
 ---
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-Free Meeting Transcriber has two local, read-only interfaces for agents. Both read the same vault.
+Free Meeting Transcriber has two local interfaces for agents. Both work on the same vault. MCP is read-only; the CLI can also create and edit meetings.
 
 | Interface | Use it when | Output |
 | --- | --- | --- |
@@ -19,13 +19,13 @@ Free Meeting Transcriber has two local, read-only interfaces for agents. Both re
 3. Read meeting details before fetching a transcript.
 4. Fetch the transcript only when the notes and summaries are not enough.
 
-MCP is usually easier because the client receives tool schemas directly. The CLI is a useful fallback when MCP is not available.
+MCP is usually easier for reading because the client receives tool schemas directly. Use the CLI when MCP is not available, or when the task needs to create or edit a meeting — MCP cannot write.
 
-## Read-only means read-only
+## What each interface can write
 
 Use these interfaces instead of crawling the vault. They apply the same rules for canonical notes, summaries, speaker names, and transcript rendering.
 
-Neither interface can edit a note, action item, or meeting. The CLI export command is the one exception to in-place read-only behavior: it can create a separate file, and it only replaces an existing file when `--force` is passed.
+MCP cannot write: no tool creates or edits a note, action item, or meeting. The CLI can: `meetings new` creates a meeting, `meetings note --set` and `--append` edit a note body, `import` turns an audio file into a new meeting, and `transcribe` replaces a meeting's transcript. `meetings export` writes only to the file you pass with `--output`, and replaces an existing file only when `--force` is passed.
 
 <CardGrid>
   <LinkCard title="Use the CLI" href="/agents/cli" description="Run commands with JSON output." />
