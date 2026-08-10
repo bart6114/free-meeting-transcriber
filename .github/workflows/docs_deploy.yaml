@@ -29,6 +29,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+          package-manager-cache: false
       - run: pnpm install --frozen-lockfile --filter @hypr/docs
       - run: pnpm --filter @hypr/docs build
       - name: Deploy to Cloudflare Workers
