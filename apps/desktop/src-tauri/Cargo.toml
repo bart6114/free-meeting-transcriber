@@ -88,6 +88,7 @@ hypr-supervisor = { workspace = true }
 hypr-tauri-utils = { workspace = true }
 hypr-tiptap = { workspace = true }
 hypr-vault-read = { workspace = true }
+hypr-vault-write = { workspace = true, features = ["tauri-events"] }
 
 sha2 = { workspace = true }
 

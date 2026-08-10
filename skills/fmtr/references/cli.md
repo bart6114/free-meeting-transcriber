@@ -27,6 +27,35 @@ fmtr --json meetings transcript MEETING_ID
 
 JSON success responses contain `schema_version`, `command`, `data`, and optional `pagination`. Continue from `pagination.next_offset` only when more context is necessary.
 
+Create a meeting note (prints the new meeting id; `--note` seeds the body from a file, or stdin with `-`):
+
+```bash
+fmtr --json meetings new --title "Weekly sync" --note notes.md
+echo "Agenda" | fmtr --json meetings new --title "Weekly sync" --note -
+```
+
+Edit an existing meeting's note (`--set` replaces, `--append` adds after a separating newline; exactly one of the two, fails if the meeting does not exist):
+
+```bash
+fmtr --json meetings note MEETING_ID --set notes.md
+echo "Follow-up" | fmtr --json meetings note MEETING_ID --append -
+```
+
+Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; add `--transcribe` to transcribe right after the import):
+
+```bash
+fmtr --json import recording.m4a --title "Weekly sync"
+fmtr --json import recording.m4a --transcribe
+```
+
+Transcribe a meeting's audio with the on-device model configured in the desktop app (replaces the meeting's transcript; requires the model to be downloaded via the desktop app first; progress goes to stderr; honors the app's audio retention setting — with retention "none", the recording is deleted once the transcript is saved):
+
+```bash
+fmtr --json transcribe MEETING_ID
+```
+
+If `import --transcribe` exits non-zero but prints a meeting id, the import succeeded and only the transcription failed — fix the reported problem (usually a missing model or configuration) and run `fmtr transcribe MEETING_ID`.
+
 Export is intended for an explicit user request to save or transfer a complete meeting:
 
 ```bash

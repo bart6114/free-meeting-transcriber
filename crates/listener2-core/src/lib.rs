@@ -5,6 +5,7 @@ mod events;
 mod runtime;
 mod subtitle;
 
+pub use batch::transcript;
 pub use batch::{
     BatchParams, BatchProvider, BatchRunMode, BatchRunOutput, expects_progressive_batch, run_batch,
 };

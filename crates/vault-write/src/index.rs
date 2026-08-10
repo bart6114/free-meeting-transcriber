@@ -25,7 +25,6 @@
 //! only a confirmed-absent file removes one.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -46,7 +45,8 @@ pub enum IndexEntity {
 }
 
 /// Emitted (coalesced) to every webview as the `index-changed` event.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type, tauri_specta::Event)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, specta::Type)]
+#[cfg_attr(feature = "tauri-events", derive(tauri_specta::Event))]
 pub struct IndexChanged {
     pub entity: IndexEntity,
     pub ids: Vec<String>,
@@ -104,8 +104,7 @@ pub struct VaultIndex {
 }
 
 pub(crate) type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
-pub(crate) type IndexChangeReceiver =
-    tokio::sync::mpsc::UnboundedReceiver<(IndexEntity, Vec<String>)>;
+pub type IndexChangeReceiver = tokio::sync::mpsc::UnboundedReceiver<(IndexEntity, Vec<String>)>;
 
 // -- queries ---------------------------------------------------------------------
 
@@ -471,7 +470,7 @@ impl SessionStore {
     /// Reload the templates map from `templates/*.json` (via `list_templates`, which
     /// already skips unparseable/dot files) and notify changed template ids -- also
     /// the `vault_watch` entry point for external `templates/**` edits.
-    pub(crate) async fn index_refresh_templates(&self) {
+    pub async fn index_refresh_templates(&self) {
         let templates = match self.list_templates().await {
             Ok(templates) => templates,
             Err(error) => {
@@ -506,7 +505,7 @@ impl SessionStore {
     /// Reload the people map from the vault-root `people.json` and notify changed person
     /// ids -- also the `vault_watch` entry point for external `people.json` edits. A
     /// missing file reads as empty, so an external delete notifies every removed id.
-    pub(crate) async fn index_refresh_people(&self) {
+    pub async fn index_refresh_people(&self) {
         let people = match self.list_people().await {
             Ok(people) => people,
             Err(error) => {
@@ -642,7 +641,7 @@ fn coalesce(batch: Vec<(IndexEntity, Vec<String>)>) -> Vec<IndexChanged> {
 /// The dispatcher loop, generic over the emit sink for testability: block on the
 /// first change, wait `COALESCE_WINDOW`, drain whatever else arrived, emit one event
 /// per entity. Ends when the store (all senders) is dropped.
-pub(crate) async fn run_index_change_dispatcher(
+pub async fn run_index_change_dispatcher(
     mut rx: IndexChangeReceiver,
     emit: impl Fn(IndexChanged),
 ) {
@@ -656,38 +655,6 @@ pub(crate) async fn run_index_change_dispatcher(
             emit(event);
         }
     }
-}
-
-/// Wire the managed store's change stream to the `index-changed` Tauri event
-/// (emitted app-wide, i.e. to every webview). Same startup shape as
-/// `vault_watch::spawn`; call once from `lib.rs`'s setup after the store is managed.
-pub fn spawn_dispatcher(app: tauri::AppHandle) {
-    use tauri::Manager;
-
-    let Some(store) = app
-        .try_state::<Arc<SessionStore>>()
-        .map(|state| state.inner().clone())
-    else {
-        tracing::error!(
-            "index events: session store is not managed; index-changed emission is disabled"
-        );
-        return;
-    };
-
-    let Some(rx) = store.take_index_change_receiver() else {
-        tracing::error!("index events: dispatcher already spawned");
-        return;
-    };
-
-    tauri::async_runtime::spawn(async move {
-        run_index_change_dispatcher(rx, move |event| {
-            use tauri_specta::Event;
-            if let Err(error) = event.emit(&app) {
-                tracing::warn!(%error, "index events: failed to emit index-changed");
-            }
-        })
-        .await;
-    });
 }
 
 impl SessionStore {

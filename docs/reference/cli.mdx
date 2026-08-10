@@ -24,9 +24,31 @@ fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 | `meetings list` | `--query TEXT`, `--limit 1..200`, `--offset NUMBER` | Meetings ordered by the application query layer. Defaults to 20 results. |
 | `meetings search [QUERY]` | `--speaker TEXT`, `--kind title\|note\|summary\|transcript`, `--limit 1..50`, `--offset NUMBER` | Full-text hits across titles, notes, summaries, and transcript words, newest meetings first. Requires a query and/or `--speaker`; `--speaker` limits hits to meetings where that person spoke. `--kind` is repeatable and defaults to all. |
 | `meetings get ID` | None | Metadata, canonical note, summaries, and action items. |
-| `meetings note ID` | `--kind note\|summary\|all` | The selected note documents. Defaults to `note`. |
+| `meetings new` | `--title TEXT`, `--note FILE` | Creates a meeting note in the vault and prints its id. `--note` seeds the note body from `FILE`, or from stdin when `FILE` is `-`. |
+| `meetings note ID` | `--kind note\|summary\|all`, `--set FILE`, `--append FILE` | The selected note documents. Defaults to `note`. With `--set` or `--append` (mutually exclusive, and incompatible with `--kind`), replaces or extends the note body from `FILE` or stdin (`-`); fails when the meeting does not exist. |
 | `meetings transcript ID` | None | The full transcript as `[HH:MM:SS] Speaker: ...` lines, one per speaker turn. |
 | `meetings export ID` | `--format markdown\|json`, `--output FILE`, `--force` | A complete meeting export, including transcripts. Defaults to Markdown on stdout. Existing files require `--force`. |
+
+## Import command
+
+```bash
+fmtr import recording.m4a --title "Weekly sync"
+fmtr import recording.m4a --transcribe
+```
+
+Creates a meeting from an audio file and prints its id. The audio is converted to the vault's 16 kHz MP3 format, exactly as the desktop app's import does, so a running app picks the meeting up automatically. Accepts `wav`, `mp3`, `ogg`, `mp4`, `m4a`, `flac`, `webm`, and `aac` files; `--title` defaults to the audio file's name.
+
+With `--transcribe`, the imported audio is transcribed immediately (see the transcribe command below). When transcription fails after a successful import, the command still reports the new meeting id — plain output prints the id, `--json` adds a `transcript_error` object to `data` — and exits non-zero.
+
+## Transcribe command
+
+```bash
+fmtr transcribe MEETING_ID
+```
+
+Transcribes the meeting's audio recording on-device with the speech-to-text model configured in the desktop app and replaces the meeting's transcript, exactly as the app's own batch transcription does. Prints the new transcript id (`--json` returns the meeting id plus a `transcript` object). Progress is written to stderr. The app's audio retention setting is honored: with retention set to "none", the recording is deleted as soon as the transcript is saved, just like in the app.
+
+The command fails with a clear message and a non-zero exit code when the meeting or its audio is missing, when no speech-to-text model is configured, when the configured provider or model is not supported by the CLI (only on-device `soniqo-*` models are), or when the model has not been downloaded yet — the CLI never downloads models, so open the desktop app once to download it. On-device transcription requires macOS on Apple Silicon.
 
 ## JSON response contract
 

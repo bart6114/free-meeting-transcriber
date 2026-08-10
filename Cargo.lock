@@ -4015,6 +4015,7 @@ dependencies = [
  "tokio",
  "tracing",
  "vault-read",
+ "vault-write",
 ]
 
 [[package]]
@@ -4941,18 +4942,26 @@ name = "fmtr-cli"
 version = "0.1.0"
 dependencies = [
  "agent-access",
+ "audio-norm",
+ "chrono",
  "clap",
  "cli-docs",
  "dirs 6.0.0",
+ "hound",
  "insta",
+ "listener2-core",
+ "owhisper-interface",
  "rmcp",
  "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
+ "transcribe-soniqo",
  "url",
+ "uuid",
  "vault-read",
+ "vault-write",
 ]
 
 [[package]]
@@ -9246,6 +9255,7 @@ dependencies = [
  "audio-utils",
  "bytes",
  "denoise",
+ "fs-format",
  "futures-util",
  "host",
  "hound",
@@ -18788,6 +18798,24 @@ dependencies = [
  "specta",
  "tempfile",
  "thiserror 2.0.18",
+]
+
+[[package]]
+name = "vault-write"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "fs-format",
+ "fs-sync-core",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "specta",
+ "tauri-specta",
+ "tempfile",
+ "tokio",
+ "tracing",
+ "vault-read",
 ]
 
 [[package]]

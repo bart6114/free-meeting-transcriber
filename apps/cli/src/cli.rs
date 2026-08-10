@@ -8,7 +8,7 @@ use hypr_agent_access::{DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, SearchKind};
 #[command(
     name = "fmtr",
     version,
-    about = "Query local Free Meeting Transcriber meeting data"
+    about = "Query and edit local Free Meeting Transcriber meeting data"
 )]
 pub struct Args {
     #[arg(
@@ -40,10 +40,27 @@ pub struct Args {
 pub enum Command {
     /// Check the local CLI and vault access without changing data
     Doctor,
-    /// Browse and export meetings
+    /// Browse, create, edit, and export meetings
     Meetings {
         #[command(subcommand)]
         command: MeetingCommand,
+    },
+    /// Import an audio file into a new meeting and print its id
+    Import {
+        /// Audio file to import (wav, mp3, ogg, mp4, m4a, flac, webm, or aac)
+        file: PathBuf,
+        #[arg(long, help = "Title for the new meeting; defaults to the file name")]
+        title: Option<String>,
+        #[arg(
+            long,
+            help = "Transcribe the audio with the configured on-device model after importing"
+        )]
+        transcribe: bool,
+    },
+    /// Transcribe a meeting's audio with the configured on-device model
+    Transcribe {
+        /// Meeting id whose audio should be transcribed
+        id: String,
     },
     /// Run the read-only Free Meeting Transcriber MCP server over stdio
     Mcp,
@@ -83,11 +100,35 @@ pub enum MeetingCommand {
     },
     /// Show meeting metadata, notes, summaries, and action items
     Get { id: String },
-    /// Show the note or generated summaries for a meeting
+    /// Create a meeting note and print its id
+    New {
+        #[arg(long, help = "Title for the new meeting")]
+        title: String,
+        #[arg(
+            long,
+            value_name = "FILE",
+            help = "Initial note body read from FILE, or '-' for stdin"
+        )]
+        note: Option<PathBuf>,
+    },
+    /// Show the note or generated summaries for a meeting, or edit the note
     Note {
         id: String,
-        #[arg(long, value_enum, default_value_t = DocumentKind::Note)]
+        #[arg(long, value_enum, default_value_t = DocumentKind::Note, conflicts_with_all = ["set", "append"])]
         kind: DocumentKind,
+        #[arg(
+            long,
+            value_name = "FILE",
+            help = "Replace the note body with FILE, or '-' for stdin"
+        )]
+        set: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "FILE",
+            conflicts_with = "set",
+            help = "Append FILE (or '-' for stdin) to the note body"
+        )]
+        append: Option<PathBuf>,
     },
     /// Show the full speaker-labeled meeting transcript
     Transcript { id: String },
@@ -139,6 +180,8 @@ pub enum ExportFormat {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
     use clap::CommandFactory;
 
@@ -232,6 +275,118 @@ mod tests {
         assert_eq!(offset, 0);
 
         assert!(Args::try_parse_from(["fmtr", "meetings", "search"]).is_err());
+    }
+
+    #[test]
+    fn parses_new_command_with_note_source() {
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr", "meetings", "new", "--title", "Planning", "--note", "-",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::New { title, note } = command else {
+            panic!("expected new command");
+        };
+        assert_eq!(title, "Planning");
+        assert_eq!(note.as_deref(), Some(Path::new("-")));
+
+        assert!(Args::try_parse_from(["fmtr", "meetings", "new"]).is_err());
+    }
+
+    #[test]
+    fn note_edit_flags_are_mutually_exclusive_and_conflict_with_kind() {
+        assert!(
+            Args::try_parse_from([
+                "fmtr",
+                "meetings",
+                "note",
+                "meeting-1",
+                "--set",
+                "a.md",
+                "--append",
+                "b.md",
+            ])
+            .is_err()
+        );
+        assert!(
+            Args::try_parse_from([
+                "fmtr",
+                "meetings",
+                "note",
+                "meeting-1",
+                "--kind",
+                "summary",
+                "--set",
+                "a.md",
+            ])
+            .is_err()
+        );
+
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr",
+            "meetings",
+            "note",
+            "meeting-1",
+            "--append",
+            "extra.md",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        assert!(matches!(
+            command,
+            MeetingCommand::Note {
+                set: None,
+                append: Some(_),
+                ..
+            }
+        ));
+    }
+
+    #[test]
+    fn parses_import_command_with_optional_title() {
+        let Command::Import {
+            file,
+            title,
+            transcribe,
+        } = Args::parse_from(["fmtr", "import", "meeting.m4a"]).command
+        else {
+            panic!("expected import command");
+        };
+        assert_eq!(file, Path::new("meeting.m4a"));
+        assert_eq!(title, None);
+        assert!(!transcribe);
+
+        let Command::Import { title, .. } =
+            Args::parse_from(["fmtr", "import", "meeting.m4a", "--title", "Weekly sync"]).command
+        else {
+            panic!("expected import command");
+        };
+        assert_eq!(title.as_deref(), Some("Weekly sync"));
+
+        assert!(Args::try_parse_from(["fmtr", "import"]).is_err());
+    }
+
+    #[test]
+    fn parses_import_transcribe_flag_and_transcribe_command() {
+        let Command::Import { transcribe, .. } =
+            Args::parse_from(["fmtr", "import", "meeting.m4a", "--transcribe"]).command
+        else {
+            panic!("expected import command");
+        };
+        assert!(transcribe);
+
+        let Command::Transcribe { id } =
+            Args::parse_from(["fmtr", "transcribe", "meeting-1"]).command
+        else {
+            panic!("expected transcribe command");
+        };
+        assert_eq!(id, "meeting-1");
+
+        assert!(Args::try_parse_from(["fmtr", "transcribe"]).is_err());
     }
 
     #[test]

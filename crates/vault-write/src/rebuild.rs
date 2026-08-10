@@ -520,7 +520,7 @@ mod tests {
     use hypr_fs_format::TranscriptWithData;
 
     use super::*;
-    use crate::session_store::content::SessionMeta;
+    use crate::content::SessionMeta;
 
     fn meta(id: &str, title: &str) -> SessionMeta {
         SessionMeta {
@@ -574,7 +574,7 @@ mod tests {
     /// empty, a genuine change must land on it.
     fn drain_changes(
         store: &SessionStore,
-    ) -> Vec<(crate::session_store::IndexEntity, Vec<String>)> {
+    ) -> Vec<(crate::IndexEntity, Vec<String>)> {
         let mut rx = store
             .take_index_change_receiver()
             .expect("receiver taken once per drain");
@@ -626,7 +626,7 @@ mod tests {
         let changes = drain_changes(&store);
         assert!(
             changes.iter().any(|(entity, ids)| {
-                *entity == crate::session_store::IndexEntity::Sessions
+                *entity == crate::IndexEntity::Sessions
                     && ids.contains(&"s1".to_string())
             }),
             "a genuine change must still notify, not just no-ops getting skipped: {changes:?}"
@@ -847,8 +847,8 @@ mod tests {
         );
     }
 
-    fn enhanced_doc(session_id: &str, doc_id: &str) -> crate::session_store::EnhancedDoc {
-        crate::session_store::EnhancedDoc {
+    fn enhanced_doc(session_id: &str, doc_id: &str) -> crate::EnhancedDoc {
+        crate::EnhancedDoc {
             id: doc_id.to_string(),
             session_id: session_id.to_string(),
             kind: "template_output".to_string(),
@@ -965,7 +965,7 @@ mod tests {
         {
             let mut index = store.index.write().unwrap();
             index.docs.entry("s1".to_string()).or_default().push(
-                crate::session_store::EnhancedDoc {
+                crate::EnhancedDoc {
                     id: "legacy-uuid".to_string(),
                     session_id: "s1".to_string(),
                     kind: "summary".to_string(),

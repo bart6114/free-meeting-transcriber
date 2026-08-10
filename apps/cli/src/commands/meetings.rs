@@ -1,12 +1,13 @@
 use std::path::Path;
 
 use crate::cli::{DocumentKind, ExportFormat, MeetingCommand};
-use crate::{Result, output};
+use crate::{Error, Result, output};
 use hypr_agent_access::{
     Document, GetMeetingInput, GetMeetingTranscriptInput, ListMeetingsInput, MeetingListItem,
     SearchHit, SearchMeetingsInput, get_meeting, get_meeting_export, get_meeting_transcript,
     list_meetings, search_meetings,
 };
+use hypr_vault_write::SessionStore;
 
 pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()> {
     match command {
@@ -68,7 +69,52 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             output::emit(&rendered);
             Ok(())
         }
-        MeetingCommand::Note { id, kind } => {
+        MeetingCommand::New { title, note } => {
+            // Read the body before touching the vault, so a bad --note path creates nothing.
+            let body = note.as_deref().map(read_body).transpose()?;
+            let store = SessionStore::new(vault.to_path_buf());
+            let meta = super::create_session(vault, &store, "create meeting", title).await?;
+            let session_id = meta.id.clone();
+            if let Some(body) = body {
+                // The meta write above already created the session; name it in the
+                // error so a partial failure leaves an identifiable meeting instead
+                // of an anonymous orphan (recover with `meetings note ID --set`).
+                store.write_note(&session_id, &body).await.map_err(|error| {
+                    Error::operation(
+                        "write note",
+                        format!(
+                            "meeting {session_id} was created, but writing its note failed: {error}"
+                        ),
+                    )
+                })?;
+            }
+
+            let rendered = if json {
+                output::json(
+                    "meetings.new",
+                    &serde_json::json!({
+                        "id": session_id,
+                        "title": meta.title,
+                        "created_at": meta.created_at,
+                    }),
+                    None,
+                )?
+            } else {
+                session_id
+            };
+            output::emit(&rendered);
+            Ok(())
+        }
+        MeetingCommand::Note {
+            id,
+            kind,
+            set,
+            append,
+        } => {
+            if set.is_some() || append.is_some() {
+                return edit_note(vault, &id, set.as_deref(), append.as_deref(), json).await;
+            }
+
             let meeting = get_meeting(
                 vault,
                 GetMeetingInput {
@@ -145,6 +191,79 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             output::write_or_emit(&content, path.as_deref(), force)
         }
     }
+}
+
+async fn edit_note(
+    vault: &Path,
+    id: &str,
+    set: Option<&Path>,
+    append: Option<&Path>,
+    json: bool,
+) -> Result<()> {
+    let store = SessionStore::new(vault.to_path_buf());
+    let exists = store
+        .read_meta(id)
+        .await
+        .map_err(|error| Error::operation("edit note", error.to_string()))?
+        .is_some();
+    if !exists {
+        return Err(Error::NotFound(format!("meeting '{id}'")));
+    }
+
+    let (action, source) = match (set, append) {
+        (Some(path), None) => ("set", path),
+        (None, Some(path)) => ("append", path),
+        _ => unreachable!("clap enforces exactly one of --set/--append"),
+    };
+    let body = read_body(source)?;
+
+    let markdown = if action == "append" {
+        match store
+            .read_note(id)
+            .await
+            .map_err(|error| Error::operation("edit note", error.to_string()))?
+        {
+            Some(existing) if !existing.is_empty() => {
+                if existing.ends_with('\n') {
+                    format!("{existing}{body}")
+                } else {
+                    format!("{existing}\n{body}")
+                }
+            }
+            _ => body,
+        }
+    } else {
+        body
+    };
+
+    store
+        .write_note(id, &markdown)
+        .await
+        .map_err(|error| Error::operation("edit note", error.to_string()))?;
+
+    let rendered = if json {
+        output::json(
+            "meetings.note",
+            &serde_json::json!({ "id": id, "action": action, "updated": true }),
+            None,
+        )?
+    } else {
+        format!("Updated note for meeting {id}.")
+    };
+    output::emit(&rendered);
+    Ok(())
+}
+
+fn read_body(source: &Path) -> Result<String> {
+    if source == Path::new("-") {
+        let mut body = String::new();
+        std::io::Read::read_to_string(&mut std::io::stdin(), &mut body)
+            .map_err(|error| Error::operation("read note body", error.to_string()))?;
+        return Ok(body);
+    }
+    std::fs::read_to_string(source).map_err(|error| {
+        Error::operation("read note body", format!("{}: {error}", source.display()))
+    })
 }
 
 fn render_list(meetings: &[MeetingListItem]) -> String {

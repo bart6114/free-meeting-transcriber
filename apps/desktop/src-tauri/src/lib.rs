@@ -383,7 +383,7 @@ pub async fn main() {
             // Coalescing `index-changed` emitter for the in-memory vault index
             // (Phase E1). Needs the store managed; changes queued before this point
             // (startup rebuild) simply flush as the dispatcher's first batch.
-            session_store::index::spawn_dispatcher(app_handle.clone());
+            session_store::spawn_dispatcher(app_handle.clone());
             // Stamps `_meta.json` recording timestamps off capture lifecycle events.
             // Needs the store managed (the block above); missing it only logs.
             recording_meta::spawn(app_handle.clone());

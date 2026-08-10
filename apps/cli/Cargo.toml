@@ -9,8 +9,15 @@ path = "src/main.rs"
 
 [dependencies]
 hypr-agent-access = { workspace = true }
+hypr-audio-norm = { workspace = true }
+hypr-listener2-core = { workspace = true }
+hypr-transcribe-soniqo = { workspace = true }
 hypr-vault-read = { workspace = true }
+hypr-vault-write = { workspace = true }
 
+owhisper-interface = { workspace = true }
+
+chrono = { workspace = true }
 clap = { workspace = true, features = ["derive", "env"] }
 dirs = { workspace = true }
 rmcp = { workspace = true, features = ["server", "transport-io"] }
@@ -19,9 +26,11 @@ serde_json = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["io-std", "macros", "rt-multi-thread"] }
 url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
 
 [dev-dependencies]
 cli-docs = { path = "../../crates/cli-docs" }
+hound = { workspace = true }
 insta = { workspace = true, features = ["json"] }
 rmcp = { workspace = true, features = ["client"] }
 tempfile = { workspace = true }
