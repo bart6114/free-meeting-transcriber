@@ -1143,6 +1143,10 @@ msgstr ""
 msgid "Show Free Meeting Transcriber in the Dock and app switcher."
 msgstr ""
 
+#: src/session/components/memo-image-strip.tsx
+msgid "Show image in memo"
+msgstr ""
+
 #: src/settings/ai/stt/select.tsx
 #: src/sidebar/timeline/item.tsx
 msgid "Show in Finder"
