@@ -63,7 +63,7 @@ export async function showBatchCompletedNotification(
       start_time: null,
       participants: null,
       event_details: null,
-      action_label: "Open Free Meeting Transcriber",
+      action_label: "Open",
       action_variant: null,
       options: null,
       footer: null,

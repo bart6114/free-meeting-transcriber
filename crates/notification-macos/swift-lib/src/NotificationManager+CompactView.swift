@@ -11,7 +11,7 @@ extension NotificationManager {
     }
 
     let actionButton = CompactActionButton()
-    let actionLabel = notification.payload.actionLabel ?? "Open Free Meeting Transcriber"
+    let actionLabel = notification.payload.actionLabel ?? "Open"
     if notification.payload.isDestructiveAction {
       actionButton.configureDestructiveAction(label: actionLabel)
       actionButton.showsProgress = notification.payload.showsStopCountdown

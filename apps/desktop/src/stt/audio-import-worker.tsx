@@ -312,9 +312,7 @@ async function announceImportCompleted(
       start_time: null,
       participants: null,
       event_details: null,
-      action_label: lastImportedSessionId
-        ? "Open note"
-        : "Open Free Meeting Transcriber",
+      action_label: lastImportedSessionId ? "Open note" : "Open",
       action_variant: null,
       options: null,
       footer: null,
