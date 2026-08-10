@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { useCallback } from "react";
 
@@ -7,12 +8,15 @@ import {
 } from "@hypr/plugin-fs-sync";
 
 import { catalogLocalNoteAttachment, sha256Hex } from "~/session/attachments";
+import { sessionAttachmentPathsQueryKey } from "~/session/hooks/useAttachmentResolver";
 
 export type FileUploadResult = AttachmentSaveResult & {
   url: string;
 };
 
 export function useFileUpload(sessionId: string) {
+  const queryClient = useQueryClient();
+
   return useCallback(
     async (file: File): Promise<FileUploadResult> => {
       const filename = file.name;
@@ -54,8 +58,11 @@ export function useFileUpload(sessionId: string) {
         }
         throw error;
       }
+      void queryClient.invalidateQueries({
+        queryKey: sessionAttachmentPathsQueryKey(sessionId),
+      });
       return { path, attachmentId, url: convertFileSrc(path) };
     },
-    [sessionId],
+    [queryClient, sessionId],
   );
 }

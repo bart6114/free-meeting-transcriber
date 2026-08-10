@@ -52,8 +52,12 @@ export function SessionPeople({
 /// Pills that render *below the in-document title* of the memo/summary
 /// editors: the title is the document's first node, so the row rides a
 /// ProseMirror title-trailer widget. Pass `element` to the editor and render
-/// `portal` anywhere in the React tree.
-export function useSessionPeopleTitleTrailer(sessionId: string): {
+/// `portal` anywhere in the React tree. The editor supports a single trailer
+/// element, so extra below-title content rides along via `trailing`.
+export function useSessionPeopleTitleTrailer(
+  sessionId: string,
+  trailing?: React.ReactNode,
+): {
   element: HTMLElement;
   portal: React.ReactNode;
 } {
@@ -66,7 +70,10 @@ export function useSessionPeopleTitleTrailer(sessionId: string): {
   return {
     element,
     portal: createPortal(
-      <SessionPeople sessionId={sessionId} className="mt-1 mb-3" />,
+      <>
+        <SessionPeople sessionId={sessionId} className="mt-1 mb-3" />
+        {trailing}
+      </>,
       element,
     ),
   };

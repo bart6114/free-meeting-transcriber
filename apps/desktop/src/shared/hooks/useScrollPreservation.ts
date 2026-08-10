@@ -26,7 +26,13 @@ export function useScrollPreservation(
     const container = scrollRef.current;
     if (!container) return;
 
-    if (options.skipRestoration) return;
+    // A skipped restoration consumes the saved position: the caller is
+    // navigating to a specific spot, so restoring the stale position on a
+    // later re-render (when the skip flag flips back) would yank the scroll.
+    if (options.skipRestoration) {
+      scrollPositions.current.delete(key);
+      return;
+    }
 
     const savedPosition = scrollPositions.current.get(key);
     if (savedPosition === undefined) return;

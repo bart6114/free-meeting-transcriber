@@ -21,6 +21,7 @@ import { SearchBar } from "./search/bar";
 import { useSearch } from "./search/context";
 import { Transcript } from "./transcript";
 
+import { MemoImageStrip } from "~/session/components/memo-image-strip";
 import { SessionDate } from "~/session/components/session-date";
 import {
   SessionPeople,
@@ -168,10 +169,14 @@ const NoteInputContent = forwardRef<
     const shouldShowTranscriptSpinner =
       shouldShowTranscriptTabSpinner(sessionMode);
 
+    const pendingImageScrollRef = useRef<string | null>(null);
     const { scrollRef, onBeforeTabChange } = useScrollPreservation(
       renderedCurrentTab.type === "enhanced"
         ? `enhanced-${renderedCurrentTab.id}`
         : renderedCurrentTab.type,
+      // Restoring the memo tab's saved scroll position would stomp the
+      // scroll-to-image navigation from the summary's thumbnail strip.
+      { skipRestoration: pendingImageScrollRef.current !== null },
     );
 
     useImperativeHandle(
@@ -304,7 +309,49 @@ const NoteInputContent = forwardRef<
       internalEditorRef.current?.commands.focusAtTrailingEmptyLine();
     };
 
-    const peopleTrailer = useSessionPeopleTitleTrailer(sessionId);
+    const handleMemoImageClick = useCallback(
+      (src: string) => {
+        pendingImageScrollRef.current = src;
+        handleTabChange({ type: "raw" });
+        // The raw editor mounts asynchronously after the tab switch, so poll
+        // briefly for the matching image before giving up.
+        const deadline = Date.now() + 3000;
+        const tryScroll = () => {
+          if (pendingImageScrollRef.current !== src) {
+            return;
+          }
+          const imgs = scrollRef.current?.querySelectorAll(
+            "img.prosemirror-image",
+          );
+          const target = imgs
+            ? Array.from(imgs).find((img) => img.getAttribute("src") === src)
+            : undefined;
+          if (target) {
+            pendingImageScrollRef.current = null;
+            target.scrollIntoView({ behavior: "smooth", block: "center" });
+            return;
+          }
+          if (Date.now() < deadline) {
+            requestAnimationFrame(tryScroll);
+          } else {
+            pendingImageScrollRef.current = null;
+          }
+        };
+        requestAnimationFrame(tryScroll);
+      },
+      [handleTabChange, scrollRef],
+    );
+
+    const peopleTrailer = useSessionPeopleTitleTrailer(
+      sessionId,
+      renderedCurrentTab.type === "enhanced" ? (
+        <MemoImageStrip
+          sessionId={sessionId}
+          className="mt-1 mb-3"
+          onImageClick={handleMemoImageClick}
+        />
+      ) : null,
+    );
 
     return (
       <div className="-mx-2 flex h-full flex-col">
