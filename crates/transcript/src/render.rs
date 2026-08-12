@@ -560,6 +560,43 @@ mod tests {
     }
 
     #[test]
+    fn multiple_indexed_assignments_on_one_channel_all_apply() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![
+                    word_si("w1", " zero", 0, 400, 1, 0),
+                    word_si("w2", " one", 4_000, 4_400, 1, 1),
+                    word_si("w3", " two", 8_000, 8_400, 1, 2),
+                ],
+                assignments: vec![
+                    speaker_assignment("py", ChannelProfile::RemoteParty, 0),
+                    speaker_assignment("py", ChannelProfile::RemoteParty, 1),
+                    speaker_assignment("py", ChannelProfile::RemoteParty, 2),
+                ],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![RenderTranscriptHuman {
+                human_id: "py".to_string(),
+                name: "PY".to_string(),
+            }],
+        });
+
+        assert!(
+            segments
+                .iter()
+                .all(|segment| segment.speaker_label == "PY"),
+            "every diarized cluster must take its scoped assignment, got: {:?}",
+            segments
+                .iter()
+                .map(|s| s.speaker_label.clone())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn undiarized_channel_behavior_unchanged() {
         let segments = render_transcript_segments(RenderTranscriptRequest {
             transcripts: vec![RenderTranscriptInput {
