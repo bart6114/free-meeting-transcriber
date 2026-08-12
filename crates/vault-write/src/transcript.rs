@@ -313,6 +313,148 @@ impl SessionStore {
         .await
     }
 
+    /// Speaker rename as a hints-only mutation: the words list is passed through
+    /// untouched (structurally preserving per-word `metadata`, which the old
+    /// frontend read-modify-write path silently wiped), and the frontend never has
+    /// to ship the full transcript over IPC just to relabel a speaker.
+    ///
+    /// The conflict rules mirror the frontend's old `upsertSpeakerAssignment`: the
+    /// new assignment scopes to `(channel, speaker_index)`; an existing
+    /// `speaker_label` hint is dropped when it has the same id as the new one, or
+    /// when its own scope (its anchor word's channel + that word's
+    /// `provider_speaker_index` hint) conflicts — same channel and either side
+    /// lacking a speaker index, or both having the same one. Hints anchored to
+    /// unknown words are kept.
+    pub async fn assign_transcript_speaker(
+        &self,
+        transcript_id: &str,
+        channel: i32,
+        speaker_index: Option<i32>,
+        speaker_label: &str,
+        anchor_word_id: &str,
+    ) -> Result<(), StoreError> {
+        // The index only resolves transcript -> session here; ownership never moves, so
+        // this lookup is safe outside the guard. Words and hints are re-read from the
+        // file below, under the guard -- persisting an index snapshot taken out here
+        // could clobber a write that lands between the read and the lock.
+        let session_id = self
+            .transcript_get(transcript_id)
+            .map(|t| t.session_id)
+            .ok_or_else(|| {
+                StoreError::Io(format!(
+                    "cannot assign speaker: transcript {transcript_id} does not exist"
+                ))
+            })?;
+
+        let guard = self.lock_writes().await;
+
+        // Land any still-dirty live buffer first (same snapshot/re-dirty contract as
+        // flush_transcript, but under this guard): the rename must apply on top of every
+        // buffered word, and marking the buffer clean here means a pending retry flush
+        // afterwards no-ops instead of replacing speaker_hints wholesale (live buffers
+        // carry no label hints) and silently erasing the rename.
+        let snapshot = {
+            let mut live = self.live.lock().await;
+            match live.get_mut(&session_id) {
+                Some(buffer) if buffer.dirty => {
+                    buffer.dirty = false;
+                    Some((
+                        buffer.transcript_id.clone(),
+                        buffer.started_at_ms,
+                        buffer.words.clone(),
+                        buffer.hints.clone(),
+                    ))
+                }
+                _ => None,
+            }
+        };
+        if let Some((buffered_id, started_at_ms, words, hints)) = snapshot {
+            let result = self
+                .persist_transcript_locked(
+                    &guard,
+                    &session_id,
+                    &buffered_id,
+                    started_at_ms,
+                    words,
+                    hints,
+                )
+                .await;
+            if let Err(err) = result {
+                let mut live = self.live.lock().await;
+                if let Some(buffer) = live.get_mut(&session_id) {
+                    buffer.dirty = true;
+                }
+                return Err(err);
+            }
+        }
+
+        let mut file = self.read_transcript_json(&session_id).await?;
+        let Some(entry) = file.transcripts.iter_mut().find(|t| t.id == transcript_id) else {
+            return Err(StoreError::Io(format!(
+                "cannot assign speaker: transcript {transcript_id} does not exist"
+            )));
+        };
+
+        let new_id = format!("{anchor_word_id}:speaker_label");
+        let next_channel = f64::from(channel);
+        let next_speaker_index = speaker_index.map(f64::from);
+
+        let mut next_hints: Vec<TranscriptSpeakerHint> = {
+            let hints = &entry.speaker_hints;
+            let words_by_id: std::collections::HashMap<&str, &TranscriptWord> = entry
+                .words
+                .iter()
+                .filter_map(|word| word.id.as_deref().map(|id| (id, word)))
+                .collect();
+
+            hints
+                .iter()
+                .filter(|hint| {
+                    if hint.hint_type != "speaker_label" {
+                        return true;
+                    }
+                    if hint.id.as_deref() == Some(new_id.as_str()) {
+                        return false;
+                    }
+                    let Some(word) = words_by_id.get(hint.word_id.as_str()) else {
+                        return true;
+                    };
+                    if word.channel != next_channel {
+                        return true;
+                    }
+                    // Same channel: a missing speaker index on either side means
+                    // "the whole channel", which conflicts with everything on it.
+                    let conflicts = match (
+                        provider_speaker_index_for_word(hints, &hint.word_id),
+                        next_speaker_index,
+                    ) {
+                        (Some(left), Some(right)) => left == right,
+                        _ => true,
+                    };
+                    !conflicts
+                })
+                .cloned()
+                .collect()
+        };
+
+        next_hints.push(TranscriptSpeakerHint {
+            id: Some(new_id),
+            word_id: anchor_word_id.to_string(),
+            hint_type: "speaker_label".to_string(),
+            // The frontend write path persisted the label as a bare JSON string;
+            // renderers read it back the same way.
+            value: serde_json::Value::String(speaker_label.to_string()),
+        });
+
+        // Hints-only mutation: `entry.words` is deliberately never reassigned, so word
+        // content (including per-word metadata) cannot regress no matter what raced the
+        // pre-guard index lookup.
+        entry.speaker_hints = next_hints;
+
+        self.write_transcript_json_locked(&guard, &session_id, file)
+            .await
+    }
+
     async fn persist_transcript(
         &self,
         session_id: &str,
@@ -370,6 +512,18 @@ impl SessionStore {
             }
         }
 
+        self.write_transcript_json_locked(guard, session_id, file)
+            .await
+    }
+
+    /// Shared persist tail: serialize the whole file, write it under the caller's guard,
+    /// and republish the full transcript list to the index.
+    async fn write_transcript_json_locked(
+        &self,
+        guard: &WriteGuard<'_>,
+        session_id: &str,
+        file: TranscriptJson,
+    ) -> Result<(), StoreError> {
         // Serialize the full file up front: a word that can't round-trip must fail the whole
         // flush (StoreError::Serialize), never get silently dropped or collapse to `[]`.
         let bytes =
@@ -426,6 +580,24 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))?
     }
+}
+
+/// Live-era `provider_speaker_index` hints serialized the value as a JSON *string*
+/// (`"{\"channel\":1,\"speaker_index\":2}"`); newer writers store the object
+/// directly. Both shapes are on disk, so both must resolve.
+fn provider_speaker_index_for_word(hints: &[TranscriptSpeakerHint], word_id: &str) -> Option<f64> {
+    let hint = hints
+        .iter()
+        .find(|h| h.hint_type == "provider_speaker_index" && h.word_id == word_id)?;
+    let parsed;
+    let value = match &hint.value {
+        serde_json::Value::String(s) => {
+            parsed = serde_json::from_str::<serde_json::Value>(s).ok()?;
+            &parsed
+        }
+        other => other,
+    };
+    value.get("speaker_index")?.as_f64()
 }
 
 #[cfg(test)]
@@ -1134,6 +1306,309 @@ mod tests {
         assert_eq!(transcripts.len(), 1);
         assert_eq!(transcripts[0]["id"], "t-batch");
         assert_eq!(transcripts[0]["words"][0]["text"], "replacement");
+    }
+
+    // -- assign_transcript_speaker (hints-only speaker rename) --
+
+    fn channel_word(id: &str, text: &str, channel: f64) -> TranscriptWord {
+        TranscriptWord {
+            channel,
+            ..word(id, text)
+        }
+    }
+
+    fn label_hint(word_id: &str, label: &str) -> TranscriptSpeakerHint {
+        TranscriptSpeakerHint {
+            id: Some(format!("{word_id}:speaker_label")),
+            word_id: word_id.to_string(),
+            hint_type: "speaker_label".to_string(),
+            value: serde_json::Value::String(label.to_string()),
+        }
+    }
+
+    /// Provider hint in the live-era on-disk shape: the value is a JSON *string*.
+    fn provider_hint(word_id: &str, channel: i64, speaker_index: i64) -> TranscriptSpeakerHint {
+        TranscriptSpeakerHint {
+            id: Some(format!("{word_id}:provider_speaker_index")),
+            word_id: word_id.to_string(),
+            hint_type: "provider_speaker_index".to_string(),
+            value: serde_json::Value::String(
+                serde_json::json!({ "channel": channel, "speaker_index": speaker_index })
+                    .to_string(),
+            ),
+        }
+    }
+
+    fn hint_summaries(store: &SessionStore, transcript_id: &str) -> Vec<(String, String)> {
+        store
+            .transcript_get(transcript_id)
+            .unwrap()
+            .speaker_hints
+            .into_iter()
+            .map(|h| (h.id.unwrap_or_default(), h.hint_type))
+            .collect()
+    }
+
+    /// REGRESSION for the metadata wipe: renaming a speaker must not touch words at
+    /// all — in particular the `metadata.timing.source = "synthetic_speech"` marker
+    /// the renderer needs to keep batch sentences atomic per channel.
+    #[tokio::test]
+    async fn assign_speaker_writes_hint_and_preserves_word_metadata() {
+        let (store, vault) = test_store().await;
+        let metadata: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_value(serde_json::json!({
+                "timing": { "source": "synthetic_speech" }
+            }))
+            .unwrap();
+        let mut transcript = batch("t1", &[]);
+        transcript.words = vec![TranscriptWord {
+            metadata: Some(metadata.clone()),
+            ..channel_word("w0", "hello", 1.0)
+        }];
+        store.write_transcript("s1", transcript).await.unwrap();
+
+        store
+            .assign_transcript_speaker("t1", 1, Some(0), "Alice", "w0")
+            .await
+            .unwrap();
+
+        let stored = store.transcript_get("t1").unwrap();
+        assert_eq!(stored.words.len(), 1);
+        assert_eq!(stored.words[0].metadata, Some(metadata));
+        assert_eq!(stored.speaker_hints, vec![label_hint("w0", "Alice")]);
+
+        // The file agrees with the index: metadata survives the round trip to disk.
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            json["transcripts"][0]["words"][0]["metadata"]["timing"]["source"],
+            "synthetic_speech"
+        );
+    }
+
+    /// REGRESSION for the buffer race: a rename that lands while a live buffer is
+    /// still dirty (e.g. the debounced flush is backing off after an I/O failure)
+    /// must first persist the buffered words, and the retry flush that fires
+    /// afterwards must be a no-op — live buffers carry no label hints, so letting it
+    /// run would replace `speaker_hints` wholesale and silently erase the rename.
+    #[tokio::test]
+    async fn assign_speaker_lands_dirty_buffer_and_survives_the_retry_flush() {
+        let (store, vault) = test_store().await;
+        store
+            .append_transcript("s1", delta_with_words(&["hello", "world"]))
+            .await
+            .unwrap();
+        store.flush_transcript("s1").await.unwrap();
+
+        // More words arrive; this buffer is dirty and its debounced flush is pending.
+        store
+            .append_transcript(
+                "s1",
+                TranscriptDelta {
+                    transcript_id: "t1".to_string(),
+                    new_words: vec![word("w2", "tail")],
+                    replaced_ids: vec![],
+                    new_hints: vec![],
+                    started_at_ms: 1000.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        store
+            .assign_transcript_speaker("t1", 0, None, "Alice", "w0")
+            .await
+            .unwrap();
+
+        // The buffered tail word landed together with the rename.
+        let stored = store.transcript_get("t1").unwrap();
+        assert_eq!(stored.words.len(), 3);
+        assert_eq!(stored.words[2].text, "tail");
+        assert_eq!(stored.speaker_hints, vec![label_hint("w0", "Alice")]);
+
+        // The pending flush now sees a clean buffer and must not clobber the hint.
+        store.flush_transcript("s1").await.unwrap();
+        let json: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(vault.path().join("sessions/s1/transcript.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(json["transcripts"][0]["speaker_hints"][0]["value"], "Alice");
+        assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 3);
+    }
+
+    #[tokio::test]
+    async fn assign_speaker_replaces_stale_assignment_on_the_same_channel() {
+        let (store, _vault) = test_store().await;
+        let mut transcript = batch("t1", &[]);
+        transcript.words = vec![
+            channel_word("old-word", "hello", 1.0),
+            channel_word("new-word", "there", 1.0),
+        ];
+        transcript.speaker_hints = vec![
+            label_hint("old-word", "Alice"),
+            provider_hint("new-word", 1, 2),
+        ];
+        store.write_transcript("s1", transcript).await.unwrap();
+
+        store
+            .assign_transcript_speaker("t1", 1, Some(2), "Bob", "new-word")
+            .await
+            .unwrap();
+
+        // The channel-wide "Alice" assignment (its anchor has no provider speaker
+        // index) conflicts with anything on channel 1, so it is dropped.
+        assert_eq!(
+            hint_summaries(&store, "t1"),
+            vec![
+                (
+                    "new-word:provider_speaker_index".to_string(),
+                    "provider_speaker_index".to_string()
+                ),
+                (
+                    "new-word:speaker_label".to_string(),
+                    "speaker_label".to_string()
+                ),
+            ]
+        );
+        let stored = store.transcript_get("t1").unwrap();
+        assert_eq!(
+            stored.speaker_hints[1].value,
+            serde_json::Value::String("Bob".to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn assign_speaker_keeps_assignments_on_a_different_channel() {
+        let (store, _vault) = test_store().await;
+        let mut transcript = batch("t1", &[]);
+        transcript.words = vec![
+            channel_word("direct-word", "hi", 0.0),
+            channel_word("remote-word", "there", 1.0),
+        ];
+        transcript.speaker_hints = vec![label_hint("direct-word", "Me")];
+        store.write_transcript("s1", transcript).await.unwrap();
+
+        store
+            .assign_transcript_speaker("t1", 1, None, "Bob", "remote-word")
+            .await
+            .unwrap();
+
+        assert_eq!(
+            hint_summaries(&store, "t1"),
+            vec![
+                (
+                    "direct-word:speaker_label".to_string(),
+                    "speaker_label".to_string()
+                ),
+                (
+                    "remote-word:speaker_label".to_string(),
+                    "speaker_label".to_string()
+                ),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn assign_speaker_lets_two_provider_speaker_scopes_coexist_on_one_channel() {
+        let (store, _vault) = test_store().await;
+        let mut transcript = batch("t1", &[]);
+        transcript.words = vec![
+            channel_word("speaker-1-word", "first", 1.0),
+            channel_word("speaker-2-word-old", "second", 1.0),
+            channel_word("speaker-2-word-new", "later", 1.0),
+        ];
+        transcript.speaker_hints = vec![
+            provider_hint("speaker-1-word", 1, 1),
+            label_hint("speaker-1-word", "Alice"),
+            provider_hint("speaker-2-word-old", 1, 2),
+            label_hint("speaker-2-word-old", "Bob"),
+            provider_hint("speaker-2-word-new", 1, 2),
+        ];
+        store.write_transcript("s1", transcript).await.unwrap();
+
+        store
+            .assign_transcript_speaker("t1", 1, Some(2), "Carol", "speaker-2-word-new")
+            .await
+            .unwrap();
+
+        // Alice (speaker index 1) survives; Bob (same channel, same speaker
+        // index 2) is superseded by Carol.
+        assert_eq!(
+            hint_summaries(&store, "t1"),
+            vec![
+                (
+                    "speaker-1-word:provider_speaker_index".to_string(),
+                    "provider_speaker_index".to_string()
+                ),
+                (
+                    "speaker-1-word:speaker_label".to_string(),
+                    "speaker_label".to_string()
+                ),
+                (
+                    "speaker-2-word-old:provider_speaker_index".to_string(),
+                    "provider_speaker_index".to_string()
+                ),
+                (
+                    "speaker-2-word-new:provider_speaker_index".to_string(),
+                    "provider_speaker_index".to_string()
+                ),
+                (
+                    "speaker-2-word-new:speaker_label".to_string(),
+                    "speaker_label".to_string()
+                ),
+            ]
+        );
+    }
+
+    /// Newer writers store the provider hint value as an object rather than a JSON
+    /// string; scope resolution must read both shapes.
+    #[tokio::test]
+    async fn assign_speaker_reads_object_shaped_provider_hint_values() {
+        let (store, _vault) = test_store().await;
+        let mut transcript = batch("t1", &[]);
+        transcript.words = vec![
+            channel_word("w-a", "first", 1.0),
+            channel_word("w-b", "second", 1.0),
+        ];
+        transcript.speaker_hints = vec![
+            TranscriptSpeakerHint {
+                value: serde_json::json!({ "channel": 1, "speaker_index": 1 }),
+                ..provider_hint("w-a", 1, 1)
+            },
+            label_hint("w-a", "Alice"),
+        ];
+        store.write_transcript("s1", transcript).await.unwrap();
+
+        store
+            .assign_transcript_speaker("t1", 1, Some(2), "Bob", "w-b")
+            .await
+            .unwrap();
+
+        // Alice's scope resolved to speaker index 1, so index 2's assignment
+        // does not evict her.
+        assert_eq!(
+            hint_summaries(&store, "t1"),
+            vec![
+                (
+                    "w-a:provider_speaker_index".to_string(),
+                    "provider_speaker_index".to_string()
+                ),
+                ("w-a:speaker_label".to_string(), "speaker_label".to_string()),
+                ("w-b:speaker_label".to_string(), "speaker_label".to_string()),
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn assign_speaker_on_missing_transcript_errors() {
+        let (store, _vault) = test_store().await;
+        let err = store
+            .assign_transcript_speaker("nope", 0, None, "Alice", "w0")
+            .await
+            .unwrap_err();
+        assert!(err.to_string().contains("does not exist"));
     }
 
     #[test]

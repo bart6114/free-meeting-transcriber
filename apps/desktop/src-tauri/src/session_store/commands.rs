@@ -286,6 +286,28 @@ pub async fn session_write_transcript<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn session_assign_transcript_speaker<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    transcript_id: String,
+    channel: i32,
+    speaker_index: Option<i32>,
+    speaker_label: String,
+    anchor_word_id: String,
+) -> Result<(), String> {
+    store(&app)?
+        .assign_transcript_speaker(
+            &transcript_id,
+            channel,
+            speaker_index,
+            &speaker_label,
+            &anchor_word_id,
+        )
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn session_replace_transcripts<R: tauri::Runtime>(
     app: AppHandle<R>,
     session_id: String,

@@ -161,6 +161,171 @@ describe("buildRenderTranscriptRequestFromRows", () => {
     ).toEqual([true, undefined]);
   });
 
+  it("flags metadata-less channel-grouped words via non-chronological start_ms", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [
+          {
+            id: "ch0-word-1",
+            text: " hello",
+            start_ms: 0,
+            end_ms: 4_000,
+            channel: 0,
+          },
+          {
+            id: "ch0-word-2",
+            text: " there",
+            start_ms: 20_000,
+            end_ms: 24_000,
+            channel: 0,
+          },
+          {
+            id: "ch1-word-1",
+            text: " hi",
+            start_ms: 100,
+            end_ms: 4_100,
+            channel: 1,
+          },
+        ],
+        speaker_hints: [],
+      },
+    ]);
+
+    expect(request?.transcripts[0]?.synthetic_timing).toBe(true);
+  });
+
+  it("does not flag chronological metadata-less words", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [
+          {
+            id: "word-1",
+            text: " hello",
+            start_ms: 0,
+            end_ms: 100,
+            channel: 0,
+          },
+          {
+            id: "word-2",
+            text: " there",
+            start_ms: 200,
+            end_ms: 300,
+            channel: 1,
+          },
+          {
+            id: "word-3",
+            text: " friend",
+            start_ms: 400,
+            end_ms: 500,
+            channel: 0,
+          },
+        ],
+        speaker_hints: [],
+      },
+    ]);
+
+    expect(request?.transcripts[0]?.synthetic_timing).toBeUndefined();
+  });
+
+  it("tolerates small out-of-order jitter below the regression threshold", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [
+          {
+            id: "word-1",
+            text: " hello",
+            start_ms: 10_000,
+            end_ms: 10_100,
+            channel: 0,
+          },
+          {
+            id: "word-2",
+            text: " there",
+            start_ms: 6_000,
+            end_ms: 6_100,
+            channel: 1,
+          },
+          {
+            id: "word-3",
+            text: " friend",
+            start_ms: 10_200,
+            end_ms: 10_300,
+            channel: 0,
+          },
+        ],
+        speaker_hints: [],
+      },
+    ]);
+
+    expect(request?.transcripts[0]?.synthetic_timing).toBeUndefined();
+  });
+
+  it("does not flag live-shape words where a channel re-appears after a regression", () => {
+    // Live persist order: finalized partials can re-append at the end with early
+    // start_ms, but channels alternate — never one contiguous run per channel.
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [
+          {
+            id: "ch0-early",
+            text: " we",
+            start_ms: 20_000,
+            end_ms: 20_100,
+            channel: 0,
+          },
+          {
+            id: "ch1-reply",
+            text: " yes",
+            start_ms: 26_000,
+            end_ms: 26_100,
+            channel: 1,
+          },
+          {
+            id: "ch0-late-final",
+            text: " hello",
+            start_ms: 100,
+            end_ms: 200,
+            channel: 0,
+          },
+        ],
+        speaker_hints: [],
+      },
+    ]);
+
+    expect(request?.transcripts[0]?.synthetic_timing).toBeUndefined();
+  });
+
+  it("does not flag single-channel words with a large start_ms regression", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [
+          {
+            id: "word-1",
+            text: " hello",
+            start_ms: 20_000,
+            end_ms: 20_100,
+            channel: 0,
+          },
+          {
+            id: "word-2",
+            text: " there",
+            start_ms: 100,
+            end_ms: 200,
+            channel: 0,
+          },
+        ],
+        speaker_hints: [],
+      },
+    ]);
+
+    expect(request?.transcripts[0]?.synthetic_timing).toBeUndefined();
+  });
+
   it("passes through all mapped participant ids for Rust-side resolution", () => {
     const request = createRequest(["early"], ["self", "remote", "third"]);
 
