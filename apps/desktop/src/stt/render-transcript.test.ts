@@ -14,6 +14,7 @@ import {
   buildRenderTranscriptRequestFromRows,
   collectAssignedHumanIdsFromTranscriptRows,
   getRenderTranscriptRequestKey,
+  renderRequestHasDiarizedChannel,
   renderTranscriptSegments,
   type TranscriptRow,
 } from "./render-transcript";
@@ -183,6 +184,62 @@ describe("buildRenderTranscriptRequestFromRows", () => {
     ]);
   });
 
+  it("keeps a channel-scope assignment as fallback alongside channel_speaker assignments", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [
+          {
+            id: "gap-word",
+            text: " gap",
+            start_ms: 0,
+            end_ms: 100,
+            channel: 1,
+          },
+          {
+            id: "indexed-word",
+            text: " indexed",
+            start_ms: 100,
+            end_ms: 200,
+            channel: 1,
+          },
+        ],
+        speaker_hints: [
+          {
+            word_id: "gap-word",
+            type: "speaker_label",
+            value: "remote",
+          },
+          {
+            word_id: "indexed-word",
+            type: "provider_speaker_index",
+            value: { channel: 1, speaker_index: 1 },
+          },
+          {
+            word_id: "indexed-word",
+            type: "speaker_label",
+            value: "third",
+          },
+        ],
+      },
+    ]);
+
+    expect(request?.transcripts[0]?.assignments).toEqual([
+      {
+        human_id: "remote",
+        scope: { kind: "channel", channel: "RemoteParty" },
+      },
+      {
+        human_id: "third",
+        scope: {
+          kind: "channel_speaker",
+          channel: "RemoteParty",
+          speaker_index: 1,
+        },
+      },
+    ]);
+  });
+
   it("collects assigned speaker labels from transcript rows", () => {
     expect(
       collectAssignedHumanIdsFromTranscriptRows([
@@ -321,6 +378,73 @@ describe("buildRenderTranscriptRequestFromRows", () => {
         source: "synthetic_text",
       },
     });
+  });
+});
+
+describe("renderRequestHasDiarizedChannel", () => {
+  const wordRow = (id: string, channel: number) => ({
+    id,
+    text: ` ${id}`,
+    start_ms: 0,
+    end_ms: 100,
+    channel,
+  });
+  const providerHint = (
+    wordId: string,
+    channel: number,
+    speakerIndex: number,
+  ) => ({
+    word_id: wordId,
+    type: "provider_speaker_index",
+    value: { channel, speaker_index: speakerIndex },
+  });
+
+  it("detects a channel with two distinct speaker indexes", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [wordRow("w1", 1), wordRow("w2", 1)],
+        speaker_hints: [providerHint("w1", 1, 0), providerHint("w2", 1, 1)],
+      },
+    ]);
+
+    expect(renderRequestHasDiarizedChannel(request)).toBe(true);
+  });
+
+  it("treats a single-index channel as undiarized", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [wordRow("w1", 1), wordRow("w2", 1)],
+        speaker_hints: [providerHint("w1", 1, 0), providerHint("w2", 1, 0)],
+      },
+    ]);
+
+    expect(renderRequestHasDiarizedChannel(request)).toBe(false);
+  });
+
+  it("does not combine indexes across channels", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [wordRow("w1", 0), wordRow("w2", 1)],
+        speaker_hints: [providerHint("w1", 0, 0), providerHint("w2", 1, 1)],
+      },
+    ]);
+
+    expect(renderRequestHasDiarizedChannel(request)).toBe(false);
+  });
+
+  it("treats channel-only words as undiarized", () => {
+    const request = buildRenderTranscriptRequestFromRows([
+      {
+        started_at: 1_000,
+        words: [wordRow("w1", 1), wordRow("w2", 1)],
+        speaker_hints: [],
+      },
+    ]);
+
+    expect(renderRequestHasDiarizedChannel(request)).toBe(false);
   });
 });
 

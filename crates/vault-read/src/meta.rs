@@ -18,6 +18,12 @@ pub struct SessionMeta {
     pub event: Option<serde_json::Value>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// Forward-compat catch-all: fields written by newer app versions must survive a
+    /// read-modify-write cycle from this version (vaults are file-synced across machines
+    /// running different builds).
+    #[serde(flatten)]
+    #[specta(skip)]
+    pub extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
 /// A legacy single-slot document file `sessions/<id>/<kind>.md` (e.g. `summary.md`),
@@ -156,6 +162,26 @@ mod tests {
             .collect();
         ids.sort();
         assert_eq!(ids, vec!["s1", "s2"]);
+    }
+
+    #[test]
+    fn meta_roundtrip_preserves_unknown_fields() {
+        let raw = serde_json::json!({
+            "id": "s1",
+            "title": "Planning",
+            "started_at": null,
+            "ended_at": null,
+            "created_at": "2026-07-01T00:00:00Z",
+            "tags": [],
+            "speakers": { "t1": { "1": "raphael" } },
+            "some_future_field": 42,
+        });
+
+        let meta: SessionMeta = serde_json::from_value(raw.clone()).unwrap();
+        let round_tripped = serde_json::to_value(&meta).unwrap();
+
+        assert_eq!(round_tripped["speakers"], raw["speakers"]);
+        assert_eq!(round_tripped["some_future_field"], raw["some_future_field"]);
     }
 
     #[test]

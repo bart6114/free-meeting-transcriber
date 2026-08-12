@@ -8,6 +8,33 @@ import {
   type Segment,
 } from "./live-segment";
 
+function diarizedSegment(
+  channel: "DirectMic" | "RemoteParty",
+  speakerIndex: number,
+): Segment {
+  return {
+    id: `segment-${channel}-${speakerIndex}`,
+    key: {
+      channel,
+      speaker_index: speakerIndex,
+      speaker_human_id: null,
+    },
+    words: [
+      {
+        id: `word-${channel}-${speakerIndex}`,
+        text: "hi",
+        start_ms: 0,
+        end_ms: 100,
+        channel,
+        is_final: true,
+      },
+    ],
+    start_ms: 0,
+    end_ms: 100,
+    text: "hi",
+  } as Segment;
+}
+
 const ctx: RenderLabelContext = {
   getSelfHumanId: () => "self",
   getHumanName: (id) => (id === "self" ? "Me" : undefined),
@@ -83,6 +110,69 @@ describe("SegmentKeyUtils", () => {
     expect(
       SegmentKeyUtils.renderLabel(segments[2]!.key, undefined, manager),
     ).toBe("Speaker 2");
+  });
+
+  it("lifts the participant cap when a channel is diarized", () => {
+    const segments = [0, 1, 2].map((speakerIndex) =>
+      diarizedSegment("RemoteParty", speakerIndex),
+    );
+    const manager = SpeakerLabelManager.fromSegments(segments, undefined, 2);
+
+    expect(
+      segments.map((segment) =>
+        SegmentKeyUtils.renderLabel(segment.key, undefined, manager),
+      ),
+    ).toEqual(["Speaker 1", "Speaker 2", "Speaker 3"]);
+  });
+
+  it("does not absorb a diarized remote channel into the unique remote participant", () => {
+    const segments = [0, 1].map((speakerIndex) =>
+      diarizedSegment("RemoteParty", speakerIndex),
+    );
+    const manager = SpeakerLabelManager.fromSegments(segments, twoPersonCtx);
+
+    expect(
+      segments.map((segment) =>
+        SegmentKeyUtils.renderLabel(segment.key, twoPersonCtx, manager),
+      ),
+    ).toEqual(["Speaker 1", "Speaker 2"]);
+    // Channel-only gap segments keep today's heuristic label.
+    expect(
+      SegmentKeyUtils.renderLabel(
+        { channel: "RemoteParty", speaker_index: null, speaker_human_id: null },
+        twoPersonCtx,
+        manager,
+      ),
+    ).toBe("Artem");
+  });
+
+  it("does not absorb a diarized direct-mic channel into self", () => {
+    const segments = [0, 1].map((speakerIndex) =>
+      diarizedSegment("DirectMic", speakerIndex),
+    );
+    const manager = SpeakerLabelManager.fromSegments(segments, ctx);
+
+    expect(
+      segments.map((segment) =>
+        SegmentKeyUtils.renderLabel(segment.key, ctx, manager),
+      ),
+    ).toEqual(["Speaker 1", "Speaker 2"]);
+    expect(
+      SegmentKeyUtils.renderLabel(
+        { channel: "DirectMic", speaker_index: null, speaker_human_id: null },
+        ctx,
+        manager,
+      ),
+    ).toBe("Me");
+  });
+
+  it("keeps single-index channels on the heuristic path", () => {
+    const segments = [diarizedSegment("RemoteParty", 0)];
+    const manager = SpeakerLabelManager.fromSegments(segments, twoPersonCtx);
+
+    expect(
+      SegmentKeyUtils.renderLabel(segments[0]!.key, twoPersonCtx, manager),
+    ).toBe("Artem");
   });
 
   it("labels remote-party segments as the unique other participant", () => {

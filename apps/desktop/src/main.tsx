@@ -29,6 +29,7 @@ import { FloatingMeetingWindowHost } from "./meeting-float/host";
 import { routeTree } from "./routeTree.gen";
 import { EventListeners } from "./services/event-listeners";
 import { TaskManager } from "./services/task-manager";
+import { RegenerateTranscriptConfirmDialog } from "./session/components/note-input/transcript/regenerate-confirm";
 import { useRemoteSessionDeletionUndoListener } from "./session/hooks/useDeleteSession";
 import { initializeApplicationSettings } from "./settings/queries";
 import { initializeAppExitFlush } from "./shared/app-exit";
@@ -63,6 +64,7 @@ function App() {
     <AppThemeProvider>
       <AppI18nProvider>
         <AITaskWindowSyncBridge store={aiTaskStore} />
+        <RegenerateTranscriptConfirmDialog />
         <RouterProvider
           router={router}
           context={{

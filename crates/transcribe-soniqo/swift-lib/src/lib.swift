@@ -261,7 +261,7 @@ private enum TranscriptSource: String, Codable, CaseIterable {
   case system
 }
 
-private struct ModelDownloadPayload: Codable {
+struct ModelDownloadPayload: Codable {
   var status: String
   var currentFile: String?
   var progressPercent: Int?
@@ -291,7 +291,7 @@ private struct StatusPayload: Codable {
   var error: String?
 }
 
-private func encodeJSON<T: Encodable>(_ value: T) -> String {
+func encodeJSON<T: Encodable>(_ value: T) -> String {
   guard let data = try? JSONEncoder().encode(value),
     let string = String(data: data, encoding: .utf8)
   else {
@@ -301,7 +301,7 @@ private func encodeJSON<T: Encodable>(_ value: T) -> String {
   return string
 }
 
-private func waitForValue<T>(_ operation: @escaping () async -> T) -> T {
+func waitForValue<T>(_ operation: @escaping () async -> T) -> T {
   let semaphore = DispatchSemaphore(value: 0)
   var result: T!
 
@@ -314,7 +314,7 @@ private func waitForValue<T>(_ operation: @escaping () async -> T) -> T {
   return result
 }
 
-private func decodeFloatSamples(from data: Data) throws -> [Float] {
+func decodeFloatSamples(from data: Data) throws -> [Float] {
   let stride = MemoryLayout<Float>.size
   guard data.count.isMultiple(of: stride) else {
     throw SoniqoBridgeError.message("Invalid audio chunk received by Soniqo.")

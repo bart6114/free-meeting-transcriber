@@ -168,6 +168,33 @@ export function collectAssignedHumanIdsFromTranscriptRows(
   return [...speakerLabels];
 }
 
+// Mirrors the Rust-side definition: a channel is diarized when >=2 distinct
+// speaker indexes appear among its (stored, hence final) words. Diarized
+// speakers can outnumber listed participants, so the unknown-speaker cap must
+// not apply.
+export function renderRequestHasDiarizedChannel(
+  request: RenderTranscriptRequest | null | undefined,
+): boolean {
+  for (const transcript of request?.transcripts ?? []) {
+    const indexesByChannel = new Map<number, Set<number>>();
+
+    for (const word of transcript.words) {
+      if (word.speaker_index == null) {
+        continue;
+      }
+
+      const indexes = indexesByChannel.get(word.channel) ?? new Set<number>();
+      indexes.add(word.speaker_index);
+      indexesByChannel.set(word.channel, indexes);
+      if (indexes.size >= 2) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function buildRenderTranscriptRequest(
   transcripts: TranscriptRow[],
   humans?: RenderTranscriptRequestHumans,

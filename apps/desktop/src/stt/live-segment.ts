@@ -61,7 +61,14 @@ export class SpeakerLabelManager {
   private unknownSpeakerMap: Map<string, number> = new Map();
   private nextIndex = 1;
 
-  constructor(private readonly maxUnknownSpeakerNumber?: number) {}
+  constructor(
+    private readonly maxUnknownSpeakerNumber?: number,
+    private readonly diarizedChannels?: ReadonlySet<SegmentChannelProfile>,
+  ) {}
+
+  isChannelDiarized(channel: SegmentChannelProfile): boolean {
+    return this.diarizedChannels?.has(channel) ?? false;
+  }
 
   getUnknownSpeakerNumber(key: SegmentKey): number {
     const serialized = SegmentKeyUtils.serialize(key);
@@ -84,14 +91,51 @@ export class SpeakerLabelManager {
     ctx?: RenderLabelContext,
     maxUnknownSpeakerNumber?: number,
   ): SpeakerLabelManager {
-    const manager = new SpeakerLabelManager(maxUnknownSpeakerNumber);
+    const diarizedChannels = getDiarizedChannels(segments);
+    // Once a channel is diarized the participant list no longer bounds the
+    // speaker count -- capping would merge two distinct diarized speakers
+    // under one label.
+    const manager = new SpeakerLabelManager(
+      diarizedChannels.size > 0 ? undefined : maxUnknownSpeakerNumber,
+      diarizedChannels,
+    );
     for (const segment of segments) {
-      if (!SegmentKeyUtils.isKnownSpeaker(segment.key, ctx)) {
+      if (!SegmentKeyUtils.isKnownSpeaker(segment.key, ctx, diarizedChannels)) {
         manager.getUnknownSpeakerNumber(segment.key);
       }
     }
     return manager;
   }
+}
+
+// A channel counts as diarized once >=2 distinct speaker indexes have landed on
+// final words -- partials are excluded so a flickering live index cannot flip
+// labeling behavior mid-recording.
+export function getDiarizedChannels(
+  segments: readonly Segment[],
+): Set<SegmentChannelProfile> {
+  const indexesByChannel = new Map<SegmentChannelProfile, Set<number>>();
+  const diarized = new Set<SegmentChannelProfile>();
+
+  for (const segment of segments) {
+    const speakerIndex = segment.key.speaker_index;
+    if (speakerIndex == null) {
+      continue;
+    }
+    if (!segment.words.some((word) => word.is_final)) {
+      continue;
+    }
+
+    const indexes =
+      indexesByChannel.get(segment.key.channel) ?? new Set<number>();
+    indexes.add(speakerIndex);
+    indexesByChannel.set(segment.key.channel, indexes);
+    if (indexes.size >= 2) {
+      diarized.add(segment.key.channel);
+    }
+  }
+
+  return diarized;
 }
 
 export const SegmentKeyUtils = {
@@ -103,9 +147,19 @@ export const SegmentKeyUtils = {
     ]);
   },
 
-  isKnownSpeaker: (key: SegmentKey, ctx?: RenderLabelContext): boolean => {
+  isKnownSpeaker: (
+    key: SegmentKey,
+    ctx?: RenderLabelContext,
+    diarizedChannels?: ReadonlySet<SegmentChannelProfile>,
+  ): boolean => {
     if (key.speaker_human_id) {
       return true;
+    }
+
+    // Diarized clusters are distinct people; channel-identity heuristics only
+    // hold when the channel carries a single voice.
+    if (key.speaker_index != null && diarizedChannels?.has(key.channel)) {
+      return false;
     }
 
     if (ctx && key.channel === "DirectMic") {
@@ -137,7 +191,16 @@ export const SegmentKeyUtils = {
       return assignedHumanId === ctx.getSelfHumanId() ? "You" : assignedHumanId;
     }
 
-    if (ctx && key.channel === "DirectMic" && assignedHumanId == null) {
+    const heuristicsGated =
+      key.speaker_index != null &&
+      (manager?.isChannelDiarized(key.channel) ?? false);
+
+    if (
+      !heuristicsGated &&
+      ctx &&
+      key.channel === "DirectMic" &&
+      assignedHumanId == null
+    ) {
       const selfHumanId = ctx.getSelfHumanId();
       if (selfHumanId) {
         const selfHuman = ctx.getHumanName(selfHumanId);
@@ -145,7 +208,12 @@ export const SegmentKeyUtils = {
       }
     }
 
-    if (ctx && key.channel === "RemoteParty" && assignedHumanId == null) {
+    if (
+      !heuristicsGated &&
+      ctx &&
+      key.channel === "RemoteParty" &&
+      assignedHumanId == null
+    ) {
       const remoteHumanId = getUniqueRemoteParticipantHumanId(ctx);
       if (remoteHumanId) {
         return ctx.getHumanName(remoteHumanId) || remoteHumanId;

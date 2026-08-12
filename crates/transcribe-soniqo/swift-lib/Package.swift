@@ -16,12 +16,14 @@ let package = Package(
       url: "https://github.com/Brendonovich/swift-rs",
       revision: "01980f981bc642a6da382cc0788f18fdd4cde6df"),
     .package(url: "https://github.com/soniqo/speech-swift", exact: "0.0.9"),
+    .package(url: "https://github.com/FluidInference/FluidAudio", exact: "0.15.5"),
   ],
   targets: [
     .target(
       name: "swift-lib",
       dependencies: [
         .product(name: "AudioCommon", package: "speech-swift"),
+        .product(name: "FluidAudio", package: "FluidAudio"),
         .product(name: "OmnilingualASR", package: "speech-swift"),
         .product(name: "ParakeetASR", package: "speech-swift"),
         .product(name: "ParakeetStreamingASR", package: "speech-swift"),

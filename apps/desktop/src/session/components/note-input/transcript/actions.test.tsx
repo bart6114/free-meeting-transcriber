@@ -3,9 +3,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   audioPath: vi.fn(),
+  confirmRegenerateSpeakerReset: vi.fn(),
   handleBatchFailed: vi.fn(),
   queueAutoEnhanceIfSummaryEmpty: vi.fn(),
   runBatch: vi.fn(),
+  sessionTranscripts: vi.fn(),
   toastError: vi.fn(),
 }));
 
@@ -34,7 +36,28 @@ vi.mock("~/stt/useRunBatch", () => ({
   useRunBatch: () => mocks.runBatch,
 }));
 
+vi.mock("~/types/tauri.gen", () => ({
+  commands: { sessionTranscripts: mocks.sessionTranscripts },
+}));
+
+vi.mock("./regenerate-confirm", () => ({
+  confirmRegenerateSpeakerReset: mocks.confirmRegenerateSpeakerReset,
+}));
+
 import { useRegenerateTranscript } from "./actions";
+
+function transcriptWithSpeakerLabels(...labels: string[]) {
+  return {
+    id: "transcript-1",
+    session_id: "session-1",
+    speaker_hints: labels.map((value, index) => ({
+      id: `hint-${index}`,
+      word_id: `word-${index}`,
+      type: "speaker_label",
+      value,
+    })),
+  };
+}
 
 describe("useRegenerateTranscript", () => {
   beforeEach(() => {
@@ -43,6 +66,8 @@ describe("useRegenerateTranscript", () => {
       status: "ok",
       data: "/tmp/session.wav",
     });
+    mocks.sessionTranscripts.mockResolvedValue({ status: "ok", data: [] });
+    mocks.runBatch.mockResolvedValue(undefined);
   });
 
   it("shows batch transcription failures even when an old transcript exists", async () => {
@@ -61,5 +86,48 @@ describe("useRegenerateTranscript", () => {
       id: "transcript-regenerate-failed-session-1",
       description: "Authentication failed",
     });
+  });
+
+  it("regenerates without confirmation when no speakers are assigned", async () => {
+    const { result } = renderHook(() => useRegenerateTranscript("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(mocks.confirmRegenerateSpeakerReset).not.toHaveBeenCalled();
+    expect(mocks.runBatch).toHaveBeenCalledWith("/tmp/session.wav");
+  });
+
+  it("asks for confirmation when speaker names are assigned and aborts on cancel", async () => {
+    mocks.sessionTranscripts.mockResolvedValue({
+      status: "ok",
+      data: [transcriptWithSpeakerLabels("Alice", "Bob")],
+    });
+    mocks.confirmRegenerateSpeakerReset.mockResolvedValue(false);
+    const { result } = renderHook(() => useRegenerateTranscript("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(mocks.confirmRegenerateSpeakerReset).toHaveBeenCalledWith(2);
+    expect(mocks.runBatch).not.toHaveBeenCalled();
+  });
+
+  it("regenerates after the speaker reset is confirmed", async () => {
+    mocks.sessionTranscripts.mockResolvedValue({
+      status: "ok",
+      data: [transcriptWithSpeakerLabels("Alice")],
+    });
+    mocks.confirmRegenerateSpeakerReset.mockResolvedValue(true);
+    const { result } = renderHook(() => useRegenerateTranscript("session-1"));
+
+    await act(async () => {
+      await result.current();
+    });
+
+    expect(mocks.confirmRegenerateSpeakerReset).toHaveBeenCalledWith(1);
+    expect(mocks.runBatch).toHaveBeenCalledWith("/tmp/session.wav");
   });
 });

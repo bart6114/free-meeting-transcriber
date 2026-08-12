@@ -28,6 +28,7 @@ vi.mock("~/stt/queries", () => ({
 
 vi.mock("~/stt/render-transcript", () => ({
   getRenderTranscriptRequestKey: mocks.getRenderTranscriptRequestKey,
+  renderRequestHasDiarizedChannel: vi.fn(() => false),
   renderTranscriptSegments: mocks.renderTranscriptSegments,
 }));
 

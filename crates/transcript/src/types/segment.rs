@@ -62,6 +62,12 @@ pub struct SegmentBuilderOptions {
     /// precise enough for word-level cross-channel ordering.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sentence_atomic: Option<bool>,
+    /// Channels whose channel-scope identity assignment is a participant
+    /// heuristic rather than an explicit user assignment. The builder must not
+    /// absorb diarized speaker indexes into these, while explicit channel
+    /// assignments stay available as the per-channel fallback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub heuristic_channels: Option<Vec<ChannelProfile>>,
 }
 
 impl Default for SegmentBuilderOptions {
@@ -72,6 +78,7 @@ impl Default for SegmentBuilderOptions {
             min_segment_words: Some(3),
             min_segment_ms: Some(1500),
             sentence_atomic: None,
+            heuristic_channels: None,
         }
     }
 }

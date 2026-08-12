@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{
     ChannelProfile, FinalizedWord, IdentityAssignment, IdentityScope, SegmentBuilderOptions,
@@ -68,8 +68,11 @@ pub fn render_transcript_segments(
         segment_options_for_participants(&participant_human_ids, self_human_id.as_deref());
 
     let mut all_segments = Vec::new();
+    let mut diarized_channels: HashSet<ChannelProfile> = HashSet::new();
 
     for transcript in transcripts {
+        diarized_channels.extend(diarized_channels_for_words(&transcript.words));
+
         let offset = transcript
             .started_at
             .map(|started_at| started_at - base_started_at)
@@ -92,8 +95,21 @@ pub fn render_transcript_segments(
 
         // Heuristics first: identity maps are last-insert-wins, and explicit
         // assignments must beat the participant heuristic on conflict.
-        let mut assignments =
+        let heuristic_assignments =
             channel_assignments_for_participants(&participant_human_ids, self_human_id.as_deref());
+
+        // Channels whose identity is purely heuristic (not confirmed by an
+        // explicit assignment) must not absorb diarized speaker indexes.
+        let heuristic_channels: Vec<ChannelProfile> = heuristic_assignments
+            .iter()
+            .filter_map(|assignment| match assignment.scope {
+                IdentityScope::Channel { channel } => Some(channel),
+                _ => None,
+            })
+            .filter(|channel| !explicit_channels.contains(channel))
+            .collect();
+
+        let mut assignments = heuristic_assignments;
         assignments.extend(transcript_assignments);
 
         let mut complete_channels = segment_options
@@ -109,6 +125,7 @@ pub fn render_transcript_segments(
         let options = SegmentBuilderOptions {
             sentence_atomic: Some(synthetic_timing),
             complete_channels: Some(complete_channels),
+            heuristic_channels: Some(heuristic_channels),
             ..segment_options.clone()
         };
         let segments = build_segments(&words, &[], &assignments, Some(&options));
@@ -117,15 +134,22 @@ pub fn render_transcript_segments(
 
     all_segments.sort_by_key(|seg| seg.words.first().map(|w| w.start_ms).unwrap_or(i64::MAX));
 
+    // Two distinct diarized speakers must never share one "Speaker N" label,
+    // so the participant-count cap only applies to undiarized transcripts.
+    let max_speaker_number = diarized_channels
+        .is_empty()
+        .then(|| {
+            max_speaker_number_for_participants(&participant_human_ids, self_human_id.as_deref())
+        })
+        .flatten();
     let ctx = SpeakerLabelContext {
         self_human_id: self_human_id.clone(),
         human_name_by_id: humans
             .into_iter()
             .map(|human| (human.human_id, human.name))
             .collect::<HashMap<_, _>>(),
+        diarized_channels,
     };
-    let max_speaker_number =
-        max_speaker_number_for_participants(&participant_human_ids, self_human_id.as_deref());
     let mut labeler = SpeakerLabeler::from_segments(&all_segments, Some(&ctx), max_speaker_number);
 
     all_segments
@@ -154,6 +178,25 @@ pub fn render_transcript_segments(
                 key: segment.key,
             })
         })
+        .collect()
+}
+
+// A channel is diarized when at least two distinct speaker indexes appear in
+// its final words (all words in this path are final).
+fn diarized_channels_for_words(words: &[RenderTranscriptWordInput]) -> HashSet<ChannelProfile> {
+    let mut indexes_by_channel: HashMap<ChannelProfile, HashSet<i32>> = HashMap::new();
+    for word in words {
+        if let Some(speaker_index) = word.speaker_index {
+            indexes_by_channel
+                .entry(ChannelProfile::from(word.channel))
+                .or_default()
+                .insert(speaker_index);
+        }
+    }
+
+    indexes_by_channel
+        .into_iter()
+        .filter_map(|(channel, indexes)| (indexes.len() > 1).then_some(channel))
         .collect()
 }
 
@@ -395,6 +438,31 @@ mod tests {
 
     #[test]
     fn caps_unknown_speaker_labels_to_participant_count() {
+        // The cap only holds while no channel is diarized (one index per channel).
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![
+                    word("w1", " one", 0, 100, 0),
+                    word_si("w2", " two", 200, 300, 1, 5),
+                    word_si("w3", " three", 400, 500, 2, 7),
+                ],
+                assignments: vec![],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec!["a".to_string(), "b".to_string()],
+            self_human_id: None,
+            humans: vec![],
+        });
+
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0].speaker_label, "Speaker 1");
+        assert_eq!(segments[1].speaker_label, "Speaker 2");
+        assert_eq!(segments[2].speaker_label, "Speaker 2");
+    }
+
+    #[test]
+    fn cap_lifts_when_indexes_exceed_participants() {
         let segments = render_transcript_segments(RenderTranscriptRequest {
             transcripts: vec![RenderTranscriptInput {
                 started_at: Some(0),
@@ -414,7 +482,115 @@ mod tests {
         assert_eq!(segments.len(), 3);
         assert_eq!(segments[0].speaker_label, "Speaker 1");
         assert_eq!(segments[1].speaker_label, "Speaker 2");
-        assert_eq!(segments[2].speaker_label, "Speaker 2");
+        assert_eq!(segments[2].speaker_label, "Speaker 3");
+    }
+
+    #[test]
+    fn multi_index_mic_channel_not_labeled_you() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![
+                    word_si("w1", " first", 0, 400, 0, 0),
+                    word_si("w2", " voice", 500, 900, 0, 0),
+                    word_si("w3", " second", 5_000, 5_400, 0, 1),
+                    word_si("w4", " voice", 5_500, 5_900, 0, 1),
+                ],
+                assignments: vec![],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: Some("self".to_string()),
+            humans: vec![RenderTranscriptHuman {
+                human_id: "self".to_string(),
+                name: "Me".to_string(),
+            }],
+        });
+
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].speaker_label, "Speaker 1");
+        assert_eq!(segments[1].speaker_label, "Speaker 2");
+        assert!(
+            segments
+                .iter()
+                .all(|segment| segment.key.speaker_human_id.is_none())
+        );
+    }
+
+    #[test]
+    fn indexed_assignment_keeps_channel_fallback() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![
+                    word_si("w1", " zero", 0, 400, 1, 0),
+                    word_si("w2", " speaks", 500, 900, 1, 0),
+                    word_si("w3", " one", 4_000, 4_400, 1, 1),
+                    word_si("w4", " speaks", 4_500, 4_900, 1, 1),
+                    word("w5", " gap", 8_500, 8_900, 1),
+                    word("w6", " words", 9_000, 9_400, 1),
+                ],
+                assignments: vec![
+                    channel_assignment("alice", ChannelProfile::RemoteParty),
+                    speaker_assignment("bob", ChannelProfile::RemoteParty, 1),
+                ],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec![],
+            self_human_id: None,
+            humans: vec![
+                RenderTranscriptHuman {
+                    human_id: "alice".to_string(),
+                    name: "Alice".to_string(),
+                },
+                RenderTranscriptHuman {
+                    human_id: "bob".to_string(),
+                    name: "Bob".to_string(),
+                },
+            ],
+        });
+
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0].speaker_label, "Alice");
+        assert_eq!(segments[0].key.speaker_index, Some(0));
+        assert_eq!(segments[1].speaker_label, "Bob");
+        assert_eq!(segments[1].key.speaker_index, Some(1));
+        assert_eq!(segments[2].speaker_label, "Alice");
+        assert_eq!(segments[2].key.speaker_index, None);
+    }
+
+    #[test]
+    fn undiarized_channel_behavior_unchanged() {
+        let segments = render_transcript_segments(RenderTranscriptRequest {
+            transcripts: vec![RenderTranscriptInput {
+                started_at: Some(0),
+                words: vec![
+                    word_si("w1", " hello", 0, 400, 0, 2),
+                    word("w2", " reply", 1_000, 1_400, 1),
+                    word("w3", " here", 1_500, 1_900, 1),
+                ],
+                assignments: vec![],
+                synthetic_timing: None,
+            }],
+            participant_human_ids: vec!["self".to_string(), "remote".to_string()],
+            self_human_id: Some("self".to_string()),
+            humans: vec![
+                RenderTranscriptHuman {
+                    human_id: "self".to_string(),
+                    name: "Me".to_string(),
+                },
+                RenderTranscriptHuman {
+                    human_id: "remote".to_string(),
+                    name: "Bob".to_string(),
+                },
+            ],
+        });
+
+        assert_eq!(segments.len(), 2);
+        assert_eq!(segments[0].speaker_label, "Me");
+        assert_eq!(segments[0].key.speaker_human_id.as_deref(), Some("self"));
+        assert_eq!(segments[1].speaker_label, "Bob");
+        assert_eq!(segments[1].key.speaker_human_id.as_deref(), Some("remote"));
     }
 
     #[test]

@@ -3,9 +3,25 @@ import { useCallback } from "react";
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
+import { confirmRegenerateSpeakerReset } from "./regenerate-confirm";
+
 import { getEnhancerService } from "~/services/enhancer";
 import { useListener } from "~/stt/contexts";
+import { collectAssignedHumanIdsFromTranscriptRows } from "~/stt/render-transcript";
 import { isStoppedTranscriptionError, useRunBatch } from "~/stt/useRunBatch";
+import { commands } from "~/types/tauri.gen";
+
+async function countAssignedSpeakers(sessionId: string): Promise<number> {
+  try {
+    const result = await commands.sessionTranscripts(sessionId);
+    if (result.status === "error") {
+      return 0;
+    }
+    return collectAssignedHumanIdsFromTranscriptRows(result.data).length;
+  } catch {
+    return 0;
+  }
+}
 
 export function useRegenerateTranscript(sessionId: string) {
   const runBatch = useRunBatch(sessionId);
@@ -21,6 +37,15 @@ export function useRegenerateTranscript(sessionId: string) {
     }
 
     const audioPath = result.data;
+
+    const assignedSpeakerCount = await countAssignedSpeakers(sessionId);
+    if (assignedSpeakerCount > 0) {
+      const confirmed =
+        await confirmRegenerateSpeakerReset(assignedSpeakerCount);
+      if (!confirmed) {
+        return;
+      }
+    }
 
     try {
       await runBatch(audioPath);

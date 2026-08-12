@@ -45,6 +45,7 @@ pub(crate) async fn create_session(
         tags: Vec::new(),
         event: None,
         folder: None,
+        extra: Default::default(),
     };
     store
         .write_meta(&meta)

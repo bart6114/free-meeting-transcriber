@@ -15,15 +15,21 @@ import {
 
 import type { Segment } from "~/stt/live-segment";
 
-const { assignTranscriptSpeakerMock, ensurePersonMock, usePeopleMock } =
-  vi.hoisted(() => ({
-    assignTranscriptSpeakerMock: vi.fn(),
-    ensurePersonMock: vi.fn(),
-    usePeopleMock: vi.fn(),
-  }));
+const {
+  assignTranscriptSpeakerMock,
+  ensurePersonMock,
+  usePeopleMock,
+  useTranscriptMock,
+} = vi.hoisted(() => ({
+  assignTranscriptSpeakerMock: vi.fn(),
+  ensurePersonMock: vi.fn(),
+  usePeopleMock: vi.fn(),
+  useTranscriptMock: vi.fn(),
+}));
 
 vi.mock("~/stt/queries", () => ({
   assignTranscriptSpeaker: assignTranscriptSpeakerMock,
+  useTranscript: useTranscriptMock,
 }));
 
 vi.mock("~/people/queries", () => ({
@@ -43,6 +49,7 @@ beforeEach(() => {
     name: name.trim(),
   }));
   usePeopleMock.mockReturnValue([]);
+  useTranscriptMock.mockReturnValue(null);
 });
 
 function remoteSegment(): Segment {
@@ -310,6 +317,150 @@ describe("SpeakerRenameControl", () => {
     await waitFor(() => expect(consoleError).toHaveBeenCalled());
     expect(assignTranscriptSpeakerMock).not.toHaveBeenCalled();
     consoleError.mockRestore();
+  });
+});
+
+describe("SpeakerRenameControl on a diarized channel", () => {
+  function diarizedTranscript(withAssignment: boolean) {
+    return {
+      id: "transcript-1",
+      ownerUserId: "self",
+      sessionId: "session-1",
+      startedAt: 0,
+      words: [
+        { id: "word-1", text: "hello", start_ms: 0, end_ms: 100, channel: 1 },
+        { id: "word-9", text: "there", start_ms: 100, end_ms: 200, channel: 1 },
+      ],
+      speakerHints: [
+        {
+          word_id: "word-1",
+          type: "provider_speaker_index",
+          value: JSON.stringify({ channel: 1, speaker_index: 2 }),
+        },
+        {
+          word_id: "word-9",
+          type: "provider_speaker_index",
+          value: JSON.stringify({ channel: 1, speaker_index: 0 }),
+        },
+        ...(withAssignment
+          ? [{ word_id: "word-9", type: "speaker_label", value: "kim" }]
+          : []),
+      ],
+    };
+  }
+
+  it("defaults the first assignment to every speaker index on the channel", async () => {
+    useTranscriptMock.mockReturnValue(diarizedTranscript(false));
+    render(
+      createElement(SpeakerRenameControl, {
+        segment: remoteSegment(),
+        transcriptId: "transcript-1",
+        color: "red",
+        label: "Speaker 2",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox.getAttribute("data-state")).toBe("checked");
+
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Alice" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(assignTranscriptSpeakerMock).toHaveBeenCalledTimes(2);
+    });
+    expect(
+      assignTranscriptSpeakerMock.mock.calls.map(([call]) => call),
+    ).toEqual([
+      {
+        transcriptId: "transcript-1",
+        segmentKey: {
+          channel: "RemoteParty",
+          speaker_index: 2,
+          speaker_human_id: null,
+        },
+        speakerLabel: "alice",
+        anchorWordId: "word-1",
+      },
+      {
+        transcriptId: "transcript-1",
+        segmentKey: {
+          channel: "RemoteParty",
+          speaker_index: 0,
+          speaker_human_id: null,
+        },
+        speakerLabel: "alice",
+        anchorWordId: "word-9",
+      },
+    ]);
+  });
+
+  it("assigns only the clicked cluster when the checkbox is unchecked", async () => {
+    useTranscriptMock.mockReturnValue(diarizedTranscript(false));
+    render(
+      createElement(SpeakerRenameControl, {
+        segment: remoteSegment(),
+        transcriptId: "transcript-1",
+        color: "red",
+        label: "Speaker 2",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    fireEvent.click(screen.getByRole("checkbox"));
+
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Alice" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(assignTranscriptSpeakerMock).toHaveBeenCalledTimes(1);
+    });
+    expect(assignTranscriptSpeakerMock).toHaveBeenCalledWith({
+      transcriptId: "transcript-1",
+      segmentKey: {
+        channel: "RemoteParty",
+        speaker_index: 2,
+        speaker_human_id: null,
+      },
+      speakerLabel: "alice",
+      anchorWordId: "word-1",
+    });
+  });
+
+  it("skips the channel-wide offer once the channel has an assignment", async () => {
+    useTranscriptMock.mockReturnValue(diarizedTranscript(true));
+    render(
+      createElement(SpeakerRenameControl, {
+        segment: remoteSegment(),
+        transcriptId: "transcript-1",
+        color: "red",
+        label: "Speaker 2",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    expect(screen.queryByRole("checkbox")).toBeNull();
+
+    const input = screen.getByRole("textbox") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "Alice" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => {
+      expect(assignTranscriptSpeakerMock).toHaveBeenCalledTimes(1);
+    });
+    expect(assignTranscriptSpeakerMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        segmentKey: {
+          channel: "RemoteParty",
+          speaker_index: 2,
+          speaker_human_id: null,
+        },
+        anchorWordId: "word-1",
+      }),
+    );
   });
 });
 

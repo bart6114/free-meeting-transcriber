@@ -573,6 +573,7 @@ mod tests {
             tags: vec![],
             event: None,
             folder: None,
+            extra: Default::default(),
         }
     }
 

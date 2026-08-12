@@ -183,6 +183,24 @@ mod tests {
         }
     }
 
+    fn provider_hint(word_id: &str, speaker_index: i64) -> TranscriptSpeakerHint {
+        TranscriptSpeakerHint {
+            id: None,
+            word_id: word_id.to_string(),
+            hint_type: "provider_speaker_index".to_string(),
+            value: serde_json::json!({ "speaker_index": speaker_index }),
+        }
+    }
+
+    fn label_hint(word_id: &str, human_id: &str) -> TranscriptSpeakerHint {
+        TranscriptSpeakerHint {
+            id: None,
+            word_id: word_id.to_string(),
+            hint_type: "speaker_label".to_string(),
+            value: Value::String(human_id.to_string()),
+        }
+    }
+
     fn transcript(
         id: &str,
         user_id: &str,
@@ -241,6 +259,119 @@ mod tests {
             rendered,
             "[00:00:16] Bart: Hello there.\n[00:01:02] Ada: Hi back."
         );
+    }
+
+    #[test]
+    fn multi_index_channel_not_absorbed() {
+        let vault = tempfile::tempdir().unwrap();
+        std::fs::write(
+            vault.path().join("people.json"),
+            serde_json::json!({"people": [{"id": "me", "name": "Bart"}]}).to_string(),
+        )
+        .unwrap();
+
+        let rendered = render_meeting_transcript(
+            vault.path(),
+            &[transcript(
+                "t1",
+                "me",
+                vec![
+                    word("w1", " one", 16_000.0, 0.0),
+                    word("w2", " two", 16_200.0, 0.0),
+                    word("w3", " three", 30_000.0, 0.0),
+                    word("w4", " four", 30_200.0, 0.0),
+                    word("w5", " gap", 45_000.0, 0.0),
+                ],
+                vec![
+                    provider_hint("w1", 0),
+                    provider_hint("w2", 0),
+                    provider_hint("w3", 1),
+                    provider_hint("w4", 1),
+                ],
+            )],
+        );
+
+        // Two diarized speakers on the mic channel stay distinct unknown speakers
+        // instead of both collapsing into self; the null-index gap word still
+        // falls back to the self heuristic.
+        assert_eq!(
+            rendered,
+            "[00:00:16] Speaker 1: one two\n[00:00:30] Speaker 2: three four\n[00:00:45] Bart: gap"
+        );
+    }
+
+    #[test]
+    fn channel_scope_is_fallback_for_unassigned_indexes() {
+        let vault = tempfile::tempdir().unwrap();
+        std::fs::write(
+            vault.path().join("people.json"),
+            serde_json::json!({
+                "people": [
+                    {"id": "ada", "name": "Ada"},
+                    {"id": "bob", "name": "Bob"},
+                ],
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let rendered = render_meeting_transcript(
+            vault.path(),
+            &[transcript(
+                "t1",
+                "",
+                vec![
+                    word("w1", " first", 16_000.0, 1.0),
+                    word("w2", " voice", 16_200.0, 1.0),
+                    word("w3", " second", 30_000.0, 1.0),
+                    word("w4", " voice", 30_200.0, 1.0),
+                    word("w5", " gap", 45_000.0, 1.0),
+                ],
+                vec![
+                    provider_hint("w1", 0),
+                    provider_hint("w2", 0),
+                    provider_hint("w3", 1),
+                    provider_hint("w4", 1),
+                    label_hint("w1", "ada"),
+                    label_hint("w5", "bob"),
+                ],
+            )],
+        );
+
+        // The (channel, index) assignment wins for its own index; the
+        // channel-scope assignment covers the unassigned index and the
+        // null-index gap word.
+        assert_eq!(
+            rendered,
+            "[00:00:16] Ada: first voice\n[00:00:30] Bob: second voice\n[00:00:45] Bob: gap"
+        );
+    }
+
+    #[test]
+    fn undiarized_single_index_channel_still_resolves_to_self() {
+        let vault = tempfile::tempdir().unwrap();
+        std::fs::write(
+            vault.path().join("people.json"),
+            serde_json::json!({"people": [{"id": "me", "name": "Bart"}]}).to_string(),
+        )
+        .unwrap();
+
+        let rendered = render_meeting_transcript(
+            vault.path(),
+            &[transcript(
+                "t1",
+                "me",
+                vec![
+                    word("w1", " hello", 16_000.0, 0.0),
+                    word("w2", " there.", 16_200.0, 0.0),
+                ],
+                vec![provider_hint("w1", 2), provider_hint("w2", 2)],
+            )],
+        );
+
+        // One distinct index is not diarization: the mic channel keeps today's
+        // self attribution.
+        assert_eq!(rendered, "[00:00:16] Bart: hello there.");
     }
 
     #[test]

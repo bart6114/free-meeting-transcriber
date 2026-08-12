@@ -44,4 +44,6 @@ pub(super) struct SpeakerState {
     pub(super) human_id_by_channel: HashMap<ChannelProfile, String>,
     pub(super) last_speaker_by_channel: HashMap<ChannelProfile, SpeakerIdentity>,
     pub(super) complete_channels: HashSet<ChannelProfile>,
+    pub(super) heuristic_channels: HashSet<ChannelProfile>,
+    pub(super) diarized_channels: HashSet<ChannelProfile>,
 }

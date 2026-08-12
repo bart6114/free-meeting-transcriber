@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::types::{ChannelProfile, IdentityAssignment, IdentityScope};
 use crate::types::{SegmentBuilderOptions, SegmentKey};
@@ -17,6 +17,28 @@ pub(super) fn create_speaker_state(
         .or_else(|| SegmentBuilderOptions::default().complete_channels)
         .unwrap_or_default()
         .into_iter()
+        .collect();
+
+    let heuristic_channels = options
+        .and_then(|opts| opts.heuristic_channels.clone())
+        .unwrap_or_default()
+        .into_iter()
+        .collect();
+
+    let mut speaker_indexes_by_channel: HashMap<ChannelProfile, HashSet<i32>> = HashMap::new();
+    for word in normalized_words {
+        if word.is_final
+            && let Some(speaker_index) = word.speaker_index
+        {
+            speaker_indexes_by_channel
+                .entry(word.channel)
+                .or_default()
+                .insert(speaker_index);
+        }
+    }
+    let diarized_channels = speaker_indexes_by_channel
+        .into_iter()
+        .filter_map(|(channel, indexes)| (indexes.len() > 1).then_some(channel))
         .collect();
 
     let mut assignment_by_word_index: HashMap<usize, SpeakerIdentity> = HashMap::new();
@@ -73,7 +95,23 @@ pub(super) fn create_speaker_state(
         human_id_by_channel,
         last_speaker_by_channel: HashMap::new(),
         complete_channels,
+        heuristic_channels,
+        diarized_channels,
     }
+}
+
+// A heuristic channel identity must not absorb a diarized speaker index —
+// diarization says the channel carries multiple people. Explicit channel
+// assignments (never listed in heuristic_channels) stay as the fallback for
+// segments without an index-specific assignment.
+fn channel_fallback_applies(
+    state: &SpeakerState,
+    channel: ChannelProfile,
+    speaker_index: Option<i32>,
+) -> bool {
+    speaker_index.is_none()
+        || !state.heuristic_channels.contains(&channel)
+        || !state.diarized_channels.contains(&channel)
 }
 
 pub(super) fn resolve_identities(
@@ -104,7 +142,9 @@ pub(super) fn assign_complete_channel_human_id(segment: &mut ProtoSegment, state
     }
 
     let channel = segment.key.channel;
-    if !state.complete_channels.contains(&channel) {
+    if !state.complete_channels.contains(&channel)
+        || !channel_fallback_applies(state, channel, segment.key.speaker_index)
+    {
         return;
     }
 
@@ -134,6 +174,7 @@ fn apply_identity_rules(
 
     if identity.human_id.is_none()
         && state.complete_channels.contains(&word.channel)
+        && channel_fallback_applies(state, word.channel, identity.speaker_index)
         && let Some(human_id) = state.human_id_by_channel.get(&word.channel)
     {
         identity.human_id = Some(human_id.clone());

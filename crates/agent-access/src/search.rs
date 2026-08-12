@@ -908,6 +908,148 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn multi_index_channel_not_absorbed() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session(vault.path(), "m1", "Sync", "2026-07-13");
+        write_transcript(
+            vault.path(),
+            "m1",
+            vec![
+                write_word("w0", "alpha", 0, 0.0),
+                write_word("w1", "bravo", 1, 0.0),
+                write_word("w2", "gap", 2, 0.0),
+            ],
+            vec![
+                serde_json::json!({
+                    "word_id": "w0",
+                    "type": "provider_speaker_index",
+                    "value": {"speaker_index": 0},
+                }),
+                serde_json::json!({
+                    "word_id": "w1",
+                    "type": "provider_speaker_index",
+                    "value": {"speaker_index": 1},
+                }),
+                serde_json::json!({
+                    "word_id": "w0",
+                    "type": "speaker_label",
+                    "value": "alice",
+                }),
+                serde_json::json!({
+                    "word_id": "w2",
+                    "type": "speaker_label",
+                    "value": "bob",
+                }),
+            ],
+        );
+
+        // The channel-scope label (bob) must not claim the index alice is
+        // explicitly assigned to, and alice must not spill onto other indexes.
+        let page = search(
+            vault.path(),
+            SearchMeetingsInput {
+                speaker: Some("alice".to_string()),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(page.hits.len(), 1);
+        assert_eq!(page.hits[0].snippet, "alpha");
+        assert_eq!(page.hits[0].start_ms, Some(0));
+    }
+
+    #[tokio::test]
+    async fn channel_scope_is_fallback_for_unassigned_indexes() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session(vault.path(), "m1", "Sync", "2026-07-13");
+        write_transcript(
+            vault.path(),
+            "m1",
+            vec![
+                write_word("w0", "alpha", 0, 0.0),
+                write_word("w1", "bravo", 1, 0.0),
+                write_word("w2", "gap", 2, 0.0),
+            ],
+            vec![
+                serde_json::json!({
+                    "word_id": "w0",
+                    "type": "provider_speaker_index",
+                    "value": {"speaker_index": 0},
+                }),
+                serde_json::json!({
+                    "word_id": "w1",
+                    "type": "provider_speaker_index",
+                    "value": {"speaker_index": 1},
+                }),
+                serde_json::json!({
+                    "word_id": "w0",
+                    "type": "speaker_label",
+                    "value": "alice",
+                }),
+                serde_json::json!({
+                    "word_id": "w2",
+                    "type": "speaker_label",
+                    "value": "bob",
+                }),
+            ],
+        );
+
+        // bob's channel-scope label covers the index with no assignment of its
+        // own and the null-index gap word.
+        let page = search(
+            vault.path(),
+            SearchMeetingsInput {
+                speaker: Some("bob".to_string()),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(page.hits.len(), 1);
+        assert_eq!(page.hits[0].snippet, "bravo gap");
+        assert_eq!(page.hits[0].start_ms, Some(1000));
+    }
+
+    #[tokio::test]
+    async fn undiarized_single_index_channel_keeps_channel_wide_labels() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session(vault.path(), "m1", "Sync", "2026-07-13");
+        write_transcript(
+            vault.path(),
+            "m1",
+            vec![
+                write_word("w0", "solo", 0, 0.0),
+                write_word("w1", "tail", 1, 0.0),
+            ],
+            vec![
+                serde_json::json!({
+                    "word_id": "w0",
+                    "type": "provider_speaker_index",
+                    "value": {"speaker_index": 0},
+                }),
+                serde_json::json!({
+                    "word_id": "w1",
+                    "type": "speaker_label",
+                    "value": "carol",
+                }),
+            ],
+        );
+
+        // One distinct index is not diarization: the channel-scope label keeps
+        // covering the whole channel, indexed words included.
+        let page = search(
+            vault.path(),
+            SearchMeetingsInput {
+                speaker: Some("carol".to_string()),
+                ..Default::default()
+            },
+        )
+        .await;
+        assert_eq!(page.hits.len(), 1);
+        assert_eq!(page.hits[0].snippet, "solo tail");
+        assert_eq!(page.hits[0].start_ms, Some(0));
+    }
+
+    #[tokio::test]
     async fn recency_order_pagination_and_corrupt_transcripts() {
         let vault = tempfile::tempdir().unwrap();
         for (id, date) in [

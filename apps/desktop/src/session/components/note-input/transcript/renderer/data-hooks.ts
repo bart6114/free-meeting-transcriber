@@ -11,6 +11,7 @@ import {
 import { useSessionTranscripts, useTranscript } from "~/stt/queries";
 import {
   getRenderTranscriptRequestKey,
+  renderRequestHasDiarizedChannel,
   renderTranscriptSegments,
 } from "~/stt/render-transcript";
 
@@ -48,7 +49,9 @@ export function useRenderedTranscriptData(transcriptId: string): {
 
   const maxSpeakerNumber = useMemo(
     () =>
-      request
+      // Diarization can surface more speakers than the participant list;
+      // capping would merge two distinct diarized speakers under one label.
+      request && !renderRequestHasDiarizedChannel(request)
         ? getMaxSpeakerNumberForParticipants(
             request.participant_human_ids,
             request.self_human_id,

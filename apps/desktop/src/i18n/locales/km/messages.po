@@ -133,6 +133,10 @@ msgstr ""
 msgid "Appearance"
 msgstr ""
 
+#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
+msgid "Apply to all speakers on this side"
+msgstr ""
+
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr ""
@@ -174,6 +178,7 @@ msgstr ""
 msgid "Can transcribe while the meeting is happening."
 msgstr ""
 
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
 #: src/settings/general/storage/change-location.tsx
 msgid "Cancel"
 msgstr ""
@@ -913,6 +918,14 @@ msgstr ""
 msgid "Re-read every session file and rebuild the database index"
 msgstr ""
 
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "Re-transcribe"
+msgstr ""
+
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "Re-transcribing resets speaker names"
+msgstr ""
+
 #: src/onboarding/permissions.tsx
 msgid "Read meeting controls, visible chat, and participant status"
 msgstr ""
@@ -1267,6 +1280,15 @@ msgstr "ភាសាចម្បងតែងតែត្រូវបានរួ
 
 #: src/settings/general/storage/change-location.tsx
 msgid "This folder already contains files. Copied vault files will be mixed in with them."
+msgstr ""
+
+#. placeholder {0}: pending.speakerCount
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "This transcript has {0} assigned speakers. Re-transcribing replaces the transcript and removes those speaker assignments."
+msgstr ""
+
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "This transcript has 1 assigned speaker. Re-transcribing replaces the transcript and removes that speaker assignment."
 msgstr ""
 
 #: src/settings/todo/index.tsx

@@ -133,6 +133,10 @@ msgstr "App restarts to apply. Existing files are copied, not moved."
 msgid "Appearance"
 msgstr "Appearance"
 
+#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
+msgid "Apply to all speakers on this side"
+msgstr "Apply to all speakers on this side"
+
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr "Assignees:"
@@ -174,6 +178,7 @@ msgstr "Base URL"
 msgid "Can transcribe while the meeting is happening."
 msgstr "Can transcribe while the meeting is happening."
 
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
 #: src/settings/general/storage/change-location.tsx
 msgid "Cancel"
 msgstr "Cancel"
@@ -913,6 +918,14 @@ msgstr "Queued"
 msgid "Re-read every session file and rebuild the database index"
 msgstr "Re-read every session file and rebuild the database index"
 
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "Re-transcribe"
+msgstr "Re-transcribe"
+
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "Re-transcribing resets speaker names"
+msgstr "Re-transcribing resets speaker names"
+
 #: src/onboarding/permissions.tsx
 msgid "Read meeting controls, visible chat, and participant status"
 msgstr "Read meeting controls, visible chat, and participant status"
@@ -1268,6 +1281,15 @@ msgstr "The main language is always included for transcription"
 #: src/settings/general/storage/change-location.tsx
 msgid "This folder already contains files. Copied vault files will be mixed in with them."
 msgstr "This folder already contains files. Copied vault files will be mixed in with them."
+
+#. placeholder {0}: pending.speakerCount
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "This transcript has {0} assigned speakers. Re-transcribing replaces the transcript and removes those speaker assignments."
+msgstr "This transcript has {0} assigned speakers. Re-transcribing replaces the transcript and removes those speaker assignments."
+
+#: src/session/components/note-input/transcript/regenerate-confirm.tsx
+msgid "This transcript has 1 assigned speaker. Re-transcribing replaces the transcript and removes that speaker assignment."
+msgstr "This transcript has 1 assigned speaker. Re-transcribing replaces the transcript and removes that speaker assignment."
 
 #: src/settings/todo/index.tsx
 msgid "Ticket"

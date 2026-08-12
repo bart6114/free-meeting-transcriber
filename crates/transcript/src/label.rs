@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::{ChannelProfile, Segment, SegmentKey};
 
@@ -6,6 +6,7 @@ use crate::{ChannelProfile, Segment, SegmentKey};
 pub struct SpeakerLabelContext {
     pub self_human_id: Option<String>,
     pub human_name_by_id: HashMap<String, String>,
+    pub diarized_channels: HashSet<ChannelProfile>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -68,13 +69,16 @@ impl SegmentKey {
             return true;
         }
 
-        matches!(
-            ctx,
-            Some(SpeakerLabelContext {
-                self_human_id: Some(_),
-                ..
-            }) if self.channel == ChannelProfile::DirectMic
-        )
+        ctx.is_some_and(|ctx| self.is_heuristic_self(ctx))
+    }
+
+    // DirectMic implies "self" only while the channel is undiarized; once
+    // diarization separates speakers on it, an indexed key may be someone
+    // else picked up by the mic, so it must stay an unknown speaker.
+    fn is_heuristic_self(&self, ctx: &SpeakerLabelContext) -> bool {
+        self.channel == ChannelProfile::DirectMic
+            && ctx.self_human_id.is_some()
+            && !(self.speaker_index.is_some() && ctx.diarized_channels.contains(&self.channel))
     }
 }
 
@@ -91,7 +95,7 @@ pub fn render_speaker_label(
             return human_id.clone();
         }
 
-        if key.channel == ChannelProfile::DirectMic
+        if key.is_heuristic_self(ctx)
             && let Some(self_human_id) = ctx.self_human_id.as_ref()
         {
             if let Some(name) = ctx.human_name_by_id.get(self_human_id) {
@@ -136,7 +140,7 @@ mod tests {
     fn renders_direct_mic_as_you_when_self_exists_without_name() {
         let ctx = SpeakerLabelContext {
             self_human_id: Some("self".to_string()),
-            human_name_by_id: HashMap::new(),
+            ..Default::default()
         };
 
         assert_eq!(
@@ -192,7 +196,7 @@ mod tests {
     fn treats_direct_mic_with_provider_speaker_as_self() {
         let ctx = SpeakerLabelContext {
             self_human_id: Some("self".to_string()),
-            human_name_by_id: HashMap::new(),
+            ..Default::default()
         };
         let key = SegmentKey {
             channel: ChannelProfile::DirectMic,

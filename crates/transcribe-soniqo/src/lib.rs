@@ -4,6 +4,8 @@ use std::time::Instant;
 
 use owhisper_interface::{batch, stream};
 
+pub mod diarize;
+
 pub const LOCAL_BASE_URL: &str = "soniqo://local";
 const SYNTHETIC_BATCH_WORD_SECONDS: f64 = 0.4;
 const MIN_SYNTHETIC_DURATION_SECONDS: f64 = 0.05;

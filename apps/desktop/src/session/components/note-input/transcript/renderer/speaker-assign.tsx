@@ -1,5 +1,7 @@
+import { Trans } from "@lingui/react/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { Checkbox } from "@hypr/ui/components/ui/checkbox";
 import {
   Popover,
   PopoverAnchor,
@@ -9,7 +11,7 @@ import { cn } from "@hypr/utils";
 
 import { ensurePerson, type Person, usePeople } from "~/people/queries";
 import type { Segment } from "~/stt/live-segment";
-import { assignTranscriptSpeaker } from "~/stt/queries";
+import { assignTranscriptSpeaker, useTranscript } from "~/stt/queries";
 
 export function SpeakerRenameControl({
   segment,
@@ -32,9 +34,17 @@ export function SpeakerRenameControl({
   const [draft, setDraft] = useState(label);
   const [touched, setTouched] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
+  const [applyToChannel, setApplyToChannel] = useState(true);
   const inputRef = useRef<HTMLInputElement>(null);
   const committedRef = useRef(false);
   const people = usePeople();
+  const { anchorWordIdBySpeakerIndex, channelHasAssignment } =
+    useChannelAssignmentState(transcriptId, segment);
+  // A first assignment on a diarized channel most likely names the whole side
+  // (one person per channel is the common case); once any assignment exists,
+  // renames target only the clicked cluster.
+  const offerChannelWideAssign =
+    anchorWordIdBySpeakerIndex.size >= 2 && !channelHasAssignment;
 
   useEffect(() => {
     if (!editing) {
@@ -68,8 +78,62 @@ export function SpeakerRenameControl({
     setDraft(label);
     setTouched(false);
     setHighlightIndex(-1);
+    setApplyToChannel(true);
     setEditing(true);
   }, [label]);
+
+  const runAssignments = useCallback(
+    async (speakerLabel: string) => {
+      if (offerChannelWideAssign && applyToChannel) {
+        // Channel-scope fallback first (only needed when the clicked segment
+        // itself has no index): later per-index writes keep it on a diarized
+        // channel, while the reverse order would let it evict them.
+        if (segment.key.speaker_index == null) {
+          const anchorWordId = getAssignmentAnchorWordId(segment);
+          if (anchorWordId) {
+            await assignTranscriptSpeaker({
+              transcriptId,
+              segmentKey: segment.key,
+              speakerLabel,
+              anchorWordId,
+            });
+          }
+        }
+        for (const [speakerIndex, anchorWordId] of anchorWordIdBySpeakerIndex) {
+          await assignTranscriptSpeaker({
+            transcriptId,
+            segmentKey: {
+              channel: segment.key.channel,
+              speaker_index: speakerIndex,
+              speaker_human_id: null,
+            },
+            speakerLabel,
+            anchorWordId,
+          });
+        }
+        return;
+      }
+
+      const anchorWordId = getAssignmentAnchorWordId(segment);
+      if (!anchorWordId) {
+        return;
+      }
+
+      await assignTranscriptSpeaker({
+        transcriptId,
+        segmentKey: segment.key,
+        speakerLabel,
+        anchorWordId,
+      });
+    },
+    [
+      anchorWordIdBySpeakerIndex,
+      applyToChannel,
+      offerChannelWideAssign,
+      segment,
+      transcriptId,
+    ],
+  );
 
   const commit = useCallback(
     (run: () => Promise<string>) => {
@@ -87,14 +151,17 @@ export function SpeakerRenameControl({
     [onAssigned],
   );
 
+  const canAssign =
+    Boolean(getAssignmentAnchorWordId(segment)) ||
+    (offerChannelWideAssign && applyToChannel);
+
   const saveFreeText = useCallback(() => {
     if (committedRef.current) {
       return;
     }
 
     const name = draft.trim();
-    const anchorWordId = getAssignmentAnchorWordId(segment);
-    if (!name || name === label || !anchorWordId) {
+    if (!name || name === label || !canAssign) {
       committedRef.current = true;
       setEditing(false);
       return;
@@ -102,41 +169,30 @@ export function SpeakerRenameControl({
 
     commit(async () => {
       const person = await ensurePerson(name);
-      await assignTranscriptSpeaker({
-        transcriptId,
-        segmentKey: segment.key,
-        speakerLabel: person.id,
-        anchorWordId,
-      });
+      await runAssignments(person.id);
       return person.id;
     });
-  }, [commit, draft, label, segment, transcriptId]);
+  }, [canAssign, commit, draft, label, runAssignments]);
 
   const selectPerson = useCallback(
     (person: Person) => {
-      const anchorWordId = getAssignmentAnchorWordId(segment);
-      if (!anchorWordId) {
+      if (!canAssign) {
         committedRef.current = true;
         setEditing(false);
         return;
       }
 
       commit(async () => {
-        await assignTranscriptSpeaker({
-          transcriptId,
-          segmentKey: segment.key,
-          speakerLabel: person.id,
-          anchorWordId,
-        });
+        await runAssignments(person.id);
         return person.id;
       });
     },
-    [commit, segment, transcriptId],
+    [canAssign, commit, runAssignments],
   );
 
   if (editing) {
     return (
-      <Popover open={suggestions.length > 0}>
+      <Popover open={suggestions.length > 0 || offerChannelWideAssign}>
         <PopoverAnchor asChild>
           <input
             ref={inputRef}
@@ -191,6 +247,24 @@ export function SpeakerRenameControl({
           className="w-56 p-1"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
+          {offerChannelWideAssign && (
+            <label
+              // Keep the input focused so toggling doesn't commit via blur.
+              onPointerDown={(e) => e.preventDefault()}
+              className={cn([
+                "flex cursor-pointer items-center gap-2 px-2 py-1",
+                "text-muted-foreground text-sm",
+              ])}
+            >
+              <Checkbox
+                checked={applyToChannel}
+                onCheckedChange={(checked) =>
+                  setApplyToChannel(checked === true)
+                }
+              />
+              <Trans>Apply to all speakers on this side</Trans>
+            </label>
+          )}
           <ul role="listbox">
             {suggestions.map((person, index) => (
               <li key={person.id}>
@@ -242,4 +316,94 @@ export function getAssignmentAnchorWordId(
     (word) => typeof word.id === "string" && word.id.length > 0,
   );
   return typeof word?.id === "string" ? word.id : undefined;
+}
+
+// Reads the stored transcript to learn, for the clicked segment's channel:
+// one anchor word per distinct diarized speaker index, and whether any
+// speaker_label assignment already exists on the channel.
+function useChannelAssignmentState(transcriptId: string, segment: Segment) {
+  const transcript = useTranscript(transcriptId);
+  const channel = segment.key.channel;
+
+  return useMemo(() => {
+    const channelNumber =
+      channel === "DirectMic" ? 0 : channel === "RemoteParty" ? 1 : 2;
+    const channelByWordId = new Map<string, number>();
+    for (const word of transcript?.words ?? []) {
+      if (typeof word.id === "string" && word.id) {
+        channelByWordId.set(
+          word.id,
+          typeof word.channel === "number" ? word.channel : 0,
+        );
+      }
+    }
+
+    const hints = transcript?.speakerHints ?? [];
+    const indexByWordId = new Map<string, number>();
+    for (const hint of hints) {
+      if (
+        hint.type !== "provider_speaker_index" ||
+        typeof hint.word_id !== "string"
+      ) {
+        continue;
+      }
+
+      const value = parseProviderSpeakerHintValue(hint.value);
+      if (!value) {
+        continue;
+      }
+
+      indexByWordId.set(hint.word_id, value.speaker_index);
+      if (typeof value.channel === "number") {
+        channelByWordId.set(hint.word_id, value.channel);
+      }
+    }
+
+    const anchorWordIdBySpeakerIndex = new Map<number, string>();
+    for (const [wordId, speakerIndex] of indexByWordId) {
+      if (
+        channelByWordId.get(wordId) === channelNumber &&
+        !anchorWordIdBySpeakerIndex.has(speakerIndex)
+      ) {
+        anchorWordIdBySpeakerIndex.set(speakerIndex, wordId);
+      }
+    }
+
+    const channelHasAssignment = hints.some(
+      (hint) =>
+        hint.type === "speaker_label" &&
+        typeof hint.word_id === "string" &&
+        channelByWordId.get(hint.word_id) === channelNumber,
+    );
+
+    return { anchorWordIdBySpeakerIndex, channelHasAssignment };
+  }, [channel, transcript]);
+}
+
+function parseProviderSpeakerHintValue(
+  value: unknown,
+): { speaker_index: number; channel?: number } | null {
+  let parsed = value;
+  if (typeof parsed === "string") {
+    try {
+      parsed = JSON.parse(parsed);
+    } catch {
+      return null;
+    }
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+
+  const speakerIndex = (parsed as { speaker_index?: unknown }).speaker_index;
+  if (typeof speakerIndex !== "number") {
+    return null;
+  }
+
+  const channel = (parsed as { channel?: unknown }).channel;
+  return {
+    speaker_index: speakerIndex,
+    ...(typeof channel === "number" ? { channel } : {}),
+  };
 }
