@@ -137,10 +137,6 @@ msgstr ""
 msgid "Appearance"
 msgstr ""
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-#~ msgid "Apply to all speakers on this side"
-#~ msgstr ""
-
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr ""

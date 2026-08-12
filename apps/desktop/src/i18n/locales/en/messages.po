@@ -137,10 +137,6 @@ msgstr "App restarts to apply. Existing files are copied, not moved."
 msgid "Appearance"
 msgstr "Appearance"
 
-#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-#~ msgid "Apply to all speakers on this side"
-#~ msgstr "Apply to all speakers on this side"
-
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr "Assignees:"
