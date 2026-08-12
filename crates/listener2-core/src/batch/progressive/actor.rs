@@ -7,6 +7,7 @@ use ractor::{Actor, ActorName, ActorProcessingErr, ActorRef, SpawnErr};
 use tracing::Instrument;
 
 use super::super::accumulator::StreamBatchAccumulator;
+use super::super::diarize::{SharedDiarization, stamp_stream_event};
 use super::super::{BatchParams, BatchRunOutput, format_user_friendly_error, session_span};
 use super::ProgressiveProvider;
 use super::bootstrap::{notify_start_result, spawn_progressive_batch_task};
@@ -19,6 +20,7 @@ pub(super) async fn run_progressive_batch(
     params: BatchParams,
     listen_params: owhisper_interface::ListenParams,
     progressive_provider: ProgressiveProvider,
+    diarization: SharedDiarization,
 ) -> crate::Result<BatchRunOutput> {
     let span = session_span(&params.session_id);
     let provider_label = progressive_provider.label().to_string();
@@ -41,6 +43,7 @@ pub(super) async fn run_progressive_batch(
             start_notifier,
             done_notifier: done_notifier.clone(),
             session_id: params.session_id,
+            diarization,
         };
 
         let batch_ref = match spawn_batch_actor(args).await {
@@ -146,6 +149,7 @@ pub(super) struct BatchArgs {
     pub(super) start_notifier: BatchStartNotifier,
     pub(super) done_notifier: BatchDoneNotifier,
     pub(super) session_id: String,
+    pub(super) diarization: SharedDiarization,
 }
 
 struct BatchState {
@@ -156,6 +160,7 @@ struct BatchState {
     done_notifier: BatchDoneNotifier,
     final_result: Option<crate::Result<BatchRunOutput>>,
     accumulator: StreamBatchAccumulator,
+    diarization: SharedDiarization,
 }
 
 impl BatchState {
@@ -201,6 +206,7 @@ impl Actor for BatchActor {
             done_notifier: args.done_notifier,
             final_result: None,
             accumulator: StreamBatchAccumulator::new(),
+            diarization: args.diarization,
         })
     }
 
@@ -229,8 +235,12 @@ impl Actor for BatchActor {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
-            BatchMsg::StreamResponse { event } => {
+            BatchMsg::StreamResponse { mut event } => {
                 tracing::info!("batch stream response received");
+                // Words must carry speaker indexes before the chunk reaches the
+                // frontend: it persists each chunk incrementally, so a pass
+                // after the run completes would be too late.
+                stamp_stream_event(&mut event, &*state.diarization.segments().await);
                 state.accumulator.observe(&event);
                 state.emit_streamed(*event);
             }

@@ -1,4 +1,5 @@
 mod accumulator;
+mod diarize;
 mod progressive;
 mod simple;
 pub mod transcript;
@@ -191,25 +192,38 @@ async fn run_batch_inner(
     };
 
     let listen_params = build_listen_params(&params, metadata.channels, metadata.sample_rate);
+    let diarization = diarize::SharedDiarization::for_file(
+        std::sync::Arc::new(diarize::SoniqoDiarizer),
+        params.file_path.clone(),
+    );
 
     match params.provider {
         BatchProvider::Am => {
             let adapter_kind = resolve_batch_adapter_kind(&params, &listen_params);
             if supports_progressive_batch(adapter_kind, listen_params.model.as_deref()) {
-                run_progressive_batch_session(runtime, params, listen_params).await
+                run_progressive_batch_session(runtime, params, listen_params, diarization).await
             } else {
-                run_direct_batch_for_adapter_kind(adapter_kind, params, listen_params).await
+                run_direct_batch_for_adapter_kind(adapter_kind, params, listen_params, diarization)
+                    .await
             }
         }
         BatchProvider::WhisperLocal => {
-            run_progressive_batch_session(runtime, params, listen_params).await
+            run_progressive_batch_session(runtime, params, listen_params, diarization).await
         }
-        BatchProvider::Soniqo => run_soniqo_batch(runtime, params, listen_params).await,
+        BatchProvider::Soniqo => {
+            run_soniqo_batch(runtime, params, listen_params, diarization).await
+        }
         BatchProvider::OpenAI => {
             if OpenAIAdapter::supports_progressive_batch_model(listen_params.model.as_deref()) {
-                run_progressive_batch_session(runtime, params, listen_params).await
+                run_progressive_batch_session(runtime, params, listen_params, diarization).await
             } else {
-                run_direct_batch_for_adapter_kind(AdapterKind::OpenAI, params, listen_params).await
+                run_direct_batch_for_adapter_kind(
+                    AdapterKind::OpenAI,
+                    params,
+                    listen_params,
+                    diarization,
+                )
+                .await
             }
         }
         BatchProvider::DashScope => Err(crate::BatchFailure::BatchCapabilityUnsupported {
@@ -220,7 +234,8 @@ async fn run_batch_inner(
             let adapter_kind = provider
                 .to_adapter_kind()
                 .expect("all non-special BatchProvider variants have an AdapterKind mapping");
-            run_direct_batch_for_adapter_kind(adapter_kind, params, listen_params).await
+            run_direct_batch_for_adapter_kind(adapter_kind, params, listen_params, diarization)
+                .await
         }
     }
 }

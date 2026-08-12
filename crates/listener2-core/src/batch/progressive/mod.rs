@@ -7,6 +7,7 @@ use owhisper_client::{AdapterKind, OpenAIAdapter};
 
 use crate::BatchRuntime;
 
+use super::diarize::SharedDiarization;
 use super::{BatchParams, BatchRunOutput};
 
 #[derive(Debug, Clone, Copy, strum::IntoStaticStr)]
@@ -29,9 +30,17 @@ pub(super) async fn run_progressive_batch_session(
     runtime: Arc<dyn BatchRuntime>,
     params: BatchParams,
     listen_params: owhisper_interface::ListenParams,
+    diarization: SharedDiarization,
 ) -> crate::Result<BatchRunOutput> {
     let progressive_provider = resolve_progressive_provider(&params, &listen_params)?;
-    actor::run_progressive_batch(runtime, params, listen_params, progressive_provider).await
+    actor::run_progressive_batch(
+        runtime,
+        params,
+        listen_params,
+        progressive_provider,
+        diarization,
+    )
+    .await
 }
 
 fn resolve_progressive_provider(

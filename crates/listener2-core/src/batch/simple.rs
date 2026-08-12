@@ -16,6 +16,7 @@ use hypr_transcribe_core::{
     TARGET_SAMPLE_RATE, channel_duration_sec, chunk_channel_audio, split_resampled_channels,
 };
 
+use super::diarize::{SharedDiarization, stamp_batch_response};
 use super::{BatchParams, BatchRunMode, BatchRunOutput, format_user_friendly_error, session_span};
 use crate::{BatchEvent, BatchRuntime};
 
@@ -26,13 +27,18 @@ const SONIQO_PROGRESS_RANGE: f64 = 0.90;
 const SONIQO_PROGRESS_MAX: f64 = 0.95;
 
 macro_rules! dispatch_batch {
-    ($ak:expr, $params:expr, $lp:expr,
+    ($ak:expr, $params:expr, $lp:expr, $diarization:expr,
      { $($var:ident => $adapter:ty),+ $(,)? },
      unsupported: [$($unsup:ident),* $(,)?]
     ) => {
         match $ak {
             $(AdapterKind::$var => {
-                run_direct_batch::<$adapter>(&AdapterKind::$var.to_string(), $params, $lp).await
+                run_direct_batch::<$adapter>(
+                    &AdapterKind::$var.to_string(),
+                    $params,
+                    $lp,
+                    $diarization,
+                ).await
             })+
             $(AdapterKind::$unsup => {
                 Err(crate::BatchFailure::DirectBatchUnsupported {
@@ -47,8 +53,9 @@ pub(super) async fn run_direct_batch_for_adapter_kind(
     adapter_kind: AdapterKind,
     params: BatchParams,
     listen_params: owhisper_interface::ListenParams,
+    diarization: SharedDiarization,
 ) -> crate::Result<BatchRunOutput> {
-    dispatch_batch!(adapter_kind, params, listen_params, {
+    dispatch_batch!(adapter_kind, params, listen_params, diarization, {
         Argmax => ArgmaxAdapter,
         Cartesia => CartesiaAdapter,
         Deepgram => DeepgramAdapter,
@@ -69,6 +76,7 @@ async fn run_direct_batch<A: BatchSttAdapter>(
     provider: &str,
     params: BatchParams,
     listen_params: owhisper_interface::ListenParams,
+    diarization: SharedDiarization,
 ) -> crate::Result<BatchRunOutput> {
     let span = session_span(&params.session_id);
 
@@ -80,7 +88,7 @@ async fn run_direct_batch<A: BatchSttAdapter>(
             .build();
 
         tracing::debug!("transcribing file: {}", params.file_path);
-        let response = match client.transcribe_file(&params.file_path).await {
+        let mut response = match client.transcribe_file(&params.file_path).await {
             Ok(response) => response,
             Err(err) => {
                 let raw_error = format!("{err:?}");
@@ -99,6 +107,8 @@ async fn run_direct_batch<A: BatchSttAdapter>(
         };
         tracing::info!("batch transcription completed");
 
+        stamp_batch_response(&mut response, &*diarization.segments().await);
+
         Ok(BatchRunOutput {
             session_id: params.session_id,
             mode: BatchRunMode::Direct,
@@ -113,6 +123,7 @@ pub(super) async fn run_soniqo_batch(
     runtime: Arc<dyn BatchRuntime>,
     params: BatchParams,
     listen_params: owhisper_interface::ListenParams,
+    diarization: SharedDiarization,
 ) -> crate::Result<BatchRunOutput> {
     let span = session_span(&params.session_id);
 
@@ -199,7 +210,8 @@ pub(super) async fn run_soniqo_batch(
             "soniqo_batch_completed"
         );
 
-        let response = hypr_transcribe_soniqo::batch_response_from_channels(model, transcribed);
+        let mut response = hypr_transcribe_soniqo::batch_response_from_channels(model, transcribed);
+        stamp_batch_response(&mut response, &*diarization.segments().await);
 
         Ok(BatchRunOutput {
             session_id: params.session_id,
