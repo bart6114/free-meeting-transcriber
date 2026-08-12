@@ -31,6 +31,10 @@ msgstr "{model} can't transcribe {0}. Try another model or change your spoken la
 msgid "{model} can't transcribe all selected languages together. Try another model or use fewer spoken languages."
 msgstr "{model} can't transcribe all selected languages together. Try another model or use fewer spoken languages."
 
+#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
+msgid "{otherClusterCount, plural, one {Also apply to the other speaker on this channel} other {Also apply to the other # speakers on this channel}}"
+msgstr "{otherClusterCount, plural, one {Also apply to the other speaker on this channel} other {Also apply to the other # speakers on this channel}}"
+
 #: src/settings/general/app-settings.tsx
 msgid "1 day"
 msgstr "1 day"
@@ -134,8 +138,8 @@ msgid "Appearance"
 msgstr "Appearance"
 
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Apply to all speakers on this side"
-msgstr "Apply to all speakers on this side"
+#~ msgid "Apply to all speakers on this side"
+#~ msgstr "Apply to all speakers on this side"
 
 #: src/task/resource-view.tsx
 msgid "Assignees:"
@@ -370,6 +374,10 @@ msgstr "Don't show notifications when Do-Not-Disturb is enabled on your system"
 #: src/settings/ai/stt/select.tsx
 msgid "Download"
 msgstr "Download"
+
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Download failed"
+msgstr "Download failed"
 
 #: src/main/audio-import-dialog.tsx
 msgid "Drop audio files or a folder here"
@@ -614,6 +622,10 @@ msgstr "In {totalSeconds}s"
 msgid "Include"
 msgstr "Include"
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Included automatically with on-device transcription — no setup needed."
+msgstr "Included automatically with on-device transcription — no setup needed."
+
 #: src/settings/general/storage/rebuild-index.tsx
 msgid "Index rebuilt from the files in your folder."
 msgstr "Index rebuilt from the files in your folder."
@@ -828,6 +840,10 @@ msgstr "No results found."
 msgid "No templates yet"
 msgstr "No templates yet"
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Not downloaded"
+msgstr "Not downloaded"
+
 #: src/session/components/title-breadcrumb.tsx
 msgid "Note breadcrumb"
 msgstr "Note breadcrumb"
@@ -930,6 +946,10 @@ msgstr "Re-transcribing resets speaker names"
 msgid "Read meeting controls, visible chat, and participant status"
 msgstr "Read meeting controls, visible chat, and participant status"
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Ready"
+msgstr "Ready"
+
 #: src/onboarding/index.tsx
 msgid "Ready to go"
 msgstr "Ready to go"
@@ -1022,6 +1042,7 @@ msgstr "Resume listening"
 
 #: src/main/audio-import-dialog.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
+#: src/settings/ai/stt/diarization-status.tsx
 msgid "Retry"
 msgstr "Retry"
 
@@ -1185,6 +1206,10 @@ msgstr "Smileys & People"
 msgid "Something went wrong while generating the summary."
 msgstr "Something went wrong while generating the summary."
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Speaker detection"
+msgstr "Speaker detection"
+
 #: src/settings/general/app-settings.tsx
 msgid "Start Free Meeting Transcriber at login"
 msgstr "Start Free Meeting Transcriber at login"
@@ -1197,6 +1222,7 @@ msgstr "Start Recording"
 msgid "Start with permissions"
 msgstr "Start with permissions"
 
+#: src/settings/ai/stt/diarization-status.tsx
 #: src/settings/ai/stt/select.tsx
 msgid "Starting"
 msgstr "Starting"

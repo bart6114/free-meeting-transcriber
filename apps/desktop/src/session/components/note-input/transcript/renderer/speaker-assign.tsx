@@ -1,4 +1,4 @@
-import { Trans } from "@lingui/react/macro";
+import { Plural } from "@lingui/react/macro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Checkbox } from "@hypr/ui/components/ui/checkbox";
@@ -34,7 +34,7 @@ export function SpeakerRenameControl({
   const [draft, setDraft] = useState(label);
   const [touched, setTouched] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
-  const [applyToChannel, setApplyToChannel] = useState(true);
+  const [applyToChannel, setApplyToChannel] = useState(false);
   // Optimistic label: shown from commit until the store round trip updates the
   // label prop, so the rename feels instant on large transcripts.
   const [pendingLabel, setPendingLabel] = useState<string | null>(null);
@@ -55,6 +55,11 @@ export function SpeakerRenameControl({
   // renames target only the clicked cluster.
   const offerChannelWideAssign =
     anchorWordIdBySpeakerIndex.size >= 2 && !channelHasAssignment;
+  const otherClusterCount =
+    segment.key.speaker_index != null &&
+    anchorWordIdBySpeakerIndex.has(segment.key.speaker_index)
+      ? anchorWordIdBySpeakerIndex.size - 1
+      : anchorWordIdBySpeakerIndex.size;
 
   useEffect(() => {
     // Before the latest commit settles, a label change belongs to an OLDER
@@ -100,7 +105,7 @@ export function SpeakerRenameControl({
     setDraft(label);
     setTouched(false);
     setHighlightIndex(-1);
-    setApplyToChannel(true);
+    setApplyToChannel(false);
     setEditing(true);
   }, [label]);
 
@@ -312,7 +317,11 @@ export function SpeakerRenameControl({
                   setApplyToChannel(checked === true)
                 }
               />
-              <Trans>Apply to all speakers on this side</Trans>
+              <Plural
+                value={otherClusterCount}
+                one="Also apply to the other speaker on this channel"
+                other="Also apply to the other # speakers on this channel"
+              />
             </label>
           )}
           <ul role="listbox">

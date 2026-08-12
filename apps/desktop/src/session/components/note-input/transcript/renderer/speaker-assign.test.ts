@@ -517,7 +517,7 @@ describe("SpeakerRenameControl on a diarized channel", () => {
     };
   }
 
-  it("defaults the first assignment to every speaker index on the channel", async () => {
+  it("assigns every speaker index on the channel when the checkbox is checked", async () => {
     useTranscriptMock.mockReturnValue(diarizedTranscript(false));
     render(
       createElement(SpeakerRenameControl, {
@@ -529,8 +529,7 @@ describe("SpeakerRenameControl on a diarized channel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
-    const checkbox = screen.getByRole("checkbox");
-    expect(checkbox.getAttribute("data-state")).toBe("checked");
+    fireEvent.click(screen.getByRole("checkbox"));
 
     const input = screen.getByRole("textbox") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Alice" } });
@@ -565,7 +564,7 @@ describe("SpeakerRenameControl on a diarized channel", () => {
     ]);
   });
 
-  it("assigns only the clicked cluster when the checkbox is unchecked", async () => {
+  it("defaults to assigning only the clicked cluster", async () => {
     useTranscriptMock.mockReturnValue(diarizedTranscript(false));
     render(
       createElement(SpeakerRenameControl, {
@@ -577,7 +576,8 @@ describe("SpeakerRenameControl on a diarized channel", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
-    fireEvent.click(screen.getByRole("checkbox"));
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox.getAttribute("data-state")).toBe("unchecked");
 
     const input = screen.getByRole("textbox") as HTMLInputElement;
     fireEvent.change(input, { target: { value: "Alice" } });

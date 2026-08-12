@@ -31,6 +31,10 @@ msgstr ""
 msgid "{model} can't transcribe all selected languages together. Try another model or use fewer spoken languages."
 msgstr ""
 
+#: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
+msgid "{otherClusterCount, plural, one {Also apply to the other speaker on this channel} other {Also apply to the other # speakers on this channel}}"
+msgstr ""
+
 #: src/settings/general/app-settings.tsx
 msgid "1 day"
 msgstr ""
@@ -134,8 +138,8 @@ msgid "Appearance"
 msgstr ""
 
 #: src/session/components/note-input/transcript/renderer/speaker-assign.tsx
-msgid "Apply to all speakers on this side"
-msgstr ""
+#~ msgid "Apply to all speakers on this side"
+#~ msgstr ""
 
 #: src/task/resource-view.tsx
 msgid "Assignees:"
@@ -369,6 +373,10 @@ msgstr ""
 
 #: src/settings/ai/stt/select.tsx
 msgid "Download"
+msgstr ""
+
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Download failed"
 msgstr ""
 
 #: src/main/audio-import-dialog.tsx
@@ -614,6 +622,10 @@ msgstr ""
 msgid "Include"
 msgstr ""
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Included automatically with on-device transcription — no setup needed."
+msgstr ""
+
 #: src/settings/general/storage/rebuild-index.tsx
 msgid "Index rebuilt from the files in your folder."
 msgstr ""
@@ -828,6 +840,10 @@ msgstr ""
 msgid "No templates yet"
 msgstr ""
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Not downloaded"
+msgstr ""
+
 #: src/session/components/title-breadcrumb.tsx
 msgid "Note breadcrumb"
 msgstr ""
@@ -930,6 +946,10 @@ msgstr ""
 msgid "Read meeting controls, visible chat, and participant status"
 msgstr ""
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Ready"
+msgstr ""
+
 #: src/onboarding/index.tsx
 msgid "Ready to go"
 msgstr ""
@@ -1022,6 +1042,7 @@ msgstr ""
 
 #: src/main/audio-import-dialog.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
+#: src/settings/ai/stt/diarization-status.tsx
 msgid "Retry"
 msgstr ""
 
@@ -1185,6 +1206,10 @@ msgstr ""
 msgid "Something went wrong while generating the summary."
 msgstr ""
 
+#: src/settings/ai/stt/diarization-status.tsx
+msgid "Speaker detection"
+msgstr ""
+
 #: src/settings/general/app-settings.tsx
 msgid "Start Free Meeting Transcriber at login"
 msgstr ""
@@ -1197,6 +1222,7 @@ msgstr ""
 msgid "Start with permissions"
 msgstr ""
 
+#: src/settings/ai/stt/diarization-status.tsx
 #: src/settings/ai/stt/select.tsx
 msgid "Starting"
 msgstr ""
