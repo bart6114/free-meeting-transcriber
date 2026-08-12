@@ -131,17 +131,15 @@ export function AudioImportDialog() {
   ).length;
 
   const handleImport = useCallback(() => {
-    setCandidates((current) => {
-      const selected = current.filter((candidate) => candidate.selected);
-      if (selected.length) {
-        enqueue(selected.map((candidate) => candidate.source));
-      }
-      return [];
-    });
+    const selected = candidates.filter((candidate) => candidate.selected);
+    if (selected.length) {
+      enqueue(selected.map((candidate) => candidate.source));
+    }
+    setCandidates([]);
     // The sidebar toast takes over as the progress surface; reopen via its
     // "View" action to see per-file status or retry failures.
     setDialogOpen(false);
-  }, [enqueue, setDialogOpen]);
+  }, [candidates, enqueue, setDialogOpen]);
 
   const finishedCount = items.filter((item) =>
     isFinishedAudioImportStatus(item.status),
