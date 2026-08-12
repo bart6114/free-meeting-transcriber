@@ -294,6 +294,174 @@ describe("SpeakerRenameControl", () => {
     expect(ensurePersonMock).not.toHaveBeenCalled();
   });
 
+  it("shows the typed name immediately while the assignment is pending", async () => {
+    let resolveAssign!: () => void;
+    assignTranscriptSpeakerMock.mockImplementation(
+      () => new Promise<void>((resolve) => (resolveAssign = resolve)),
+    );
+    render(
+      createElement(SpeakerRenameControl, {
+        segment: remoteSegment(),
+        transcriptId: "transcript-1",
+        color: "red",
+        label: "Speaker 2",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Alice Smith" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+
+    // Optimistic: the new name shows before ensurePerson/assign settle.
+    expect(screen.getByRole("button", { name: "Alice Smith" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Speaker 2" })).toBeNull();
+
+    await waitFor(() => expect(assignTranscriptSpeakerMock).toHaveBeenCalled());
+    resolveAssign();
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Alice Smith" })).toBeTruthy(),
+    );
+  });
+
+  it("shows the clicked person's name immediately while the assignment is pending", async () => {
+    usePeopleMock.mockReturnValue([{ id: "bob_peters", name: "Bob Peters" }]);
+    assignTranscriptSpeakerMock.mockImplementation(() => new Promise(() => {}));
+    render(
+      createElement(SpeakerRenameControl, {
+        segment: remoteSegment(),
+        transcriptId: "transcript-1",
+        color: "red",
+        label: "Speaker 2",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "bo" } });
+    fireEvent.click(screen.getByRole("option", { name: "Bob Peters" }));
+
+    expect(screen.getByRole("button", { name: "Bob Peters" })).toBeTruthy();
+  });
+
+  it("hands display back to the label prop once the store round trip lands", async () => {
+    const onAssigned = vi.fn();
+    const props = {
+      segment: remoteSegment(),
+      transcriptId: "transcript-1",
+      color: "red",
+      label: "Speaker 2",
+      onAssigned,
+    };
+    const { rerender } = render(createElement(SpeakerRenameControl, props));
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Alice Smith" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    expect(screen.getByRole("button", { name: "Alice Smith" })).toBeTruthy();
+
+    await waitFor(() => expect(onAssigned).toHaveBeenCalled());
+    rerender(
+      createElement(SpeakerRenameControl, { ...props, label: "Alice S." }),
+    );
+    expect(screen.getByRole("button", { name: "Alice S." })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Alice Smith" })).toBeNull();
+  });
+
+  it("keeps the newest pending label when an older rename's label change lands first", async () => {
+    let resolveAssign!: () => void;
+    assignTranscriptSpeakerMock.mockImplementation(
+      () => new Promise<void>((resolve) => (resolveAssign = resolve)),
+    );
+    const props = {
+      segment: remoteSegment(),
+      transcriptId: "transcript-1",
+      color: "red",
+      label: "Speaker 2",
+    };
+    const { rerender } = render(createElement(SpeakerRenameControl, props));
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Bob" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    await waitFor(() => expect(assignTranscriptSpeakerMock).toHaveBeenCalled());
+
+    // A label change arriving while Bob's commit is still in flight (an older
+    // rename's round trip) must not evict the newest optimistic label.
+    rerender(createElement(SpeakerRenameControl, { ...props, label: "Alice" }));
+    expect(screen.getByRole("button", { name: "Bob" })).toBeTruthy();
+
+    resolveAssign();
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Bob" })).toBeNull(),
+    );
+    expect(screen.getByRole("button", { name: "Alice" })).toBeTruthy();
+  });
+
+  it("clears the pending label when the rename resolves to the name already shown", async () => {
+    // ensurePerson reuses people case-insensitively: retyping "bob peters" over
+    // "Bob Peters" resolves to the existing person and the label prop never
+    // changes, so the raw typed text must not stick around.
+    ensurePersonMock.mockResolvedValue({
+      id: "bob_peters",
+      name: "Bob Peters",
+    });
+    render(
+      createElement(SpeakerRenameControl, {
+        segment: remoteSegment(),
+        transcriptId: "transcript-1",
+        color: "red",
+        label: "Bob Peters",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Bob Peters" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "bob peters" },
+    });
+    fireEvent.blur(screen.getByRole("textbox"));
+    expect(screen.getByRole("button", { name: "bob peters" })).toBeTruthy();
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Bob Peters" })).toBeTruthy(),
+    );
+    expect(screen.queryByRole("button", { name: "bob peters" })).toBeNull();
+  });
+
+  it("reverts to the previous label when the assignment fails", async () => {
+    assignTranscriptSpeakerMock.mockRejectedValue(new Error("write failed"));
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => {});
+    render(
+      createElement(SpeakerRenameControl, {
+        segment: remoteSegment(),
+        transcriptId: "transcript-1",
+        color: "red",
+        label: "Speaker 2",
+      }),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Speaker 2" }));
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Bob" },
+    });
+    fireEvent.blur(screen.getByRole("textbox"));
+
+    expect(screen.getByRole("button", { name: "Bob" })).toBeTruthy();
+
+    await waitFor(() => expect(consoleError).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Speaker 2" })).toBeTruthy(),
+    );
+    expect(screen.queryByRole("button", { name: "Bob" })).toBeNull();
+    consoleError.mockRestore();
+  });
+
   it("skips the assignment when ensurePerson fails", async () => {
     ensurePersonMock.mockRejectedValue(new Error("disk full"));
     const consoleError = vi

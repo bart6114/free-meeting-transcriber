@@ -263,6 +263,14 @@ async sessionWriteTranscript(sessionId: string, transcript: TranscriptWithData) 
     else return { status: "error", error: e  as any };
 }
 },
+async sessionAssignTranscriptSpeaker(transcriptId: string, channel: number, speakerIndex: number | null, speakerLabel: string, anchorWordId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_assign_transcript_speaker", { transcriptId, channel, speakerIndex, speakerLabel, anchorWordId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async sessionReplaceTranscripts(sessionId: string, transcript: TranscriptWithData) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_replace_transcripts", { sessionId, transcript }) };

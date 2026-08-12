@@ -2,8 +2,6 @@ import type { LiveTranscriptDelta } from "@hypr/plugin-transcription";
 
 import type { SpeakerHintWithId, WordWithId } from "./types";
 
-import type { SegmentKey } from "~/stt/live-segment";
-
 interface TranscriptStore {
   getCell(
     tableId: "transcripts",
@@ -210,121 +208,9 @@ export function applyLiveTranscriptDelta(
   accumulator.dispose();
 }
 
-export function upsertSpeakerAssignment(
-  store: TranscriptStore,
-  transcriptId: string,
-  segmentKey: SegmentKey,
-  speakerLabel: string,
-  anchorWordId: string,
-): void {
-  const hints = parseTranscriptHints(store, transcriptId);
-  const words = parseTranscriptWords(store, transcriptId);
-  const wordsById = new Map(words.map((word) => [word.id, word]));
-  const channel =
-    segmentKey.channel === "DirectMic"
-      ? 0
-      : segmentKey.channel === "RemoteParty"
-        ? 1
-        : 2;
-  const nextScope: SpeakerAssignmentScope = {
-    channel,
-    speakerIndex:
-      typeof segmentKey.speaker_index === "number"
-        ? segmentKey.speaker_index
-        : null,
-  };
-
-  const newHint: SpeakerHintWithId = {
-    id: `${anchorWordId}:speaker_label`,
-    word_id: anchorWordId,
-    type: "speaker_label",
-    value: speakerLabel,
-  };
-
-  const nextHints = hints.filter((hint) => {
-    if (hint.type !== "speaker_label") {
-      return true;
-    }
-
-    if (hint.id === newHint.id) {
-      return false;
-    }
-
-    const hintScope = getSpeakerAssignmentScopeForHint(hints, wordsById, hint);
-    if (!hintScope) {
-      return true;
-    }
-
-    return !speakerAssignmentScopesConflict(hintScope, nextScope);
-  });
-
-  nextHints.push(newHint);
-  updateTranscriptHints(store, transcriptId, nextHints);
-}
-
 function markTranscriptAccumulatorDirty(transcriptId: string): void {
   if (activeAccumulatorCounts.has(transcriptId)) {
     dirtyAccumulatorTranscriptIds.add(transcriptId);
-  }
-}
-
-type SpeakerAssignmentScope = {
-  channel: number | null | undefined;
-  speakerIndex: number | null;
-};
-
-function getSpeakerAssignmentScopeForHint(
-  hints: SpeakerHintWithId[],
-  wordsById: Map<string, WordWithId>,
-  hint: SpeakerHintWithId,
-): SpeakerAssignmentScope | null {
-  const wordId = hint.word_id;
-  if (typeof wordId !== "string") {
-    return null;
-  }
-
-  const word = wordsById.get(wordId);
-  if (!word) {
-    return null;
-  }
-
-  return {
-    channel: word.channel,
-    speakerIndex: findSpeakerIndexForWord(hints, wordId),
-  };
-}
-
-function speakerAssignmentScopesConflict(
-  left: SpeakerAssignmentScope,
-  right: SpeakerAssignmentScope,
-): boolean {
-  if (left.channel !== right.channel) {
-    return false;
-  }
-
-  return (
-    left.speakerIndex == null ||
-    right.speakerIndex == null ||
-    left.speakerIndex === right.speakerIndex
-  );
-}
-
-function findSpeakerIndexForWord(
-  hints: SpeakerHintWithId[],
-  wordId: string,
-): number | null {
-  const providerHint = hints.find(
-    (h) => h.type === "provider_speaker_index" && h.word_id === wordId,
-  );
-  if (!providerHint) return null;
-  try {
-    const data =
-      typeof providerHint.value === "string"
-        ? JSON.parse(providerHint.value)
-        : providerHint.value;
-    return typeof data.speaker_index === "number" ? data.speaker_index : null;
-  } catch {
-    return null;
   }
 }
 

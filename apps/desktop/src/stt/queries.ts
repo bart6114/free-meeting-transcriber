@@ -10,10 +10,7 @@ import {
   type TranscriptRow,
 } from "~/stt/render-transcript";
 import type { SpeakerHintWithId, WordWithId } from "~/stt/types";
-import {
-  createTranscriptAccumulator,
-  upsertSpeakerAssignment,
-} from "~/stt/utils";
+import { createTranscriptAccumulator } from "~/stt/utils";
 import type {
   TranscriptSpeakerHint,
   TranscriptWithData,
@@ -167,6 +164,10 @@ export function appendTranscriptWordsAndHints(
   });
 }
 
+// Hints-only Rust command: the store rewrites `speaker_hints` and passes the words
+// through untouched, so a rename never ships the full transcript over IPC (and can
+// never mangle per-word metadata the way the old read-modify-write path did).
+// Shares the per-transcript queue with the append path to keep write ordering.
 export function assignTranscriptSpeaker({
   transcriptId,
   segmentKey,
@@ -178,14 +179,25 @@ export function assignTranscriptSpeaker({
   speakerLabel: string;
   anchorWordId: string;
 }): Promise<void> {
-  return mutateTranscript(transcriptId, (store) => {
-    upsertSpeakerAssignment(
-      store,
+  return enqueueDatabaseWrite(`transcript:${transcriptId}`, async () => {
+    const channel =
+      segmentKey.channel === "DirectMic"
+        ? 0
+        : segmentKey.channel === "RemoteParty"
+          ? 1
+          : 2;
+    const result = await commands.sessionAssignTranscriptSpeaker(
       transcriptId,
-      segmentKey,
+      channel,
+      typeof segmentKey.speaker_index === "number"
+        ? segmentKey.speaker_index
+        : null,
       speakerLabel,
       anchorWordId,
     );
+    if (result.status === "error") {
+      throw new Error(result.error);
+    }
   });
 }
 
@@ -235,12 +247,19 @@ function toTranscriptWord(word: WordWithId): TranscriptWord {
   };
 }
 
-// `WordWithId.metadata` is TinyBase's JSON-stringified storage representation (see the
-// ToStorageType comment above); the Rust command wants the parsed object.
+// `WordWithId.metadata` has two live shapes: TinyBase-heritage callers (useRunBatch)
+// still hand in the JSON-stringified storage representation, while words read back
+// from the Rust store (`transcriptGet` in `mutateTranscript`) arrive already parsed.
+// Passing an object to JSON.parse would coerce it to "[object Object]", throw, and
+// silently wipe every word's metadata — the renderer then loses the
+// `timing.source: synthetic_speech` flag and shreds batch transcripts.
 function parseMetadata(
-  metadata: string | undefined,
+  metadata: string | TranscriptWord["metadata"] | undefined,
 ): TranscriptWord["metadata"] {
   if (!metadata) return null;
+  if (typeof metadata === "object") {
+    return Array.isArray(metadata) ? null : metadata;
+  }
   try {
     return JSON.parse(metadata) as TranscriptWord["metadata"];
   } catch {

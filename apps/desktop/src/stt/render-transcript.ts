@@ -12,6 +12,8 @@ import type { SegmentWord } from "~/stt/live-segment";
 import type { TranscriptWordMetadata } from "~/stt/timing";
 import { getTranscriptTimingSource } from "~/stt/timing";
 
+const CHRONOLOGY_REGRESSION_THRESHOLD_MS = 5_000;
+
 export type RenderedTranscriptSegmentWithWordMetadata = Omit<
   RenderedTranscriptSegment,
   "words"
@@ -260,10 +262,48 @@ function buildRenderTranscriptRequest(
       continue;
     }
 
-    const syntheticTiming = words.some((word) => {
-      const source = getTranscriptTimingSource(word as { metadata?: unknown });
-      return source === "synthetic_speech" || source === "synthetic_text";
-    });
+    // Structural fallback for lost timing metadata (historical wipe bug,
+    // hand-edited vaults): batch STT appends whole channels one after another,
+    // so channel-partitioned words (every channel exactly one contiguous run)
+    // with a big start_ms regression at a channel boundary mean per-channel
+    // grouped output whose timings cannot support word-level cross-channel
+    // interleaving. Live transcripts persist words in delta-arrival order —
+    // partial replacement can even re-append finals late, regressing start_ms —
+    // but real conversation alternates channels many times, so the
+    // one-run-per-channel shape never matches them; only boundary regressions
+    // count, so within-run arrival noise stays irrelevant too.
+    let metadataSynthetic = false;
+    let channelPartitioned = true;
+    let boundaryRegression = false;
+    let maxStartMs = Number.NEGATIVE_INFINITY;
+    let runChannel: number | undefined;
+    const finishedRunChannels = new Set<number>();
+    for (const word of words) {
+      if (!metadataSynthetic) {
+        const source = getTranscriptTimingSource(
+          word as { metadata?: unknown },
+        );
+        metadataSynthetic =
+          source === "synthetic_speech" || source === "synthetic_text";
+      }
+      if (word.channel !== runChannel) {
+        if (runChannel !== undefined) {
+          finishedRunChannels.add(runChannel);
+          if (word.start_ms < maxStartMs - CHRONOLOGY_REGRESSION_THRESHOLD_MS) {
+            boundaryRegression = true;
+          }
+        }
+        if (finishedRunChannels.has(word.channel)) {
+          channelPartitioned = false;
+        }
+        runChannel = word.channel;
+      }
+      if (word.start_ms > maxStartMs) {
+        maxStartMs = word.start_ms;
+      }
+    }
+    const syntheticTiming =
+      metadataSynthetic || (channelPartitioned && boundaryRegression);
 
     normalizedTranscripts.push({
       started_at:

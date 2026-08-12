@@ -35,8 +35,18 @@ export function SpeakerRenameControl({
   const [touched, setTouched] = useState(false);
   const [highlightIndex, setHighlightIndex] = useState(-1);
   const [applyToChannel, setApplyToChannel] = useState(true);
+  // Optimistic label: shown from commit until the store round trip updates the
+  // label prop, so the rename feels instant on large transcripts.
+  const [pendingLabel, setPendingLabel] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const committedRef = useRef(false);
+  const commitLabelRef = useRef(label);
+  // Distinguishes settles of superseded commits (rapid successive renames) from
+  // the latest one: only the latest commit may clear or keep the pending label.
+  const commitSeqRef = useRef(0);
+  const commitSettledRef = useRef(true);
+  const labelRef = useRef(label);
+  labelRef.current = label;
   const people = usePeople();
   const { anchorWordIdBySpeakerIndex, channelHasAssignment } =
     useChannelAssignmentState(transcriptId, segment);
@@ -45,6 +55,18 @@ export function SpeakerRenameControl({
   // renames target only the clicked cluster.
   const offerChannelWideAssign =
     anchorWordIdBySpeakerIndex.size >= 2 && !channelHasAssignment;
+
+  useEffect(() => {
+    // Before the latest commit settles, a label change belongs to an OLDER
+    // rename's round trip — the pending label (the user's newest intent) stays.
+    if (
+      pendingLabel !== null &&
+      commitSettledRef.current &&
+      label !== commitLabelRef.current
+    ) {
+      setPendingLabel(null);
+    }
+  }, [label, pendingLabel]);
 
   useEffect(() => {
     if (!editing) {
@@ -136,19 +158,47 @@ export function SpeakerRenameControl({
   );
 
   const commit = useCallback(
-    (run: () => Promise<string>) => {
+    (
+      optimisticName: string,
+      run: () => Promise<{ id: string; name: string }>,
+    ) => {
       if (committedRef.current) {
         return;
       }
       committedRef.current = true;
+      const seq = ++commitSeqRef.current;
+      commitLabelRef.current = label;
+      commitSettledRef.current = false;
+      setPendingLabel(optimisticName);
       setEditing(false);
       run()
-        .then((speakerLabel) => onAssigned?.(speakerLabel))
+        .then((person) => {
+          onAssigned?.(person.id);
+          if (seq !== commitSeqRef.current) {
+            return;
+          }
+          commitSettledRef.current = true;
+          // Two shapes where the label prop will never (or already did) move,
+          // so waiting on the effect above would strand the pending label: the
+          // rename resolved to the name already shown (ensurePerson reuses
+          // people case-insensitively), or the prop updated before this settle.
+          if (
+            person.name === commitLabelRef.current ||
+            labelRef.current !== commitLabelRef.current
+          ) {
+            setPendingLabel(null);
+          }
+        })
         .catch((error) => {
           console.error("[transcript] failed to assign speaker", error);
+          if (seq !== commitSeqRef.current) {
+            return;
+          }
+          commitSettledRef.current = true;
+          setPendingLabel(null);
         });
     },
-    [onAssigned],
+    [label, onAssigned],
   );
 
   const canAssign =
@@ -167,10 +217,10 @@ export function SpeakerRenameControl({
       return;
     }
 
-    commit(async () => {
+    commit(name, async () => {
       const person = await ensurePerson(name);
       await runAssignments(person.id);
-      return person.id;
+      return { id: person.id, name: person.name };
     });
   }, [canAssign, commit, draft, label, runAssignments]);
 
@@ -182,9 +232,9 @@ export function SpeakerRenameControl({
         return;
       }
 
-      commit(async () => {
+      commit(person.name, async () => {
         await runAssignments(person.id);
-        return person.id;
+        return { id: person.id, name: person.name };
       });
     },
     [canAssign, commit, runAssignments],
@@ -304,7 +354,7 @@ export function SpeakerRenameControl({
       ])}
       style={{ color }}
     >
-      {label}
+      {pendingLabel ?? label}
     </button>
   );
 }

@@ -38,6 +38,17 @@ const mocks = vi.hoisted(() => ({
       { status: "ok"; data: null } | { status: "error"; error: string }
     > => Promise.resolve({ status: "ok", data: null }),
   ),
+  sessionAssignTranscriptSpeaker: vi.fn(
+    (
+      _transcriptId: string,
+      _channel: number,
+      _speakerIndex: number | null,
+      _speakerLabel: string,
+      _anchorWordId: string,
+    ): Promise<
+      { status: "ok"; data: null } | { status: "error"; error: string }
+    > => Promise.resolve({ status: "ok", data: null }),
+  ),
   peopleList: vi.fn(
     (): Promise<
       | { status: "ok"; data: Array<{ id: string; name: string }> }
@@ -52,6 +63,7 @@ vi.mock("~/types/tauri.gen", () => ({
     sessionTranscripts: mocks.sessionTranscripts,
     transcriptGet: mocks.transcriptGet,
     sessionReplaceTranscripts: mocks.sessionReplaceTranscripts,
+    sessionAssignTranscriptSpeaker: mocks.sessionAssignTranscriptSpeaker,
     peopleList: mocks.peopleList,
   },
   events: {
@@ -93,6 +105,10 @@ describe("transcript queries", () => {
     mocks.sessionTranscripts.mockResolvedValue({ status: "ok", data: [] });
     mocks.transcriptGet.mockResolvedValue({ status: "ok", data: null });
     mocks.sessionReplaceTranscripts.mockResolvedValue({
+      status: "ok",
+      data: null,
+    });
+    mocks.sessionAssignTranscriptSpeaker.mockResolvedValue({
       status: "ok",
       data: null,
     });
@@ -341,6 +357,42 @@ describe("transcript queries", () => {
     ]);
   });
 
+  // REGRESSION: the store returns metadata as a parsed object; JSON.parse-ing it
+  // used to throw and silently null out every word's metadata on append, losing the
+  // renderer's synthetic-timing flag.
+  it("passes already-parsed word metadata through the append path untouched", async () => {
+    mocks.transcriptGet.mockResolvedValueOnce({
+      status: "ok",
+      data: {
+        id: "transcript-1",
+        session_id: "session-1",
+        started_at: 1000,
+        words: [
+          {
+            id: "word-1",
+            text: "Hello",
+            start_ms: 0,
+            end_ms: 500,
+            channel: 0,
+            metadata: { timing: { source: "synthetic_speech" } },
+          },
+        ],
+        speaker_hints: [],
+      },
+    });
+
+    await appendTranscriptWordsAndHints(
+      "transcript-1",
+      [{ id: "word-2", text: "world", start_ms: 500, end_ms: 900, channel: 0 }],
+      [],
+    );
+
+    const call = mocks.sessionWriteTranscript.mock.calls[0];
+    expect(call?.[1]?.words?.[0]?.metadata).toEqual({
+      timing: { source: "synthetic_speech" },
+    });
+  });
+
   it("refuses to mutate a transcript that no longer exists", async () => {
     mocks.transcriptGet.mockResolvedValueOnce({ status: "ok", data: null });
 
@@ -350,20 +402,7 @@ describe("transcript queries", () => {
     expect(mocks.sessionWriteTranscript).not.toHaveBeenCalled();
   });
 
-  it("persists a plain-string speaker label through the store", async () => {
-    mocks.transcriptGet.mockResolvedValueOnce({
-      status: "ok",
-      data: {
-        id: "transcript-1",
-        session_id: "session-1",
-        started_at: 1000,
-        words: [
-          { id: "word-1", text: "Hello", start_ms: 0, end_ms: 500, channel: 1 },
-        ],
-        speaker_hints: [],
-      },
-    });
-
+  it("assigns a speaker through the hints-only store command", async () => {
     await assignTranscriptSpeaker({
       transcriptId: "transcript-1",
       segmentKey: {
@@ -375,14 +414,57 @@ describe("transcript queries", () => {
       anchorWordId: "word-1",
     });
 
-    const call = mocks.sessionWriteTranscript.mock.calls[0];
-    expect(call?.[1]?.speaker_hints).toEqual([
-      expect.objectContaining({
-        word_id: "word-1",
-        type: "speaker_label",
-        value: "Alice",
+    // Hints-only path: no full-transcript read-modify-write round trips.
+    expect(mocks.sessionAssignTranscriptSpeaker).toHaveBeenCalledWith(
+      "transcript-1",
+      1,
+      0,
+      "Alice",
+      "word-1",
+    );
+    expect(mocks.transcriptGet).not.toHaveBeenCalled();
+    expect(mocks.sessionWriteTranscript).not.toHaveBeenCalled();
+  });
+
+  it("maps a missing speaker index to null for the store command", async () => {
+    await assignTranscriptSpeaker({
+      transcriptId: "transcript-1",
+      segmentKey: {
+        channel: "DirectMic",
+        speaker_index: null,
+        speaker_human_id: null,
+      },
+      speakerLabel: "Me",
+      anchorWordId: "word-9",
+    });
+
+    expect(mocks.sessionAssignTranscriptSpeaker).toHaveBeenCalledWith(
+      "transcript-1",
+      0,
+      null,
+      "Me",
+      "word-9",
+    );
+  });
+
+  it("surfaces a speaker-assignment failure instead of swallowing it", async () => {
+    mocks.sessionAssignTranscriptSpeaker.mockResolvedValue({
+      status: "error",
+      error: "transcript gone",
+    });
+
+    await expect(
+      assignTranscriptSpeaker({
+        transcriptId: "transcript-1",
+        segmentKey: {
+          channel: "RemoteParty",
+          speaker_index: 0,
+          speaker_human_id: null,
+        },
+        speakerLabel: "Alice",
+        anchorWordId: "word-1",
       }),
-    ]);
+    ).rejects.toThrow("transcript gone");
   });
 
   it("zeroes a transcript's content instead of deleting the row", async () => {
