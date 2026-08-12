@@ -17,7 +17,7 @@ describe("ConfigError", () => {
   });
 
   it("offers API key setup from the empty summary state", () => {
-    render(<ConfigError />);
+    render(<ConfigError sessionTitle="Weekly sync" />);
 
     expect(screen.getByRole("alert")).not.toBeNull();
     expect(screen.getByText("Set up AI summaries")).not.toBeNull();
@@ -32,5 +32,27 @@ describe("ConfigError", () => {
       type: "settings",
       state: { tab: "intelligence" },
     });
+  });
+
+  it("keeps the session title and speakers row visible", () => {
+    const trailer = document.createElement("div");
+    trailer.textContent = "Alice";
+
+    render(
+      <ConfigError sessionTitle="Weekly sync" titleTrailerElement={trailer} />,
+    );
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Weekly sync" }),
+    ).not.toBeNull();
+    expect(screen.getByText("Alice")).not.toBeNull();
+  });
+
+  it("falls back to the untitled placeholder", () => {
+    render(<ConfigError sessionTitle="  " />);
+
+    expect(
+      screen.getByRole("heading", { level: 1, name: "Untitled" }),
+    ).not.toBeNull();
   });
 });
