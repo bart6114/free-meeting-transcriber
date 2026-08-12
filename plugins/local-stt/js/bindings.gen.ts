@@ -120,10 +120,11 @@ downloadProgressPayload: "plugin:local-stt:download-progress-payload"
 /** user-defined types **/
 
 export type AmModel = "am-parakeet-v2" | "am-parakeet-v3" | "am-whisper-large-v3"
+export type DiarizerModel = "diarizer-fluid-community"
 export type DownloadProgressPayload = { model: LocalModel; status: DownloadStatus }
 export type DownloadStatus = { downloading: number } | "completed" | { failed: string }
 export type GgufLlmModel = "Llama3p2_3bQ4" | "Gemma3_4bQ4" | "HyprLLM"
-export type LocalModel = SoniqoModel | WhisperModel | AmModel | GgufLlmModel
+export type LocalModel = SoniqoModel | WhisperModel | AmModel | GgufLlmModel | DiarizerModel
 export type ServerInfo = { url: string | null; status: ServerStatus; model: LocalModel | null }
 export type ServerStatus = "unreachable" | "loading" | "ready"
 export type ServerType = "internal" | "external"

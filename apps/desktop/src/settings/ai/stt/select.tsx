@@ -36,6 +36,7 @@ import {
 import { cn } from "@hypr/utils";
 
 import { useSttSettings } from "./context";
+import { DiarizationStatus } from "./diarization-status";
 import { HealthStatusIndicator, useConnectionHealth } from "./health";
 import { LocalModelBackendBadge, LocalModelLabel } from "./model-icon";
 import {
@@ -316,6 +317,8 @@ export function SelectProviderAndModel({
           </Select>
         </div>
       </div>
+
+      <DiarizationStatus />
     </div>
   );
 }

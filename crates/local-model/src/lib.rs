@@ -69,10 +69,51 @@ impl GgufLlmModel {
     }
 }
 
+#[derive(
+    Debug, Clone, Copy, serde::Serialize, serde::Deserialize, specta::Type, Eq, Hash, PartialEq,
+)]
+pub enum DiarizerModel {
+    #[serde(rename = "diarizer-fluid-community")]
+    FluidCommunity,
+}
+
+impl DiarizerModel {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            DiarizerModel::FluidCommunity => "diarizer-fluid-community",
+        }
+    }
+
+    pub fn display_name(&self) -> &'static str {
+        match self {
+            DiarizerModel::FluidCommunity => "Speaker detection",
+        }
+    }
+
+    pub fn size_bytes(&self) -> u64 {
+        match self {
+            DiarizerModel::FluidCommunity => 104857600,
+        }
+    }
+
+    pub fn description(&self) -> &'static str {
+        match self {
+            DiarizerModel::FluidCommunity => "100 MB",
+        }
+    }
+}
+
+impl std::fmt::Display for DiarizerModel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.as_str())
+    }
+}
+
 #[derive(Debug, Clone, Copy, Eq, Hash, PartialEq)]
 pub enum LocalModelKind {
     Stt,
     Llm,
+    Diarizer,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, Eq, Hash, PartialEq)]
@@ -82,6 +123,7 @@ pub enum LocalModel {
     Whisper(WhisperModel),
     Am(AmModel),
     GgufLlm(GgufLlmModel),
+    Diarizer(DiarizerModel),
 }
 
 impl std::fmt::Display for LocalModel {
@@ -91,6 +133,7 @@ impl std::fmt::Display for LocalModel {
             LocalModel::Whisper(model) => write!(f, "whisper-{model}"),
             LocalModel::Am(model) => write!(f, "am-{model}"),
             LocalModel::GgufLlm(model) => write!(f, "llm-{model:?}"),
+            LocalModel::Diarizer(model) => write!(f, "{model}"),
         }
     }
 }
@@ -122,6 +165,8 @@ impl LocalModel {
             LocalModel::GgufLlm(GgufLlmModel::Gemma3_4bQ4),
         ]);
 
+        models.push(LocalModel::Diarizer(DiarizerModel::FluidCommunity));
+
         models
     }
 
@@ -131,6 +176,7 @@ impl LocalModel {
             LocalModel::Whisper(_) => "stt-whisper",
             LocalModel::Am(_) => "stt-am",
             LocalModel::GgufLlm(_) => "llm",
+            LocalModel::Diarizer(_) => "diarizer",
         }
     }
 
@@ -140,6 +186,7 @@ impl LocalModel {
                 LocalModelKind::Stt
             }
             LocalModel::GgufLlm(_) => LocalModelKind::Llm,
+            LocalModel::Diarizer(_) => LocalModelKind::Diarizer,
         }
     }
 
@@ -159,6 +206,7 @@ impl LocalModel {
             LocalModel::GgufLlm(GgufLlmModel::Llama3p2_3bQ4) => "llm-llama3-2-3b-q4",
             LocalModel::GgufLlm(GgufLlmModel::HyprLLM) => "llm-hypr-llm",
             LocalModel::GgufLlm(GgufLlmModel::Gemma3_4bQ4) => "llm-gemma3-4b-q4",
+            LocalModel::Diarizer(model) => model.as_str(),
         }
     }
 
@@ -168,6 +216,7 @@ impl LocalModel {
             LocalModel::Whisper(model) => models_base.join("stt").join(model.file_name()),
             LocalModel::Am(model) => models_base.join("stt").join(model.model_dir()),
             LocalModel::GgufLlm(model) => models_base.join("llm").join(model.file_name()),
+            LocalModel::Diarizer(model) => models_base.join("diarizer").join(model.as_str()),
         }
     }
 
@@ -177,6 +226,7 @@ impl LocalModel {
             LocalModel::Whisper(model) => model.display_name().to_string(),
             LocalModel::Am(model) => model.display_name().to_string(),
             LocalModel::GgufLlm(model) => model.display_name().to_string(),
+            LocalModel::Diarizer(model) => model.display_name().to_string(),
         }
     }
 
@@ -186,6 +236,7 @@ impl LocalModel {
             LocalModel::Whisper(model) => model.description(),
             LocalModel::Am(model) => model.description().to_string(),
             LocalModel::GgufLlm(model) => model.description(),
+            LocalModel::Diarizer(model) => model.description().to_string(),
         }
     }
 
@@ -197,6 +248,7 @@ impl LocalModel {
             LocalModel::Whisper(_) => is_apple_silicon,
             LocalModel::Am(_) => is_apple_silicon,
             LocalModel::GgufLlm(_) => cfg!(target_arch = "aarch64"),
+            LocalModel::Diarizer(_) => is_apple_silicon,
         }
     }
 }
@@ -249,12 +301,13 @@ impl DownloadableModel for LocalModel {
             LocalModel::Whisper(model) => format!("whisper:{}", model.file_name()),
             LocalModel::Am(model) => format!("am:{}", model.model_dir()),
             LocalModel::GgufLlm(model) => model.download_key(),
+            LocalModel::Diarizer(model) => format!("diarizer:{}", model.as_str()),
         }
     }
 
     fn download_url(&self) -> Option<String> {
         match self {
-            LocalModel::Soniqo(_) => None,
+            LocalModel::Soniqo(_) | LocalModel::Diarizer(_) => None,
             LocalModel::Whisper(model) => Some(model.model_url().to_string()),
             LocalModel::Am(model) => Some(model.tar_url().to_string()),
             LocalModel::GgufLlm(model) => model.download_url(),
@@ -263,7 +316,7 @@ impl DownloadableModel for LocalModel {
 
     fn download_checksum(&self) -> Option<u32> {
         match self {
-            LocalModel::Soniqo(_) => None,
+            LocalModel::Soniqo(_) | LocalModel::Diarizer(_) => None,
             LocalModel::Whisper(model) => Some(model.checksum()),
             LocalModel::Am(model) => Some(model.tar_checksum()),
             LocalModel::GgufLlm(model) => model.download_checksum(),
@@ -278,6 +331,7 @@ impl DownloadableModel for LocalModel {
                 .join("stt")
                 .join(format!("{}.tar", model.model_dir())),
             LocalModel::GgufLlm(model) => model.download_destination(models_base),
+            LocalModel::Diarizer(model) => models_base.join("diarizer").join(model.as_str()),
         }
     }
 
@@ -285,6 +339,7 @@ impl DownloadableModel for LocalModel {
         match self {
             LocalModel::Soniqo(model) => hypr_transcribe_soniqo::is_model_downloaded(*model)
                 .map_err(|e| Error::OperationFailed(e.to_string())),
+            LocalModel::Diarizer(_) => Ok(hypr_transcribe_soniqo::diarize::is_ready()),
             LocalModel::Whisper(model) => {
                 Ok(models_base.join("stt").join(model.file_name()).exists())
             }
@@ -299,6 +354,9 @@ impl DownloadableModel for LocalModel {
         match self {
             LocalModel::Soniqo(_) => Err(Error::FinalizeFailed(
                 "Soniqo models are downloaded through the Soniqo bridge".to_string(),
+            )),
+            LocalModel::Diarizer(_) => Err(Error::FinalizeFailed(
+                "Diarizer models are downloaded through the diarizer bridge".to_string(),
             )),
             LocalModel::Whisper(_) => Ok(()),
             LocalModel::Am(model) => {
@@ -315,6 +373,9 @@ impl DownloadableModel for LocalModel {
         match self {
             LocalModel::Soniqo(model) => hypr_transcribe_soniqo::delete_model(*model)
                 .map_err(|e| Error::DeleteFailed(e.to_string())),
+            LocalModel::Diarizer(_) => Err(Error::DeleteFailed(
+                "Diarizer models are managed by the diarizer bridge".to_string(),
+            )),
             LocalModel::Whisper(model) => {
                 let model_path = models_base.join("stt").join(model.file_name());
                 if model_path.exists() {

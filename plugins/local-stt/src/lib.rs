@@ -79,6 +79,8 @@ pub fn init<R: tauri::Runtime>(options: InitOptions) -> tauri::plugin::TauriPlug
 
             app.manage(state.clone());
 
+            ext::backfill_diarizer_download(app.app_handle().clone());
+
             let parent = options.parent_supervisor.clone();
             tauri::async_runtime::spawn(async move {
                 match server::supervisor::spawn_stt_supervisor(parent).await {

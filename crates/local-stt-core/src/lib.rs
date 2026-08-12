@@ -50,7 +50,7 @@ pub fn stt_model_info(model: &LocalModel) -> SttModelInfo {
             size_bytes: Some(value.model_size_bytes()),
             model_type: SttModelType::Argmax,
         },
-        LocalModel::GgufLlm(_) => unreachable!(),
+        LocalModel::GgufLlm(_) | LocalModel::Diarizer(_) => unreachable!(),
     }
 }
 

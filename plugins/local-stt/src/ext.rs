@@ -11,7 +11,7 @@ use hypr_model_downloader::{DownloadStatus, ModelDownloadManager, ModelDownloade
 #[cfg(feature = "whisper-cpp")]
 use crate::server::internal;
 use crate::{
-    model::LocalModel,
+    model::{DiarizerModel, LocalModel, LocalModelKind},
     server::{ServerInfo, ServerStatus, ServerType, external, supervisor},
     types::DownloadProgressPayload,
 };
@@ -32,6 +32,10 @@ impl<R: Runtime> ModelDownloaderRuntime<LocalModel> for TauriModelRuntime<R> {
     }
 
     fn emit_progress(&self, model: &LocalModel, status: hypr_model_downloader::DownloadStatus) {
+        if matches!(status, DownloadStatus::Completed) && stt_completion_triggers_diarizer(model) {
+            maybe_start_diarizer_download(self.app_handle.clone());
+        }
+
         let payload = DownloadProgressPayload {
             model: model.clone(),
             status,
@@ -57,7 +61,10 @@ pub struct LocalStt<'a, R: Runtime, M: Manager<R>> {
 impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
     fn ensure_stt_model(model: &LocalModel) -> Result<(), crate::Error> {
         match model {
-            LocalModel::Soniqo(_) | LocalModel::Am(_) | LocalModel::Whisper(_) => {
+            LocalModel::Soniqo(_)
+            | LocalModel::Am(_)
+            | LocalModel::Whisper(_)
+            | LocalModel::Diarizer(_) => {
                 if model.is_available_on_current_platform() {
                     Ok(())
                 } else {
@@ -112,6 +119,10 @@ impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
             return Ok(soniqo_download_state(*model).await?.status == "ready");
         }
 
+        if matches!(model, LocalModel::Diarizer(_)) {
+            return Ok(diarizer_download_state().await?.status == "ready");
+        }
+
         let downloader = {
             let state = self.manager.state::<crate::SharedState>();
             let guard = state.lock().await;
@@ -140,7 +151,7 @@ impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
         let server_type = match &model {
             LocalModel::Am(_) => ServerType::External,
             LocalModel::Whisper(_) => ServerType::Internal,
-            LocalModel::Soniqo(_) | LocalModel::GgufLlm(_) => {
+            LocalModel::Soniqo(_) | LocalModel::GgufLlm(_) | LocalModel::Diarizer(_) => {
                 return Err(crate::Error::UnsupportedModelType);
             }
         };
@@ -249,7 +260,7 @@ impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
         let server_type = match model {
             LocalModel::Am(_) => ServerType::External,
             LocalModel::Whisper(_) => ServerType::Internal,
-            LocalModel::Soniqo(_) | LocalModel::GgufLlm(_) => {
+            LocalModel::Soniqo(_) | LocalModel::GgufLlm(_) | LocalModel::Diarizer(_) => {
                 return Err(crate::Error::UnsupportedModelType);
             }
         };
@@ -305,7 +316,24 @@ impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
             )
             .await?;
 
-            spawn_soniqo_progress_poller(self.manager.app_handle().clone(), model, soniqo_model);
+            spawn_bridge_progress_poller(self.manager.app_handle().clone(), model, move || {
+                hypr_transcribe_soniqo::model_download_state(soniqo_model)
+            });
+            return Ok(());
+        }
+
+        if matches!(model, LocalModel::Diarizer(_)) {
+            run_soniqo_blocking(
+                hypr_transcribe_soniqo::diarize::start_model_download,
+                crate::Error::ServerStartFailed,
+            )
+            .await?;
+
+            spawn_bridge_progress_poller(
+                self.manager.app_handle().clone(),
+                model,
+                hypr_transcribe_soniqo::diarize::model_download_state,
+            );
             return Ok(());
         }
 
@@ -322,7 +350,7 @@ impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
     pub async fn cancel_download(&self, model: LocalModel) -> Result<bool, crate::Error> {
         Self::ensure_stt_model(&model)?;
 
-        if matches!(model, LocalModel::Soniqo(_)) {
+        if matches!(model, LocalModel::Soniqo(_) | LocalModel::Diarizer(_)) {
             return Ok(false);
         }
 
@@ -340,6 +368,10 @@ impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
 
         if let LocalModel::Soniqo(model) = model {
             return Ok(soniqo_download_state(*model).await?.status == "downloading");
+        }
+
+        if matches!(model, LocalModel::Diarizer(_)) {
+            return Ok(diarizer_download_state().await?.status == "downloading");
         }
 
         let downloader = {
@@ -361,6 +393,10 @@ impl<'a, R: Runtime, M: Manager<R>> LocalStt<'a, R, M> {
                 crate::Error::ServerStopFailed,
             )
             .await;
+        }
+
+        if matches!(model, LocalModel::Diarizer(_)) {
+            return Err(crate::Error::UnsupportedModelType);
         }
 
         let downloader = {
@@ -396,17 +432,91 @@ async fn soniqo_download_state(
     .await
 }
 
-fn spawn_soniqo_progress_poller<R: Runtime>(
+async fn diarizer_download_state()
+-> Result<hypr_transcribe_soniqo::ModelDownloadState, crate::Error> {
+    run_soniqo_blocking(
+        hypr_transcribe_soniqo::diarize::model_download_state,
+        crate::Error::ServerStartFailed,
+    )
+    .await
+}
+
+fn stt_completion_triggers_diarizer(model: &LocalModel) -> bool {
+    model.model_kind() == LocalModelKind::Stt
+}
+
+fn diarizer_needs_download(state: &hypr_transcribe_soniqo::ModelDownloadState) -> bool {
+    !matches!(state.status.as_str(), "ready" | "downloading")
+}
+
+// Diarization is always-on when its model is present: any downloaded STT model
+// pulls the diarizer in, but a missing/failed diarizer never blocks STT.
+pub(crate) fn maybe_start_diarizer_download<R: Runtime>(app_handle: tauri::AppHandle<R>) {
+    tauri::async_runtime::spawn(async move {
+        match diarizer_download_state().await {
+            Ok(state) if diarizer_needs_download(&state) => {}
+            Ok(_) => return,
+            Err(error) => {
+                tracing::warn!("diarizer_state_check_failed: {error}");
+                return;
+            }
+        }
+
+        if let Err(error) = run_soniqo_blocking(
+            hypr_transcribe_soniqo::diarize::start_model_download,
+            crate::Error::ServerStartFailed,
+        )
+        .await
+        {
+            tracing::warn!("diarizer_download_start_failed: {error}");
+            return;
+        }
+
+        spawn_bridge_progress_poller(
+            app_handle,
+            LocalModel::Diarizer(DiarizerModel::FluidCommunity),
+            hypr_transcribe_soniqo::diarize::model_download_state,
+        );
+    });
+}
+
+pub(crate) fn backfill_diarizer_download<R: Runtime>(app_handle: tauri::AppHandle<R>) {
+    tauri::async_runtime::spawn(async move {
+        for model in LocalModel::all() {
+            if model.model_kind() != LocalModelKind::Stt
+                || !model.is_available_on_current_platform()
+            {
+                continue;
+            }
+
+            if app_handle
+                .local_stt()
+                .is_model_downloaded(&model)
+                .await
+                .unwrap_or(false)
+            {
+                maybe_start_diarizer_download(app_handle.clone());
+                return;
+            }
+        }
+    });
+}
+
+fn spawn_bridge_progress_poller<R: Runtime, F>(
     app_handle: tauri::AppHandle<R>,
     model: LocalModel,
-    soniqo_model: hypr_transcribe_soniqo::SoniqoModel,
-) {
+    fetch_state: F,
+) where
+    F: Fn() -> hypr_transcribe_soniqo::Result<hypr_transcribe_soniqo::ModelDownloadState>
+        + Clone
+        + Send
+        + Sync
+        + 'static,
+{
     tokio::spawn(async move {
         for _ in 0..7200 {
-            let status = tokio::task::spawn_blocking(move || {
-                hypr_transcribe_soniqo::model_download_state(soniqo_model)
-            })
-            .await;
+            let fetch_once = fetch_state.clone();
+            let status = tokio::task::spawn_blocking(move || fetch_once()).await;
 
             let download_status = match status {
                 Ok(Ok(state)) => match state.status.as_str() {
@@ -414,7 +524,7 @@ fn spawn_soniqo_progress_poller<R: Runtime>(
                     "error" => DownloadStatus::Failed(
                         state
                             .error
-                            .unwrap_or_else(|| "Soniqo model download failed".to_string()),
+                            .unwrap_or_else(|| "Model download failed".to_string()),
                     ),
                     _ => DownloadStatus::Downloading(state.progress_percent.unwrap_or(0)),
                 },
@@ -426,6 +536,13 @@ fn spawn_soniqo_progress_poller<R: Runtime>(
                 download_status,
                 DownloadStatus::Completed | DownloadStatus::Failed(_)
             );
+
+            if matches!(download_status, DownloadStatus::Completed)
+                && stt_completion_triggers_diarizer(&model)
+            {
+                maybe_start_diarizer_download(app_handle.clone());
+            }
+
             let _ = DownloadProgressPayload {
                 model: model.clone(),
                 status: download_status,
@@ -441,7 +558,7 @@ fn spawn_soniqo_progress_poller<R: Runtime>(
 
         let _ = DownloadProgressPayload {
             model,
-            status: DownloadStatus::Failed("Soniqo model download timed out".to_string()),
+            status: DownloadStatus::Failed("Model download timed out".to_string()),
         }
         .emit(&app_handle);
     });
@@ -551,5 +668,64 @@ async fn external_health() -> Option<ServerInfo> {
             call_t!(actor, external::ExternalSTTMessage::GetHealth, 10 * 1000).ok()
         }
         None => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::SoniqoModel;
+    use hypr_local_model::GgufLlmModel;
+
+    fn state_with_status(status: &str) -> hypr_transcribe_soniqo::ModelDownloadState {
+        hypr_transcribe_soniqo::ModelDownloadState {
+            status: status.to_string(),
+            current_file: None,
+            progress_percent: None,
+            local_path: String::new(),
+            error: None,
+        }
+    }
+
+    // No SharedState is managed on the mock app: reaching the supervisor or
+    // downloader machinery would panic, so an early error proves the diarizer
+    // can never start or block an STT server.
+    #[tokio::test]
+    async fn diarizer_never_starts_or_blocks_stt_server() {
+        let app = tauri::test::mock_app();
+
+        let result = app
+            .local_stt()
+            .start_server(LocalModel::Diarizer(DiarizerModel::FluidCommunity))
+            .await;
+
+        assert!(matches!(
+            result,
+            Err(crate::Error::UnsupportedModelType) | Err(crate::Error::UnsupportedPlatform)
+        ));
+    }
+
+    #[test]
+    fn only_stt_completions_trigger_diarizer_download() {
+        assert!(stt_completion_triggers_diarizer(&LocalModel::Soniqo(
+            SoniqoModel::ParakeetStreaming
+        )));
+        assert!(stt_completion_triggers_diarizer(&LocalModel::Am(
+            hypr_am::AmModel::ParakeetV3
+        )));
+        assert!(!stt_completion_triggers_diarizer(&LocalModel::Diarizer(
+            DiarizerModel::FluidCommunity
+        )));
+        assert!(!stt_completion_triggers_diarizer(&LocalModel::GgufLlm(
+            GgufLlmModel::HyprLLM
+        )));
+    }
+
+    #[test]
+    fn diarizer_download_skipped_when_ready_or_downloading() {
+        assert!(diarizer_needs_download(&state_with_status("idle")));
+        assert!(diarizer_needs_download(&state_with_status("error")));
+        assert!(!diarizer_needs_download(&state_with_status("downloading")));
+        assert!(!diarizer_needs_download(&state_with_status("ready")));
     }
 }
