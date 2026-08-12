@@ -7,6 +7,13 @@ type IndexSubscription = {
   entities: readonly IndexEntity[];
   ids?: readonly string[];
   onChange: () => void;
+  // Dedupe handle: subscriptions sharing a key (many mounted copies of the same
+  // query) get one onChange per event instead of one per copy. A large transcript
+  // mounts hundreds of identical `useTranscript`/`usePeople` subscriptions; firing
+  // them all made every event cancel-and-restart the same refetch hundreds of
+  // times (invalidateQueries defaults to cancelRefetch), which could leave the
+  // query stuck with stale data until remount.
+  dedupeKey?: string;
 };
 
 const subscriptions = new Set<IndexSubscription>();
@@ -23,6 +30,7 @@ function ensureIndexChangedListener() {
   listenerStarted = true;
   events.indexChanged
     .listen(({ payload }) => {
+      const seenDedupeKeys = new Set<string>();
       for (const subscription of subscriptions) {
         if (!subscription.entities.includes(payload.entity)) {
           continue;
@@ -35,6 +43,12 @@ function ensureIndexChangedListener() {
           !payload.ids.some((id) => subscription.ids?.includes(id))
         ) {
           continue;
+        }
+        if (subscription.dedupeKey) {
+          if (seenDedupeKeys.has(subscription.dedupeKey)) {
+            continue;
+          }
+          seenDedupeKeys.add(subscription.dedupeKey);
         }
         subscription.onChange();
       }
@@ -54,12 +68,14 @@ export function subscribeIndexChanged(
   entity: IndexEntity | readonly IndexEntity[],
   onChange: () => void,
   ids?: readonly string[],
+  dedupeKey?: string,
 ): () => void {
   ensureIndexChangedListener();
   const subscription: IndexSubscription = {
     entities: Array.isArray(entity) ? entity : [entity as IndexEntity],
     ids,
     onChange,
+    dedupeKey,
   };
   subscriptions.add(subscription);
   return () => {
@@ -91,6 +107,11 @@ export function useIndexQuery<TData>({
     queryKey: queryKey as unknown[],
     queryFn,
     enabled,
+    // These queries read local vault state over Tauri IPC, not the network.
+    // The default "online" mode pauses (re)fetches whenever the webview
+    // reports itself offline, leaving the mounted view stuck with stale data
+    // until a remount -- there is no network to wait for here.
+    networkMode: "always",
   });
 
   // The stringified key stands in for the (per-render) array/object identities.
@@ -108,6 +129,7 @@ export function useIndexQuery<TData>({
         });
       },
       ids,
+      subscriptionKey,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, queryClient, subscriptionKey]);

@@ -585,9 +585,7 @@ mod tests {
         });
 
         assert!(
-            segments
-                .iter()
-                .all(|segment| segment.speaker_label == "PY"),
+            segments.iter().all(|segment| segment.speaker_label == "PY"),
             "every diarized cluster must take its scoped assignment, got: {:?}",
             segments
                 .iter()

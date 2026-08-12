@@ -40,6 +40,8 @@ export function useRenderedTranscriptData(transcriptId: string): {
       return renderTranscriptSegments(request);
     },
     enabled: !!request,
+    // Local IPC render call: never let a misreported offline state pause it.
+    networkMode: "always",
     // Keep the previous segments on screen while a changed request re-renders,
     // so a speaker rename doesn't blank the transcript and remount every segment.
     placeholderData: keepPreviousData,
