@@ -18,6 +18,12 @@ A model marked **Live** can show text during a meeting. The streaming model supp
 
 A downloaded on-device Soniqo model also powers transcription from the terminal: `fmtr transcribe MEETING_ID` uses it without opening the app. The CLI never downloads models itself, so complete the download here first. See the [CLI reference](/reference/cli).
 
+## Speaker detection
+
+Recordings that are transcribed after the fact — imported files and models marked **After recording** — also get automatic speaker detection: the transcript separates who said what, and you can name each speaker by clicking their label. Live transcription does not separate speakers.
+
+Speaker detection runs on your Mac and is included with on-device transcription. Its small model downloads automatically the first time it is needed; the **Speaker detection** row in **Settings → Transcription** shows its status and offers a **Retry** if the download failed.
+
 ## Intelligence
 
 You do not need an Intelligence model to record, write notes, or transcribe. Configure one only if you want generated summaries and titles.

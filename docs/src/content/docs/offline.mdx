@@ -11,6 +11,7 @@ You can record meetings and work with notes without an internet connection. Tran
 - Record and play meeting audio.
 - Export existing memos, summaries, and transcripts.
 - Transcribe with a downloaded on-device model.
+- Separate speakers in imported and after-recording transcripts, once the speaker-detection model has been downloaded.
 - Import and transcribe recordings from the terminal with `fmtr import` and `fmtr transcribe`, when the selected model is an on-device Soniqo model.
 - Generate summaries through a local LM Studio or Ollama server.
 
@@ -24,6 +25,8 @@ A remote Intelligence provider still needs internet access.
 4. Make a short test recording before you disconnect.
 
 Do the download in advance. The model files are not bundled with the app.
+
+The speaker-detection model downloads automatically in the background the first time it is needed. Before you disconnect, check that **Settings → Transcription → Speaker detection** shows **Ready**.
 
 ## Prepare local summaries
 

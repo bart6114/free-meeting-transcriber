@@ -11,11 +11,11 @@ The app stores notes, transcripts, settings, retained recordings, people, and te
 
 You can inspect and edit the vault with other tools. The app watches for external changes and refreshes its in-memory index. If the app is about to overwrite a version it did not write, it first moves that version into the vault's `.trash/` folder.
 
-Downloaded transcription models are also local, but they are managed separately from meeting files.
+Downloaded transcription and speaker-detection models are also local, but they are managed separately from meeting files.
 
 ## Remote Intelligence providers
 
-Transcription runs on your Mac. Meeting content only leaves the app when you ask a remote Intelligence provider to generate a summary or title. That request includes the prompt and the meeting context needed to produce the result.
+Transcription and speaker detection run on your Mac. Meeting content only leaves the app when you ask a remote Intelligence provider to generate a summary or title. That request includes the prompt and the meeting context needed to produce the result.
 
 API keys are stored in the macOS login Keychain. Review a provider's retention and training policy before using it with sensitive meetings.
 
