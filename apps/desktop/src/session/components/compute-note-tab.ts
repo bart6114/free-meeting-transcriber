@@ -4,7 +4,8 @@ export function computeCurrentNoteTab(
   tabView: EditorView | null,
   isLiveSessionActive: boolean,
   enhancedNoteIds: readonly string[],
-  canShowTranscript = false,
+  canShowTranscript: boolean,
+  defaultEnhancedNoteId: string | null,
 ): EditorView {
   const firstEnhancedNoteId = enhancedNoteIds[0];
   const hasEnhancedNote = (id: string) => enhancedNoteIds.includes(id);
@@ -40,8 +41,11 @@ export function computeCurrentNoteTab(
     return { type: "raw" };
   }
 
-  if (firstEnhancedNoteId) {
-    return { type: "enhanced", id: firstEnhancedNoteId };
+  if (
+    defaultEnhancedNoteId &&
+    enhancedNoteIds.includes(defaultEnhancedNoteId)
+  ) {
+    return { type: "enhanced", id: defaultEnhancedNoteId };
   }
 
   return { type: "raw" };

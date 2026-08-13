@@ -54,16 +54,22 @@ export function useCurrentNoteTab(
   const isLiveSessionActive = sessionMode === "active";
   const canShowTranscript = useCanShowTranscript(tab.id, { audioExists });
 
-  const enhancedNoteIds = useEnhancedNoteRecords(tab.id).map((note) => note.id);
+  const enhancedNotes = useEnhancedNoteRecords(tab.id);
 
   return useMemo(() => {
+    const enhancedNoteIds = enhancedNotes.map((note) => note.id);
+    const defaultEnhancedNoteId =
+      enhancedNotes.find((note) => hasStoredNoteContent(note.content))?.id ??
+      null;
+
     return computeCurrentNoteTab(
       tab.state.view ?? null,
       isLiveSessionActive,
       enhancedNoteIds,
       canShowTranscript,
+      defaultEnhancedNoteId,
     );
-  }, [tab.state.view, isLiveSessionActive, enhancedNoteIds, canShowTranscript]);
+  }, [tab.state.view, isLiveSessionActive, enhancedNotes, canShowTranscript]);
 }
 
 export function useCanShowTranscript(

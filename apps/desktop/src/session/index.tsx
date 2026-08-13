@@ -19,17 +19,19 @@ import { SessionSurface } from "./components/session-surface";
 import {
   computeCurrentNoteTab,
   getCanShowTranscript,
+  hasStoredNoteContent,
   useHasTranscript,
 } from "./components/shared";
 import { useAutoEnhance } from "./hooks/useAutoEnhance";
-import {
-  useEnhancedNotes,
-  useEnsureDefaultSummaryFromState,
-} from "./hooks/useEnhancedNotes";
+import { useEnsureDefaultSummaryFromState } from "./hooks/useEnhancedNotes";
 import { shouldShowSessionTopAudioPlayer } from "./top-audio-player";
 
 import * as AudioPlayer from "~/audio-player";
-import { useSession, useSessionRawMd } from "~/session/queries";
+import {
+  useEnhancedNoteRecords,
+  useSession,
+  useSessionRawMd,
+} from "~/session/queries";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
 import { useListener } from "~/stt/contexts";
 import { consumePendingUpload } from "~/stt/pending-upload";
@@ -165,7 +167,17 @@ function TabContentNoteInner({
     hasTranscript,
     sessionMode,
   });
-  const enhancedNoteIds = useEnhancedNotes(sessionId);
+  const enhancedNotes = useEnhancedNoteRecords(sessionId);
+  const enhancedNoteIds = React.useMemo(
+    () => enhancedNotes.map((note) => note.id),
+    [enhancedNotes],
+  );
+  const defaultEnhancedNoteId = React.useMemo(
+    () =>
+      enhancedNotes.find((note) => hasStoredNoteContent(note.content))?.id ??
+      null,
+    [enhancedNotes],
+  );
   const session = useSession(sessionId);
   const rawMd = useSessionRawMd(sessionId);
   const contentHydrated = session !== null;
@@ -196,8 +208,15 @@ function TabContentNoteInner({
       isLiveSessionActive,
       enhancedNoteIds,
       canShowTranscript,
+      defaultEnhancedNoteId,
     );
-  }, [tab.state.view, isLiveSessionActive, enhancedNoteIds, canShowTranscript]);
+  }, [
+    tab.state.view,
+    isLiveSessionActive,
+    enhancedNoteIds,
+    canShowTranscript,
+    defaultEnhancedNoteId,
+  ]);
   useAutoFocusTitle({ sessionId, noteInputRef });
 
   const showTopAudioPlayer = shouldShowSessionTopAudioPlayer({

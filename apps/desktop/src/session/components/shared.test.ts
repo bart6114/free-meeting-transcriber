@@ -48,7 +48,11 @@ vi.mock("~/stt/contexts", () => ({
 
 vi.mock("~/session/queries", () => ({
   useEnhancedNote: () => ({ content: hoisted.enhancedContent }),
-  useEnhancedNoteRecords: () => hoisted.enhancedNoteIds.map((id) => ({ id })),
+  useEnhancedNoteRecords: () =>
+    hoisted.enhancedNoteIds.map((id) => ({
+      id,
+      content: hoisted.enhancedContent,
+    })),
   useSession: () => ({ raw_md: hoisted.rawMd }),
   useSessionHasTranscript: () => hoisted.hasTranscript,
 }));
@@ -104,6 +108,29 @@ describe("useCurrentNoteTab", () => {
     );
 
     expect(result.current).toEqual({ type: "transcript" });
+  });
+
+  it("opens memo when the summary record is empty", () => {
+    const unopenedTab = {
+      ...tab,
+      state: { view: null, autoStart: null },
+    } as Extract<Tab, { type: "sessions" }>;
+
+    const { result } = renderHook(() => useCurrentNoteTab(unopenedTab));
+
+    expect(result.current).toEqual({ type: "raw" });
+  });
+
+  it("opens summary when it has generated content", () => {
+    hoisted.enhancedContent = "Generated summary";
+    const unopenedTab = {
+      ...tab,
+      state: { view: null, autoStart: null },
+    } as Extract<Tab, { type: "sessions" }>;
+
+    const { result } = renderHook(() => useCurrentNoteTab(unopenedTab));
+
+    expect(result.current).toEqual({ type: "enhanced", id: "note-1" });
   });
 });
 
@@ -225,12 +252,19 @@ describe("computeCurrentNoteTab", () => {
         true,
         ["note-1"],
         false,
+        null,
       );
       expect(result).toEqual({ type: "enhanced", id: "note-1" });
     });
 
     it("preserves raw view", () => {
-      const result = computeCurrentNoteTab({ type: "raw" }, true, ["note-1"]);
+      const result = computeCurrentNoteTab(
+        { type: "raw" },
+        true,
+        ["note-1"],
+        false,
+        null,
+      );
       expect(result).toEqual({ type: "raw" });
     });
 
@@ -240,6 +274,7 @@ describe("computeCurrentNoteTab", () => {
         true,
         ["note-1"],
         true,
+        null,
       );
       expect(result).toEqual({ type: "transcript" });
     });
@@ -250,29 +285,43 @@ describe("computeCurrentNoteTab", () => {
         true,
         ["note-1"],
         false,
+        null,
       );
       expect(result).toEqual({ type: "raw" });
     });
 
     it("returns raw view when no persisted view", () => {
-      const result = computeCurrentNoteTab(null, true, ["note-1"]);
+      const result = computeCurrentNoteTab(
+        null,
+        true,
+        ["note-1"],
+        false,
+        "note-1",
+      );
       expect(result).toEqual({ type: "raw" });
     });
   });
 
   describe("when not listening", () => {
-    it("respects persisted enhanced view", () => {
+    it("respects persisted enhanced view even when it is empty", () => {
       const result = computeCurrentNoteTab(
         { type: "enhanced", id: "note-1" },
         false,
         ["note-1"],
         false,
+        null,
       );
       expect(result).toEqual({ type: "enhanced", id: "note-1" });
     });
 
     it("respects persisted raw view", () => {
-      const result = computeCurrentNoteTab({ type: "raw" }, false, ["note-1"]);
+      const result = computeCurrentNoteTab(
+        { type: "raw" },
+        false,
+        ["note-1"],
+        false,
+        null,
+      );
       expect(result).toEqual({ type: "raw" });
     });
 
@@ -282,6 +331,7 @@ describe("computeCurrentNoteTab", () => {
         false,
         ["note-1"],
         true,
+        null,
       );
       expect(result).toEqual({ type: "transcript" });
     });
@@ -292,6 +342,7 @@ describe("computeCurrentNoteTab", () => {
         false,
         ["note-1"],
         false,
+        null,
       );
       expect(result).toEqual({ type: "raw" });
     });
@@ -302,6 +353,7 @@ describe("computeCurrentNoteTab", () => {
         false,
         ["note-1"],
         false,
+        null,
       );
       expect(result).toEqual({ type: "raw" });
     });
@@ -312,17 +364,46 @@ describe("computeCurrentNoteTab", () => {
         false,
         [],
         false,
+        null,
       );
       expect(result).toEqual({ type: "raw" });
     });
 
-    it("defaults to enhanced view when available and no persisted view", () => {
-      const result = computeCurrentNoteTab(null, false, ["note-1"]);
+    it("defaults to a generated enhanced view when no view is persisted", () => {
+      const result = computeCurrentNoteTab(
+        null,
+        false,
+        ["note-1"],
+        false,
+        "note-1",
+      );
       expect(result).toEqual({ type: "enhanced", id: "note-1" });
     });
 
+    it("defaults to raw when the enhanced note is empty", () => {
+      const result = computeCurrentNoteTab(
+        null,
+        false,
+        ["note-1"],
+        false,
+        null,
+      );
+      expect(result).toEqual({ type: "raw" });
+    });
+
+    it("defaults to the generated note when an earlier enhanced note is empty", () => {
+      const result = computeCurrentNoteTab(
+        null,
+        false,
+        ["empty-note", "generated-note"],
+        false,
+        "generated-note",
+      );
+      expect(result).toEqual({ type: "enhanced", id: "generated-note" });
+    });
+
     it("defaults to raw when no enhanced notes and no persisted view", () => {
-      const result = computeCurrentNoteTab(null, false, []);
+      const result = computeCurrentNoteTab(null, false, [], false, null);
       expect(result).toEqual({ type: "raw" });
     });
 
@@ -331,6 +412,8 @@ describe("computeCurrentNoteTab", () => {
         { type: "enhanced", id: "legacy-summary" },
         false,
         ["stored-summary"],
+        false,
+        null,
       );
 
       expect(result).toEqual({ type: "enhanced", id: "stored-summary" });
