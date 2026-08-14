@@ -116,7 +116,7 @@ describe("SettingsNav", () => {
       "General",
       "App",
       "Notifications",
-      "Developers",
+      "Agents",
       "Permissions",
       "AI",
       "Transcription",

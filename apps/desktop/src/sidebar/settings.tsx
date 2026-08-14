@@ -65,7 +65,7 @@ export function SettingsNav() {
       items: [
         { id: "app", label: t`App`, icon: CogIcon },
         { id: "notifications", label: t`Notifications`, icon: BellIcon },
-        { id: "developers", label: t`Developers`, icon: Code2Icon },
+        { id: "developers", label: t`Agents`, icon: Code2Icon },
       ],
     },
     {

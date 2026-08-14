@@ -104,6 +104,10 @@ msgstr "Advanced"
 msgid "After recording"
 msgstr "After recording"
 
+#: src/sidebar/settings.tsx
+msgid "Agents"
+msgstr "Agents"
+
 #: src/shared/open-note-dialog.tsx
 msgid "All Notes"
 msgstr "All Notes"
@@ -352,8 +356,8 @@ msgid "Detection delay"
 msgstr "Detection delay"
 
 #: src/sidebar/settings.tsx
-msgid "Developers"
-msgstr "Developers"
+#~ msgid "Developers"
+#~ msgstr "Developers"
 
 #: src/settings/dictionary/index.tsx
 msgid "Dictionary"

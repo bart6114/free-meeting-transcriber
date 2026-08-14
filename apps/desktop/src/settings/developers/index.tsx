@@ -88,7 +88,7 @@ export function SettingsDevelopers() {
 
   return (
     <div className="mx-auto flex w-full max-w-3xl flex-col gap-8">
-      <SettingsPageTitle title="Developers" />
+      <SettingsPageTitle title="Agents" />
       <CliSection
         status={status}
         isLoading={statusQuery.isPending}
