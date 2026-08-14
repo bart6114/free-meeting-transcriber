@@ -1,4 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Command as CommandPrimitive } from "cmdk";
 import { FileTextIcon, SearchIcon, XIcon } from "lucide-react";
 import {
@@ -13,11 +14,16 @@ import { useHotkeys } from "react-hotkeys-hook";
 
 import { cn } from "@hypr/utils";
 
+import { useSearchEngine } from "~/search/contexts/engine";
+import type { SearchSnippet } from "~/search/contexts/engine";
+import { snippetSegments } from "~/search/snippet";
 import { useSessionSummaries } from "~/session/queries";
 import { useMainContentCenterOffset } from "~/shared/main/content-offset";
 import { useTabs } from "~/store/zustand/tabs";
 
 const MAX_RECENT_DISPLAY = 5;
+const SEARCH_LIMIT = 20;
+const SNIPPET_MAX_CHARS = 120;
 
 interface OpenNoteDialogProps {
   open: boolean;
@@ -33,6 +39,7 @@ type NoteResult = {
   id: string;
   title: string;
   createdAt: string;
+  snippet?: SearchSnippet | null;
 };
 
 const OpenNoteDialogContext = createContext<OpenNoteDialogContextValue | null>(
@@ -81,6 +88,30 @@ export function useOpenNoteDialog() {
   return context;
 }
 
+function SnippetLine({ snippet }: { snippet: SearchSnippet }) {
+  const segments = useMemo(() => snippetSegments(snippet), [snippet]);
+  if (segments.length === 0) {
+    return null;
+  }
+
+  return (
+    <span className="text-muted-foreground/80 truncate text-xs">
+      {segments.map((segment, index) =>
+        segment.highlighted ? (
+          <mark
+            key={index}
+            className="text-foreground bg-transparent font-semibold"
+          >
+            {segment.text}
+          </mark>
+        ) : (
+          <span key={index}>{segment.text}</span>
+        ),
+      )}
+    </span>
+  );
+}
+
 export function OpenNoteDialog({
   open,
   onOpenChange,
@@ -92,8 +123,23 @@ export function OpenNoteDialog({
   const recentlyOpenedSessionIds = useTabs(
     (state) => state.recentlyOpenedSessionIds,
   );
+  const { search } = useSearchEngine();
 
   const sessions = useSessionSummaries();
+
+  const trimmedQuery = query.trim();
+
+  const { data: contentHits } = useQuery({
+    queryKey: ["open-note-dialog-search", trimmedQuery],
+    queryFn: () =>
+      search(trimmedQuery, null, {
+        limit: SEARCH_LIMIT,
+        snippets: true,
+        snippetMaxChars: SNIPPET_MAX_CHARS,
+      }),
+    enabled: open && trimmedQuery.length > 0,
+    placeholderData: keepPreviousData,
+  });
 
   const sessionsMap = useMemo(() => {
     return new Map<string, NoteResult>(
@@ -132,24 +178,44 @@ export function OpenNoteDialog({
     );
   }, [allNotesSortedByDate, recentSessionIdSet]);
 
-  const filteredRecentSessions = useMemo(() => {
-    if (!query.trim()) return recentSessions;
-    const lowerQuery = query.toLowerCase();
-    return recentSessions.filter((s) =>
-      s.title.toLowerCase().includes(lowerQuery),
-    );
-  }, [recentSessions, query]);
+  // Full-text hits (memo, summaries, transcripts) merged with client-side
+  // title substring matches: Tantivy only matches whole tokens, so substring
+  // matching keeps prefix typing ("plan" -> "Planning session") working.
+  const searchResults = useMemo(() => {
+    if (!trimmedQuery) return [];
 
-  const filteredOtherNotes = useMemo(() => {
-    if (!query.trim()) return otherNotes;
-    const lowerQuery = query.toLowerCase();
-    return otherNotes.filter((note) =>
-      note.title.toLowerCase().includes(lowerQuery),
+    const sessionHits = (contentHits ?? []).filter(
+      (hit) => hit.document.type === "session",
     );
-  }, [otherNotes, query]);
+    const snippetsById = new Map(
+      sessionHits.map((hit) => [hit.document.id, hit.contentSnippet]),
+    );
 
-  const hasAnyResults =
-    filteredRecentSessions.length > 0 || filteredOtherNotes.length > 0;
+    const lowerQuery = trimmedQuery.toLowerCase();
+    const results: NoteResult[] = [];
+    const seen = new Set<string>();
+
+    for (const note of allNotesSortedByDate) {
+      if (note.title.toLowerCase().includes(lowerQuery)) {
+        seen.add(note.id);
+        results.push({ ...note, snippet: snippetsById.get(note.id) ?? null });
+      }
+    }
+
+    for (const hit of sessionHits) {
+      if (seen.has(hit.document.id)) continue;
+      const note = sessionsMap.get(hit.document.id);
+      if (!note) continue;
+      seen.add(note.id);
+      results.push({ ...note, snippet: hit.contentSnippet });
+    }
+
+    return results;
+  }, [trimmedQuery, contentHits, allNotesSortedByDate, sessionsMap]);
+
+  const hasAnyResults = trimmedQuery
+    ? searchResults.length > 0
+    : recentSessions.length > 0 || otherNotes.length > 0;
 
   const handleOpenChange = useCallback(
     (nextOpen: boolean) => {
@@ -238,18 +304,40 @@ export function OpenNoteDialog({
                 <CommandPrimitive.Empty className="text-muted-foreground py-6 text-center text-sm">
                   <Trans>No notes found.</Trans>
                 </CommandPrimitive.Empty>
+              ) : trimmedQuery ? (
+                <CommandPrimitive.Group>
+                  {searchResults.map((note) => (
+                    <CommandPrimitive.Item
+                      key={note.id}
+                      value={note.id}
+                      onSelect={() => handleSelect(note)}
+                      className={cn([
+                        "flex cursor-pointer items-center gap-3 rounded-lg px-3 py-2.5",
+                        "text-muted-foreground text-sm",
+                        "data-[selected=true]:bg-accent/60",
+                        "transition-colors",
+                      ])}
+                    >
+                      <FileTextIcon className="text-muted-foreground h-4 w-4 shrink-0" />
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate">{note.title}</span>
+                        {note.snippet && <SnippetLine snippet={note.snippet} />}
+                      </span>
+                    </CommandPrimitive.Item>
+                  ))}
+                </CommandPrimitive.Group>
               ) : (
                 <>
-                  {filteredRecentSessions.length > 0 && (
+                  {recentSessions.length > 0 && (
                     <CommandPrimitive.Group
-                      className={filteredOtherNotes.length > 0 ? "pb-1.5" : ""}
+                      className={otherNotes.length > 0 ? "pb-1.5" : ""}
                       heading={
                         <div className="text-muted-foreground px-2 py-1.5 text-xs font-medium tracking-wider uppercase">
                           <Trans>Recent</Trans>
                         </div>
                       }
                     >
-                      {filteredRecentSessions.map((session) => (
+                      {recentSessions.map((session) => (
                         <CommandPrimitive.Item
                           key={`recent-${session.id}`}
                           value={`recent-${session.id}`}
@@ -268,11 +356,11 @@ export function OpenNoteDialog({
                     </CommandPrimitive.Group>
                   )}
 
-                  {filteredOtherNotes.length > 0 && (
+                  {otherNotes.length > 0 && (
                     <CommandPrimitive.Group
                       heading={
                         <div className="flex flex-col gap-3">
-                          {filteredRecentSessions.length > 0 && (
+                          {recentSessions.length > 0 && (
                             <div className="bg-accent mx-2 h-px" />
                           )}
                           <div className="text-muted-foreground px-2 py-1.5 text-xs font-medium tracking-wider uppercase">
@@ -281,7 +369,7 @@ export function OpenNoteDialog({
                         </div>
                       }
                     >
-                      {filteredOtherNotes.map((note) => (
+                      {otherNotes.map((note) => (
                         <CommandPrimitive.Item
                           key={note.id}
                           value={note.id}

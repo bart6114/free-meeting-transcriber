@@ -29,7 +29,20 @@ export const searchFiltersSchema = z.object({
 
 export type SearchFilters = z.infer<typeof searchFiltersSchema>;
 
+export type SearchSnippet = {
+  fragment: string;
+  highlights: { start: number; end: number }[];
+};
+
 export type SearchHit = {
   score: number;
   document: SearchDocument;
+  titleSnippet: SearchSnippet | null;
+  contentSnippet: SearchSnippet | null;
+};
+
+export type SearchOptions = {
+  limit?: number;
+  snippets?: boolean;
+  snippetMaxChars?: number;
 };
