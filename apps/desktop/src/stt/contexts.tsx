@@ -216,19 +216,6 @@ function getNotificationAppName(app: MicApp) {
   return getMicAppNotificationOverride(app)?.displayName ?? app.name;
 }
 
-async function getNotificationIconForDetectedApps(
-  apps: MicApp[],
-): Promise<NotificationIcon | null> {
-  for (const app of apps) {
-    const icon = await getNotificationIconForApp(app);
-    if (icon) {
-      return icon;
-    }
-  }
-
-  return null;
-}
-
 function getIgnorableApps(apps: MicApp[]) {
   const seen = new Set<string>();
 
@@ -246,20 +233,20 @@ function getIgnoreAppsFooterText(apps: MicApp[]) {
   const firstName = apps[0] ? getNotificationAppName(apps[0]).trim() : "";
 
   if (apps.length === 1) {
-    return firstName ? `Ignore ${firstName}?` : "Ignore this app?";
+    return firstName || "This app";
   }
 
   if (!firstName) {
-    return "Ignore these apps?";
+    return "These apps";
   }
 
   const secondName = apps[1] ? getNotificationAppName(apps[1]).trim() : "";
   if (apps.length === 2 && secondName) {
-    return `Ignore ${firstName} and ${secondName}?`;
+    return `${firstName} and ${secondName}`;
   }
 
   const otherAppCount = apps.length - 1;
-  return `Ignore ${firstName} and ${otherAppCount} other app${otherAppCount === 1 ? "" : "s"}?`;
+  return `${firstName} and ${otherAppCount} other app${otherAppCount === 1 ? "" : "s"}`;
 }
 
 function getAutoStopCandidateAppIds(
@@ -486,14 +473,11 @@ const useHandleDetectEvents = (store: ListenerStore) => {
                 ignorableApps.length > 0
                   ? await getNotificationIconForApp(ignorableApps[0]!)
                   : null;
-              const notificationIcon = await getNotificationIconForDetectedApps(
-                payload.apps,
-              );
               const footer =
                 ignorableApps.length > 0
                   ? {
                       text: getIgnoreAppsFooterText(ignorableApps),
-                      actionLabel: "Yes",
+                      actionLabel: "Always ignore",
                       icon: footerIcon,
                     }
                   : null;
@@ -518,11 +502,11 @@ const useHandleDetectEvents = (store: ListenerStore) => {
                 start_time: null,
                 participants: null,
                 event_details: null,
-                action_label: "Yes",
+                action_label: "Start recording",
                 action_variant: null,
                 options: null,
                 footer,
-                icon: notificationIcon,
+                icon: null,
               });
             } finally {
               pendingMicDetectedPromptRef.current = false;

@@ -572,17 +572,14 @@ describe("ListenerProvider detect events", () => {
             app_ids: ["us.zoom.xos"],
           },
           footer: {
-            text: "Ignore Zoom?",
-            actionLabel: "Yes",
+            text: "Zoom",
+            actionLabel: "Always ignore",
             icon: {
               type: "path",
               path: "/resources/notification-icons/zoom.svg",
             },
           },
-          icon: {
-            type: "path",
-            path: "/resources/notification-icons/zoom.svg",
-          },
+          icon: null,
         }),
       ),
     );
@@ -651,10 +648,7 @@ describe("ListenerProvider detect events", () => {
             app_ids: [],
           },
           footer: null,
-          icon: {
-            type: "path",
-            path: "/resources/notification-icons/phone.png",
-          },
+          icon: null,
         }),
       ),
     );
@@ -692,17 +686,14 @@ describe("ListenerProvider detect events", () => {
             app_ids: ["/usr/libexec/avconferenced"],
           },
           footer: {
-            text: "Ignore iPhone Call?",
-            actionLabel: "Yes",
+            text: "iPhone Call",
+            actionLabel: "Always ignore",
             icon: {
               type: "path",
               path: "/resources/notification-icons/phone.png",
             },
           },
-          icon: {
-            type: "path",
-            path: "/resources/notification-icons/phone.png",
-          },
+          icon: null,
         }),
       ),
     );
