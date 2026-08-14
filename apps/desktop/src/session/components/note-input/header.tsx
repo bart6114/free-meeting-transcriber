@@ -1,4 +1,5 @@
 import { useLingui } from "@lingui/react/macro";
+import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import {
   AlignLeftIcon,
   AudioLinesIcon,
@@ -216,8 +217,10 @@ async function copyTextToClipboard(
         }),
       ]);
     } catch {
-      // Fallback for environments that do not support text/markdown
-      await navigator.clipboard.writeText(text);
+      // WKWebView rejects text/markdown ClipboardItems, and the async
+      // clipboard API needs transient user activation that expires after
+      // awaited IPC calls — the Tauri plugin has neither restriction.
+      await writeClipboardText(text);
     }
 
     if (messages) {
