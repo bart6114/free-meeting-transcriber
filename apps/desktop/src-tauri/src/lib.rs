@@ -380,6 +380,16 @@ pub async fn main() {
                 }
             }
 
+            // Keeps an already-installed `~/.local/bin/fmtr` symlink pointed at
+            // this app bundle so app updates carry the CLI along; no-op when the
+            // user never installed the CLI.
+            {
+                let app_handle = app_handle.clone();
+                tauri::async_runtime::spawn(async move {
+                    embedded_cli::sync_installed(&app_handle);
+                });
+            }
+
             // Coalescing `index-changed` emitter for the in-memory vault index
             // (Phase E1). Needs the store managed; changes queued before this point
             // (startup rebuild) simply flush as the dispatcher's first batch.

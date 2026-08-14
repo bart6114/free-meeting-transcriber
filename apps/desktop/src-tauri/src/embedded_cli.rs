@@ -1,6 +1,4 @@
 #[cfg(target_os = "macos")]
-use std::os::unix::fs::PermissionsExt;
-#[cfg(target_os = "macos")]
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -56,7 +54,7 @@ pub fn check<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -> EmbeddedCl
 
     #[cfg(target_os = "macos")]
     {
-        let Some(_resource_path) = resolve_resource_path(manager) else {
+        let Some(resource_path) = resolve_resource_path(manager) else {
             return EmbeddedCliStatus {
                 supported: true,
                 command_name: command_name.to_string(),
@@ -68,9 +66,8 @@ pub fn check<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -> EmbeddedCl
                 ),
             };
         };
-        let app_version = manager.package_info().version.to_string();
 
-        classify_status(command_name, install_path, &app_version)
+        classify_status(command_name, install_path, &resource_path)
     }
 }
 
@@ -102,15 +99,49 @@ pub fn install<R: tauri::Runtime, T: tauri::Manager<R>>(
         let resource_path = resolve_resource_path(manager)
             .ok_or_else(|| "The bundled CLI could not be found.".to_string())?;
         let install_path = PathBuf::from(&status.install_path);
-        let app_version = manager.package_info().version.to_string();
-        let managed_path = managed_binary_path(&install_path, &status.command_name, &app_version)?;
 
-        install_managed_cli(&resource_path, &managed_path, &install_path)?;
+        install_symlink(&resource_path, &install_path)?;
+        remove_legacy_managed_copies(&install_path, &status.command_name);
         Ok(classify_status(
             &status.command_name,
             install_path,
-            &app_version,
+            &resource_path,
         ))
+    }
+}
+
+/// Re-points a previously installed CLI symlink at the current app bundle.
+/// Runs at startup so the command on PATH follows app updates and moves,
+/// and so pre-symlink installs (versioned copies under `.fmtr-cli/`) migrate.
+/// Never installs for users who haven't opted in via Settings -> Developers.
+pub fn sync_installed<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) {
+    #[cfg(not(target_os = "macos"))]
+    {
+        let _ = manager;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let status = check(manager);
+        if status.state != EmbeddedCliState::Missing {
+            return;
+        }
+        let is_symlink = std::fs::symlink_metadata(PathBuf::from(&status.install_path))
+            .is_ok_and(|metadata| metadata.file_type().is_symlink());
+        if !is_symlink {
+            return;
+        }
+
+        match install(manager) {
+            Ok(status) if status.state == EmbeddedCliState::Installed => {
+                tracing::info!(
+                    command = status.command_name,
+                    "relinked the fmtr CLI to the current app"
+                );
+            }
+            Ok(_) => {}
+            Err(error) => tracing::warn!(%error, "failed to relink the fmtr CLI"),
+        }
     }
 }
 
@@ -187,12 +218,9 @@ fn bundled_binary_name() -> Option<&'static str> {
 fn classify_status(
     command_name: &str,
     install_path: PathBuf,
-    app_version: &str,
+    resource_path: &Path,
 ) -> EmbeddedCliStatus {
-    let state = managed_binary_path(&install_path, command_name, app_version)
-        .and_then(|managed_path| classify_installation(&install_path, &managed_path));
-
-    match state {
+    match classify_installation(&install_path, resource_path) {
         Ok(state) => EmbeddedCliStatus {
             supported: true,
             command_name: command_name.to_string(),
@@ -213,7 +241,7 @@ fn classify_status(
 #[cfg(target_os = "macos")]
 fn classify_installation(
     install_path: &Path,
-    managed_path: &Path,
+    resource_path: &Path,
 ) -> Result<EmbeddedCliState, String> {
     let metadata = match std::fs::symlink_metadata(install_path) {
         Ok(metadata) => metadata,
@@ -232,52 +260,69 @@ fn classify_installation(
         return Ok(EmbeddedCliState::Conflict);
     }
 
-    let installed_target = std::fs::read_link(install_path).map_err(|error| {
+    let target = std::fs::read_link(install_path).map_err(|error| {
         format!(
             "Failed to inspect the installed command at {}: {error}",
             install_path.display()
         )
     })?;
-    if !is_replaceable_symlink_target(&installed_target, managed_path) {
-        return Ok(EmbeddedCliState::Conflict);
-    }
-    if installed_target != managed_path {
-        return Ok(EmbeddedCliState::Missing);
-    }
-
-    let managed_metadata = match std::fs::symlink_metadata(managed_path) {
-        Ok(metadata) => metadata,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            return Ok(EmbeddedCliState::Missing);
-        }
-        Err(error) => {
-            return Err(format!(
-                "Failed to resolve the managed CLI at {}: {error}",
-                managed_path.display()
-            ));
-        }
+    let target = if target.is_absolute() {
+        target
+    } else {
+        install_path
+            .parent()
+            .map(|dir| dir.join(&target))
+            .unwrap_or(target)
     };
 
-    if !managed_metadata.file_type().is_file() || managed_metadata.permissions().mode() & 0o100 == 0
-    {
+    if points_at(&target, resource_path) {
+        return Ok(EmbeddedCliState::Installed);
+    }
+    if is_replaceable_symlink_target(&target) {
         return Ok(EmbeddedCliState::Missing);
     }
-
-    Ok(EmbeddedCliState::Installed)
+    Ok(EmbeddedCliState::Conflict)
 }
 
 #[cfg(target_os = "macos")]
-fn is_replaceable_symlink_target(target: &Path, managed_path: &Path) -> bool {
-    managed_path
-        .parent()
-        .is_some_and(|managed_dir| target.parent() == Some(managed_dir))
+fn points_at(target: &Path, resource_path: &Path) -> bool {
+    if target == resource_path {
+        return true;
+    }
+    matches!(
+        (
+            std::fs::canonicalize(target),
+            std::fs::canonicalize(resource_path),
+        ),
+        (Ok(target), Ok(resource)) if target == resource
+    )
+}
+
+/// Targets a previous install could have left behind: the legacy versioned
+/// copies under `.fmtr-cli/`, a sidecar inside an app bundle (older app
+/// location or channel), the dev `resources/cli` tree, or a dangling link
+/// (replacing one cannot lose anything). Anything else is someone else's
+/// file and must not be overwritten.
+#[cfg(target_os = "macos")]
+fn is_replaceable_symlink_target(target: &Path) -> bool {
+    if target
+        .components()
+        .any(|component| component.as_os_str() == MANAGED_CLI_DIR)
+    {
+        return true;
+    }
+    if !target.exists() {
+        return true;
+    }
+    let path = target.to_string_lossy();
+    path.contains(".app/Contents/MacOS/") || path.contains("/resources/cli/")
 }
 
 #[cfg(target_os = "macos")]
 fn details_for_state(state: EmbeddedCliState, install_path: &Path) -> Option<String> {
     match state {
         EmbeddedCliState::Installed => Some(format!(
-            "Installed at {} and managed by Free Meeting Transcriber.",
+            "Installed at {} and linked to this app, so it updates together with the app.",
             install_path.display()
         )),
         EmbeddedCliState::Missing => Some(format!(
@@ -294,85 +339,7 @@ fn details_for_state(state: EmbeddedCliState, install_path: &Path) -> Option<Str
 }
 
 #[cfg(target_os = "macos")]
-fn managed_binary_path(
-    install_path: &Path,
-    command_name: &str,
-    app_version: &str,
-) -> Result<PathBuf, String> {
-    let install_dir = install_path
-        .parent()
-        .ok_or_else(|| "The CLI install directory is invalid.".to_string())?;
-
-    Ok(install_dir
-        .join(MANAGED_CLI_DIR)
-        .join(command_name)
-        .join(app_version))
-}
-
-#[cfg(target_os = "macos")]
-fn install_managed_cli(
-    resource_path: &Path,
-    managed_path: &Path,
-    install_path: &Path,
-) -> Result<(), String> {
-    let managed_dir = managed_path
-        .parent()
-        .ok_or_else(|| "The managed CLI directory is invalid.".to_string())?;
-    std::fs::create_dir_all(managed_dir)
-        .map_err(|error| format!("Could not create {}: {error}", managed_dir.display()))?;
-
-    let file_name = managed_path
-        .file_name()
-        .ok_or_else(|| "The managed CLI path is invalid.".to_string())?;
-    let temp_path = managed_path.with_file_name(format!(
-        ".{}.tmp-{}",
-        file_name.to_string_lossy(),
-        std::process::id()
-    ));
-    if std::fs::symlink_metadata(&temp_path).is_ok() {
-        std::fs::remove_file(&temp_path).map_err(|error| {
-            format!(
-                "Could not prepare the CLI update at {}: {error}",
-                temp_path.display()
-            )
-        })?;
-    }
-
-    std::fs::copy(resource_path, &temp_path).map_err(|error| {
-        format!(
-            "Could not copy the bundled CLI to {}: {error}",
-            temp_path.display()
-        )
-    })?;
-    let mut permissions = std::fs::metadata(&temp_path)
-        .map_err(|error| {
-            format!(
-                "Could not inspect the CLI update at {}: {error}",
-                temp_path.display()
-            )
-        })?
-        .permissions();
-    permissions.set_mode(permissions.mode() | 0o100);
-    if let Err(error) = std::fs::set_permissions(&temp_path, permissions) {
-        let _ = std::fs::remove_file(&temp_path);
-        return Err(format!(
-            "Could not make the CLI executable at {}: {error}",
-            temp_path.display()
-        ));
-    }
-    if let Err(error) = std::fs::rename(&temp_path, managed_path) {
-        let _ = std::fs::remove_file(&temp_path);
-        return Err(format!(
-            "Could not install the managed CLI at {}: {error}",
-            managed_path.display()
-        ));
-    }
-
-    install_symlink(managed_path, install_path)
-}
-
-#[cfg(target_os = "macos")]
-fn install_symlink(managed_path: &Path, install_path: &Path) -> Result<(), String> {
+fn install_symlink(resource_path: &Path, install_path: &Path) -> Result<(), String> {
     let install_dir = install_path
         .parent()
         .ok_or_else(|| "The CLI install directory is invalid.".to_string())?;
@@ -396,13 +363,13 @@ fn install_symlink(managed_path: &Path, install_path: &Path) -> Result<(), Strin
         })?;
     }
 
-    std::os::unix::fs::symlink(managed_path, &temp_path).map_err(|error| {
+    std::os::unix::fs::symlink(resource_path, &temp_path).map_err(|error| {
         format!(
             "Could not prepare the command at {}: {error}",
             temp_path.display()
         )
     })?;
-    if let Err(error) = ensure_install_path_replaceable(install_path, managed_path) {
+    if let Err(error) = ensure_install_path_replaceable(install_path, resource_path) {
         let _ = std::fs::remove_file(&temp_path);
         return Err(error);
     }
@@ -418,7 +385,10 @@ fn install_symlink(managed_path: &Path, install_path: &Path) -> Result<(), Strin
 }
 
 #[cfg(target_os = "macos")]
-fn ensure_install_path_replaceable(install_path: &Path, managed_path: &Path) -> Result<(), String> {
+fn ensure_install_path_replaceable(
+    install_path: &Path,
+    resource_path: &Path,
+) -> Result<(), String> {
     let metadata = match std::fs::symlink_metadata(install_path) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
@@ -437,7 +407,7 @@ fn ensure_install_path_replaceable(install_path: &Path, managed_path: &Path) -> 
                 install_path.display()
             )
         })?;
-        if is_replaceable_symlink_target(&target, managed_path) {
+        if points_at(&target, resource_path) || is_replaceable_symlink_target(&target) {
             return Ok(());
         }
     }
@@ -448,11 +418,21 @@ fn ensure_install_path_replaceable(install_path: &Path, managed_path: &Path) -> 
     ))
 }
 
+/// Earlier releases copied the CLI to `~/.local/bin/.fmtr-cli/<name>/<version>`
+/// and symlinked to the copy. Best effort -- leftovers only waste disk.
+#[cfg(target_os = "macos")]
+fn remove_legacy_managed_copies(install_path: &Path, command_name: &str) {
+    let Some(install_dir) = install_path.parent() else {
+        return;
+    };
+    let managed_dir = install_dir.join(MANAGED_CLI_DIR);
+    let _ = std::fs::remove_dir_all(managed_dir.join(command_name));
+    let _ = std::fs::remove_dir(managed_dir);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    #[cfg(target_os = "macos")]
-    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn maps_bundle_id_to_command_name() {
@@ -466,11 +446,18 @@ mod tests {
     }
 
     #[cfg(target_os = "macos")]
+    fn write_app_bundle_cli(dir: &Path, app_name: &str) -> PathBuf {
+        let resource_path = dir.join(app_name).join("Contents/MacOS/fmtr");
+        std::fs::create_dir_all(resource_path.parent().unwrap()).unwrap();
+        std::fs::write(&resource_path, app_name).unwrap();
+        resource_path
+    }
+
+    #[cfg(target_os = "macos")]
     #[test]
     fn classifies_missing_install() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = dir.path().join("fmtr-cli");
-        std::fs::write(&resource_path, "cli").unwrap();
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
 
         let state = classify_installation(&dir.path().join("fmtr"), &resource_path).unwrap();
         assert_eq!(state, EmbeddedCliState::Missing);
@@ -478,68 +465,118 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn classifies_installed_symlink() {
+    fn classifies_symlink_into_current_app_as_installed() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("managed-fmtr-cli");
-        std::fs::write(&managed_path, "cli").unwrap();
-        std::fs::set_permissions(&managed_path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
         let install_path = dir.path().join("fmtr");
-        std::os::unix::fs::symlink(&managed_path, &install_path).unwrap();
+        std::os::unix::fs::symlink(&resource_path, &install_path).unwrap();
 
-        let state = classify_installation(&install_path, &managed_path).unwrap();
+        let state = classify_installation(&install_path, &resource_path).unwrap();
         assert_eq!(state, EmbeddedCliState::Installed);
     }
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn classifies_non_executable_managed_cli_as_missing() {
+    fn classifies_legacy_managed_copy_as_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("managed-fmtr-cli");
-        std::fs::write(&managed_path, "cli").unwrap();
-        std::fs::set_permissions(&managed_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let legacy_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(&legacy_path, "old cli").unwrap();
         let install_path = dir.path().join("fmtr");
-        std::os::unix::fs::symlink(&managed_path, &install_path).unwrap();
+        std::os::unix::fs::symlink(&legacy_path, &install_path).unwrap();
 
-        assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Missing
-        );
+        let state = classify_installation(&install_path, &resource_path).unwrap();
+        assert_eq!(state, EmbeddedCliState::Missing);
     }
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn classifies_stale_symlinks_as_missing() {
+    fn classifies_dangling_symlink_as_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("fmtr-cli");
-        let old_managed_path = dir.path().join("old-fmtr-cli");
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
         let install_path = dir.path().join("fmtr");
-        std::fs::write(&managed_path, "new cli").unwrap();
-        std::fs::write(&old_managed_path, "old cli").unwrap();
-        std::os::unix::fs::symlink(&old_managed_path, &install_path).unwrap();
+        std::os::unix::fs::symlink(dir.path().join("gone"), &install_path).unwrap();
 
-        assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Missing
-        );
+        let state = classify_installation(&install_path, &resource_path).unwrap();
+        assert_eq!(state, EmbeddedCliState::Missing);
+    }
 
-        std::fs::remove_file(old_managed_path).unwrap();
-        assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Missing
-        );
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn classifies_symlink_into_old_app_bundle_as_missing() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_resource_path = write_app_bundle_cli(dir.path(), "Old.app");
+        let new_resource_path = write_app_bundle_cli(dir.path(), "New.app");
+        let install_path = dir.path().join("fmtr");
+        std::os::unix::fs::symlink(&old_resource_path, &install_path).unwrap();
+
+        let state = classify_installation(&install_path, &new_resource_path).unwrap();
+        assert_eq!(state, EmbeddedCliState::Missing);
     }
 
     #[cfg(target_os = "macos")]
     #[test]
     fn classifies_foreign_symlink_as_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let foreign_target = dir.path().join("other-tool");
+        std::fs::write(&foreign_target, "not ours").unwrap();
         let install_path = dir.path().join("fmtr");
-        std::os::unix::fs::symlink("/opt/homebrew/bin/fmtr", &install_path).unwrap();
+        std::os::unix::fs::symlink(&foreign_target, &install_path).unwrap();
+
+        let state = classify_installation(&install_path, &resource_path).unwrap();
+        assert_eq!(state, EmbeddedCliState::Conflict);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn classifies_regular_file_as_conflict() {
+        let dir = tempfile::tempdir().unwrap();
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let install_path = dir.path().join("fmtr");
+        std::fs::write(&install_path, "other").unwrap();
+
+        let state = classify_installation(&install_path, &resource_path).unwrap();
+        assert_eq!(state, EmbeddedCliState::Conflict);
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn install_symlinks_directly_into_the_app_bundle() {
+        let dir = tempfile::tempdir().unwrap();
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let install_path = dir.path().join("home/.local/bin/fmtr");
+
+        install_symlink(&resource_path, &install_path).unwrap();
+
+        assert_eq!(std::fs::read_link(&install_path).unwrap(), resource_path);
+        assert_eq!(
+            classify_installation(&install_path, &resource_path).unwrap(),
+            EmbeddedCliState::Installed
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn reinstall_repoints_symlink_after_app_move() {
+        let dir = tempfile::tempdir().unwrap();
+        let old_resource_path = write_app_bundle_cli(dir.path(), "Old.app");
+        let new_resource_path = write_app_bundle_cli(dir.path(), "New.app");
+        let install_path = dir.path().join("home/.local/bin/fmtr");
+        install_symlink(&old_resource_path, &install_path).unwrap();
+        std::fs::remove_dir_all(dir.path().join("Old.app")).unwrap();
 
         assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Conflict
+            classify_installation(&install_path, &new_resource_path).unwrap(),
+            EmbeddedCliState::Missing
+        );
+
+        install_symlink(&new_resource_path, &install_path).unwrap();
+        assert_eq!(std::fs::read_to_string(&install_path).unwrap(), "New.app");
+        assert_eq!(
+            classify_installation(&install_path, &new_resource_path).unwrap(),
+            EmbeddedCliState::Installed
         );
     }
 
@@ -547,84 +584,32 @@ mod tests {
     #[test]
     fn installer_refuses_to_replace_foreign_symlink() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = dir.path().join("bundled-fmtr-cli");
-        let managed_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let foreign_target = dir.path().join("other-tool");
+        std::fs::write(&foreign_target, "not ours").unwrap();
         let install_path = dir.path().join("fmtr");
-        let foreign_target = Path::new("/opt/homebrew/bin/fmtr");
-        std::fs::write(&resource_path, "cli").unwrap();
-        std::os::unix::fs::symlink(foreign_target, &install_path).unwrap();
+        std::os::unix::fs::symlink(&foreign_target, &install_path).unwrap();
 
-        assert!(install_managed_cli(&resource_path, &managed_path, &install_path).is_err());
+        assert!(install_symlink(&resource_path, &install_path).is_err());
         assert_eq!(std::fs::read_link(&install_path).unwrap(), foreign_target);
     }
 
     #[cfg(target_os = "macos")]
     #[test]
-    fn installed_cli_survives_bundled_resource_move() {
+    fn install_prunes_legacy_managed_copies() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = dir
-            .path()
-            .join("Free Meeting Transcriber.app/Contents/MacOS/fmtr-cli");
+        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
         let install_path = dir.path().join("home/.local/bin/fmtr");
-        let managed_path = managed_binary_path(&install_path, "fmtr", "1.2.0").unwrap();
-        std::fs::create_dir_all(resource_path.parent().unwrap()).unwrap();
-        std::fs::write(&resource_path, "cli").unwrap();
-        std::fs::set_permissions(&resource_path, std::fs::Permissions::from_mode(0o644)).unwrap();
+        let legacy_path = dir.path().join("home/.local/bin/.fmtr-cli/fmtr/1.2.0");
+        std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
+        std::fs::write(&legacy_path, "old cli").unwrap();
+        std::fs::create_dir_all(install_path.parent().unwrap()).unwrap();
+        std::os::unix::fs::symlink(&legacy_path, &install_path).unwrap();
 
-        install_managed_cli(&resource_path, &managed_path, &install_path).unwrap();
-        std::fs::remove_dir_all(dir.path().join("Free Meeting Transcriber.app")).unwrap();
+        install_symlink(&resource_path, &install_path).unwrap();
+        remove_legacy_managed_copies(&install_path, "fmtr");
 
-        assert_eq!(std::fs::read_to_string(&install_path).unwrap(), "cli");
-        assert_ne!(
-            std::fs::metadata(&install_path)
-                .unwrap()
-                .permissions()
-                .mode()
-                & 0o111,
-            0
-        );
-        assert_eq!(
-            classify_installation(&install_path, &managed_path).unwrap(),
-            EmbeddedCliState::Installed
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn app_update_requires_installing_the_new_cli_version() {
-        let dir = tempfile::tempdir().unwrap();
-        let install_path = dir.path().join("home/.local/bin/fmtr");
-        let old_resource_path = dir.path().join("old-cli");
-        let new_resource_path = dir.path().join("new-cli");
-        let old_managed_path = managed_binary_path(&install_path, "fmtr", "1.2.0").unwrap();
-        let new_managed_path = managed_binary_path(&install_path, "fmtr", "1.3.0").unwrap();
-        std::fs::write(&old_resource_path, "old cli").unwrap();
-        std::fs::write(&new_resource_path, "new cli").unwrap();
-        install_managed_cli(&old_resource_path, &old_managed_path, &install_path).unwrap();
-
-        assert_eq!(
-            classify_installation(&install_path, &new_managed_path).unwrap(),
-            EmbeddedCliState::Missing
-        );
-
-        install_managed_cli(&new_resource_path, &new_managed_path, &install_path).unwrap();
-        assert_eq!(std::fs::read_to_string(&install_path).unwrap(), "new cli");
-        assert_eq!(
-            classify_installation(&install_path, &new_managed_path).unwrap(),
-            EmbeddedCliState::Installed
-        );
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn classifies_regular_file_as_conflict() {
-        let dir = tempfile::tempdir().unwrap();
-        let managed_path = dir.path().join("fmtr-cli");
-        let install_path = dir.path().join("fmtr");
-        std::fs::write(&managed_path, "cli").unwrap();
-        std::fs::write(&install_path, "other").unwrap();
-
-        let state = classify_installation(&install_path, &managed_path).unwrap();
-        assert_eq!(state, EmbeddedCliState::Conflict);
+        assert_eq!(std::fs::read_link(&install_path).unwrap(), resource_path);
+        assert!(!dir.path().join("home/.local/bin/.fmtr-cli").exists());
     }
 }
