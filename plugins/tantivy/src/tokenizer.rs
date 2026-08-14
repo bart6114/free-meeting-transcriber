@@ -1,7 +1,7 @@
 use hypr_language::ISO639;
 use tantivy::Index;
 use tantivy::tokenizer::{
-    AsciiFoldingFilter, Language, LowerCaser, NgramTokenizer, RemoveLongFilter, Stemmer,
+    AsciiFoldingFilter, Language, LowerCaser, RemoveLongFilter, SimpleTokenizer, Stemmer,
     TextAnalyzer,
 };
 
@@ -56,7 +56,11 @@ pub fn get_tokenizer_name_for_language(lang: &hypr_language::Language) -> &'stat
 pub fn register_tokenizers(index: &Index) {
     let tokenizer_manager = index.tokenizers();
 
-    let multilang_tokenizer = TextAnalyzer::builder(NgramTokenizer::new(1, 3, false).unwrap())
+    // Whole-word tokens: matching and snippet highlighting operate on words, and
+    // partial words are handled at query time by expanding the trailing term
+    // against the index's term dictionary (see `ext.rs`). An ngram tokenizer here
+    // would make every 1-3 letter fragment a match.
+    let multilang_tokenizer = TextAnalyzer::builder(SimpleTokenizer::default())
         .filter(RemoveLongFilter::limit(40))
         .filter(LowerCaser)
         .filter(AsciiFoldingFilter)
@@ -85,7 +89,7 @@ pub fn register_tokenizers(index: &Index) {
     ];
 
     for (name, lang) in languages {
-        let tokenizer = TextAnalyzer::builder(NgramTokenizer::new(1, 3, false).unwrap())
+        let tokenizer = TextAnalyzer::builder(SimpleTokenizer::default())
             .filter(RemoveLongFilter::limit(40))
             .filter(LowerCaser)
             .filter(AsciiFoldingFilter)
@@ -176,6 +180,26 @@ mod tests {
         assert!(
             tokenizer_manager.get("lang_de").is_some(),
             "lang_de tokenizer should be registered"
+        );
+    }
+
+    #[test]
+    fn test_multilang_tokenizer_emits_whole_words() {
+        let schema = build_schema();
+        let index = Index::create_in_ram(schema);
+        register_tokenizers(&index);
+
+        let mut tokenizer = index.tokenizers().get("multilang").unwrap();
+        let mut stream = tokenizer.token_stream("David zijn wérk");
+        let mut tokens = Vec::new();
+        while let Some(token) = stream.next() {
+            tokens.push(token.text.clone());
+        }
+
+        assert_eq!(
+            tokens,
+            vec!["david".to_string(), "zijn".to_string(), "werk".to_string()],
+            "expected lowercased, ascii-folded whole words, no ngram fragments"
         );
     }
 

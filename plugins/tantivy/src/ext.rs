@@ -1,11 +1,13 @@
+use std::collections::BTreeSet;
+
 use tantivy::collector::{Count, TopDocs};
 use tantivy::query::{
-    AllQuery, BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhraseQuery, Query, QueryParser,
-    TermQuery,
+    AllQuery, BooleanQuery, BoostQuery, FuzzyTermQuery, Occur, PhraseQuery, Query, TermQuery,
 };
-use tantivy::schema::{Facet, IndexRecordOption};
+use tantivy::schema::{Facet, Field, IndexRecordOption};
 use tantivy::snippet::SnippetGenerator;
-use tantivy::{DateTime, Index, ReloadPolicy, TantivyDocument, Term};
+use tantivy::tokenizer::TextAnalyzer;
+use tantivy::{DateTime, Index, ReloadPolicy, Searcher, TantivyDocument, Term};
 use tauri_plugin_settings::SettingsPluginExt;
 
 use crate::query::build_created_at_range_query;
@@ -68,6 +70,76 @@ fn parse_query_parts(query: &str) -> (Vec<&str>, Vec<&str>) {
     }
 
     (phrases, regular_terms)
+}
+
+// Title boost factor (3x) to match Orama's title:3, content:1 behavior
+const TITLE_BOOST: f32 = 3.0;
+const MAX_PREFIX_EXPANSIONS: usize = 64;
+
+fn analyze_tokens(analyzer: &mut TextAnalyzer, text: &str) -> Vec<String> {
+    let mut stream = analyzer.token_stream(text);
+    let mut tokens = Vec::new();
+    while let Some(token) = stream.next() {
+        tokens.push(token.text.clone());
+    }
+    tokens
+}
+
+/// Expand a typed word-prefix into the concrete terms present in the index for
+/// `field`. Expanding to real `TermQuery`s (instead of an automaton-based prefix
+/// query) lets the snippet generator see the matched whole words, so they get
+/// highlighted in results.
+fn expand_prefix_terms(searcher: &Searcher, field: Field, prefix: &str) -> Vec<String> {
+    let mut expanded = BTreeSet::new();
+    'segments: for segment in searcher.segment_readers() {
+        let Ok(inverted) = segment.inverted_index(field) else {
+            continue;
+        };
+        let Ok(mut stream) = inverted.terms().range().ge(prefix.as_bytes()).into_stream() else {
+            continue;
+        };
+        while stream.advance() {
+            if !stream.key().starts_with(prefix.as_bytes()) {
+                break;
+            }
+            if let Ok(term) = std::str::from_utf8(stream.key()) {
+                expanded.insert(term.to_string());
+            }
+            if expanded.len() >= MAX_PREFIX_EXPANSIONS {
+                break 'segments;
+            }
+        }
+    }
+    expanded.into_iter().collect()
+}
+
+fn text_term_query(field: Field, text: &str) -> Box<dyn Query> {
+    Box::new(TermQuery::new(
+        Term::from_field_text(field, text),
+        IndexRecordOption::WithFreqs,
+    ))
+}
+
+fn union_query(mut queries: Vec<Box<dyn Query>>) -> Box<dyn Query> {
+    if queries.len() == 1 {
+        queries.pop().unwrap()
+    } else {
+        Box::new(BooleanQuery::union(queries))
+    }
+}
+
+/// Match in title (boosted) or content.
+fn either_field_clause(
+    title_query: Box<dyn Query>,
+    content_query: Box<dyn Query>,
+) -> Box<dyn Query> {
+    Box::new(BooleanQuery::new(vec![
+        (
+            Occur::Should,
+            Box::new(BoostQuery::new(title_query, TITLE_BOOST)) as Box<dyn Query>,
+        ),
+        (Occur::Should, content_query),
+    ]))
 }
 
 pub struct Tantivy<'a, R: tauri::Runtime, M: tauri::Manager<R>> {
@@ -176,107 +248,103 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Tantivy<'a, R, M> {
         let phrase_slop = request.options.phrase_slop.unwrap_or(0);
         let has_query = !request.query.trim().is_empty();
 
-        // Title boost factor (3x) to match Orama's title:3, content:1 behavior
-        const TITLE_BOOST: f32 = 3.0;
-
         let mut combined_query: Box<dyn Query> = if !has_query {
             Box::new(AllQuery)
-        } else if use_fuzzy {
-            let distance = request.options.distance.unwrap_or(1);
-
-            // Parse query to extract phrases (quoted) and regular terms
+        } else {
+            // Query terms must go through the same analyzer as the indexed text
+            // (lowercase + ascii folding), or cased/accented queries match nothing.
+            // Title and content share one tokenizer, so analyzing once suffices.
+            let mut analyzer = index.tokenizer_for_field(fields.content)?;
             let (phrases, regular_terms) = parse_query_parts(&request.query);
 
-            let mut term_queries: Vec<(Occur, Box<dyn Query>)> = Vec::new();
+            let mut clauses: Vec<(Occur, Box<dyn Query>)> = Vec::new();
 
-            // Handle quoted phrases with PhraseQuery
-            for phrase in phrases {
-                let words: Vec<&str> = phrase.split_whitespace().collect();
-                if words.len() > 1 {
-                    // Create phrase query for title field
-                    let title_terms: Vec<Term> = words
-                        .iter()
-                        .map(|w| Term::from_field_text(fields.title, w))
-                        .collect();
-                    let mut title_phrase = PhraseQuery::new(title_terms);
-                    title_phrase.set_slop(phrase_slop);
-
-                    // Create phrase query for content field
-                    let content_terms: Vec<Term> = words
-                        .iter()
-                        .map(|w| Term::from_field_text(fields.content, w))
-                        .collect();
-                    let mut content_phrase = PhraseQuery::new(content_terms);
-                    content_phrase.set_slop(phrase_slop);
-
-                    // Boost title matches by 3x
-                    let boosted_title: Box<dyn Query> =
-                        Box::new(BoostQuery::new(Box::new(title_phrase), TITLE_BOOST));
-                    let content_query: Box<dyn Query> = Box::new(content_phrase);
-
-                    // Phrase must match in at least one field (title OR content)
-                    let phrase_field_query = BooleanQuery::new(vec![
-                        (Occur::Should, boosted_title),
-                        (Occur::Should, content_query),
-                    ]);
-
-                    term_queries.push((Occur::Must, Box::new(phrase_field_query)));
-                } else if !words.is_empty() {
-                    // Single word "phrase" - treat as regular term
-                    let word = words[0];
-                    let title_fuzzy = FuzzyTermQuery::new(
-                        Term::from_field_text(fields.title, word),
-                        distance,
-                        true,
-                    );
-                    let content_fuzzy = FuzzyTermQuery::new(
-                        Term::from_field_text(fields.content, word),
-                        distance,
-                        true,
-                    );
-
-                    let boosted_title: Box<dyn Query> =
-                        Box::new(BoostQuery::new(Box::new(title_fuzzy), TITLE_BOOST));
-                    let content_query: Box<dyn Query> = Box::new(content_fuzzy);
-
-                    let term_field_query = BooleanQuery::new(vec![
-                        (Occur::Should, boosted_title),
-                        (Occur::Should, content_query),
-                    ]);
-
-                    term_queries.push((Occur::Must, Box::new(term_field_query)));
+            // Quoted phrases: exact word sequence in title or content.
+            for phrase in &phrases {
+                let words = analyze_tokens(&mut analyzer, phrase);
+                match words.as_slice() {
+                    [] => {}
+                    [word] => clauses.push((
+                        Occur::Must,
+                        either_field_clause(
+                            text_term_query(fields.title, word),
+                            text_term_query(fields.content, word),
+                        ),
+                    )),
+                    words => {
+                        let phrase_query = |field| {
+                            let terms = words
+                                .iter()
+                                .map(|word| Term::from_field_text(field, word))
+                                .collect();
+                            let mut query = PhraseQuery::new(terms);
+                            query.set_slop(phrase_slop);
+                            Box::new(query) as Box<dyn Query>
+                        };
+                        clauses.push((
+                            Occur::Must,
+                            either_field_clause(
+                                phrase_query(fields.title),
+                                phrase_query(fields.content),
+                            ),
+                        ));
+                    }
                 }
             }
 
-            // Handle regular (unquoted) terms with fuzzy matching
-            for term in regular_terms {
-                let title_fuzzy =
-                    FuzzyTermQuery::new(Term::from_field_text(fields.title, term), distance, true);
-                let content_fuzzy = FuzzyTermQuery::new(
-                    Term::from_field_text(fields.content, term),
-                    distance,
-                    true,
-                );
+            let tokens: Vec<String> = regular_terms
+                .iter()
+                .flat_map(|term| analyze_tokens(&mut analyzer, term))
+                .collect();
+            // The trailing term is likely still being typed unless the query ends
+            // with whitespace or a closing quote: also match it as a word prefix.
+            let last_token_is_prefix = !request
+                .query
+                .ends_with(|c: char| c.is_whitespace() || c == '"');
 
-                // Boost title matches by 3x
-                let boosted_title: Box<dyn Query> =
-                    Box::new(BoostQuery::new(Box::new(title_fuzzy), TITLE_BOOST));
-                let content_query: Box<dyn Query> = Box::new(content_fuzzy);
+            for (i, token) in tokens.iter().enumerate() {
+                let is_prefix = last_token_is_prefix && i + 1 == tokens.len();
+                let mut title_variants = vec![text_term_query(fields.title, token)];
+                let mut content_variants = vec![text_term_query(fields.content, token)];
 
-                // Each term must match in at least one field (title OR content)
-                let term_field_query = BooleanQuery::new(vec![
-                    (Occur::Should, boosted_title),
-                    (Occur::Should, content_query),
-                ]);
+                if is_prefix {
+                    for expanded in expand_prefix_terms(&searcher, fields.title, token) {
+                        if expanded != *token {
+                            title_variants.push(text_term_query(fields.title, &expanded));
+                        }
+                    }
+                    for expanded in expand_prefix_terms(&searcher, fields.content, token) {
+                        if expanded != *token {
+                            content_variants.push(text_term_query(fields.content, &expanded));
+                        }
+                    }
+                }
+                if use_fuzzy {
+                    let distance = request.options.distance.unwrap_or(1);
+                    title_variants.push(Box::new(FuzzyTermQuery::new(
+                        Term::from_field_text(fields.title, token),
+                        distance,
+                        true,
+                    )));
+                    content_variants.push(Box::new(FuzzyTermQuery::new(
+                        Term::from_field_text(fields.content, token),
+                        distance,
+                        true,
+                    )));
+                }
 
-                // All terms must be present (Must for each term)
-                term_queries.push((Occur::Must, Box::new(term_field_query)));
+                // Every term must appear (in either field) for a document to match.
+                clauses.push((
+                    Occur::Must,
+                    either_field_clause(union_query(title_variants), union_query(content_variants)),
+                ));
             }
 
-            Box::new(BooleanQuery::new(term_queries))
-        } else {
-            let query_parser = QueryParser::for_index(index, vec![fields.title, fields.content]);
-            query_parser.parse_query(&request.query)?
+            if clauses.is_empty() {
+                Box::new(AllQuery)
+            } else {
+                Box::new(BooleanQuery::new(clauses))
+            }
         };
 
         // Apply created_at filter
@@ -616,6 +684,8 @@ impl<R: tauri::Runtime, T: tauri::Manager<R>> TantivyPluginExt<R> for T {
 mod tests {
     use super::*;
     use crate::tokenizer::get_tokenizer_name_for_language;
+    use crate::{CollectionIndex, IndexState, SearchDocument, SearchFilters, SearchRequest};
+    use tauri::Manager;
 
     #[test]
     fn test_detect_language_tokenizer_integration() {
@@ -623,5 +693,137 @@ mod tests {
         let lang = detect_language(text);
         let tokenizer_name = get_tokenizer_name_for_language(&lang);
         assert_eq!(tokenizer_name, "lang_en");
+    }
+
+    async fn harness() -> tauri::App<tauri::test::MockRuntime> {
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        app.manage(IndexState::default());
+
+        let schema = crate::build_schema();
+        let index = tantivy::Index::create_in_ram(schema.clone());
+        register_tokenizers(&index);
+        let reader = index
+            .reader_builder()
+            .reload_policy(ReloadPolicy::Manual)
+            .try_into()
+            .unwrap();
+        let writer = index.writer(50_000_000).unwrap();
+        app.state::<IndexState>()
+            .inner
+            .write()
+            .await
+            .collections
+            .insert(
+                "default".to_string(),
+                CollectionIndex {
+                    schema,
+                    index,
+                    reader,
+                    writer,
+                },
+            );
+        app
+    }
+
+    fn doc(id: &str, title: &str, content: &str) -> SearchDocument {
+        SearchDocument {
+            id: id.to_string(),
+            doc_type: "session".to_string(),
+            language: None,
+            title: title.to_string(),
+            content: content.to_string(),
+            created_at: 0,
+            facets: Vec::new(),
+        }
+    }
+
+    async fn search(
+        app: &tauri::App<tauri::test::MockRuntime>,
+        query: &str,
+    ) -> crate::SearchResult {
+        {
+            let state = app.state::<IndexState>();
+            let guard = state.inner.read().await;
+            guard.collections["default"].reader.reload().unwrap();
+        }
+        app.tantivy()
+            .search(SearchRequest {
+                query: query.to_string(),
+                collection: None,
+                filters: SearchFilters::default(),
+                limit: 10,
+                options: crate::SearchOptions {
+                    snippets: Some(true),
+                    ..Default::default()
+                },
+            })
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn matches_whole_words_not_letter_fragments() {
+        let app = harness().await;
+        app.tantivy()
+            .add_document(
+                None,
+                doc(
+                    "s1",
+                    "M&A process",
+                    "dat David zijn werk vastleggen uiteraard",
+                ),
+            )
+            .await
+            .unwrap();
+        app.tantivy()
+            .add_document(None, doc("s2", "tim debrief", "de mailkooning is geworden"))
+            .await
+            .unwrap();
+
+        // The ngram-era regression: "david" matched every document containing
+        // the letters d/a/v/i and highlighted 1-3 char fragments everywhere.
+        let result = search(&app, "david").await;
+        assert_eq!(result.count, 1);
+        assert_eq!(result.hits[0].document.id, "s1");
+
+        // Casing and accents normalize through the analyzer.
+        assert_eq!(search(&app, "David").await.count, 1);
+
+        // Subsequence/infix letters must not match.
+        assert_eq!(search(&app, "avid").await.count, 0);
+        assert_eq!(search(&app, "xyz").await.count, 0);
+
+        // Multi-term queries require every word.
+        assert_eq!(search(&app, "david vastleggen").await.count, 1);
+        assert_eq!(search(&app, "david mailkooning").await.count, 0);
+    }
+
+    #[tokio::test]
+    async fn trailing_term_matches_as_prefix_with_whole_word_highlight() {
+        let app = harness().await;
+        app.tantivy()
+            .add_document(None, doc("s1", "debrief", "dat David zijn werk"))
+            .await
+            .unwrap();
+
+        let result = search(&app, "dav").await;
+        assert_eq!(result.count, 1, "search-as-you-type prefix must match");
+
+        let snippet = result.hits[0].content_snippet.as_ref().unwrap();
+        let highlighted: Vec<&str> = snippet
+            .highlights
+            .iter()
+            .map(|range| &snippet.fragment[range.start..range.end])
+            .collect();
+        assert_eq!(
+            highlighted,
+            vec!["David"],
+            "the whole matched word is highlighted, nothing else"
+        );
+
+        // A trailing space means the word is finished: no prefix matching.
+        assert_eq!(search(&app, "dav ").await.count, 0);
     }
 }

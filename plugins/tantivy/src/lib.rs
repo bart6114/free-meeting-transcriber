@@ -99,7 +99,9 @@ pub struct SearchRequest {
     pub options: SearchOptions,
 }
 
-pub const SCHEMA_VERSION: u32 = 2;
+// 2 -> 3: title/content moved from 1-3 char ngrams to whole-word tokens; the
+// index must be rebuilt or every existing posting is an unmatchable fragment.
+pub const SCHEMA_VERSION: u32 = 3;
 
 pub struct CollectionConfig {
     pub name: String,
