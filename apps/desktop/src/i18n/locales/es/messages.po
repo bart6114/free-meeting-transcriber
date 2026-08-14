@@ -355,10 +355,6 @@ msgstr ""
 msgid "Detection delay"
 msgstr ""
 
-#: src/sidebar/settings.tsx
-#~ msgid "Developers"
-#~ msgstr ""
-
 #: src/settings/dictionary/index.tsx
 msgid "Dictionary"
 msgstr ""
