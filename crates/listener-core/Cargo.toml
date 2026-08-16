@@ -19,6 +19,7 @@ hypr-supervisor = { workspace = true }
 hypr-transcribe-soniqo = { workspace = true }
 hypr-transcript = { workspace = true }
 hypr-vad-masking = { workspace = true }
+hypr-vault-read = { workspace = true }
 
 owhisper-client = { workspace = true, features = ["local"] }
 owhisper-interface = { workspace = true }
@@ -40,7 +41,6 @@ tokio = { workspace = true, features = ["rt-multi-thread", "macros", "signal"] }
 tokio-stream = { workspace = true }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
-uuid = { workspace = true }
 
 sentry = { workspace = true }
 

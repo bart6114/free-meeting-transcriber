@@ -827,8 +827,12 @@ mod tests {
         .await;
 
         // An external editor touches the vault; vault_watch reacts by calling
-        // refresh_session, whose index diff notifies the change bus.
-        let dir = h.vault.path().join("sessions/s1");
+        // refresh_session, whose index diff notifies the change bus. The created
+        // directory has a readable name, so resolve it through the store.
+        let dir = h
+            .vault
+            .path()
+            .join(h.store.session_dir("s1").await.unwrap());
         std::fs::write(
             dir.join("_meta.json"),
             serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),

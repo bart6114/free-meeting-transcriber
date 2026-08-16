@@ -1,49 +1,54 @@
 use std::path::{Path, PathBuf};
 
+use hypr_vault_read::{SessionLookupError, SessionMeta, find_session};
+
 use crate::path::is_uuid;
 use crate::{Error, Result};
+
+/// How a directory participates in the session layout: one holding `_meta.json`
+/// is a session directory (even when the meta is unreadable — such a directory is
+/// left untouched, never traversed as a folder); anything else is a personal folder.
+pub(crate) enum DirClass {
+    /// The id is present when `_meta.json` parses; it comes from `_meta.json.id`,
+    /// never from the directory basename.
+    Session(Option<String>),
+    Folder,
+}
+
+pub(crate) fn classify_dir(abs_dir: &Path) -> DirClass {
+    match std::fs::read(abs_dir.join("_meta.json")) {
+        Ok(bytes) => DirClass::Session(
+            serde_json::from_slice::<SessionMeta>(&bytes)
+                .ok()
+                .map(|meta| meta.id),
+        ),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => DirClass::Folder,
+        Err(_) => DirClass::Session(None),
+    }
+}
 
 pub fn find_session_dir(sessions_base: &Path, session_id: &str) -> Result<PathBuf> {
     if !is_uuid(session_id) {
         return Err(Error::Path("session_id_invalid".into()));
     }
 
-    if let Some(found) = find_session_dir_recursive(sessions_base, session_id)? {
-        return Ok(found);
+    // vault-read's resolver scans `<vault>/sessions`; callers hand us that
+    // directory, so the vault root is its parent.
+    let vault = sessions_base
+        .parent()
+        .ok_or_else(|| Error::Path("sessions_base_invalid".into()))?;
+
+    match find_session(vault, session_id) {
+        Ok(Some((location, _))) => Ok(vault.join(location.relative_dir)),
+        // Not-yet-created sessions keep resolving to the legacy path so callers
+        // that create the directory on demand (audio import, attachments) work.
+        Ok(None) => Ok(sessions_base.join(session_id)),
+        // A corrupt meta still owns its directory: artifact access stays possible
+        // and the directory is never treated as absent.
+        Err(SessionLookupError::Corrupt { dir, .. }) => Ok(vault.join(dir)),
+        Err(error @ SessionLookupError::Ambiguous { .. }) => Err(Error::Path(error.to_string())),
+        Err(SessionLookupError::Io(reason)) => Err(Error::Path(reason)),
     }
-    Ok(sessions_base.join(session_id))
-}
-
-fn find_session_dir_recursive(dir: &Path, session_id: &str) -> std::io::Result<Option<PathBuf>> {
-    let entries = match std::fs::read_dir(dir) {
-        Ok(entries) => entries,
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(error) => return Err(error),
-    };
-
-    for entry in entries {
-        let entry = entry?;
-        let path = entry.path();
-        if !entry.file_type()?.is_dir() {
-            continue;
-        }
-
-        let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
-            continue;
-        };
-
-        if name == session_id {
-            return Ok(Some(path));
-        }
-
-        if !is_uuid(name)
-            && let Some(found) = find_session_dir_recursive(&path, session_id)?
-        {
-            return Ok(Some(found));
-        }
-    }
-
-    Ok(None)
 }
 
 pub fn delete_session_dir(session_dir: &Path) -> std::io::Result<()> {
@@ -116,6 +121,77 @@ mod tests {
             result,
             env.path().join("sessions/work/project").join(UUID_1)
         );
+    }
+
+    #[test]
+    fn find_session_by_meta_id_in_readable_dir_at_root() {
+        let env = TestEnv::new()
+            .folder("sessions")
+            .session(UUID_1)
+            .dir_name("2026-03-20 — Product planning — 550e84")
+            .done_folder()
+            .done()
+            .build();
+
+        let result = find_session_dir(&env.path().join("sessions"), UUID_1).unwrap();
+        assert_eq!(
+            result,
+            env.path()
+                .join("sessions/2026-03-20 — Product planning — 550e84")
+        );
+    }
+
+    #[test]
+    fn find_session_by_meta_id_in_readable_dir_nested_in_folder() {
+        let env = TestEnv::new()
+            .folder("sessions")
+            .done()
+            .folder("sessions/work")
+            .session(UUID_1)
+            .dir_name("2026-04-01 — Retro — 550e84")
+            .done_folder()
+            .done()
+            .build();
+
+        let result = find_session_dir(&env.path().join("sessions"), UUID_1).unwrap();
+        assert_eq!(
+            result,
+            env.path().join("sessions/work/2026-04-01 — Retro — 550e84")
+        );
+    }
+
+    #[test]
+    fn find_session_reads_identity_from_meta_never_from_the_basename() {
+        // A directory named like one uuid whose metadata claims another.
+        let env = TestEnv::new()
+            .folder("sessions")
+            .session(UUID_1)
+            .dir_name(UUID_2)
+            .done_folder()
+            .done()
+            .build();
+
+        let result = find_session_dir(&env.path().join("sessions"), UUID_1).unwrap();
+        assert_eq!(result, env.path().join("sessions").join(UUID_2));
+    }
+
+    #[test]
+    fn find_session_duplicate_id_claims_error_instead_of_picking_one() {
+        let env = TestEnv::new()
+            .folder("sessions")
+            .session(UUID_1)
+            .dir_name("2026-03-20 — Planning — 550e84")
+            .done_folder()
+            .done()
+            .folder("sessions/work")
+            .session(UUID_1)
+            .dir_name("Planning copy")
+            .done_folder()
+            .done()
+            .build();
+
+        let result = find_session_dir(&env.path().join("sessions"), UUID_1);
+        assert!(matches!(result, Err(Error::Path(_))));
     }
 
     #[test]

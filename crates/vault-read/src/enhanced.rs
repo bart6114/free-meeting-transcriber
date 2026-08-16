@@ -3,7 +3,7 @@ use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result, paths};
+use crate::{Error, Result, layout, paths};
 
 pub const ENHANCED_KINDS: [&str; 2] = ["summary", "template_output"];
 
@@ -94,11 +94,22 @@ pub fn parse_enhanced_file(id: &str, session_id: &str, raw: &str) -> Result<Enha
     })
 }
 
-/// Every parseable `sessions/<id>/enhanced/<uuid>.md` doc. Files that fail to parse are
-/// skipped (read-only tolerance: one corrupted doc must not hide the rest); a missing
-/// `enhanced/` directory is an empty list.
+/// Every parseable `enhanced/<uuid>.md` doc in the session's directory (resolved from
+/// the id via layout discovery). Files that fail to parse are skipped (read-only
+/// tolerance: one corrupted doc must not hide the rest); a missing `enhanced/`
+/// directory is an empty list.
 pub fn list_enhanced_docs(vault: &Path, session_id: &str) -> Result<Vec<EnhancedDoc>> {
-    let dir = vault.join(paths::enhanced_dir(session_id));
+    list_enhanced_docs_in(vault, &layout::artifact_dir(vault, session_id)?, session_id)
+}
+
+/// `list_enhanced_docs` for an already-resolved session directory (vault-relative);
+/// `session_id` is stamped into each returned doc.
+pub fn list_enhanced_docs_in(
+    vault: &Path,
+    session_dir: &Path,
+    session_id: &str,
+) -> Result<Vec<EnhancedDoc>> {
+    let dir = vault.join(paths::enhanced_dir_in(session_dir));
     let entries = match std::fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

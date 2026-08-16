@@ -280,7 +280,8 @@ impl SessionStore {
             .any(|existing| existing.id != t.id);
         if loses_content {
             let vault_base = self.vault_base.clone();
-            let relative = paths::transcript_path(session_id);
+            let session_dir = self.session_dir_locked(&guard, session_id).await?;
+            let relative = paths::transcript_path_in(&session_dir);
             tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
                 let abs = vault_base.join(relative);
                 hypr_fs_sync_core::export::move_to_trash(&vault_base, &abs)
@@ -562,7 +563,8 @@ impl SessionStore {
         let bytes =
             serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Serialize(e.to_string()))?;
 
-        self.write_file_locked(guard, paths::transcript_path(session_id), bytes)
+        let session_dir = self.session_dir_locked(guard, session_id).await?;
+        self.write_file_locked(guard, paths::transcript_path_in(&session_dir), bytes)
             .await?;
 
         // The file was just re-derived whole, so the index gets the same full list.
@@ -584,7 +586,7 @@ impl SessionStore {
     ) -> Result<TranscriptJson, StoreError> {
         validate_session_id(session_id)?;
         let vault_base = self.vault_base.clone();
-        let relative = paths::transcript_path(session_id);
+        let relative = paths::transcript_path_in(&self.session_dir(session_id).await?);
 
         tokio::task::spawn_blocking(move || -> Result<TranscriptJson, StoreError> {
             let path = vault_base.join(&relative);

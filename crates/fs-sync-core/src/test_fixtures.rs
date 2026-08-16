@@ -13,6 +13,18 @@ pub fn md_with_frontmatter(frontmatter: &str, content: &str) -> String {
     format!("---\n{frontmatter}\n---\n{content}")
 }
 
+pub fn session_meta_json(id: &str) -> String {
+    serde_json::json!({
+        "id": id,
+        "title": format!("Session {id}"),
+        "started_at": null,
+        "ended_at": null,
+        "created_at": "2026-07-01T00:00:00Z",
+        "tags": [],
+    })
+    .to_string()
+}
+
 struct Note {
     id: String,
     content: String,
@@ -20,6 +32,7 @@ struct Note {
 
 struct Session {
     id: String,
+    dir_name: Option<String>,
     notes: Vec<Note>,
     memo: Option<String>,
     has_meta: bool,
@@ -44,6 +57,7 @@ impl TestEnvBuilder {
             parent: SessionParent::Root(self),
             session: Session {
                 id: id.to_string(),
+                dir_name: None,
                 notes: Vec::new(),
                 memo: None,
                 has_meta: true,
@@ -107,15 +121,19 @@ impl TestEnvBuilder {
 }
 
 fn write_session(temp: &TempDir, folder_path: &str, session: &Session) {
+    let dir_name = session.dir_name.as_deref().unwrap_or(&session.id);
     let session_path = if folder_path.is_empty() {
-        temp.child(&session.id)
+        temp.child(dir_name)
     } else {
-        temp.child(folder_path).child(&session.id)
+        temp.child(folder_path).child(dir_name)
     };
     session_path.create_dir_all().unwrap();
 
     if session.has_meta {
-        session_path.child("_meta.json").write_str("{}").unwrap();
+        session_path
+            .child("_meta.json")
+            .write_str(&session_meta_json(&session.id))
+            .unwrap();
     }
 
     for note in &session.notes {
@@ -142,6 +160,11 @@ pub struct SessionBuilder {
 }
 
 impl SessionBuilder {
+    pub fn dir_name(mut self, name: &str) -> Self {
+        self.session.dir_name = Some(name.to_string());
+        self
+    }
+
     pub fn note(mut self, id: &str, content: &str) -> Self {
         self.session.notes.push(Note {
             id: id.to_string(),
@@ -193,6 +216,7 @@ impl FolderBuilder {
             parent: SessionParent::Folder(self),
             session: Session {
                 id: id.to_string(),
+                dir_name: None,
                 notes: Vec::new(),
                 memo: None,
                 has_meta: true,

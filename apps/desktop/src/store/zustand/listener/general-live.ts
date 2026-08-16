@@ -319,13 +319,18 @@ export const startLiveSession = <T extends LiveStore>(
       live.eventUnlistenersBySession[targetSessionId] = unlisteners;
     });
 
-    const [dataDirPath, micUsingApps, bundleId] = yield* Effect.tryPromise({
+    const [sessionPath, micUsingApps, bundleId] = yield* Effect.tryPromise({
       try: () =>
         Promise.all([
-          settingsCommands.vaultBase().then((r) => {
-            if (r.status === "error") throw new Error(r.error);
-            return r.data;
-          }),
+          settingsCommands
+            .vaultBase()
+            .then((r) => {
+              if (r.status === "error") throw new Error(r.error);
+              return r.data;
+            })
+            .then((dataDirPath) =>
+              getSessionResourcePath(dataDirPath, targetSessionId),
+            ),
           detectCommands
             .listMicUsingApplications()
             .then((r) =>
@@ -336,7 +341,6 @@ export const startLiveSession = <T extends LiveStore>(
       catch: (error) => error,
     });
 
-    const sessionPath = getSessionResourcePath(dataDirPath, targetSessionId);
     const app_meeting = micUsingApps?.[0] ?? null;
     const triggerAppIds = getAutoStopTriggerAppIds(micUsingApps, bundleId);
 
@@ -564,14 +568,18 @@ export const stopLiveSession = <T extends GeneralState>(
         }
 
         void Promise.all([
-          settingsCommands.vaultBase().then((r) => {
-            if (r.status === "error") throw new Error(r.error);
-            return r.data;
-          }),
+          settingsCommands
+            .vaultBase()
+            .then((r) => {
+              if (r.status === "error") throw new Error(r.error);
+              return r.data;
+            })
+            .then((dataDirPath) =>
+              getSessionResourcePath(dataDirPath, sessionId),
+            ),
           getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
         ])
-          .then(([dataDirPath, bundleId]) => {
-            const sessionPath = getSessionResourcePath(dataDirPath, sessionId);
+          .then(([sessionPath, bundleId]) => {
             return hooksCommands.runEventHooks({
               afterListeningStopped: {
                 args: {

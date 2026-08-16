@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::path::PathBuf;
 
 use super::index::{IndexEntity, SessionEntry, VAULT_TASKS_KEY, apply_map_value, legacy_doc};
 use super::{SessionStore, StoreError, paths};
@@ -31,16 +32,56 @@ impl SessionStore {
     pub async fn rebuild_index(&self) -> Result<RebuildReport, StoreError> {
         let mut report = RebuildReport::default();
 
-        let folder_ids = self.scan_session_ids().await?;
-        for id in &folder_ids {
+        let scan = self.scan_session_locations().await?;
+
+        // Ids the prune below must not touch: an id claimed by multiple directories is
+        // ambiguous (not gone), and an id whose known directory now has unreadable
+        // metadata is corrupt (not gone) -- corruption must never look like deletion.
+        let protected: HashSet<String> = {
+            let catalog = self.locations.read().unwrap();
+            let broken_dirs: HashSet<&PathBuf> = scan.broken_dirs.iter().collect();
+            catalog
+                .iter()
+                .filter(|(_, dir)| broken_dirs.contains(dir))
+                .map(|(id, _)| id.clone())
+                .chain(scan.duplicate_ids.iter().cloned())
+                .collect()
+        };
+
+        // Refresh the location catalog from discovery before reconciling any content, so
+        // every per-session read below resolves against the physical layout just scanned.
+        // Corrupt-protected ids keep their previous location (their directory is still
+        // there, just unreadable); duplicated ids are dropped so writes block instead of
+        // silently picking one claimant.
+        {
+            let mut catalog = self.locations.write().unwrap();
+            let previous = std::mem::take(&mut *catalog);
+            for (id, dir) in &scan.locations {
+                catalog.insert(id.clone(), dir.clone());
+            }
+            for id in &protected {
+                if scan.duplicate_ids.contains(id) {
+                    continue;
+                }
+                if let Some(dir) = previous.get(id) {
+                    catalog.entry(id.clone()).or_insert_with(|| dir.clone());
+                }
+            }
+        }
+
+        report.errors.extend(scan.errors.iter().cloned());
+        report.ghost_sessions = scan.ghost_dirs.clone();
+
+        for (id, _) in &scan.locations {
             // The per-session raw error (if any) is only useful to refresh_session's single-id
             // caller; rebuild_index already has the full picture in report.errors.
             let _ = self.refresh_one(id, &mut report).await?;
         }
 
-        // Sessions that vanished from disk are removed (the folder scan succeeded and came
-        // back without them -- the only certainty a prune is allowed to act on).
-        let present: HashSet<&str> = folder_ids.iter().map(String::as_str).collect();
+        // Sessions that vanished from disk are removed (the discovery scan succeeded and
+        // came back without them -- the only certainty a prune is allowed to act on;
+        // ambiguous/corrupt ids are protected above).
+        let present: HashSet<&str> = scan.locations.iter().map(|(id, _)| id.as_str()).collect();
         let stale: Vec<String> = {
             let index = self.index.read().unwrap();
             index
@@ -49,7 +90,11 @@ impl SessionStore {
                 .chain(index.docs.keys())
                 .chain(index.transcripts.keys())
                 .chain(index.tasks.keys())
-                .filter(|id| *id != VAULT_TASKS_KEY && !present.contains(id.as_str()))
+                .filter(|id| {
+                    *id != VAULT_TASKS_KEY
+                        && !present.contains(id.as_str())
+                        && !protected.contains(id.as_str())
+                })
                 .cloned()
                 .collect::<HashSet<String>>()
                 .into_iter()
@@ -114,6 +159,10 @@ impl SessionStore {
 
         let meta = match self.read_meta(id).await {
             Ok(None) => {
+                // The directory (or at least its identity) is gone: drop the catalog
+                // entry too, so a later write re-resolves instead of recreating the
+                // stale path.
+                self.catalog_remove(id);
                 self.index_remove_session_and_notify(id);
                 match self.session_has_content(id).await {
                     Ok(true) => report.ghost_sessions.push(id.to_string()),
@@ -253,7 +302,15 @@ impl SessionStore {
             }
         };
 
-        let tasks = self.read_index_tasks(paths::session_tasks_path(id)).await;
+        let tasks = match self.session_dir(id).await {
+            Ok(dir) => {
+                self.read_index_tasks(paths::session_tasks_path_in(&dir))
+                    .await
+            }
+            // Unresolvable (e.g. ambiguous) id: leave the existing tasks entry alone,
+            // same keep-on-failure contract as every other artifact here.
+            Err(_) => None,
+        };
 
         let mut changes = Vec::new();
         {
@@ -306,31 +363,39 @@ impl SessionStore {
 
     // -- filesystem reads (read-only; never writes to the vault) --
 
-    pub(super) async fn scan_session_ids(&self) -> Result<Vec<String>, StoreError> {
-        let dir = self.vault_base.join(paths::sessions_root());
-        tokio::task::spawn_blocking(move || -> Result<Vec<String>, StoreError> {
-            let mut ids = Vec::new();
-            let entries = match std::fs::read_dir(&dir) {
-                Ok(entries) => entries,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(ids),
-                Err(e) => return Err(StoreError::Io(format!("failed to read sessions dir: {e}"))),
+    /// Discovery-backed layout scan: `(id, physical directory)` pairs for every healthy
+    /// session (identity from `_meta.json.id`, both legacy UUID-named and readable
+    /// directories), plus the diagnostics rebuild needs -- formatted layout errors,
+    /// the directories whose metadata is unreadable, the ids claimed by more than one
+    /// directory, and ghost directories (session-like content with no metadata).
+    pub(super) async fn scan_session_locations(&self) -> Result<SessionLayoutScan, StoreError> {
+        let vault_base = self.vault_base.clone();
+        tokio::task::spawn_blocking(move || -> Result<SessionLayoutScan, StoreError> {
+            let discovery = hypr_vault_read::discover_sessions(&vault_base)?;
+
+            let mut scan = SessionLayoutScan {
+                locations: discovery
+                    .sessions
+                    .into_iter()
+                    .map(|(location, _)| (location.id, location.relative_dir))
+                    .collect(),
+                ..Default::default()
             };
-            for entry in entries {
-                let entry =
-                    entry.map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
-                let path = entry.path();
-                if !path.is_dir() {
-                    continue;
+            for error in &discovery.errors {
+                scan.errors.push(error.to_string());
+                match error {
+                    hypr_vault_read::SessionDiscoveryError::DuplicateId { id, .. } => {
+                        scan.duplicate_ids.push(id.clone());
+                    }
+                    hypr_vault_read::SessionDiscoveryError::CorruptMeta { dir, .. }
+                    | hypr_vault_read::SessionDiscoveryError::Unreadable { dir, .. } => {
+                        scan.broken_dirs.push(dir.clone());
+                    }
                 }
-                let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-                    continue;
-                };
-                if name.starts_with('.') {
-                    continue;
-                }
-                ids.push(name.to_string());
             }
-            Ok(ids)
+
+            scan.ghost_dirs = scan_ghost_dirs(&vault_base)?;
+            Ok(scan)
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
@@ -344,7 +409,7 @@ impl SessionStore {
         &self,
         id: &str,
     ) -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
-        let dir = self.vault_base.join(paths::session_dir(id));
+        let dir = self.vault_base.join(self.session_dir(id).await?);
         tokio::task::spawn_blocking(
             move || -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
                 let mut out = Vec::new();
@@ -412,7 +477,9 @@ impl SessionStore {
         &self,
         id: &str,
     ) -> Result<Vec<(String, Result<super::EnhancedDoc, StoreError>)>, StoreError> {
-        let dir = self.vault_base.join(paths::enhanced_dir(id));
+        let dir = self
+            .vault_base
+            .join(paths::enhanced_dir_in(&self.session_dir(id).await?));
         let session_id = id.to_string();
         tokio::task::spawn_blocking(
             move || -> Result<Vec<(String, Result<super::EnhancedDoc, StoreError>)>, StoreError> {
@@ -468,36 +535,93 @@ impl SessionStore {
     /// session directory has at least one recognized content file (a `<kind>.md` document or
     /// `transcript.json`) despite having no `_meta.json`. Never reads file contents.
     async fn session_has_content(&self, id: &str) -> Result<bool, StoreError> {
-        let dir = self.vault_base.join(paths::session_dir(id));
-        tokio::task::spawn_blocking(move || -> Result<bool, StoreError> {
-            let entries = match std::fs::read_dir(&dir) {
-                Ok(entries) => entries,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
-                Err(e) => {
-                    return Err(StoreError::Io(format!(
-                        "failed to read session directory: {e}"
-                    )));
-                }
-            };
-            for entry in entries {
-                let entry =
-                    entry.map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
-                let path = entry.path();
-                if !path.is_file() {
-                    continue;
-                }
-                let is_md = path.extension().and_then(|e| e.to_str()) == Some("md");
-                let is_transcript =
-                    path.file_name().and_then(|n| n.to_str()) == Some("transcript.json");
-                if is_md || is_transcript {
-                    return Ok(true);
-                }
-            }
-            Ok(false)
-        })
-        .await
-        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
+        let dir = self.vault_base.join(self.session_dir(id).await?);
+        tokio::task::spawn_blocking(move || dir_has_session_content(&dir))
+            .await
+            .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
     }
+}
+
+/// Result of `scan_session_locations`: the healthy `(id, vault-relative dir)` pairs
+/// plus everything rebuild must know about the parts of the layout that are not
+/// healthy sessions.
+#[derive(Debug, Default)]
+pub(super) struct SessionLayoutScan {
+    pub locations: Vec<(String, PathBuf)>,
+    /// Formatted layout diagnostics (duplicate ids, corrupt/unreadable metadata),
+    /// carrying physical paths; surfaced through `RebuildReport.errors`.
+    pub errors: Vec<String>,
+    /// Ids claimed by more than one directory -- ambiguous, never pruned or resolved.
+    pub duplicate_ids: Vec<String>,
+    /// Vault-relative directories whose `_meta.json` exists but cannot be read/parsed.
+    pub broken_dirs: Vec<PathBuf>,
+    /// Directories (relative to `sessions/`) holding recognized session content (a
+    /// `<kind>.md` document or `transcript.json`) with no `_meta.json` at all -- left
+    /// deliberately unindexed, files untouched.
+    pub ghost_dirs: Vec<String>,
+}
+
+/// Walks `sessions/` the same way discovery does (skip hidden, never descend past a
+/// `_meta.json`) and reports the meta-less directories that directly hold session-like
+/// content. Root-level ghosts keep their historical bare-basename form; nested ones
+/// carry their `sessions/`-relative path.
+fn scan_ghost_dirs(vault_base: &std::path::Path) -> Result<Vec<String>, StoreError> {
+    let root = vault_base.join(paths::sessions_root());
+    let mut ghosts = Vec::new();
+    let mut pending: Vec<PathBuf> = vec![PathBuf::new()];
+    while let Some(relative) = pending.pop() {
+        let entries = match std::fs::read_dir(root.join(&relative)) {
+            Ok(entries) => entries,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            // Unreadable directories are already reported as layout diagnostics by the
+            // discovery pass; the ghost sweep just moves on.
+            Err(_) => continue,
+        };
+        for entry in entries {
+            let Ok(entry) = entry else { continue };
+            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                continue;
+            }
+            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
+                continue;
+            };
+            if name.starts_with('.') {
+                continue;
+            }
+            let child_rel = relative.join(&name);
+            let child_abs = entry.path();
+            if child_abs.join("_meta.json").exists() {
+                continue; // a session (or corrupt session) directory, never a parent
+            }
+            if dir_has_session_content(&child_abs)? {
+                ghosts.push(child_rel.to_string_lossy().into_owned());
+            }
+            pending.push(child_rel);
+        }
+    }
+    ghosts.sort();
+    Ok(ghosts)
+}
+
+fn dir_has_session_content(dir: &std::path::Path) -> Result<bool, StoreError> {
+    let entries = match std::fs::read_dir(dir) {
+        Ok(entries) => entries,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(_) => return Ok(false),
+    };
+    for entry in entries {
+        let Ok(entry) = entry else { continue };
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let is_md = path.extension().and_then(|e| e.to_str()) == Some("md");
+        let is_transcript = path.file_name().and_then(|n| n.to_str()) == Some("transcript.json");
+        if is_md || is_transcript {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Pushes a human-readable line to `errors` and remembers the first raw `StoreError`
@@ -564,6 +688,16 @@ mod tests {
         (store, temp)
     }
 
+    /// Physical directory of a session: creation now picks a human-readable name, so
+    /// tests resolve it through the store instead of assuming `sessions/<id>`.
+    async fn session_path(
+        store: &SessionStore,
+        vault: &tempfile::TempDir,
+        id: &str,
+    ) -> std::path::PathBuf {
+        vault.path().join(store.session_dir(id).await.unwrap())
+    }
+
     /// A second store over the same vault, with a cold (empty) index -- the startup shape:
     /// everything it knows must come back from the files alone.
     fn cold_store(vault: &tempfile::TempDir) -> SessionStore {
@@ -615,7 +749,7 @@ mod tests {
         store.rebuild_index().await.unwrap();
         drain_changes(&store);
 
-        let meta_path = vault.path().join("sessions/s1/_meta.json");
+        let meta_path = session_path(&store, &vault, "s1").await.join("_meta.json");
         let edited = serde_json::to_vec_pretty(&meta("s1", "Two")).unwrap();
         std::fs::write(&meta_path, edited).unwrap();
 
@@ -642,7 +776,7 @@ mod tests {
     async fn rebuild_of_an_already_wrapped_note_file_does_not_grow_the_indexed_body() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
-        let dir = vault.path().join("sessions/s1");
+        let dir = session_path(&store, &vault, "s1").await;
         std::fs::write(
             dir.join("_memo.md"),
             "---\nid: s1:note\nposition: 0\nsession_id: s1\n---\n\nreal content",
@@ -738,17 +872,27 @@ mod tests {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "keep me").await.unwrap();
-        std::fs::remove_file(vault.path().join("sessions/s1/_meta.json")).unwrap();
+        let dir = session_path(&store, &vault, "s1").await;
+        std::fs::remove_file(dir.join("_meta.json")).unwrap();
         store.refresh_session("s1").await.unwrap();
         assert!(store.session_get("s1").is_none());
-        assert!(vault.path().join("sessions/s1/_memo.md").is_file()); // vault untouched
+        assert!(dir.join("_memo.md").is_file()); // vault untouched
     }
 
     #[tokio::test]
     async fn rebuild_unparseable_meta_leaves_existing_entry_and_logs_error() {
         let (store, vault) = test_store().await;
-        store.write_meta(&meta("s1", "Original")).await.unwrap();
-        std::fs::write(vault.path().join("sessions/s1/_meta.json"), b"{ not json").unwrap();
+        // Seed a legacy uuid-style directory by hand: a corrupt meta can no longer name
+        // its id, so the reported error identifies the session by its directory path.
+        let dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::to_vec_pretty(&meta("s1", "Original")).unwrap(),
+        )
+        .unwrap();
+        store.rebuild_index().await.unwrap();
+        std::fs::write(dir.join("_meta.json"), b"{ not json").unwrap();
 
         let report = store.rebuild_index().await.unwrap();
 
@@ -775,7 +919,7 @@ mod tests {
             .await
             .unwrap();
 
-        std::fs::remove_dir_all(vault.path().join("sessions/s1")).unwrap();
+        std::fs::remove_dir_all(session_path(&store, &vault, "s1").await).unwrap();
 
         store.rebuild_index().await.unwrap();
 
@@ -796,7 +940,7 @@ mod tests {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "Original")).await.unwrap();
 
-        let meta_path = vault.path().join("sessions/s1/_meta.json");
+        let meta_path = session_path(&store, &vault, "s1").await.join("_meta.json");
         std::fs::remove_file(&meta_path).unwrap();
         std::fs::create_dir(&meta_path).unwrap();
 
@@ -822,7 +966,7 @@ mod tests {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "live note").await.unwrap();
-        let dir = vault.path().join("sessions/s1");
+        let dir = session_path(&store, &vault, "s1").await;
         std::fs::write(
             dir.join("_memo.conflict-2026-07-23T12-00-00.123Z.md"),
             "stale conflict copy",
@@ -905,7 +1049,12 @@ mod tests {
             .await
             .unwrap();
 
-        std::fs::remove_file(vault.path().join("sessions/s1/enhanced/doc-1.md")).unwrap();
+        std::fs::remove_file(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("enhanced/doc-1.md"),
+        )
+        .unwrap();
 
         store.rebuild_index().await.unwrap();
 
@@ -925,7 +1074,9 @@ mod tests {
             .unwrap();
 
         std::fs::write(
-            vault.path().join("sessions/s1/enhanced/doc-1.md"),
+            session_path(&store, &vault, "s1")
+                .await
+                .join("enhanced/doc-1.md"),
             "---\ntitle: [unclosed\n---\n\nbody",
         )
         .unwrap();

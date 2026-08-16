@@ -4,6 +4,7 @@
 //! `crates/agent-access` (fmtr CLI/MCP) reads vaults exclusively through this crate.
 
 pub mod enhanced;
+pub mod layout;
 pub mod meta;
 pub mod paths;
 pub mod people;
@@ -12,6 +13,10 @@ pub mod tasks;
 pub mod transcript;
 
 pub use enhanced::{ENHANCED_KINDS, EnhancedDoc, parse_enhanced_file, render_enhanced_file};
+pub use layout::{
+    SessionDiscovery, SessionDiscoveryError, SessionLocation, SessionLookupError,
+    discover_sessions, find_session,
+};
 pub use meta::{LegacyDoc, SessionMeta};
 pub use people::{Person, read_people};
 pub use strip::strip_leading_frontmatter;

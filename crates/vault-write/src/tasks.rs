@@ -33,13 +33,6 @@ enum TaskScope {
 }
 
 impl TaskScope {
-    fn relative_path(&self) -> PathBuf {
-        match self {
-            TaskScope::Session(id) => paths::session_tasks_path(id),
-            TaskScope::Vault => paths::vault_tasks_path(),
-        }
-    }
-
     /// This scope's key in the in-memory index's tasks map (and the id carried by the
     /// `index-changed` tasks event).
     fn index_key(&self) -> &str {
@@ -290,21 +283,13 @@ impl SessionStore {
                 let vault_base = self.vault_base.clone();
                 let doc_id = source_id.to_string();
                 let found = tokio::task::spawn_blocking(move || -> Option<String> {
-                    let entries =
-                        std::fs::read_dir(vault_base.join(paths::sessions_root())).ok()?;
-                    for entry in entries.flatten() {
-                        let session_id = entry.file_name().to_str()?.to_string();
-                        if session_id.starts_with('.') {
-                            continue;
-                        }
-                        if vault_base
-                            .join(paths::enhanced_doc_path(&session_id, &doc_id))
+                    let discovery = hypr_vault_read::discover_sessions(&vault_base).ok()?;
+                    discovery.sessions.into_iter().find_map(|(location, _)| {
+                        vault_base
+                            .join(paths::enhanced_doc_path_in(&location.relative_dir, &doc_id))
                             .is_file()
-                        {
-                            return Some(session_id);
-                        }
-                    }
-                    None
+                            .then_some(location.id)
+                    })
                 })
                 .await
                 .map_err(|e| StoreError::Io(format!("task join error: {e}")))?;
@@ -333,8 +318,19 @@ impl SessionStore {
         Ok(())
     }
 
+    /// Vault-relative path of this scope's `tasks.json`; session scopes resolve their
+    /// physical directory through the location catalog.
+    async fn task_scope_path(&self, scope: &TaskScope) -> Result<PathBuf, StoreError> {
+        match scope {
+            TaskScope::Session(id) => {
+                Ok(paths::session_tasks_path_in(&self.session_dir(id).await?))
+            }
+            TaskScope::Vault => Ok(paths::vault_tasks_path()),
+        }
+    }
+
     async fn read_tasks_at(&self, scope: &TaskScope) -> Result<Vec<TaskItem>, StoreError> {
-        let path = self.vault_base.join(scope.relative_path());
+        let path = self.vault_base.join(self.task_scope_path(scope).await?);
         tokio::task::spawn_blocking(move || -> Result<Vec<TaskItem>, StoreError> {
             let raw = match std::fs::read(&path) {
                 Ok(raw) => raw,
@@ -360,8 +356,8 @@ impl SessionStore {
         };
         let bytes =
             serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Serialize(e.to_string()))?;
-        self.write_file_locked(guard, scope.relative_path(), bytes)
-            .await?;
+        let relative = self.task_scope_path(scope).await?;
+        self.write_file_locked(guard, relative, bytes).await?;
 
         self.index_set_tasks(scope.index_key(), tasks.to_vec());
         self.notify_index_changed(
@@ -371,8 +367,8 @@ impl SessionStore {
         Ok(())
     }
 
-    /// Every `tasks.json` that exists: one per session that has tasks, plus the vault-root
-    /// file. Cheap because sessions without tasks have no file at all.
+    /// Every `tasks.json` that exists: one per discovered session that has tasks, plus
+    /// the vault-root file. Cheap because sessions without tasks have no file at all.
     async fn scan_task_scopes(&self) -> Result<Vec<TaskScope>, StoreError> {
         let vault_base = self.vault_base.clone();
         tokio::task::spawn_blocking(move || -> Result<Vec<TaskScope>, StoreError> {
@@ -380,25 +376,13 @@ impl SessionStore {
             if vault_base.join(paths::vault_tasks_path()).is_file() {
                 scopes.push(TaskScope::Vault);
             }
-            let entries = match std::fs::read_dir(vault_base.join(paths::sessions_root())) {
-                Ok(entries) => entries,
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(scopes),
-                Err(e) => return Err(StoreError::Io(format!("failed to read sessions dir: {e}"))),
-            };
-            for entry in entries {
-                let entry =
-                    entry.map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
-                let Some(session_id) = entry.file_name().to_str().map(str::to_string) else {
-                    continue;
-                };
-                if session_id.starts_with('.') {
-                    continue;
-                }
+            let discovery = hypr_vault_read::discover_sessions(&vault_base)?;
+            for (location, _) in discovery.sessions {
                 if vault_base
-                    .join(paths::session_tasks_path(&session_id))
+                    .join(paths::session_tasks_path_in(&location.relative_dir))
                     .is_file()
                 {
-                    scopes.push(TaskScope::Session(session_id));
+                    scopes.push(TaskScope::Session(location.id));
                 }
             }
             Ok(scopes)
@@ -448,6 +432,16 @@ mod tests {
         (store, temp)
     }
 
+    /// Physical directory of a session: creation now picks a human-readable name, so
+    /// tests resolve it through the store instead of assuming `sessions/<id>`.
+    async fn session_path(
+        store: &SessionStore,
+        vault: &tempfile::TempDir,
+        id: &str,
+    ) -> std::path::PathBuf {
+        vault.path().join(store.session_dir(id).await.unwrap())
+    }
+
     #[tokio::test]
     async fn replace_then_list_round_trips_ordered_tasks() {
         let (store, vault) = test_store().await;
@@ -462,7 +456,12 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(vault.path().join("sessions/s1/tasks.json").is_file());
+        assert!(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("tasks.json")
+                .is_file()
+        );
         let listed = store.list_tasks("session_raw_note", "s1").await.unwrap();
         assert_eq!(
             listed.iter().map(|t| t.id.as_str()).collect::<Vec<_>>(),
@@ -579,7 +578,12 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(vault.path().join("sessions/s1/tasks.json").is_file());
+        assert!(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("tasks.json")
+                .is_file()
+        );
         assert!(!vault.path().join("tasks.json").exists());
     }
 
@@ -589,12 +593,9 @@ mod tests {
     async fn enhanced_note_resolution_falls_back_to_a_filesystem_scan() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1")).await.unwrap();
-        std::fs::create_dir_all(vault.path().join("sessions/s1/enhanced")).unwrap();
-        std::fs::write(
-            vault.path().join("sessions/s1/enhanced/doc-x.md"),
-            "dropped in by hand",
-        )
-        .unwrap();
+        let dir = session_path(&store, &vault, "s1").await;
+        std::fs::create_dir_all(dir.join("enhanced")).unwrap();
+        std::fs::write(dir.join("enhanced/doc-x.md"), "dropped in by hand").unwrap();
 
         store
             .replace_tasks("enhanced_note", "doc-x", vec![input("t-1", 0, "Task")])
@@ -609,7 +610,7 @@ mod tests {
                 .len(),
             1
         );
-        assert!(vault.path().join("sessions/s1/tasks.json").is_file());
+        assert!(dir.join("tasks.json").is_file());
     }
 
     #[tokio::test]
@@ -725,7 +726,12 @@ mod tests {
         assert_eq!(moved[0].source_order, 4);
         assert_eq!(moved[1].id, "t-2");
         assert_eq!(moved[1].source_order, 5);
-        assert!(vault.path().join("sessions/s2/tasks.json").is_file());
+        assert!(
+            session_path(&store, &vault, "s2")
+                .await
+                .join("tasks.json")
+                .is_file()
+        );
     }
 
     /// A content-identical replace must not rewrite the file: the bytes (including every
@@ -738,7 +744,7 @@ mod tests {
             .replace_tasks("session_raw_note", "s1", vec![input("t-1", 0, "Task")])
             .await
             .unwrap();
-        let path = vault.path().join("sessions/s1/tasks.json");
+        let path = session_path(&store, &vault, "s1").await.join("tasks.json");
         let before = std::fs::read(&path).unwrap();
 
         store
@@ -760,12 +766,13 @@ mod tests {
             .await
             .unwrap();
 
-        let names: Vec<String> = std::fs::read_dir(vault.path().join("sessions/s1"))
+        let dir = session_path(&store, &vault, "s1").await;
+        let names: Vec<String> = std::fs::read_dir(&dir)
             .unwrap()
             .map(|e| e.unwrap().file_name().to_string_lossy().to_string())
             .collect();
         assert!(names.iter().all(|n| !n.contains("tmp")), "{names:?}");
-        let raw = std::fs::read(vault.path().join("sessions/s1/tasks.json")).unwrap();
+        let raw = std::fs::read(dir.join("tasks.json")).unwrap();
         let parsed: TasksFile = serde_json::from_slice(&raw).unwrap();
         assert_eq!(parsed.tasks.len(), 1);
     }
@@ -863,12 +870,10 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(store.journal_matches_current_file("sessions/s1/tasks.json"));
-        std::fs::write(
-            vault.path().join("sessions/s1/tasks.json"),
-            b"{\"tasks\":[]}",
-        )
-        .unwrap();
-        assert!(!store.journal_matches_current_file("sessions/s1/tasks.json"));
+        let rel = store.session_dir("s1").await.unwrap().join("tasks.json");
+        let rel = rel.to_str().unwrap();
+        assert!(store.journal_matches_current_file(rel));
+        std::fs::write(vault.path().join(rel), b"{\"tasks\":[]}").unwrap();
+        assert!(!store.journal_matches_current_file(rel));
     }
 }

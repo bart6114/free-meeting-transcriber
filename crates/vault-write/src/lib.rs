@@ -4,9 +4,14 @@ use std::sync::Arc;
 
 pub mod audio;
 pub mod content;
+#[cfg(test)]
+mod dual_layout_tests;
 pub mod enhanced;
 pub mod index;
 pub mod journal;
+pub mod layout_name;
+pub mod locations;
+pub mod migrate;
 pub mod paths;
 pub mod people;
 pub mod rebuild;
@@ -40,6 +45,18 @@ pub struct SessionStore {
     /// Extra change-stream consumers (`subscribe_index_changes`) -- Phase F: the
     /// Tantivy search projection rides one of these instead of SQL triggers.
     index_change_taps: Arc<std::sync::Mutex<Vec<index::IndexChangeSender>>>,
+    /// Session-location catalog: logical id -> vault-relative physical directory
+    /// (see `locations.rs`). Refreshed wholesale by `rebuild_index`, maintained
+    /// incrementally by writes/deletes/restores, warmed lazily on cache misses.
+    locations: Arc<std::sync::RwLock<HashMap<String, PathBuf>>>,
+    /// Recent `delete_session` records backing the process-local undo toast
+    /// (see `locations::DeletedSession`).
+    recent_deletions: Arc<std::sync::Mutex<HashMap<String, locations::DeletedSession>>>,
+    /// Sessions currently recording (`mark_recording_started`..`mark_recording_ended`).
+    /// The provisional-to-final directory rename is deferred while a session is in
+    /// here: `listener-core`'s DiskSink holds absolute paths into the directory and
+    /// uses them during finalization, so renaming mid-recording is unsafe.
+    active_recordings: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
 }
 
 #[derive(Debug)]
@@ -85,6 +102,9 @@ impl SessionStore {
             index_changes_tx,
             index_changes_rx: Arc::new(std::sync::Mutex::new(Some(index_changes_rx))),
             index_change_taps: Arc::new(std::sync::Mutex::new(Vec::new())),
+            locations: Arc::new(std::sync::RwLock::new(HashMap::new())),
+            recent_deletions: Arc::new(std::sync::Mutex::new(HashMap::new())),
+            active_recordings: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
         }
     }
 
@@ -318,7 +338,7 @@ mod tests {
         let (store, temp) = test_store().await;
         let vault = temp.path();
         store
-            .write_file(paths::note_path("s1"), b"hello".to_vec())
+            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"hello".to_vec())
             .await
             .unwrap();
         assert_eq!(
@@ -339,7 +359,7 @@ mod tests {
         let (store, temp) = test_store().await;
         let vault = temp.path();
         store
-            .write_file(paths::note_path("s1"), b"hello".to_vec())
+            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"hello".to_vec())
             .await
             .unwrap();
         assert!(
@@ -369,7 +389,10 @@ mod tests {
         let (store, temp) = test_store().await;
         let vault = temp.path();
         store
-            .write_file(paths::note_path("s1"), b"written by the app".to_vec())
+            .write_file(
+                PathBuf::from("sessions/s1/_memo.md"),
+                b"written by the app".to_vec(),
+            )
             .await
             .unwrap();
 
@@ -381,7 +404,10 @@ mod tests {
         .unwrap();
 
         store
-            .write_file(paths::note_path("s1"), b"app overwrite".to_vec())
+            .write_file(
+                PathBuf::from("sessions/s1/_memo.md"),
+                b"app overwrite".to_vec(),
+            )
             .await
             .unwrap();
 
@@ -407,7 +433,7 @@ mod tests {
         std::fs::write(vault.join("sessions/s1/_memo.md"), b"from a previous run").unwrap();
 
         store
-            .write_file(paths::note_path("s1"), b"this run".to_vec())
+            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"this run".to_vec())
             .await
             .unwrap();
 
@@ -428,20 +454,23 @@ mod tests {
         for i in 0..25 {
             store
                 .write_file(
-                    paths::note_path("s1"),
+                    PathBuf::from("sessions/s1/_memo.md"),
                     format!("keystroke {i}").into_bytes(),
                 )
                 .await
                 .unwrap();
             store
                 .write_file(
-                    paths::meta_path("s1"),
+                    PathBuf::from("sessions/s1/_meta.json"),
                     format!("{{\"n\":{i}}}").into_bytes(),
                 )
                 .await
                 .unwrap();
             store
-                .write_file(paths::transcript_path("s1"), format!("[{i}]").into_bytes())
+                .write_file(
+                    PathBuf::from("sessions/s1/transcript.json"),
+                    format!("[{i}]").into_bytes(),
+                )
                 .await
                 .unwrap();
         }
@@ -466,7 +495,10 @@ mod tests {
         std::fs::write(vault.join("sessions/s1/_memo.md"), b"same bytes").unwrap();
 
         store
-            .write_file(paths::note_path("s1"), b"same bytes".to_vec())
+            .write_file(
+                PathBuf::from("sessions/s1/_memo.md"),
+                b"same bytes".to_vec(),
+            )
             .await
             .unwrap();
 
@@ -517,12 +549,12 @@ mod tests {
         let store2 = store.clone();
         let task1 = async {
             store1
-                .write_file(paths::note_path("s1"), b"content1".to_vec())
+                .write_file(PathBuf::from("sessions/s1/_memo.md"), b"content1".to_vec())
                 .await
         };
         let task2 = async {
             store2
-                .write_file(paths::note_path("s1"), b"content2".to_vec())
+                .write_file(PathBuf::from("sessions/s1/_memo.md"), b"content2".to_vec())
                 .await
         };
 

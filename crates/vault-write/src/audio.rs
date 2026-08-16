@@ -59,21 +59,22 @@ fn canonical_audio_file_name(source: &Path) -> Result<String, StoreError> {
     Ok(format!("audio.{}", extension))
 }
 
-/// Sessions can live under a user folder (`sessions/<folder>/<id>/`), which the readers find by
-/// searching rather than by the flat `sessions/<id>/` path. So a recording that already sits in
-/// a directory named for its session stays there; only a file from outside (an import) is moved
-/// into the session directory.
-fn canonical_audio_dir(vault_base: &Path, session_id: &str, source: &Path) -> PathBuf {
+/// A recording that already sits in its session's resolved directory -- or in any
+/// directory named for its session, which covers a recorder writing into a location
+/// discovery doesn't know yet (no `_meta.json` written so far) -- stays where it is;
+/// only a file from outside (an import) is moved into the resolved session directory.
+fn canonical_audio_dir(resolved_dir_abs: &Path, session_id: &str, source: &Path) -> PathBuf {
     let session_dir = source.parent().filter(|parent| {
-        parent
-            .file_name()
-            .and_then(|name| name.to_str())
-            .is_some_and(|name| name == session_id)
+        is_same_file_path(parent, resolved_dir_abs)
+            || parent
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name == session_id)
     });
 
     match session_dir {
         Some(dir) => dir.to_path_buf(),
-        None => vault_base.join(paths::session_dir(session_id)),
+        None => resolved_dir_abs.to_path_buf(),
     }
 }
 
@@ -98,13 +99,13 @@ impl SessionStore {
         source_path: &str,
     ) -> Result<String, StoreError> {
         validate_session_id(session_id)?;
-        let vault_base = self.vault_base.clone();
+        let resolved_dir_abs = self.vault_base.join(self.session_dir(session_id).await?);
         let session_id = session_id.to_string();
         let source_path = PathBuf::from(source_path);
 
         tokio::task::spawn_blocking(move || -> Result<String, StoreError> {
             let file_name = canonical_audio_file_name(&source_path)?;
-            let dest_dir = canonical_audio_dir(&vault_base, &session_id, &source_path);
+            let dest_dir = canonical_audio_dir(&resolved_dir_abs, &session_id, &source_path);
             let dest_abs = dest_dir.join(&file_name);
 
             if !is_same_file_path(&source_path, &dest_abs) {
@@ -131,11 +132,11 @@ impl SessionStore {
     /// written by the builds that did relocate recordings there.
     pub async fn list_audio(&self, session_id: &str) -> Result<Vec<String>, StoreError> {
         validate_session_id(session_id)?;
+        let session_dir = self.session_dir(session_id).await?;
         let vault_base = self.vault_base.clone();
-        let session_id = session_id.to_string();
 
         tokio::task::spawn_blocking(move || -> Result<Vec<String>, StoreError> {
-            let dir = vault_base.join(paths::audio_dir(&session_id));
+            let dir = vault_base.join(paths::audio_dir_in(&session_dir));
             let entries = match std::fs::read_dir(&dir) {
                 Ok(entries) => entries,
                 Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
@@ -169,8 +170,8 @@ impl SessionStore {
     /// replaces). Missing file is a no-op, not an error.
     pub async fn delete_audio(&self, session_id: &str, filename: &str) -> Result<(), StoreError> {
         validate_session_id(session_id)?;
+        let session_dir = self.session_dir(session_id).await?;
         let vault_base = self.vault_base.clone();
-        let session_id = session_id.to_string();
         let filename = filename.to_string();
 
         tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
@@ -185,7 +186,7 @@ impl SessionStore {
             }
 
             let path = vault_base
-                .join(paths::audio_dir(&session_id))
+                .join(paths::audio_dir_in(&session_dir))
                 .join(&filename);
             match std::fs::remove_file(&path) {
                 Ok(()) => Ok(()),

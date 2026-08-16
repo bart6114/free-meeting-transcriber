@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result, paths};
+use crate::{Error, Result, layout, paths};
 
 /// One action item, file-canonical in `sessions/<session_id>/tasks.json` (or the vault-root
 /// `tasks.json` for a source that cannot be tied to a session). Mirrors the live columns of
@@ -39,9 +39,15 @@ pub struct TasksFile {
     pub tasks: Vec<TaskItem>,
 }
 
-/// Read one session's `tasks.json`; a missing file is an empty list.
+/// Read one session's `tasks.json`; a missing file is an empty list. The session id
+/// resolves to its physical directory via layout discovery.
 pub fn read_session_tasks(vault: &Path, session_id: &str) -> Result<Vec<TaskItem>> {
-    let path = vault.join(paths::session_tasks_path(session_id));
+    read_session_tasks_in(vault, &layout::artifact_dir(vault, session_id)?)
+}
+
+/// `read_session_tasks` for an already-resolved session directory (vault-relative).
+pub fn read_session_tasks_in(vault: &Path, session_dir: &Path) -> Result<Vec<TaskItem>> {
+    let path = vault.join(paths::session_tasks_path_in(session_dir));
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

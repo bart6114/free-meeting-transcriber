@@ -325,6 +325,33 @@ pub async fn main() {
                         // async worker then waits for the tantivy collection.
                         search_index::spawn(app_handle.clone(), store.clone());
 
+                        // One-way readable-name migration for legacy UUID-named session
+                        // directories, before the first rebuild and before vault_watch
+                        // starts (renames must not race the watcher or be indexed at
+                        // stale paths). Idempotent: an already-migrated vault is a
+                        // no-op, and partial completion resumes next startup.
+                        match hypr_tauri_utils::block_on(store.migrate_legacy_session_directories())
+                        {
+                            Ok(report)
+                                if !report.renamed.is_empty() || !report.failed.is_empty() =>
+                            {
+                                tracing::info!(
+                                    renamed = report.renamed.len(),
+                                    skipped = report.skipped.len(),
+                                    failed = ?report.failed,
+                                    "migrated legacy session directories to readable names"
+                                );
+                            }
+                            Ok(_) => {}
+                            Err(e) => {
+                                tracing::error!("session directory migration failed: {}", e);
+                            }
+                        }
+                        // Crash recovery for the provisional-name lifecycle: a first
+                        // title written while recording defers its directory rename to
+                        // recording stop; if the app died in between, finish it here.
+                        hypr_tauri_utils::block_on(store.reconcile_provisional_names());
+
                         // Files are the source of truth, so every startup rebuilds the
                         // sessions/session_documents/transcripts index from what's on disk
                         // before the UI proceeds. `block_on`: the UI must not come up

@@ -88,7 +88,7 @@ pub(super) async fn spawn_recorder(
         Some(RecorderActor::name()),
         RecorderActor::new(),
         RecArgs {
-            app_dir: ctx.app_dir.clone(),
+            vault_dir: ctx.vault_dir.clone(),
             session_id: ctx.params.session_id.clone(),
         },
         supervisor_cell,

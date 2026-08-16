@@ -164,10 +164,10 @@ async fn start_session_impl(
 
         configure_sentry_session_context(&params);
 
-        let app_dir = match state.runtime.vault_base() {
-            Ok(base) => base.join("sessions"),
+        let vault_dir = match state.runtime.vault_base() {
+            Ok(base) => base,
             Err(e) => {
-                tracing::error!(error.message = %e, "failed_to_resolve_sessions_dir");
+                tracing::error!(error.message = %e, "failed_to_resolve_vault_dir");
                 clear_sentry_session_context();
                 return Err(StartSessionError::FailedToResolveSessionsDir);
             }
@@ -178,7 +178,7 @@ async fn start_session_impl(
             audio: state.audio.clone(),
             requested_transcription_mode,
             params: params.clone(),
-            app_dir,
+            vault_dir,
             started_at_instant: Instant::now(),
             started_at_system: SystemTime::now(),
         };
@@ -306,14 +306,13 @@ fn handle_supervisor_completion(
 
         state.active_supervisor = None;
 
-        let sessions_base = state
+        let vault_base = state
             .runtime
             .vault_base()
-            .map(|base| base.join("sessions"))
             .unwrap_or_else(|_| std::env::temp_dir());
         emit_session_ended(
             &*state.runtime,
-            &sessions_base,
+            &vault_base,
             &session_id,
             reason,
             state.active_session_id.is_none(),
@@ -338,14 +337,13 @@ fn handle_supervisor_completion(
 
         state.finalizing_sessions.remove(&session_id);
 
-        let sessions_base = state
+        let vault_base = state
             .runtime
             .vault_base()
-            .map(|base| base.join("sessions"))
             .unwrap_or_else(|_| std::env::temp_dir());
         emit_session_ended(
             &*state.runtime,
-            &sessions_base,
+            &vault_base,
             &session_id,
             reason,
             state.active_session_id.is_none(),

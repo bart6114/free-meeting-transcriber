@@ -644,7 +644,7 @@ mod tests {
                 participant_human_ids: vec![],
                 self_human_id: None,
             },
-            app_dir: std::env::temp_dir(),
+            vault_dir: std::env::temp_dir(),
             started_at_instant: Instant::now(),
             started_at_system: SystemTime::now(),
         }

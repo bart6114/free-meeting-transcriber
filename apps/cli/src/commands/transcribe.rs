@@ -64,7 +64,16 @@ pub(crate) async fn transcribe_session(
         return Err(Error::NotFound(format!("meeting '{session_id}'")));
     }
 
-    let audio_path = find_session_audio(vault, session_id)
+    // Resolve the session's physical directory once: the basename may be a
+    // readable name rather than the id, so audio lookup and retention deletion
+    // must go through the store's catalog, never `sessions/<id>` directly.
+    let session_dir = vault.join(
+        store
+            .session_dir(session_id)
+            .await
+            .map_err(|error| Error::operation(ACTION, error.to_string()))?,
+    );
+    let audio_path = find_session_audio(&session_dir)
         .ok_or_else(|| Error::NotFound(format!("audio recording for meeting '{session_id}'")))?;
 
     let config = read_vault_config(vault)?;
@@ -122,7 +131,7 @@ pub(crate) async fn transcribe_session(
     // recording is deleted as soon as a transcript with words is persisted.
     // A transcript exists with words here — the empty case errored above.
     if config.audio_retention.as_deref() == Some("none") {
-        delete_session_audio(vault, session_id);
+        delete_session_audio(&session_dir);
     }
 
     Ok(outcome)
@@ -132,8 +141,7 @@ pub(crate) async fn transcribe_session(
 /// know), like `fs-sync-core`'s `audio::delete`. Failures only warn: the
 /// transcript is already persisted, so the command's result stands — matching
 /// the desktop, which logs and moves on.
-fn delete_session_audio(vault: &Path, session_id: &str) {
-    let session_dir = vault.join("sessions").join(session_id);
+fn delete_session_audio(session_dir: &Path) {
     for name in AUDIO_FILE_NAMES {
         let path = session_dir.join(name);
         if let Err(error) = std::fs::remove_file(&path)
@@ -256,8 +264,7 @@ fn ensure_soniqo_model_ready(model: &str) -> Result<()> {
     Ok(())
 }
 
-pub(crate) fn find_session_audio(vault: &Path, session_id: &str) -> Option<PathBuf> {
-    let session_dir = vault.join("sessions").join(session_id);
+pub(crate) fn find_session_audio(session_dir: &Path) -> Option<PathBuf> {
     AUDIO_FILE_NAMES
         .iter()
         .map(|name| session_dir.join(name))
@@ -382,7 +389,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
 
         // A session without audio (or without a directory at all) is fine.
-        delete_session_audio(dir.path(), "missing");
+        delete_session_audio(&dir.path().join("sessions").join("missing"));
 
         let session_dir = dir.path().join("sessions").join("s1");
         std::fs::create_dir_all(&session_dir).unwrap();
@@ -390,7 +397,7 @@ mod tests {
         std::fs::write(session_dir.join("audio.wav"), b"wav").unwrap();
         std::fs::write(session_dir.join("transcript.json"), b"{}").unwrap();
 
-        delete_session_audio(dir.path(), "s1");
+        delete_session_audio(&session_dir);
 
         assert!(!session_dir.join("audio.mp3").exists());
         assert!(!session_dir.join("audio.wav").exists());
@@ -422,17 +429,48 @@ mod tests {
         let session_dir = dir.path().join("sessions").join("s1");
         std::fs::create_dir_all(&session_dir).unwrap();
 
-        assert_eq!(find_session_audio(dir.path(), "s1"), None);
+        assert_eq!(find_session_audio(&session_dir), None);
 
         std::fs::write(session_dir.join("audio.wav"), b"wav").unwrap();
         assert_eq!(
-            find_session_audio(dir.path(), "s1"),
+            find_session_audio(&session_dir),
             Some(session_dir.join("audio.wav"))
         );
 
         std::fs::write(session_dir.join("audio.mp3"), b"mp3").unwrap();
         assert_eq!(
-            find_session_audio(dir.path(), "s1"),
+            find_session_audio(&session_dir),
+            Some(session_dir.join("audio.mp3"))
+        );
+    }
+
+    #[tokio::test]
+    async fn audio_resolution_follows_a_readable_session_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let id = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+        let session_dir = dir.path().join("sessions/2026-03-20 — Planning — 6ba7b8");
+        std::fs::create_dir_all(&session_dir).unwrap();
+        std::fs::write(
+            session_dir.join("_meta.json"),
+            serde_json::json!({
+                "id": id,
+                "title": "Planning",
+                "started_at": null,
+                "ended_at": null,
+                "created_at": "2026-03-20T10:00:00.000Z",
+                "tags": [],
+            })
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(session_dir.join("audio.mp3"), b"mp3").unwrap();
+
+        // The exact resolution import/transcribe perform: the store maps the
+        // id to the readable directory, and audio lookup runs inside it.
+        let store = SessionStore::new(dir.path().to_path_buf());
+        let resolved = dir.path().join(store.session_dir(id).await.unwrap());
+        assert_eq!(
+            find_session_audio(&resolved),
             Some(session_dir.join("audio.mp3"))
         );
     }

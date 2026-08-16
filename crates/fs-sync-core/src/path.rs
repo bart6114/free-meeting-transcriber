@@ -106,18 +106,24 @@ fn normalize_absolute_path(path: &Path) -> Result<PathBuf> {
     Ok(normalized)
 }
 
+/// Builds `<sessions>/<folder>/<dir_name>` from a session directory's physical
+/// basename — never from its id, so readable names survive moves between folders.
 pub fn build_session_dir(
     sessions_base: &Path,
     folder_path: &str,
-    session_id: &str,
+    dir_name: &str,
 ) -> Result<PathBuf> {
     let folder_path = normalize_folder_path(folder_path)?;
 
-    if folder_path.is_empty() {
-        return Ok(sessions_base.join(session_id));
+    if dir_name.is_empty() || matches!(dir_name, "." | "..") || dir_name.contains(['/', '\\']) {
+        return Err(crate::Error::Path("session_dir_name_invalid".into()));
     }
 
-    Ok(sessions_base.join(folder_path).join(session_id))
+    if folder_path.is_empty() {
+        return Ok(sessions_base.join(dir_name));
+    }
+
+    Ok(sessions_base.join(folder_path).join(dir_name))
 }
 
 #[cfg(test)]
@@ -172,6 +178,21 @@ mod tests {
             build_session_dir(&base, "work/project-a", UUID_1).unwrap(),
             base.join("work").join("project-a").join(UUID_1)
         );
+        assert_eq!(
+            build_session_dir(&base, "work", "2026-03-20 — Planning — 550e84").unwrap(),
+            base.join("work").join("2026-03-20 — Planning — 550e84")
+        );
+    }
+
+    #[test]
+    fn test_build_session_dir_rejects_invalid_dir_names() {
+        let base = PathBuf::from("/tmp/sessions");
+        for dir_name in ["", ".", "..", "a/b", r"a\b"] {
+            assert!(
+                build_session_dir(&base, "", dir_name).is_err(),
+                "{dir_name}"
+            );
+        }
     }
 
     #[test]

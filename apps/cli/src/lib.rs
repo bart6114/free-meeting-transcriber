@@ -103,22 +103,22 @@ mod tests {
         .await
         .unwrap();
 
+        // The directory name is human-readable; identity lives in _meta.json.id.
         let sessions = std::fs::read_dir(vault.join("sessions"))
             .unwrap()
             .map(|entry| entry.unwrap())
             .collect::<Vec<_>>();
         assert_eq!(sessions.len(), 1);
-        let id = sessions[0].file_name().into_string().unwrap();
+        let meta: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(sessions[0].path().join("_meta.json")).unwrap(),
+        )
+        .unwrap();
+        let id = meta["id"].as_str().unwrap().to_string();
         // Desktop id format: lowercase hyphenated UUID (crypto.randomUUID()).
         assert_eq!(id.len(), 36);
         assert_eq!(id.matches('-').count(), 4);
         assert_eq!(id, id.to_lowercase());
 
-        let meta: serde_json::Value = serde_json::from_str(
-            &std::fs::read_to_string(sessions[0].path().join("_meta.json")).unwrap(),
-        )
-        .unwrap();
-        assert_eq!(meta["id"], id.as_str());
         assert_eq!(meta["title"], "Kickoff");
         assert_eq!(meta["tags"], serde_json::json!([]));
         // Desktop timestamp format: RFC3339 UTC with millisecond precision and Z.
@@ -215,19 +215,18 @@ mod tests {
         .await
         .unwrap();
 
+        // The directory name is human-readable; identity lives in _meta.json.id.
         let sessions = std::fs::read_dir(vault.join("sessions"))
             .unwrap()
             .map(|entry| entry.unwrap())
             .collect::<Vec<_>>();
         assert_eq!(sessions.len(), 1);
-        let id = sessions[0].file_name().into_string().unwrap();
-        assert_eq!(id.len(), 36);
-
         let meta: serde_json::Value = serde_json::from_str(
             &std::fs::read_to_string(sessions[0].path().join("_meta.json")).unwrap(),
         )
         .unwrap();
-        assert_eq!(meta["id"], id.as_str());
+        let id = meta["id"].as_str().unwrap();
+        assert_eq!(id.len(), 36);
         // The title defaults to the audio file's stem.
         assert_eq!(meta["title"], "standup recording");
         let created_at = meta["created_at"].as_str().unwrap();

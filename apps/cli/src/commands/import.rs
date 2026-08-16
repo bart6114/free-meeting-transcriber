@@ -49,7 +49,13 @@ pub async fn run(
                 .await
                 .map_err(|error| Error::operation("import audio", error.to_string()))?
                 .ok_or_else(|| Error::NotFound(format!("meeting '{id}'")))?;
-            if let Some(existing) = super::transcribe::find_session_audio(vault, &id) {
+            let existing_dir = vault.join(
+                store
+                    .session_dir(&id)
+                    .await
+                    .map_err(|error| Error::operation("import audio", error.to_string()))?,
+            );
+            if let Some(existing) = super::transcribe::find_session_audio(&existing_dir) {
                 return Err(Error::operation(
                     "import audio",
                     format!(
@@ -74,8 +80,14 @@ pub async fn run(
 
     // Same layout and conversion as the desktop import path (fs-sync-core's
     // `import_to_session`): normalize to 16 kHz MP3 via a temp file, then move
-    // atomically into place.
-    let session_dir = vault.join("sessions").join(&session_id);
+    // atomically into place. The store resolves the session's physical
+    // directory — its basename may be a readable name, not the id.
+    let session_dir = vault.join(
+        store
+            .session_dir(&session_id)
+            .await
+            .map_err(|error| Error::operation("import audio", error.to_string()))?,
+    );
     let tmp_path = session_dir.join("audio.mp3.tmp");
     let target_path = session_dir.join("audio.mp3");
     let source_path = file.clone();
