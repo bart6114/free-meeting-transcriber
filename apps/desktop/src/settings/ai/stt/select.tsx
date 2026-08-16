@@ -10,6 +10,7 @@ import {
   AlertTriangle,
   Check,
   FolderOpen,
+  Info,
   Loader2,
   Trash2,
 } from "lucide-react";
@@ -339,8 +340,11 @@ function TranscriptionLanguageWarningToast() {
   const unsupportedLanguages = warning.unsupportedLanguages.map((language) =>
     getBaseLanguageDisplayName(language, i18n.locale),
   );
-  const description =
-    unsupportedLanguages.length > 0
+  const description = warning.liveOnly
+    ? unsupportedLanguages.length > 0
+      ? t`Live transcription isn't available for ${formatLanguageList(unsupportedLanguages)}. You'll get the transcript right after the recording ends instead.`
+      : t`Live transcription isn't available for this language combination. You'll get the transcript right after the recording ends instead.`
+    : unsupportedLanguages.length > 0
       ? t`${model} can't transcribe ${formatLanguageList(unsupportedLanguages)}. Try another model or change your spoken languages.`
       : t`${model} can't transcribe all selected languages together. Try another model or use fewer spoken languages.`;
 
@@ -350,6 +354,7 @@ function TranscriptionLanguageWarningToast() {
       warningKey={warning.key}
       description={description}
       actionLabel={t`Got it`}
+      variant={warning.liveOnly ? "info" : "warning"}
     />
   );
 }
@@ -358,16 +363,25 @@ function TranscriptionLanguageWarningToastLifecycle({
   warningKey,
   description,
   actionLabel,
+  variant,
 }: {
   warningKey: string;
   description: string;
   actionLabel: string;
+  variant: "info" | "warning";
 }) {
   useMountEffect(() => {
-    sonnerToast.warning(description, {
+    const showToast =
+      variant === "info" ? sonnerToast.info : sonnerToast.warning;
+    showToast(description, {
       id: TRANSCRIPTION_LANGUAGE_WARNING_TOAST_ID,
       duration: Infinity,
-      icon: <AlertTriangle className="text-brand size-4 shrink-0" />,
+      icon:
+        variant === "info" ? (
+          <Info className="text-brand size-4 shrink-0" />
+        ) : (
+          <AlertTriangle className="text-brand size-4 shrink-0" />
+        ),
       action: {
         label: actionLabel,
         onClick: () => {
@@ -431,20 +445,44 @@ function useTranscriptionLanguageWarning() {
       spoken_languages,
     ],
     queryFn: async () => {
-      const isSupported = (languages: readonly string[]) =>
-        useLiveMode
-          ? isSupportedLanguagesLive(
-              current_stt_provider!,
-              selectedSttModel ?? null,
-              languages,
-            )
-          : isSupportedLanguagesBatch(
-              current_stt_provider!,
-              selectedSttModel ?? null,
-              languages,
-            );
+      const isSupportedLive = (languages: readonly string[]) =>
+        isSupportedLanguagesLive(
+          current_stt_provider!,
+          selectedSttModel ?? null,
+          languages,
+        );
+      const isSupportedBatch = (languages: readonly string[]) =>
+        isSupportedLanguagesBatch(
+          current_stt_provider!,
+          selectedSttModel ?? null,
+          languages,
+        );
 
-      return await getLanguageSupportIssue(spoken_languages ?? [], isSupported);
+      if (!useLiveMode) {
+        const issue = await getLanguageSupportIssue(
+          spoken_languages ?? [],
+          isSupportedBatch,
+        );
+        return issue && { ...issue, liveOnly: false };
+      }
+
+      const liveIssue = await getLanguageSupportIssue(
+        spoken_languages ?? [],
+        isSupportedLive,
+      );
+      if (!liveIssue) {
+        return null;
+      }
+
+      // Recording demotes to the batch model when live can't cover the
+      // configured languages, so a live-only gap just delays the transcript.
+      const batchIssue = await getLanguageSupportIssue(
+        spoken_languages ?? [],
+        isSupportedBatch,
+      );
+      return batchIssue
+        ? { ...batchIssue, liveOnly: false }
+        : { ...liveIssue, liveOnly: true };
     },
     enabled:
       isConfigured &&
@@ -465,10 +503,12 @@ function useTranscriptionLanguageWarning() {
     key: [
       current_stt_provider,
       selectedSttModel,
+      languageSupportIssue.data.liveOnly ? "live" : "batch",
       ...(spoken_languages ?? []),
     ].join(":"),
     model: selectedSttModel,
     unsupportedLanguages: languageSupportIssue.data.unsupportedLanguages,
+    liveOnly: languageSupportIssue.data.liveOnly,
   };
 }
 
