@@ -733,10 +733,6 @@ msgstr "मीटिंग्ज"
 msgid "Memo"
 msgstr ""
 
-#: src/session/components/note-input/header.tsx
-msgid "Memos"
-msgstr ""
-
 #: src/task/resource-view.tsx
 msgid "Merged"
 msgstr ""
@@ -847,6 +843,10 @@ msgstr ""
 
 #: src/settings/ai/stt/diarization-status.tsx
 msgid "Not downloaded"
+msgstr ""
+
+#: src/session/components/note-input/header.tsx
+msgid "Note"
 msgstr ""
 
 #: src/session/components/title-breadcrumb.tsx

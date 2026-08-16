@@ -733,10 +733,6 @@ msgstr "Meetings"
 msgid "Memo"
 msgstr "Memo"
 
-#: src/session/components/note-input/header.tsx
-msgid "Memos"
-msgstr "Memos"
-
 #: src/task/resource-view.tsx
 msgid "Merged"
 msgstr "Merged"
@@ -848,6 +844,10 @@ msgstr "No templates yet"
 #: src/settings/ai/stt/diarization-status.tsx
 msgid "Not downloaded"
 msgstr "Not downloaded"
+
+#: src/session/components/note-input/header.tsx
+msgid "Note"
+msgstr "Note"
 
 #: src/session/components/title-breadcrumb.tsx
 msgid "Note breadcrumb"
