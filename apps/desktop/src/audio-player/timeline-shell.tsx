@@ -4,7 +4,7 @@ import { cn } from "@hypr/utils";
 
 export function TimelineMeta({ children }: { children: ReactNode }) {
   return (
-    <div className="text-muted-foreground inline-flex shrink-0 items-center gap-1 font-mono text-xs tabular-nums select-none">
+    <div className="text-muted-foreground inline-flex shrink-0 items-center gap-1 font-mono text-[10px] tracking-[0.03em] tabular-nums select-none">
       {children}
     </div>
   );
@@ -30,14 +30,14 @@ export function TimelineShell({
     >
       <div
         className={cn([
-          "flex items-center gap-2 px-2 py-1",
+          "flex items-center",
           "w-full max-w-full",
           contentClassName,
         ])}
       >
         {leading}
-        {meta}
         <div className="min-w-0 flex-1">{main}</div>
+        {meta}
       </div>
     </div>
   );

@@ -104,19 +104,22 @@ export function Timeline({
           onClick={handleClick}
           className={cn([
             "flex items-center justify-center",
-            "h-7 w-7 rounded-full",
-            "border-border bg-card border",
-            "hover:bg-accent transition-all hover:scale-110",
-            "shrink-0 shadow-xs select-none",
+            "h-5 w-5 rounded-full",
+            "bg-foreground",
+            "transition-all hover:opacity-85",
+            "shrink-0 select-none",
           ])}
         >
           {state === "playing" ? (
             <Pause
-              className="text-foreground h-3.5 w-3.5"
+              className="text-background h-2.5 w-2.5"
               fill="currentColor"
             />
           ) : (
-            <Play className="text-foreground h-3.5 w-3.5" fill="currentColor" />
+            <Play
+              className="text-background ml-px h-2.5 w-2.5"
+              fill="currentColor"
+            />
           )}
         </button>
       }
@@ -133,11 +136,9 @@ export function Timeline({
                 onClick={() => setShowRateMenu((prev) => !prev)}
                 className={cn([
                   "flex items-center justify-center",
-                  "h-6 rounded-md px-1.5",
-                  "border-border bg-card border",
+                  "h-5 rounded px-1",
                   "hover:bg-accent transition-colors",
-                  "text-muted-foreground font-mono text-xs select-none",
-                  "shadow-xs",
+                  "text-muted-foreground/80 font-mono text-[10px] select-none",
                 ])}
               >
                 {playbackRate}x
@@ -177,7 +178,7 @@ export function Timeline({
       main={
         <div
           ref={registerContainer}
-          className="h-6 min-w-0 flex-1"
+          className="h-5 min-w-0 flex-1"
           style={{ width: "100%" }}
         />
       }

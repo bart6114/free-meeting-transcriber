@@ -35,8 +35,7 @@
 @source "../../../../packages/editor/src";
 
 @theme {
-  --font-sans:
-    "Bricolage Grotesque Variable", system-ui, -apple-system, sans-serif;
+  --font-sans: -apple-system, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
   --font-serif: "Literata Variable", Georgia, "Times New Roman", serif;
   --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
@@ -242,6 +241,12 @@
   }
 
   /* https://github.com/gitbutlerapp/gitbutler/blob/master/apps/desktop/src/styles/styles.css */
+
+  /* 15px root shrinks the whole rem-based type/spacing scale ~6% for a
+     denser, quieter UI (text-sm 14px -> 13.1px). */
+  html {
+    font-size: 15px;
+  }
 
   html,
   body {

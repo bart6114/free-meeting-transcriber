@@ -3,21 +3,27 @@ import { describe, expect, it } from "vitest";
 import { shouldShowSessionTopAudioPlayer } from "./top-audio-player";
 
 describe("shouldShowSessionTopAudioPlayer", () => {
-  it("shows playback only on the transcript tab", () => {
+  it("shows playback whenever a recording is ready", () => {
     expect(
       shouldShowSessionTopAudioPlayer({
         audioExists: true,
         audioUrlReady: true,
-        currentView: { type: "transcript" },
         sessionMode: "inactive",
       }),
     ).toBe(true);
 
     expect(
       shouldShowSessionTopAudioPlayer({
-        audioExists: true,
+        audioExists: false,
         audioUrlReady: true,
-        currentView: { type: "enhanced", id: "summary-1" },
+        sessionMode: "inactive",
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldShowSessionTopAudioPlayer({
+        audioExists: true,
+        audioUrlReady: false,
         sessionMode: "inactive",
       }),
     ).toBe(false);
@@ -28,7 +34,6 @@ describe("shouldShowSessionTopAudioPlayer", () => {
       shouldShowSessionTopAudioPlayer({
         audioExists: true,
         audioUrlReady: true,
-        currentView: { type: "transcript" },
         sessionMode: "active",
       }),
     ).toBe(false);
@@ -37,7 +42,6 @@ describe("shouldShowSessionTopAudioPlayer", () => {
       shouldShowSessionTopAudioPlayer({
         audioExists: true,
         audioUrlReady: true,
-        currentView: { type: "transcript" },
         sessionMode: "finalizing",
       }),
     ).toBe(false);

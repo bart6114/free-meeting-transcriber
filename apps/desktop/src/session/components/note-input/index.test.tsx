@@ -298,7 +298,7 @@ describe("NoteInput tab selection", () => {
     expect(screen.getByTestId("transcript")).not.toBeNull();
   });
 
-  it("renders the title above the audio player above the transcript", () => {
+  it("pins the audio player above the title and transcript", () => {
     renderNoteInput({
       currentTab: { type: "transcript" },
       topAudioPlayer: <div data-testid="top-audio-player" />,
@@ -309,12 +309,21 @@ describe("NoteInput tab selection", () => {
     const transcript = screen.getByTestId("transcript");
 
     expect(
-      title.compareDocumentPosition(player) & Node.DOCUMENT_POSITION_FOLLOWING,
+      player.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
     expect(
       player.compareDocumentPosition(transcript) &
         Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy();
+  });
+
+  it("renders the audio player on non-transcript views too", () => {
+    renderNoteInput({
+      currentTab: { type: "raw" },
+      topAudioPlayer: <div data-testid="top-audio-player" />,
+    });
+
+    expect(screen.getByTestId("top-audio-player")).not.toBeNull();
   });
 
   it("does not render a standalone title in the memo view", () => {

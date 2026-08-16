@@ -360,7 +360,7 @@ describe("Header", () => {
     );
 
     const summaryTab = screen.getByRole("button", { name: "Customer Call" });
-    const memoTab = screen.getByRole("button", { name: "Memos" });
+    const memoTab = screen.getByRole("button", { name: "Note" });
     const transcriptTab = screen.getByRole("button", { name: "Transcript" });
     const viewSwitcher = screen.getByRole("group", {
       name: "Session note views",
@@ -375,7 +375,7 @@ describe("Header", () => {
     expect(viewSwitcher.className).toContain("dark:bg-accent/55");
     expect(summaryTab.getAttribute("aria-current")).toBeNull();
     expect(memoTab.getAttribute("aria-current")).toBe("page");
-    expect(memoTab.textContent).toBe("Memos");
+    expect(memoTab.textContent).toBe("Note");
     expect(memoTab.className).toContain("h-[26px]");
     expect(memoTab.className).not.toContain("-my-px");
     expect(memoTab.className).toContain("bg-card");
@@ -388,13 +388,12 @@ describe("Header", () => {
     expect(summaryTab.className).toContain("px-2");
     expect(summaryTab.className).not.toContain("min-w-10");
     expect(summaryTab.className).toContain("dark:hover:bg-accent/80");
-    expect(summaryTab.querySelector("svg")).not.toBeNull();
-    expect(summaryTab.querySelectorAll("svg")).toHaveLength(1);
-    expect(transcriptTab.querySelector("svg")).not.toBeNull();
+    expect(summaryTab.querySelector("svg")).toBeNull();
+    expect(transcriptTab.querySelector("svg")).toBeNull();
     expect(transcriptTab.className).toContain("px-2");
     expect(transcriptTab.className).not.toContain("min-w-10");
-    expect(summaryTab.textContent).toBe("");
-    expect(transcriptTab.textContent).toBe("");
+    expect(summaryTab.textContent).toBe("Customer Call");
+    expect(transcriptTab.textContent).toBe("Transcript");
     expect(summaryTab.getAttribute("title")).toBe(
       "Customer Call was used to generate this summary.",
     );
@@ -422,13 +421,13 @@ describe("Header", () => {
     expect(activeSummaryTab.className).toContain("text-foreground");
     expect(activeSummaryTab.className).toContain("dark:text-foreground");
     expect(activeSummaryTab.className).toContain("dark:bg-accent");
-    expect(activeSummaryTab.querySelectorAll("svg")).toHaveLength(2);
+    expect(activeSummaryTab.querySelectorAll("svg")).toHaveLength(1);
 
     fireEvent.click(activeSummaryTab);
 
     expect(screen.getByPlaceholderText("Search templates...")).not.toBeNull();
 
-    fireEvent.click(screen.getByRole("button", { name: "Memos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Note" }));
 
     view.rerender(
       <Header
@@ -458,7 +457,7 @@ describe("Header", () => {
       />,
     );
 
-    const memoTab = screen.getByRole("button", { name: "Memos" });
+    const memoTab = screen.getByRole("button", { name: "Note" });
     const viewSwitcher = screen.getByRole("group", {
       name: "Session note views",
     });
@@ -466,7 +465,7 @@ describe("Header", () => {
     expect(viewSwitcher.className).not.toContain("h-[30px]");
     expect(viewSwitcher.className).not.toContain("bg-foreground/10");
     expect(viewSwitcher.className).not.toContain("rounded-full");
-    expect(memoTab.textContent).toBe("Memos");
+    expect(memoTab.textContent).toBe("Note");
     expect(memoTab.className).toContain("h-7");
     expect(memoTab.className).toContain("bg-card");
     expect(memoTab.className).toContain("border-0");
@@ -493,7 +492,7 @@ describe("Header", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "Memos" }));
+    fireEvent.click(screen.getByRole("button", { name: "Note" }));
     expect(screen.getByRole("button", { name: "Transcript" }).textContent).toBe(
       "Transcript",
     );

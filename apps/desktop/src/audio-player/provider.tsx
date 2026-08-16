@@ -180,12 +180,12 @@ export function AudioPlayerProvider({
 
     const ws = WaveSurfer.create({
       container,
-      height: 24,
+      height: 20,
       waveColor: "#e5e5e5",
       progressColor: "#a8a8a8",
       cursorColor: "#737373",
-      cursorWidth: 2,
-      barWidth: 3,
+      cursorWidth: 1.5,
+      barWidth: 2,
       barGap: 2,
       barRadius: 2,
       barHeight: 1,

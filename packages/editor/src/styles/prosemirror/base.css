@@ -65,8 +65,6 @@
   }
 }
 
-.prosemirror-editor.session-note-editor,
-.prosemirror-editor.enhanced-summary-editor,
 .blog-editor .prosemirror-editor {
   font-family: var(--font-serif);
   line-height: 1.65;
@@ -74,5 +72,22 @@
   p {
     line-height: 1.65;
     margin-bottom: 0.5rem;
+  }
+}
+
+.prosemirror-editor.session-note-editor,
+.prosemirror-editor.enhanced-summary-editor {
+  font-family: var(--font-sans);
+  font-size: 0.9375rem;
+  line-height: 1.7;
+  color: hsl(var(--foreground) / 0.85);
+
+  p {
+    line-height: 1.7;
+    margin-bottom: 0.5rem;
+  }
+
+  li::marker {
+    color: hsl(var(--muted-foreground) / 0.7);
   }
 }

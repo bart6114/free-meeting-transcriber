@@ -222,7 +222,6 @@ function TabContentNoteInner({
   const showTopAudioPlayer = shouldShowSessionTopAudioPlayer({
     audioExists,
     audioUrlReady,
-    currentView,
     sessionMode,
   });
 
@@ -242,13 +241,23 @@ function TabContentNoteInner({
             currentView={currentView}
             standaloneWindow={standaloneWindow}
             title={
-              <NoteInputHeader
-                sessionId={sessionId}
-                editorTabs={editorTabs}
-                currentTab={currentView}
-                handleTabChange={handleTabChange}
-                isTranscribing={isTranscribing}
-              />
+              <div className="flex min-w-0 items-center gap-2">
+                <NoteInputHeader
+                  sessionId={sessionId}
+                  editorTabs={editorTabs}
+                  currentTab={currentView}
+                  handleTabChange={handleTabChange}
+                  isTranscribing={isTranscribing}
+                />
+                {showTopAudioPlayer ? (
+                  <div
+                    data-session-top-audio-player
+                    className="border-border bg-card h-7 w-56 shrink-0 overflow-hidden rounded-full border"
+                  >
+                    <AudioPlayer.Timeline contentClassName="gap-2 py-[3px] pr-2.5 pl-[3px]" />
+                  </div>
+                ) : null}
+              </div>
             }
           />
         }
@@ -264,15 +273,6 @@ function TabContentNoteInner({
             handleTabChange={handleTabChange}
             sessionMode={sessionMode}
             hideHeader
-            topAudioPlayer={
-              showTopAudioPlayer ? (
-                <div data-session-top-audio-player className="shrink-0 pb-2">
-                  <div className="border-border/70 bg-card/80 overflow-hidden rounded-[22px] border">
-                    <AudioPlayer.Timeline contentClassName="py-1.5 pr-3 pl-1" />
-                  </div>
-                </div>
-              ) : null
-            }
           />
         ) : (
           <SessionContentLoading />

@@ -414,7 +414,7 @@ export const TimelineView = memo(function TimelineView({
                   "bg-background pt-0 pr-1 pb-1 pl-3",
                 ])}
               >
-                <div className="text-foreground text-base font-bold">
+                <div className="text-muted-foreground/70 pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase">
                   {bucket.label}
                 </div>
               </div>

@@ -373,6 +373,8 @@ const NoteInputContent = forwardRef<
           </div>
         )}
 
+        {topAudioPlayer && <div className="px-3 pt-1.5">{topAudioPlayer}</div>}
+
         <div className="relative flex-1 overflow-hidden">
           <div
             ref={scrollRef}
@@ -423,7 +425,6 @@ const NoteInputContent = forwardRef<
                       trailer row's mt-1, so the title→pills gap matches. */}
                   <SessionPeople sessionId={sessionId} className="mt-2" />
                 </div>
-                {topAudioPlayer}
                 <div className="min-h-0 flex-1">
                   <Transcript sessionId={sessionId} scrollRef={scrollRef} />
                 </div>
