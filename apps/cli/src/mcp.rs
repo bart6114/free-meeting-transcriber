@@ -122,7 +122,7 @@ impl ServerHandler for FmtrMcpServer {
         .with_protocol_version(ProtocolVersion::V_2024_11_05)
         .with_server_info(Implementation::new(
             "fmtr",
-            env!("CARGO_PKG_VERSION"),
+            env!("FMTR_VERSION"),
         ))
         .with_instructions(
             "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Call get_meeting_transcript for the full transcript as speaker-labeled '[HH:MM:SS] Speaker: ...' lines. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a start_ms that lines up with the transcript's timestamps. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",

@@ -7,7 +7,7 @@ use hypr_agent_access::{DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, SearchKind};
 #[derive(Debug, Parser)]
 #[command(
     name = "fmtr",
-    version,
+    version = env!("FMTR_VERSION"),
     about = "Query and edit local Free Meeting Transcriber meeting data"
 )]
 pub struct Args {
