@@ -2,13 +2,19 @@ use std::path::Path;
 
 use hypr_fs_format::TranscriptJson;
 
-use crate::{Error, Result, paths};
+use crate::{Error, Result, layout, paths};
 
 /// Read one session's `transcript.json`; a missing file is an empty transcript list
 /// (the "no transcript yet" state), malformed JSON is an error so callers can tell
-/// "nothing here" apart from "something here that failed to parse".
+/// "nothing here" apart from "something here that failed to parse". The session id
+/// resolves to its physical directory via layout discovery.
 pub fn read_transcript_json(vault: &Path, session_id: &str) -> Result<TranscriptJson> {
-    let path = vault.join(paths::transcript_path(session_id));
+    read_transcript_json_in(vault, &layout::artifact_dir(vault, session_id)?)
+}
+
+/// `read_transcript_json` for an already-resolved session directory (vault-relative).
+pub fn read_transcript_json_in(vault: &Path, session_dir: &Path) -> Result<TranscriptJson> {
+    let path = vault.join(paths::transcript_path_in(session_dir));
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => {

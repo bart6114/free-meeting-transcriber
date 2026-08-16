@@ -13,6 +13,7 @@ hypr-audio-utils = { workspace = true }
 hypr-frontmatter = { workspace = true }
 hypr-fs-format = { workspace = true }
 hypr-tiptap = { workspace = true }
+hypr-vault-read = { workspace = true }
 
 serde = { workspace = true }
 serde_json = { workspace = true }

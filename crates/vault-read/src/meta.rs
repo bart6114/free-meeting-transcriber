@@ -2,7 +2,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{Error, Result, paths, strip_leading_frontmatter};
+use crate::{Error, Result, layout, paths, strip_leading_frontmatter};
 
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
 pub struct SessionMeta {
@@ -34,10 +34,26 @@ pub struct LegacyDoc {
     pub markdown: String,
 }
 
-/// Read one session's `_meta.json`. `Ok(None)` only for a genuinely absent file --
-/// a transiently unreadable or corrupt file is an error, never "no session".
+/// Read one session's `_meta.json`, resolving the id to its physical directory via
+/// layout discovery (identity is `_meta.json.id`, never the directory basename).
+/// `Ok(None)` only when no directory claims the id -- a corrupt or ambiguous claim
+/// is an error, never "no session".
 pub fn read_session_meta(vault: &Path, id: &str) -> Result<Option<SessionMeta>> {
-    let path = vault.join(paths::meta_path(id));
+    match layout::find_session(vault, id) {
+        Ok(found) => Ok(found.map(|(_, meta)| meta)),
+        Err(layout::SessionLookupError::Corrupt { reason, .. }) => Err(Error::Parse(reason)),
+        Err(error @ layout::SessionLookupError::Ambiguous { .. }) => {
+            Err(Error::Parse(error.to_string()))
+        }
+        Err(layout::SessionLookupError::Io(reason)) => Err(Error::Io(reason)),
+    }
+}
+
+/// Read a session's `_meta.json` from an already-resolved session directory
+/// (vault-relative). `Ok(None)` only for a genuinely absent file -- a transiently
+/// unreadable or corrupt file is an error, never "no session".
+pub fn read_session_meta_in(vault: &Path, session_dir: &Path) -> Result<Option<SessionMeta>> {
+    let path = vault.join(paths::meta_path_in(session_dir));
     let bytes = match std::fs::read(&path) {
         Ok(bytes) => bytes,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
@@ -48,36 +64,28 @@ pub fn read_session_meta(vault: &Path, id: &str) -> Result<Option<SessionMeta>> 
         .map_err(|e| Error::Parse(format!("failed to deserialize meta: {e}")))
 }
 
-/// Scan `sessions/` and return every session's parsed `_meta.json`. Entries without a
-/// parseable meta file are skipped (read-only tolerance: one corrupted session must not
-/// hide the rest); a missing `sessions/` directory is an empty vault, not an error.
+/// Every discovered session's parsed `_meta.json`, in both legacy UUID-named and
+/// readable directories, nested personal folders included. Corrupt or duplicated
+/// entries are skipped (read-only tolerance: one bad session must not hide the
+/// rest); a missing `sessions/` directory is an empty vault, not an error. Callers
+/// that need the physical locations or the skip diagnostics use
+/// `layout::discover_sessions` directly.
 pub fn list_session_metas(vault: &Path) -> Result<Vec<SessionMeta>> {
-    let root = vault.join(paths::sessions_root());
-    let entries = match std::fs::read_dir(&root) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(Error::Io(format!("failed to read sessions dir: {e}"))),
-    };
-
-    let mut metas = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|e| Error::Io(format!("failed to read dir entry: {e}")))?;
-        if !entry.path().is_dir() {
-            continue;
-        }
-        let Some(id) = entry.file_name().to_str().map(str::to_string) else {
-            continue;
-        };
-        if let Ok(Some(meta)) = read_session_meta(vault, &id) {
-            metas.push(meta);
-        }
-    }
-    Ok(metas)
+    Ok(layout::discover_sessions(vault)?
+        .sessions
+        .into_iter()
+        .map(|(_, meta)| meta)
+        .collect())
 }
 
 /// Read the user's note (`_memo.md`), stripping any legacy exporter frontmatter wrapper.
 pub fn read_note(vault: &Path, id: &str) -> Result<Option<String>> {
-    let path = vault.join(paths::note_path(id));
+    read_note_in(vault, &layout::artifact_dir(vault, id)?)
+}
+
+/// `read_note` for an already-resolved session directory (vault-relative).
+pub fn read_note_in(vault: &Path, session_dir: &Path) -> Result<Option<String>> {
+    let path = vault.join(paths::note_path_in(session_dir));
     match std::fs::read_to_string(&path) {
         Ok(content) => Ok(Some(strip_leading_frontmatter(content))),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -89,7 +97,12 @@ pub fn read_note(vault: &Path, id: &str) -> Result<Option<String>> {
 /// files (`_memo.md`) are the note/meta namespace, not documents. Unreadable files are
 /// skipped.
 pub fn list_legacy_docs(vault: &Path, id: &str) -> Result<Vec<LegacyDoc>> {
-    let dir = vault.join(paths::session_dir(id));
+    list_legacy_docs_in(vault, &layout::artifact_dir(vault, id)?)
+}
+
+/// `list_legacy_docs` for an already-resolved session directory (vault-relative).
+pub fn list_legacy_docs_in(vault: &Path, session_dir: &Path) -> Result<Vec<LegacyDoc>> {
+    let dir = vault.join(session_dir);
     let entries = match std::fs::read_dir(&dir) {
         Ok(entries) => entries,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),

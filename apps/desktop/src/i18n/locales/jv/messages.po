@@ -675,6 +675,15 @@ msgstr ""
 msgid "Live"
 msgstr ""
 
+#. placeholder {0}: formatLanguageList(unsupportedLanguages)
+#: src/settings/ai/stt/select.tsx
+msgid "Live transcription isn't available for {0}. You'll get the transcript right after the recording ends instead."
+msgstr ""
+
+#: src/settings/ai/stt/select.tsx
+msgid "Live transcription isn't available for this language combination. You'll get the transcript right after the recording ends instead."
+msgstr ""
+
 #: src/templates/auto-form.tsx
 msgid "Loading Auto prompt..."
 msgstr ""

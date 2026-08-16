@@ -33,6 +33,15 @@ pub fn spawn(app: AppHandle) {
             return;
         };
 
+        // Registered synchronously, before the async stamp is even scheduled: the
+        // provisional-directory rename deferral must be in force the moment capture
+        // starts, not whenever the spawned task gets around to running -- a title
+        // typed right after hitting record must not rename the directory the
+        // recorder is writing into.
+        if !is_end {
+            store.note_recording_active(&session_id);
+        }
+
         // Stamped here rather than inside the spawned task: the event marks the actual
         // lifecycle moment, the store write merely persists it.
         let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);

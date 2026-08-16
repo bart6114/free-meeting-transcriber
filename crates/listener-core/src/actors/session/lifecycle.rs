@@ -56,14 +56,14 @@ pub(crate) fn clear_sentry_session_context() {
 
 pub(crate) fn emit_session_ended(
     runtime: &dyn ListenerRuntime,
-    sessions_base: &Path,
+    vault_base: &Path,
     session_id: &str,
     failure_reason: Option<String>,
     clear_sentry_context: bool,
 ) {
     let span = session_span(session_id);
     let _guard = span.enter();
-    let audio_path = resolve_final_audio_path(sessions_base, session_id)
+    let audio_path = resolve_final_audio_path(vault_base, session_id)
         .map(|path| path.to_string_lossy().into_owned());
 
     runtime.emit_lifecycle(SessionLifecycleEvent::Inactive {

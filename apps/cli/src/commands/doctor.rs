@@ -55,7 +55,7 @@ fn inspect(args: &Args) -> Result<DoctorReport> {
     }
 
     Ok(DoctorReport {
-        cli_version: env!("CARGO_PKG_VERSION"),
+        cli_version: env!("FMTR_VERSION"),
         ready: report.is_directory && report.sessions.is_some(),
         vault: report,
     })

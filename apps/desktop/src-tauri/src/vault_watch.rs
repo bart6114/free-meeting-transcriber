@@ -18,16 +18,15 @@
 //!
 //! This version never does either of those things:
 //!
-//! 1. **The event -> action pipeline is pure and has exactly two outcomes**
-//!    (`WatchAction::Ignore` / `WatchAction::Refresh(session_id)`) --
+//! 1. **The event -> action pipeline is pure and index-only** --
 //!    `classify_event` below. There is no delete verb, no soft-hide, no
 //!    write-to-vault path. The worst an incorrectly-classified event can do
-//!    is call `store.refresh_session`, which is read-only on the filesystem
-//!    and transactional on the index (see `session_store/rebuild.rs`): a
-//!    session whose folder is genuinely gone loses its index rows (correct),
-//!    a session whose folder is untouched gets re-indexed as a no-op
-//!    (harmless). Files are **never** touched by this module, in either
-//!    direction.
+//!    is call `store.refresh_session` or `store.rebuild_index`, both of
+//!    which are read-only on the filesystem and transactional on the index
+//!    (see `session_store/rebuild.rs`): a session whose folder is genuinely
+//!    gone loses its index rows (correct), a session whose folder is
+//!    untouched gets re-indexed as a no-op (harmless). Files are **never**
+//!    touched by this module, in either direction.
 //!
 //! 2. **The own-write filter is the write journal, not a TTL.**
 //!    `SessionStore`'s `write_file` (used by every `write_meta`/`write_note`/
@@ -44,10 +43,16 @@
 //!    on it: every event that *does* arrive here is re-checked against the
 //!    journal from scratch.
 //!
-//! # What "external" means for a path outside `sessions/<id>/`
+//! # What "external" means for a path outside `sessions/`
 //!
-//! Only paths under `sessions/<id>/...` (or the bare `sessions/<id>` folder
-//! itself, e.g. a rename's old/new endpoint) ever produce a `Refresh`.
+//! Only paths under a *cataloged* session directory (or the directory
+//! itself, e.g. a rename's old endpoint) ever produce a `Refresh` -- the
+//! session directory is no longer assumed to be named after the id, so
+//! ownership comes from `SessionStore::session_id_for_relative_path`
+//! (longest-prefix, NFC-normalized). Any other path under `sessions/` --
+//! a new/copied/renamed directory, a rename's new endpoint, or the bare
+//! `sessions` root -- is structural and produces one coalesced
+//! `RebuildSessions` instead of a guessed id.
 //! Everything else -- `.trash/`, this app's own index/export bookkeeping
 //! (`app.db*`, `search_index/`, `AGENTS.md`, the export marker file), and
 //! any in-flight `.tmp-`-prefixed atomic-write temp file -- is `Ignore`d
@@ -62,8 +67,11 @@
 //! A burst of events (a sync client delivering several files back-to-back,
 //! or a single folder move producing separate old-path/new-path events) is
 //! collected for a sliding `COALESCE_WINDOW` quiet period and reduced to a
-//! `HashSet` of distinct session ids before any `refresh_session` call is
-//! made -- one refresh per session per burst, not one per raw path.
+//! `RefreshPlan` (distinct session ids plus one structural-rebuild flag)
+//! before any store call is made -- one refresh per session per burst, not
+//! one per raw path, and at most one `rebuild_index` per burst, which then
+//! subsumes the per-id refreshes (a rename's old endpoint would otherwise
+//! be refreshed as "gone" before rediscovery re-homed it).
 //!
 //! # Startup ordering
 //!
@@ -74,6 +82,7 @@
 //! account for vault state from here on).
 
 use std::collections::HashSet;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -95,14 +104,20 @@ use crate::session_store::SessionStore;
 /// events across a couple of emissions a few hundred ms apart.
 const COALESCE_WINDOW: Duration = Duration::from_secs(2);
 
-/// The only two things a vault-watch event can lead to. No delete/hide verb
-/// exists here on purpose -- `Refresh` is the sole action, and
-/// `refresh_session` itself (not this module) is what decides whether a
-/// missing file means removing index rows.
+/// What a vault-watch event can lead to. No delete/hide verb exists here on
+/// purpose -- `Refresh`/`RebuildSessions` are the only session actions, and
+/// `refresh_session`/`rebuild_index` themselves (not this module) are what
+/// decide whether a missing file means removing index rows.
 #[derive(Debug, PartialEq, Eq)]
 pub enum WatchAction {
     Ignore,
     Refresh(String),
+    /// A structural change under `sessions/`: a path no cataloged session
+    /// directory owns (new/copied/renamed directory, a rename endpoint, an
+    /// unknown nested dir) or the bare `sessions` root. Identity lives in
+    /// `_meta.json`, so the only safe response is one read-only rediscovery
+    /// pass (`rebuild_index`) rather than an id guessed from the path.
+    RebuildSessions,
     /// An external edit under `templates/` -- rescans the in-memory templates index
     /// (Phase E1; templates have no SQL half to refresh).
     RefreshTemplates,
@@ -111,20 +126,29 @@ pub enum WatchAction {
     RefreshPeople,
 }
 
-/// Pure routing decision: given a vault-relative path and whether its
-/// current on-disk bytes match this store's own last write there, decide
-/// what (if anything) the watcher should do.
+/// Pure routing decision: given a vault-relative path, whether its current
+/// on-disk bytes match this store's own last write there, and which logical
+/// session (if any) the store's location catalog says owns the path, decide
+/// what the watcher should do.
 ///
 /// `journal_match` is checked first and unconditionally wins -- an own
 /// write is ignored no matter how the path would otherwise classify. Only
-/// after that does path shape matter: anything under `sessions/<id>/...`
-/// (or `sessions/<id>` itself) that isn't own-write is a `Refresh` for that
-/// id, whether the change is an edit, a create, or a delete (this function
-/// never inspects the filesystem, so "deleted" and "edited" look identical
-/// to it -- `refresh_session` is what tells them apart). Everything else --
-/// non-session paths, `.trash/`, this app's own bookkeeping files, in-flight
-/// atomic-write temp files -- is `Ignore`.
-pub fn classify_event(relative: &str, journal_match: bool) -> WatchAction {
+/// after that does path shape matter: a path under `sessions/` that the
+/// catalog attributes to a session (`catalog_session_id`, resolved by the
+/// caller via `SessionStore::session_id_for_relative_path` so this function
+/// stays pure) is a `Refresh` for that logical id, whether the change is an
+/// edit, a create, or a delete (this function never inspects the
+/// filesystem, so "deleted" and "edited" look identical to it --
+/// `refresh_session` is what tells them apart). A `sessions/` path no
+/// cataloged directory owns -- including the bare `sessions` root -- is
+/// structural: `RebuildSessions`. Everything else -- non-session paths,
+/// `.trash/`, this app's own bookkeeping files, in-flight atomic-write temp
+/// files -- is `Ignore`.
+pub fn classify_event(
+    relative: &str,
+    journal_match: bool,
+    catalog_session_id: Option<&str>,
+) -> WatchAction {
     if journal_match {
         return WatchAction::Ignore;
     }
@@ -141,10 +165,30 @@ pub fn classify_event(relative: &str, journal_match: bool) -> WatchAction {
         return WatchAction::RefreshPeople;
     }
 
-    match session_id_for_relative_path(relative) {
-        Some(id) => WatchAction::Refresh(id),
-        None => WatchAction::Ignore,
+    if is_sessions_path(relative) {
+        // Hidden entries (`.DS_Store`, AppleDouble `._*`, sync-client dot-dirs)
+        // are never session artifacts and layout discovery skips them entirely,
+        // so they must not read as structural changes -- every Finder-touched
+        // `sessions/.DS_Store` would otherwise trigger a full rebuild.
+        if has_hidden_session_component(relative) {
+            return WatchAction::Ignore;
+        }
+        return match catalog_session_id {
+            Some(id) => WatchAction::Refresh(id.to_string()),
+            None => WatchAction::RebuildSessions,
+        };
     }
+
+    WatchAction::Ignore
+}
+
+/// Any dot-prefixed component below the `sessions/` root (the file itself or a
+/// containing directory).
+fn has_hidden_session_component(relative: &str) -> bool {
+    relative
+        .split('/')
+        .skip(1)
+        .any(|component| component.starts_with('.'))
 }
 
 /// Any change under `templates/` (including `.deleted-defaults.json` -- a tombstone
@@ -158,19 +202,11 @@ fn is_people_path(relative: &str) -> bool {
     relative == "people.json"
 }
 
-/// Extracts `<id>` from a `sessions/<id>` or `sessions/<id>/...` relative
-/// path. `None` for anything else, including the bare `sessions` root
-/// itself (nothing session-specific to refresh) and empty segments.
-fn session_id_for_relative_path(relative: &str) -> Option<String> {
-    let mut segments = relative.split('/');
-    if segments.next() != Some("sessions") {
-        return None;
-    }
-    let id = segments.next()?;
-    if id.is_empty() {
-        return None;
-    }
-    Some(id.to_string())
+/// Anything at or under the `sessions/` root, including the bare root
+/// itself (whose own change events -- e.g. a directory created or removed
+/// directly inside it -- are structural).
+fn is_sessions_path(relative: &str) -> bool {
+    relative == "sessions" || relative.starts_with("sessions/")
 }
 
 fn is_trash_path(relative: &str) -> bool {
@@ -249,10 +285,12 @@ async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> Refr
     let mut plan = RefreshPlan::default();
     for relative in changed {
         let journal_match = store.journal_matches_current_file(relative);
-        match classify_event(relative, journal_match) {
+        let catalog_session_id = store.session_id_for_relative_path(Path::new(relative));
+        match classify_event(relative, journal_match, catalog_session_id.as_deref()) {
             WatchAction::Refresh(id) => {
                 plan.session_ids.insert(id);
             }
+            WatchAction::RebuildSessions => plan.rebuild_sessions = true,
             WatchAction::RefreshTemplates => plan.templates = true,
             WatchAction::RefreshPeople => plan.people = true,
             WatchAction::Ignore => {}
@@ -264,6 +302,10 @@ async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> Refr
 #[derive(Debug, Default, PartialEq)]
 struct RefreshPlan {
     session_ids: HashSet<String>,
+    /// One flag for the whole batch: any structural `sessions/` change means
+    /// one `rebuild_index` pass, which rediscovers every session and thereby
+    /// subsumes the per-id refreshes in `session_ids`.
+    rebuild_sessions: bool,
     templates: bool,
     people: bool,
 }
@@ -288,7 +330,30 @@ async fn refresh_ids(store: &SessionStore, ids: HashSet<String>) {
 
 async fn handle_batch(store: &SessionStore, changed: &HashSet<String>) {
     let plan = ids_to_refresh(store, changed).await;
-    refresh_ids(store, plan.session_ids).await;
+    if plan.rebuild_sessions {
+        // One rebuild for the whole batch, and it subsumes every per-id
+        // refresh: a rename burst delivers the old endpoint (cataloged ->
+        // Refresh) and the new endpoint (unknown -> RebuildSessions)
+        // together, and refreshing the old id alone would drop its index
+        // rows before rediscovery re-homed the directory.
+        match store.rebuild_index().await {
+            Ok(report) => {
+                tracing::info!(
+                    sessions = report.sessions,
+                    errors = report.errors.len(),
+                    "vault watch: rebuilt session index from structural external change"
+                );
+            }
+            Err(error) => {
+                tracing::warn!(%error, "vault watch: failed to rebuild session index");
+                // The rebuild was meant to subsume these; a failed rebuild must
+                // not also swallow the batch's known-session edits.
+                refresh_ids(store, plan.session_ids).await;
+            }
+        }
+    } else {
+        refresh_ids(store, plan.session_ids).await;
+    }
     if plan.templates {
         store.index_refresh_templates().await;
         tracing::info!("vault watch: refreshed templates index from external change");
@@ -354,7 +419,7 @@ mod tests {
     #[test]
     fn own_write_is_ignored_even_if_late() {
         assert!(matches!(
-            classify_event("sessions/s1/_memo.md", true),
+            classify_event("sessions/s1/_memo.md", true, Some("s1")),
             WatchAction::Ignore
         ));
     }
@@ -362,7 +427,7 @@ mod tests {
     #[test]
     fn external_session_edit_refreshes() {
         assert!(matches!(
-            classify_event("sessions/s1/_meta.json", false),
+            classify_event("sessions/s1/_meta.json", false, Some("s1")),
             WatchAction::Refresh(id) if id == "s1"
         ));
     }
@@ -371,7 +436,7 @@ mod tests {
     fn deleted_meta_is_still_only_a_refresh() {
         // refresh_session handles absence by removing index rows; watcher has no delete verb
         assert!(matches!(
-            classify_event("sessions/s1/_meta.json", false),
+            classify_event("sessions/s1/_meta.json", false, Some("s1")),
             WatchAction::Refresh(_)
         ));
     }
@@ -379,11 +444,11 @@ mod tests {
     #[test]
     fn non_session_paths_ignored() {
         assert!(matches!(
-            classify_event("AGENTS.md", false),
+            classify_event("AGENTS.md", false, None),
             WatchAction::Ignore
         ));
         assert!(matches!(
-            classify_event(".trash/2026-07-24/sessions/s1", false),
+            classify_event(".trash/2026-07-24/sessions/s1", false, None),
             WatchAction::Ignore
         ));
     }
@@ -397,24 +462,73 @@ mod tests {
     #[test]
     fn nested_enhanced_doc_paths_refresh_their_session() {
         assert!(matches!(
-            classify_event("sessions/s1/enhanced/doc-1.md", false),
+            classify_event("sessions/s1/enhanced/doc-1.md", false, Some("s1")),
             WatchAction::Refresh(id) if id == "s1"
         ));
         assert!(matches!(
-            classify_event(".trash/2026-07-26/sessions/s1/enhanced/doc-1.md", false),
+            classify_event(
+                ".trash/2026-07-26/sessions/s1/enhanced/doc-1.md",
+                false,
+                None
+            ),
             WatchAction::Ignore
         ));
         assert!(matches!(
-            classify_event("sessions/s1/enhanced/.tmp-1234-5678-doc-1.md", false),
+            classify_event(
+                "sessions/s1/enhanced/.tmp-1234-5678-doc-1.md",
+                false,
+                Some("s1")
+            ),
             WatchAction::Ignore
         ));
     }
 
     #[test]
     fn bare_session_folder_path_refreshes() {
+        // e.g. a rename's old endpoint: the catalog still owns the exact
+        // directory path, so it refreshes as that logical id.
         assert!(matches!(
-            classify_event("sessions/s1", false),
+            classify_event("sessions/s1", false, Some("s1")),
             WatchAction::Refresh(id) if id == "s1"
+        ));
+    }
+
+    /// The `Refresh` id is whatever the catalog says owns the path -- with
+    /// readable directory names the basename is presentation only, and the
+    /// logical id (a full UUID) never comes from parsing the path.
+    #[test]
+    fn readable_dir_refreshes_under_its_catalog_id_not_its_basename() {
+        let full_id = "550e8400-e29b-41d4-a716-446655440000";
+        assert!(matches!(
+            classify_event(
+                "sessions/2026-03-20 — Planning — 550e84/_memo.md",
+                false,
+                Some(full_id)
+            ),
+            WatchAction::Refresh(id) if id == full_id
+        ));
+    }
+
+    /// Structural paths under `sessions/`: an unknown directory (new, copied,
+    /// or a rename's new endpoint) and anything nested in it rebuild instead
+    /// of guessing an id from the path.
+    #[test]
+    fn unknown_session_paths_trigger_rebuild() {
+        assert!(matches!(
+            classify_event("sessions/2026-03-21 — Copied in — abc123", false, None),
+            WatchAction::RebuildSessions
+        ));
+        assert!(matches!(
+            classify_event(
+                "sessions/2026-03-21 — Copied in — abc123/_meta.json",
+                false,
+                None
+            ),
+            WatchAction::RebuildSessions
+        ));
+        assert!(matches!(
+            classify_event("sessions/Work/unknown dir/nested.md", false, None),
+            WatchAction::RebuildSessions
         ));
     }
 
@@ -423,19 +537,19 @@ mod tests {
     #[test]
     fn template_paths_refresh_templates_unless_own_write_or_trash() {
         assert!(matches!(
-            classify_event("templates/t-1.json", false),
+            classify_event("templates/t-1.json", false, None),
             WatchAction::RefreshTemplates
         ));
         assert!(matches!(
-            classify_event("templates/.deleted-defaults.json", false),
+            classify_event("templates/.deleted-defaults.json", false, None),
             WatchAction::RefreshTemplates
         ));
         assert!(matches!(
-            classify_event("templates/t-1.json", true),
+            classify_event("templates/t-1.json", true, None),
             WatchAction::Ignore
         ));
         assert!(matches!(
-            classify_event(".trash/2026-07-26/templates/t-1.json", false),
+            classify_event(".trash/2026-07-26/templates/t-1.json", false, None),
             WatchAction::Ignore
         ));
     }
@@ -446,39 +560,41 @@ mod tests {
     #[test]
     fn people_path_refreshes_people_unless_own_write_or_trash() {
         assert!(matches!(
-            classify_event("people.json", false),
+            classify_event("people.json", false, None),
             WatchAction::RefreshPeople
         ));
         assert!(matches!(
-            classify_event("people.json", true),
+            classify_event("people.json", true, None),
             WatchAction::Ignore
         ));
         assert!(matches!(
-            classify_event(".trash/2026-08-06/people.json", false),
+            classify_event(".trash/2026-08-06/people.json", false, None),
             WatchAction::Ignore
         ));
         assert!(matches!(
-            classify_event("sessions/s1/people.json", false),
+            classify_event("sessions/s1/people.json", false, Some("s1")),
             WatchAction::Refresh(id) if id == "s1"
         ));
     }
 
+    /// Something changed directly at the `sessions/` root (a directory
+    /// appearing or disappearing, most likely) -- structural, so rebuild.
     #[test]
-    fn bare_sessions_root_is_ignored() {
+    fn bare_sessions_root_triggers_rebuild() {
         assert!(matches!(
-            classify_event("sessions", false),
-            WatchAction::Ignore
+            classify_event("sessions", false, None),
+            WatchAction::RebuildSessions
         ));
     }
 
     #[test]
     fn app_db_paths_are_ignored() {
         assert!(matches!(
-            classify_event("app.db", false),
+            classify_event("app.db", false, None),
             WatchAction::Ignore
         ));
         assert!(matches!(
-            classify_event("app.db-wal", false),
+            classify_event("app.db-wal", false, None),
             WatchAction::Ignore
         ));
         for retired in [
@@ -487,7 +603,7 @@ mod tests {
             "app.db.pre-files-backup-shm",
         ] {
             assert!(
-                matches!(classify_event(retired, false), WatchAction::Ignore),
+                matches!(classify_event(retired, false, None), WatchAction::Ignore),
                 "{retired} must be ignored"
             );
         }
@@ -500,7 +616,7 @@ mod tests {
     #[test]
     fn the_retired_store_migration_marker_is_inert() {
         assert!(matches!(
-            classify_event(".store-migrated-v1", false),
+            classify_event(".store-migrated-v1", false, None),
             WatchAction::Ignore
         ));
     }
@@ -508,7 +624,7 @@ mod tests {
     #[test]
     fn search_index_paths_are_ignored() {
         assert!(matches!(
-            classify_event("search_index/abc.term", false),
+            classify_event("search_index/abc.term", false, None),
             WatchAction::Ignore
         ));
     }
@@ -516,23 +632,55 @@ mod tests {
     #[test]
     fn export_marker_path_is_ignored() {
         assert!(matches!(
-            classify_event(LEGACY_EXPORT_MARKER_FILENAME, false),
+            classify_event(LEGACY_EXPORT_MARKER_FILENAME, false, None),
             WatchAction::Ignore
         ));
     }
 
+    /// Tmp/trash rules keep precedence over session classification whether or
+    /// not the catalog knows the enclosing directory -- an atomic-write temp
+    /// file inside a brand-new session dir must not trigger a rebuild.
     #[test]
     fn tmp_write_paths_under_a_session_are_ignored() {
         assert!(matches!(
-            classify_event("sessions/s1/.tmp-1234-5678-_memo.md", false),
+            classify_event("sessions/s1/.tmp-1234-5678-_memo.md", false, Some("s1")),
             WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event("sessions/unknown dir/.tmp-1234-5678-_memo.md", false, None),
+            WatchAction::Ignore
+        ));
+    }
+
+    /// Finder/sync droppings (`.DS_Store`, AppleDouble `._*`, dot-dirs like
+    /// `.stversions`) are invisible to layout discovery, so they must never read
+    /// as structural changes -- otherwise every Finder browse of the vault would
+    /// trigger a full rebuild.
+    #[test]
+    fn hidden_entries_under_sessions_are_ignored_not_structural() {
+        for path in [
+            "sessions/.DS_Store",
+            "sessions/Work/.DS_Store",
+            "sessions/._resource-fork",
+            "sessions/.stversions/2026-01-01 — Old — abc123/_meta.json",
+            "sessions/s1/.hidden-file",
+        ] {
+            assert!(
+                matches!(classify_event(path, false, None), WatchAction::Ignore),
+                "{path}"
+            );
+        }
+        // The bare root itself stays structural.
+        assert!(matches!(
+            classify_event("sessions", false, None),
+            WatchAction::RebuildSessions
         ));
     }
 
     #[test]
     fn a_user_file_merely_containing_tmp_dash_still_refreshes() {
         assert!(matches!(
-            classify_event("sessions/s1/notes.tmp-ideas.md", false),
+            classify_event("sessions/s1/notes.tmp-ideas.md", false, Some("s1")),
             WatchAction::Refresh(id) if id == "s1"
         ));
     }
@@ -541,7 +689,12 @@ mod tests {
     fn journal_match_wins_over_an_otherwise_refreshable_path() {
         // Same path as external_session_edit_refreshes, but own-write this time.
         assert!(matches!(
-            classify_event("sessions/s1/_meta.json", true),
+            classify_event("sessions/s1/_meta.json", true, Some("s1")),
+            WatchAction::Ignore
+        ));
+        // An own write also wins over an otherwise-structural unknown path.
+        assert!(matches!(
+            classify_event("sessions/unknown dir/_meta.json", true, None),
             WatchAction::Ignore
         ));
     }
@@ -589,15 +742,18 @@ mod tests {
     async fn real_journal_end_to_end_external_edit_is_queued_for_refresh() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
+        // The created directory has a readable name; the simulated FileChanged path
+        // must be the real vault-relative path, resolved through the store.
+        let rel = store.session_dir("s1").await.unwrap();
 
         // Bypass write_meta entirely -- an external editor/sync client would too.
         std::fs::write(
-            vault.path().join("sessions/s1/_meta.json"),
+            vault.path().join(&rel).join("_meta.json"),
             serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),
         )
         .unwrap();
 
-        let changed = HashSet::from(["sessions/s1/_meta.json".to_string()]);
+        let changed = HashSet::from([format!("{}/_meta.json", rel.to_str().unwrap())]);
         let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
@@ -608,9 +764,11 @@ mod tests {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "keep me").await.unwrap();
-        std::fs::remove_file(vault.path().join("sessions/s1/_meta.json")).unwrap();
+        let rel = store.session_dir("s1").await.unwrap();
+        let dir = vault.path().join(&rel);
+        std::fs::remove_file(dir.join("_meta.json")).unwrap();
 
-        let changed = HashSet::from(["sessions/s1/_meta.json".to_string()]);
+        let changed = HashSet::from([format!("{}/_meta.json", rel.to_str().unwrap())]);
         let ids = ids_to_refresh(&store, &changed).await.session_ids;
         assert_eq!(ids, HashSet::from(["s1".to_string()]));
 
@@ -621,7 +779,7 @@ mod tests {
             "index entry must be gone"
         );
         assert!(
-            vault.path().join("sessions/s1/_memo.md").is_file(),
+            dir.join("_memo.md").is_file(),
             "the watcher must never touch files -- only the index row is affected"
         );
     }
@@ -630,20 +788,130 @@ mod tests {
     async fn handle_batch_collapses_multiple_paths_for_the_same_session_into_one_refresh() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
+        let rel = store.session_dir("s1").await.unwrap();
+        let dir = vault.path().join(&rel);
 
         std::fs::write(
-            vault.path().join("sessions/s1/_meta.json"),
+            dir.join("_meta.json"),
             serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),
         )
         .unwrap();
-        std::fs::write(vault.path().join("sessions/s1/other.md"), b"note").unwrap();
+        std::fs::write(dir.join("other.md"), b"note").unwrap();
 
         let changed = HashSet::from([
-            "sessions/s1/_meta.json".to_string(),
-            "sessions/s1/other.md".to_string(),
+            format!("{}/_meta.json", rel.to_str().unwrap()),
+            format!("{}/other.md", rel.to_str().unwrap()),
         ]);
-        let ids = ids_to_refresh(&store, &changed).await.session_ids;
+        let plan = ids_to_refresh(&store, &changed).await;
 
-        assert_eq!(ids, HashSet::from(["s1".to_string()]));
+        assert_eq!(plan.session_ids, HashSet::from(["s1".to_string()]));
+        assert!(!plan.rebuild_sessions);
+    }
+
+    // -- readable directory names: catalog-backed classification --
+
+    const READABLE_DIR: &str = "sessions/2026-03-20 — Planning — 6ba7b8";
+
+    fn seed_session_dir(vault: &std::path::Path, relative: &str, meta: &SessionMeta) {
+        let dir = vault.join(relative);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::to_vec_pretty(meta).unwrap(),
+        )
+        .unwrap();
+    }
+
+    #[tokio::test]
+    async fn artifact_edit_under_readable_cataloged_dir_refreshes_its_logical_id() {
+        let (store, vault) = test_store().await;
+        let id = "6ba7b8aa-1111-2222-3333-444455556666";
+        seed_session_dir(vault.path(), READABLE_DIR, &meta(id, "Planning"));
+        store.rebuild_index().await.unwrap();
+
+        std::fs::write(vault.path().join(READABLE_DIR).join("_memo.md"), b"edited").unwrap();
+
+        let changed = HashSet::from([format!("{READABLE_DIR}/_memo.md")]);
+        let plan = ids_to_refresh(&store, &changed).await;
+
+        assert_eq!(
+            plan.session_ids,
+            HashSet::from([id.to_string()]),
+            "the refresh must carry the full logical id from the catalog, never the basename"
+        );
+        assert!(!plan.rebuild_sessions);
+
+        handle_batch(&store, &changed).await;
+        assert!(store.session_get(id).is_some());
+    }
+
+    #[tokio::test]
+    async fn unknown_new_session_dir_burst_plans_exactly_one_rebuild_and_indexes_it() {
+        let (store, vault) = test_store().await;
+        store.rebuild_index().await.unwrap();
+
+        let id = "7ba7b8aa-1111-2222-3333-444455556666";
+        let new_dir = "sessions/2026-03-21 — Copied in — 7ba7b8";
+        seed_session_dir(vault.path(), new_dir, &meta(id, "Copied in"));
+        std::fs::write(vault.path().join(new_dir).join("_memo.md"), b"note").unwrap();
+
+        let changed = HashSet::from([
+            new_dir.to_string(),
+            format!("{new_dir}/_meta.json"),
+            format!("{new_dir}/_memo.md"),
+        ]);
+        let plan = ids_to_refresh(&store, &changed).await;
+
+        // One flag for the whole burst == exactly one rebuild_index call in
+        // handle_batch, and no per-id refreshes guessed from the paths.
+        assert!(plan.rebuild_sessions);
+        assert!(plan.session_ids.is_empty());
+
+        handle_batch(&store, &changed).await;
+        assert!(
+            store.session_get(id).is_some(),
+            "the rebuild must have discovered the new directory by its _meta.json id"
+        );
+    }
+
+    #[tokio::test]
+    async fn bare_sessions_root_event_plans_a_rebuild() {
+        let (store, _vault) = test_store().await;
+        let plan = ids_to_refresh(&store, &HashSet::from(["sessions".to_string()])).await;
+        assert!(plan.rebuild_sessions);
+    }
+
+    #[tokio::test]
+    async fn external_rename_endpoints_keep_the_session_indexed_under_its_full_id() {
+        let (store, vault) = test_store().await;
+        let id = "8ba7b8aa-1111-2222-3333-444455556666";
+        store
+            .write_meta(&meta(id, "Renamed outside"))
+            .await
+            .unwrap();
+        store.write_note(id, "keep me").await.unwrap();
+        let old_rel = store.session_dir(id).await.unwrap();
+
+        let new_rel = "sessions/2026-03-22 — Renamed by hand — 8ba7b8";
+        std::fs::rename(vault.path().join(&old_rel), vault.path().join(new_rel)).unwrap();
+
+        // The watcher sees both rename endpoints: the old one is still
+        // cataloged (Refresh), the new one is unknown (RebuildSessions).
+        let changed = HashSet::from([old_rel.to_str().unwrap().to_string(), new_rel.to_string()]);
+        let plan = ids_to_refresh(&store, &changed).await;
+        assert!(plan.rebuild_sessions);
+
+        handle_batch(&store, &changed).await;
+
+        assert!(
+            store.session_get(id).is_some(),
+            "the rebuild subsumes the old-endpoint refresh -- refreshing the old id alone \
+             would have dropped its index rows"
+        );
+        assert_eq!(
+            store.session_dir(id).await.unwrap(),
+            std::path::PathBuf::from(new_rel),
+            "the catalog must now home the id in the renamed directory"
+        );
     }
 }

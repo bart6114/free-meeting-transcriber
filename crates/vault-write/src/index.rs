@@ -729,6 +729,16 @@ mod tests {
         (store, temp)
     }
 
+    /// Physical directory of a session: creation now picks a human-readable name, so
+    /// tests resolve it through the store instead of assuming `sessions/<id>`.
+    async fn session_path(
+        store: &SessionStore,
+        vault: &tempfile::TempDir,
+        id: &str,
+    ) -> std::path::PathBuf {
+        vault.path().join(store.session_dir(id).await.unwrap())
+    }
+
     fn drain_changes(store: &SessionStore) -> Vec<(IndexEntity, Vec<String>)> {
         let mut rx = store
             .take_index_change_receiver()
@@ -839,7 +849,7 @@ mod tests {
         store.write_note("s1", "note").await.unwrap();
         assert!(store.session_get("s1").is_some());
 
-        std::fs::remove_dir_all(vault.path().join("sessions/s1")).unwrap();
+        std::fs::remove_dir_all(session_path(&store, &vault, "s1").await).unwrap();
         store.rebuild_index().await.unwrap();
 
         assert!(store.session_get("s1").is_none());
@@ -1240,12 +1250,13 @@ mod tests {
         store.write_meta(&meta("s1", "Original")).await.unwrap();
         drain_changes(&store);
 
+        let dir = session_path(&store, &vault, "s1").await;
         std::fs::write(
-            vault.path().join("sessions/s1/_meta.json"),
+            dir.join("_meta.json"),
             serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),
         )
         .unwrap();
-        std::fs::write(vault.path().join("sessions/s1/_memo.md"), "external note").unwrap();
+        std::fs::write(dir.join("_memo.md"), "external note").unwrap();
 
         store.refresh_session("s1").await.unwrap();
 
@@ -1263,13 +1274,14 @@ mod tests {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "keep the file").await.unwrap();
-        std::fs::remove_file(vault.path().join("sessions/s1/_meta.json")).unwrap();
+        let dir = session_path(&store, &vault, "s1").await;
+        std::fs::remove_file(dir.join("_meta.json")).unwrap();
 
         store.refresh_session("s1").await.unwrap();
 
         assert!(store.session_get("s1").is_none());
         assert!(
-            vault.path().join("sessions/s1/_memo.md").is_file(),
+            dir.join("_memo.md").is_file(),
             "index refresh must never touch files"
         );
     }
@@ -1280,7 +1292,11 @@ mod tests {
     async fn refresh_session_keeps_the_old_entry_for_a_corrupt_meta() {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1", "Original")).await.unwrap();
-        std::fs::write(vault.path().join("sessions/s1/_meta.json"), "{ not json").unwrap();
+        std::fs::write(
+            session_path(&store, &vault, "s1").await.join("_meta.json"),
+            "{ not json",
+        )
+        .unwrap();
 
         let _ = store.refresh_session("s1").await;
 

@@ -1,7 +1,6 @@
-use std::path::{Path, PathBuf};
-
 use serde::{Deserialize, Serialize};
 
+use super::locations::DeletedSession;
 use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
 
 // The `_meta.json` schema is shared with the read-only vault consumers (fmtr CLI/MCP);
@@ -44,12 +43,22 @@ impl SessionStore {
         let meta_json =
             serde_json::to_vec_pretty(meta).map_err(|e| StoreError::Serialize(e.to_string()))?;
 
-        self.write_file_locked(guard, paths::meta_path(&meta.id), meta_json)
+        let dir = self.creation_dir_locked(guard, meta).await?;
+        self.write_file_locked(guard, paths::meta_path_in(&dir), meta_json)
             .await?;
+        // The location becomes authoritative only after the meta write succeeds --
+        // a failed create must not leave a catalog entry pointing at nothing.
+        self.catalog_insert(&meta.id, dir.clone());
 
         // Index write-through directly after the file write (file truth).
         self.index_upsert_meta(meta);
         self.notify_index_changed(super::IndexEntity::Sessions, vec![meta.id.clone()]);
+
+        // A provisional `Untitled` directory whose session just gained a real title
+        // renames once to its final readable name (deferred while recording; a
+        // failure never rolls the title back -- see the reconcile's own doc).
+        self.reconcile_provisional_name_locked(guard, &meta.id, &meta.title, &dir)
+            .await;
 
         Ok(())
     }
@@ -116,6 +125,13 @@ impl SessionStore {
         validate_session_id(id)?;
         let guard = self.lock_writes().await;
 
+        // Tracked even if the stamp below fails: the recorder holds paths into the
+        // directory either way, so the provisional rename must stay deferred.
+        self.active_recordings
+            .lock()
+            .unwrap()
+            .insert(id.to_string());
+
         let mut meta = self
             .read_meta(id)
             .await?
@@ -132,6 +148,10 @@ impl SessionStore {
         validate_session_id(id)?;
         let guard = self.lock_writes().await;
 
+        // Cleared before the meta write so its write-through reconciles a rename the
+        // recording deferred (recorder finalization is done once this event fires).
+        self.active_recordings.lock().unwrap().remove(id);
+
         let mut meta = self
             .read_meta(id)
             .await?
@@ -143,12 +163,12 @@ impl SessionStore {
 
     pub async fn read_meta(&self, id: &str) -> Result<Option<SessionMeta>, StoreError> {
         validate_session_id(id)?;
+        let dir = self.session_dir(id).await?;
         let vault_base = self.vault_base.clone();
-        let id = id.to_string();
 
         let result =
             tokio::task::spawn_blocking(move || -> Result<Option<SessionMeta>, StoreError> {
-                let path = vault_base.join(paths::meta_path(&id));
+                let path = vault_base.join(paths::meta_path_in(&dir));
 
                 // Attempt-then-match, not exists()-then-read: `Path::exists()` swallows
                 // permission-denied/stat failures as `false`, which would misreport a
@@ -176,7 +196,11 @@ impl SessionStore {
     pub async fn write_note(&self, id: &str, markdown: &str) -> Result<(), StoreError> {
         validate_session_id(id)?;
         let note_bytes = markdown.as_bytes().to_vec();
-        self.write_file(paths::note_path(id), note_bytes).await?;
+        let guard = self.lock_writes().await;
+        let dir = self.session_dir_locked(&guard, id).await?;
+        self.write_file_locked(&guard, paths::note_path_in(&dir), note_bytes)
+            .await?;
+        drop(guard);
 
         // Store what `read_note` would return, not the raw bytes: a body that starts with an
         // exporter-shaped frontmatter block would otherwise sit un-stripped in the index and
@@ -192,11 +216,11 @@ impl SessionStore {
 
     pub async fn read_note(&self, id: &str) -> Result<Option<String>, StoreError> {
         validate_session_id(id)?;
+        let dir = self.session_dir(id).await?;
         let vault_base = self.vault_base.clone();
-        let id = id.to_string();
 
         let result = tokio::task::spawn_blocking(move || -> Result<Option<String>, StoreError> {
-            let path = vault_base.join(paths::note_path(&id));
+            let path = vault_base.join(paths::note_path_in(&dir));
 
             // Same attempt-then-match rationale as read_meta above.
             match std::fs::read_to_string(&path) {
@@ -219,8 +243,11 @@ impl SessionStore {
     ) -> Result<(), StoreError> {
         validate_session_id(id)?;
         let doc_bytes = markdown.as_bytes().to_vec();
-        self.write_file(paths::document_path(id, kind), doc_bytes)
+        let guard = self.lock_writes().await;
+        let dir = self.session_dir_locked(&guard, id).await?;
+        self.write_file_locked(&guard, paths::document_path_in(&dir, kind), doc_bytes)
             .await?;
+        drop(guard);
 
         self.index_upsert_doc(&super::index::legacy_doc(id, kind, markdown.to_string()));
         self.notify_index_changed(super::IndexEntity::Docs, vec![id.to_string()]);
@@ -228,75 +255,133 @@ impl SessionStore {
         Ok(())
     }
 
-    /// Moves the whole `sessions/<id>/` folder to trash (undo-able via `restore_session`).
+    /// Moves the session's whole physical directory to trash (undo-able via
+    /// `restore_session`). The directory is resolved under the store write lock --
+    /// never rebuilt from the id -- and the exact trash path `move_to_trash` returns
+    /// is recorded in the recent-deletions map so undo can restore that directory to
+    /// its original (possibly readable, possibly nested) relative path.
     ///
-    /// The id is validated first: `sessions/<id>` for an empty id resolves to `sessions/`
-    /// itself, so an unguarded delete would trash the user's entire session tree in one
-    /// call -- and `restore_session` could not put it back.
+    /// The id is validated first: an empty id would resolve to `sessions/` itself, so
+    /// an unguarded delete would trash the user's entire session tree in one call.
     pub async fn delete_session(&self, id: &str) -> Result<(), StoreError> {
         validate_session_id(id)?;
 
-        let vault_base = self.vault_base.clone();
-        let id_str = id.to_string();
+        // Write lock first, then the live lock -- the same order as
+        // assign_transcript_speaker, so the two can never deadlock. Holding the write
+        // lock across the trash keeps a concurrent session-scoped write from resolving
+        // the directory mid-move and recreating it.
+        let guard = self.lock_writes().await;
+
+        // Resolve before touching any in-memory state: a failed resolution
+        // (ambiguous id, I/O error) must leave the live buffer and the
+        // recording-deferral guard intact -- the session survives the failed delete.
+        let relative_dir = self.session_dir_locked(&guard, id).await?;
 
         // Drop the session's live transcript buffer *before* trashing the folder, and keep
         // the `live` lock held across the trash. A debounced flush still holding words for
         // this session would otherwise fire afterwards, and `persist_transcript` ->
-        // `write_file` -> `create_dir_all` would recreate `sessions/<id>/` -- resurrecting a
-        // ghost session and, worse, making `restore_session` fail with ENOTEMPTY because the
-        // destination it renames onto now exists. Any flusher that wakes up during the delete
-        // blocks here, then finds no buffer and no-ops. (Recording into a session with no
-        // `_meta.json` still persists, deliberately: this only drops buffers for a session
-        // that was just deleted.)
+        // `write_file` -> `create_dir_all` would recreate the session directory --
+        // resurrecting a ghost session and, worse, making `restore_session` fail with
+        // ENOTEMPTY because the destination it renames onto now exists. Any flusher that
+        // wakes up during the delete blocks here, then finds no buffer and no-ops.
+        // (Recording into a session with no `_meta.json` still persists, deliberately:
+        // this only drops buffers for a session that was just deleted.)
         let mut live = self.live.lock().await;
         live.remove(id);
+        self.active_recordings.lock().unwrap().remove(id);
 
-        // Move folder to trash first (file operation)
-        tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
-            let session_path = vault_base.join(paths::session_dir(&id_str));
-            hypr_fs_sync_core::export::move_to_trash(&vault_base, &session_path)
-                .map_err(|e| StoreError::Io(format!("failed to move session to trash: {}", e)))?;
-            Ok(())
-        })
+        let vault_base = self.vault_base.clone();
+        let dir_to_move = relative_dir.clone();
+        let trash_path = tokio::task::spawn_blocking(
+            move || -> Result<Option<std::path::PathBuf>, StoreError> {
+                let session_path = vault_base.join(&dir_to_move);
+                hypr_fs_sync_core::export::move_to_trash(&vault_base, &session_path)
+                    .map_err(|e| StoreError::Io(format!("failed to move session to trash: {}", e)))
+            },
+        )
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
 
         drop(live);
+        drop(guard);
 
-        // The folder is confirmed gone (trashed) -- clear every index map.
+        // `move_to_trash` returns None when the directory never existed -- nothing to
+        // undo, and a stale recent-deletion record must not shadow an older real one.
+        if let Some(trash_path) = trash_path {
+            self.recent_deletions.lock().unwrap().insert(
+                id.to_string(),
+                DeletedSession {
+                    original_relative_dir: relative_dir,
+                    trash_path,
+                },
+            );
+        }
+
+        // The folder is confirmed gone (trashed) -- clear the catalog and every index map.
+        self.catalog_remove(id);
         self.index_remove_session_and_notify(id);
 
         Ok(())
     }
 
-    /// Undoes a `delete_session` from earlier today: moves the folder back from
-    /// `.trash/<today>/sessions/<id>` and reindexes it. Only looks at today's trash dir --
-    /// this backs the undo-toast window, not a general-purpose recovery tool. `Ok(false)`
-    /// (not an error) when there's nothing to restore, e.g. the toast window already lapsed
-    /// past midnight or the session was never deleted.
+    /// Undoes a `delete_session` from this process: renames the exact trashed directory
+    /// back to its original relative path. Backed only by the in-memory recent-deletions
+    /// map -- the undo toast is process-local and short-lived, so there is no on-disk
+    /// tombstone; after a restart the trashed directory remains available for manual
+    /// recovery. `Ok(false)` (not an error) when there's nothing to restore: no record,
+    /// or the trash entry has since disappeared.
     pub async fn restore_session(&self, id: &str) -> Result<bool, StoreError> {
         validate_session_id(id)?;
+        let Some(record) = self.recent_deletions.lock().unwrap().get(id).cloned() else {
+            return Ok(false);
+        };
+
+        let guard = self.lock_writes().await;
         let vault_base = self.vault_base.clone();
         let id_owned = id.to_string();
-
+        let deletion = record.clone();
         let restored = tokio::task::spawn_blocking(move || -> Result<bool, StoreError> {
-            let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-            let trash_sessions_dir = vault_base
-                .join(".trash")
-                .join(date)
-                .join(paths::sessions_root());
-
-            let Some(trashed_path) = latest_trashed_session_path(&trash_sessions_dir, &id_owned)?
-            else {
-                return Ok(false);
+            // The trash entry must still be this session: a parseable `_meta.json`
+            // claiming the requested full id. A vanished entry is an expired undo; a
+            // tampered one fails loudly rather than restoring someone else's bytes.
+            let meta_bytes = match std::fs::read(deletion.trash_path.join("_meta.json")) {
+                Ok(bytes) => bytes,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+                Err(e) => {
+                    return Err(StoreError::Io(format!(
+                        "failed to read trashed session meta: {e}"
+                    )));
+                }
             };
-
-            let restored_path = vault_base.join(paths::session_dir(&id_owned));
-            if let Some(parent) = restored_path.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| StoreError::Io(format!("failed to create sessions dir: {}", e)))?;
+            let meta: SessionMeta = serde_json::from_slice(&meta_bytes).map_err(|e| {
+                StoreError::Serialize(format!(
+                    "trashed session at {} is not restorable: {e}",
+                    deletion.trash_path.display()
+                ))
+            })?;
+            if meta.id != id_owned {
+                return Err(StoreError::Io(format!(
+                    "trashed directory {} claims session id {:?}, not {:?}; refusing to restore",
+                    deletion.trash_path.display(),
+                    meta.id,
+                    id_owned
+                )));
             }
-            std::fs::rename(&trashed_path, &restored_path).map_err(|e| {
+
+            let destination = vault_base.join(&deletion.original_relative_dir);
+            // Never merge onto an occupied destination -- fail safely and leave the
+            // trash entry for manual recovery.
+            if destination.exists() {
+                return Err(StoreError::Io(format!(
+                    "restore destination {} is already occupied",
+                    destination.display()
+                )));
+            }
+            if let Some(parent) = destination.parent() {
+                std::fs::create_dir_all(parent)
+                    .map_err(|e| StoreError::Io(format!("failed to create parent dir: {}", e)))?;
+            }
+            std::fs::rename(&deletion.trash_path, &destination).map_err(|e| {
                 StoreError::Io(format!("failed to restore session from trash: {}", e))
             })?;
             Ok(true)
@@ -304,67 +389,18 @@ impl SessionStore {
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
 
+        self.recent_deletions.lock().unwrap().remove(id);
+        if restored {
+            self.catalog_insert(id, record.original_relative_dir);
+        }
+        drop(guard);
+
         if restored {
             self.refresh_session(id).await?;
         }
 
         Ok(restored)
     }
-}
-
-/// Finds the most-recently-trashed candidate for `id` under today's `.trash/<date>/sessions/`.
-/// `move_to_trash`'s `unique_path` disambiguates same-day repeat trashing of the same id as
-/// `<id>`, then `<id>-1`, `<id>-2`, ... in that chronological order (each new trash of the same
-/// id picks the first free slot) -- so the highest existing suffix is the most recent deletion,
-/// and undo should bring that one back, not the oldest. `None` when nothing matches (including
-/// a missing trash dir, e.g. the toast window lapsed past midnight).
-fn latest_trashed_session_path(
-    trash_sessions_dir: &Path,
-    id: &str,
-) -> Result<Option<PathBuf>, StoreError> {
-    let entries = match std::fs::read_dir(trash_sessions_dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
-        Err(e) => {
-            return Err(StoreError::Io(format!(
-                "failed to read trash sessions dir: {}",
-                e
-            )));
-        }
-    };
-
-    let mut best: Option<(i64, PathBuf)> = None;
-    for entry in entries {
-        let entry =
-            entry.map_err(|e| StoreError::Io(format!("failed to read dir entry: {}", e)))?;
-        if !entry.path().is_dir() {
-            continue;
-        }
-        let Some(name) = entry.file_name().to_str().map(str::to_string) else {
-            continue;
-        };
-
-        // Bare `id` is the oldest possible match (rank -1, below any real -N suffix); `<id>-N`
-        // ranks as N.
-        let rank: Option<i64> = if name == id {
-            Some(-1)
-        } else {
-            name.strip_prefix(id)
-                .and_then(|rest| rest.strip_prefix('-'))
-                .and_then(|suffix| suffix.parse::<i64>().ok())
-        };
-
-        let Some(rank) = rank else { continue };
-        let is_better = match &best {
-            Some((best_rank, _)) => rank > *best_rank,
-            None => true,
-        };
-        if is_better {
-            best = Some((rank, entry.path()));
-        }
-    }
-
-    Ok(best.map(|(_, path)| path))
 }
 
 #[cfg(test)]
@@ -392,6 +428,16 @@ mod tests {
         (store, temp)
     }
 
+    /// Physical directory of a session: creation now picks a human-readable name, so
+    /// tests resolve it through the store instead of assuming `sessions/<id>`.
+    async fn session_path(
+        store: &SessionStore,
+        vault: &tempfile::TempDir,
+        id: &str,
+    ) -> std::path::PathBuf {
+        vault.path().join(store.session_dir(id).await.unwrap())
+    }
+
     #[tokio::test]
     async fn write_meta_writes_file_and_index() {
         let (store, vault) = test_store().await;
@@ -399,7 +445,12 @@ mod tests {
             .write_meta(&meta("s1", "Jury feedback"))
             .await
             .unwrap();
-        assert!(vault.path().join("sessions/s1/_meta.json").is_file());
+        assert!(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("_meta.json")
+                .is_file()
+        );
         assert_eq!(store.session_get("s1").unwrap().meta.title, "Jury feedback");
         assert_eq!(
             store.read_meta("s1").await.unwrap().unwrap().title,
@@ -425,7 +476,9 @@ mod tests {
         assert_eq!(indexed.event, m.event);
         assert_eq!(indexed.folder.as_deref(), Some("work/standups"));
 
-        let raw = std::fs::read_to_string(vault.path().join("sessions/s1/_meta.json")).unwrap();
+        let raw =
+            std::fs::read_to_string(session_path(&store, &vault, "s1").await.join("_meta.json"))
+                .unwrap();
         assert!(raw.contains("planning"));
     }
 
@@ -510,7 +563,12 @@ mod tests {
             .write_note("s1", "# Meeting notes\n\nDiscussed: X, Y, Z")
             .await
             .unwrap();
-        assert!(vault.path().join("sessions/s1/_memo.md").is_file());
+        assert!(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("_memo.md")
+                .is_file()
+        );
         assert_eq!(
             store.session_get("s1").unwrap().note_markdown.as_deref(),
             Some("# Meeting notes\n\nDiscussed: X, Y, Z")
@@ -583,40 +641,29 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(vault.path().join("sessions/s1").is_dir());
+        let rel = store.session_dir("s1").await.unwrap();
+        let dir = vault.path().join(&rel);
+        assert!(dir.is_dir());
         store.delete_session("s1").await.unwrap();
 
-        assert!(!vault.path().join("sessions/s1").is_dir());
+        assert!(!dir.is_dir());
 
         assert!(store.session_get("s1").is_none());
         assert!(store.session_enhanced_docs("s1").is_empty());
         assert!(store.session_transcripts("s1").is_empty());
 
-        // Verify trashed content exists under .trash/
-        let trash_root = vault.path().join(".trash");
-        assert!(trash_root.exists(), "trash directory should exist");
-        // Look for the moved session folder: .trash/<date>/sessions/s1/_meta.json
-        let mut found_meta = false;
-        for date_entry in std::fs::read_dir(&trash_root).unwrap() {
-            let date_entry = date_entry.unwrap();
-            let date_path = date_entry.path();
-            if date_path.is_dir() {
-                let sessions_path = date_path.join("sessions");
-                if sessions_path.exists() {
-                    let s1_path = sessions_path.join("s1");
-                    if s1_path.exists() {
-                        let meta_path = s1_path.join("_meta.json");
-                        if meta_path.exists() {
-                            found_meta = true;
-                            break;
-                        }
-                    }
-                }
-            }
-        }
+        // The whole folder moved to .trash/<date>/<its vault-relative path>.
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
         assert!(
-            found_meta,
-            "trashed session's _meta.json should exist under .trash/<date>/sessions/s1/"
+            vault
+                .path()
+                .join(".trash")
+                .join(&date)
+                .join(&rel)
+                .join("_meta.json")
+                .is_file(),
+            "trashed session's _meta.json should exist under .trash/<date>/{}",
+            rel.display()
         );
     }
 
@@ -632,8 +679,18 @@ mod tests {
 
         assert!(store.delete_session("").await.is_err());
 
-        assert!(vault.path().join("sessions/s1/_meta.json").is_file());
-        assert!(vault.path().join("sessions/s2/_meta.json").is_file());
+        assert!(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("_meta.json")
+                .is_file()
+        );
+        assert!(
+            session_path(&store, &vault, "s2")
+                .await
+                .join("_meta.json")
+                .is_file()
+        );
         assert!(!vault.path().join(".trash").exists());
         assert!(store.session_get("s1").is_some());
     }
@@ -702,20 +759,25 @@ mod tests {
             .await
             .unwrap();
 
+        let dir = session_path(&store, &vault, "s1").await;
         store.delete_session("s1").await.unwrap();
-        assert!(!vault.path().join("sessions/s1").exists());
+        assert!(!dir.exists());
 
         // Let the armed debounce timer fire well past its deadline.
         tokio::time::sleep(std::time::Duration::from_millis(1500)).await;
         assert!(
-            !vault.path().join("sessions/s1").exists(),
+            !dir.exists(),
             "a pending flush must not recreate the deleted session folder"
+        );
+        assert!(
+            !vault.path().join("sessions/s1").exists(),
+            "a pending flush must not resurrect a legacy uuid-named folder either"
         );
 
         let restored = store.restore_session("s1").await.unwrap();
         assert!(restored, "undo-delete must still work");
         assert_eq!(
-            std::fs::read_to_string(vault.path().join("sessions/s1/_memo.md")).unwrap(),
+            std::fs::read_to_string(dir.join("_memo.md")).unwrap(),
             "notes worth restoring"
         );
     }
@@ -785,7 +847,7 @@ mod tests {
             .unwrap();
 
         let raw: serde_json::Value = serde_json::from_slice(
-            &std::fs::read(vault.path().join("sessions/s1/_meta.json")).unwrap(),
+            &std::fs::read(session_path(&store, &vault, "s1").await.join("_meta.json")).unwrap(),
         )
         .unwrap();
         assert_eq!(raw["started_at"], "2026-07-31T10:00:00.000Z");
@@ -922,14 +984,15 @@ mod tests {
             .unwrap();
         store.write_note("s1", "Some notes").await.unwrap();
 
+        let dir = session_path(&store, &vault, "s1").await;
         store.delete_session("s1").await.unwrap();
-        assert!(!vault.path().join("sessions/s1").is_dir());
+        assert!(!dir.is_dir());
 
         let restored = store.restore_session("s1").await.unwrap();
         assert!(restored);
 
-        assert!(vault.path().join("sessions/s1/_meta.json").is_file());
-        assert!(vault.path().join("sessions/s1/_memo.md").is_file());
+        assert!(dir.join("_meta.json").is_file());
+        assert!(dir.join("_memo.md").is_file());
 
         let record = store.session_get("s1").unwrap();
         assert_eq!(record.meta.title, "Jury feedback");
@@ -951,36 +1014,44 @@ mod tests {
         let (store, vault) = test_store().await;
 
         store
-            .write_meta(&meta("s1", "First version"))
+            .write_meta(&meta("s1", "Jury feedback"))
             .await
             .unwrap();
         store.write_note("s1", "first content").await.unwrap();
+        let rel = store.session_dir("s1").await.unwrap();
         store.delete_session("s1").await.unwrap();
 
-        // Recreate under the same id and delete again the same day: move_to_trash finds the
-        // .trash/<date>/sessions/s1 slot already taken and disambiguates to .../s1-1.
+        // Recreate under the same id (same title and created_at, so the readable name is
+        // identical too) and delete again the same day: move_to_trash finds the
+        // .trash/<date>/<name> slot already taken and disambiguates to <name>-1.
         store
-            .write_meta(&meta("s1", "Second version"))
+            .write_meta(&meta("s1", "Jury feedback"))
             .await
             .unwrap();
         store.write_note("s1", "second content").await.unwrap();
+        assert_eq!(store.session_dir("s1").await.unwrap(), rel);
         store.delete_session("s1").await.unwrap();
 
         let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-        let trash_sessions_dir = vault.path().join(".trash").join(&date).join("sessions");
-        assert!(trash_sessions_dir.join("s1").is_dir());
-        assert!(trash_sessions_dir.join("s1-1").is_dir());
+        let trash_sessions_dir = vault
+            .path()
+            .join(".trash")
+            .join(&date)
+            .join(rel.parent().unwrap());
+        let name = rel.file_name().unwrap().to_str().unwrap();
+        assert!(trash_sessions_dir.join(name).is_dir());
+        assert!(trash_sessions_dir.join(format!("{name}-1")).is_dir());
 
         let restored = store.restore_session("s1").await.unwrap();
         assert!(restored);
 
-        let note = std::fs::read_to_string(vault.path().join("sessions/s1/_memo.md")).unwrap();
+        let note = std::fs::read_to_string(vault.path().join(&rel).join("_memo.md")).unwrap();
         assert_eq!(
             note, "second content",
             "restore must bring back the most recently deleted duplicate, not the oldest"
         );
         // The older duplicate is left alone in trash, not silently consumed or merged.
-        assert!(trash_sessions_dir.join("s1").is_dir());
+        assert!(trash_sessions_dir.join(name).is_dir());
     }
 
     #[tokio::test]
@@ -990,7 +1061,7 @@ mod tests {
         store.write_meta(&meta("s1", "Original")).await.unwrap();
 
         // Corrupt the file on disk
-        let meta_path = vault.path().join("sessions/s1/_meta.json");
+        let meta_path = session_path(&store, &vault, "s1").await.join("_meta.json");
         std::fs::write(&meta_path, b"{ invalid json").unwrap();
 
         // read_meta should return Err(StoreError::Serialize)

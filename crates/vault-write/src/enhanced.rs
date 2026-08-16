@@ -144,8 +144,9 @@ impl SessionStore {
         let session_id = session_id.to_string();
         let doc_id = doc_id.to_string();
 
+        let session_dir = self.session_dir(&session_id).await?;
         tokio::task::spawn_blocking(move || -> Result<Option<EnhancedDoc>, StoreError> {
-            let path = vault_base.join(paths::enhanced_doc_path(&session_id, &doc_id));
+            let path = vault_base.join(paths::enhanced_doc_path_in(&session_dir, &doc_id));
             // Attempt-then-match, same rationale as read_meta: never mistake a transient
             // read failure for "doc doesn't exist".
             let raw = match std::fs::read_to_string(&path) {
@@ -175,8 +176,12 @@ impl SessionStore {
         validate_session_id(session_id)?;
         validate_doc_id(doc_id)?;
 
+        // The trash-move is a write: resolve the session's directory under the write
+        // lock so a concurrent rename can't strand the delete at a stale path.
+        let guard = self.lock_writes().await;
+        let session_dir = self.session_dir_locked(&guard, session_id).await?;
         let vault_base = self.vault_base.clone();
-        let relative = paths::enhanced_doc_path(session_id, doc_id);
+        let relative = paths::enhanced_doc_path_in(&session_dir, doc_id);
 
         tokio::task::spawn_blocking(move || -> Result<(), StoreError> {
             let abs = vault_base.join(relative);
@@ -187,6 +192,7 @@ impl SessionStore {
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))??;
+        drop(guard);
 
         self.index_remove_doc(session_id, doc_id);
         self.notify_index_changed(super::IndexEntity::Docs, vec![session_id.to_string()]);
@@ -205,9 +211,10 @@ impl SessionStore {
         doc: &EnhancedDoc,
     ) -> Result<(), StoreError> {
         let rendered = render_enhanced_file(doc)?;
+        let session_dir = self.session_dir_locked(guard, &doc.session_id).await?;
         self.write_file_locked(
             guard,
-            paths::enhanced_doc_path(&doc.session_id, &doc.id),
+            paths::enhanced_doc_path_in(&session_dir, &doc.id),
             rendered.into_bytes(),
         )
         .await?;
@@ -265,6 +272,16 @@ mod tests {
         (store, temp)
     }
 
+    /// Physical directory of a session: creation now picks a human-readable name, so
+    /// tests resolve it through the store instead of assuming `sessions/<id>`.
+    async fn session_path(
+        store: &SessionStore,
+        vault: &tempfile::TempDir,
+        id: &str,
+    ) -> std::path::PathBuf {
+        vault.path().join(store.session_dir(id).await.unwrap())
+    }
+
     #[tokio::test]
     async fn write_enhanced_doc_round_trips_file_and_index() {
         let (store, vault) = test_store().await;
@@ -272,7 +289,12 @@ mod tests {
         let d = doc("s1", "doc-1");
         store.write_enhanced_doc(&d).await.unwrap();
 
-        assert!(vault.path().join("sessions/s1/enhanced/doc-1.md").is_file());
+        assert!(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("enhanced/doc-1.md")
+                .is_file()
+        );
         assert_eq!(
             store.read_enhanced_doc("s1", "doc-1").await.unwrap(),
             Some(d.clone())
@@ -290,8 +312,12 @@ mod tests {
         store.write_meta(&meta("s1")).await.unwrap();
         store.write_enhanced_doc(&doc("s1", "doc-1")).await.unwrap();
 
-        let raw =
-            std::fs::read_to_string(vault.path().join("sessions/s1/enhanced/doc-1.md")).unwrap();
+        let raw = std::fs::read_to_string(
+            session_path(&store, &vault, "s1")
+                .await
+                .join("enhanced/doc-1.md"),
+        )
+        .unwrap();
         assert!(raw.starts_with("---\n"));
         assert!(raw.contains("title: Customer review"));
         assert!(raw.contains("template_id: template-1"));
@@ -455,17 +481,19 @@ mod tests {
         let (store, vault) = test_store().await;
         store.write_meta(&meta("s1")).await.unwrap();
         store.write_enhanced_doc(&doc("s1", "doc-1")).await.unwrap();
+        let rel = store.session_dir("s1").await.unwrap();
 
         store.delete_enhanced_doc("s1", "doc-1").await.unwrap();
 
-        assert!(!vault.path().join("sessions/s1/enhanced/doc-1.md").exists());
+        assert!(!vault.path().join(&rel).join("enhanced/doc-1.md").exists());
         let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
         assert!(
             vault
                 .path()
                 .join(".trash")
                 .join(date)
-                .join("sessions/s1/enhanced/doc-1.md")
+                .join(&rel)
+                .join("enhanced/doc-1.md")
                 .is_file(),
             "deleted doc must be hand-recoverable from trash"
         );

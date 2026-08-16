@@ -10,6 +10,7 @@ pub use search::{
 
 use std::path::{Path, PathBuf};
 
+use hypr_vault_read::SessionLocation;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -183,8 +184,9 @@ pub async fn get_meeting_transcript(
 
 pub async fn get_meeting_export(vault: &Path, meeting_id: String) -> Result<MeetingExport> {
     run_blocking("export meeting", vault, move |vault| {
-        let meeting = get_meeting_sync(vault, &meeting_id)?;
-        let transcripts = load_transcripts_sync(vault, &meeting_id)?;
+        let (location, meta) = find_meeting(vault, &meeting_id)?;
+        let meeting = assemble_meeting_sync(vault, &location, meta)?;
+        let transcripts = load_transcripts_sync(vault, &location)?;
         Ok(MeetingExport {
             meeting,
             transcripts,
@@ -221,8 +223,7 @@ fn list_meetings_sync(vault: &Path, input: ListMeetingsInput) -> Result<MeetingP
         .clamp(1, MAX_LIST_LIMIT);
     let offset = input.offset.unwrap_or(0);
 
-    let mut metas =
-        hypr_vault_read::meta::list_session_metas(vault).map_err(vault_error("list meetings"))?;
+    let mut sessions = discover_sessions(vault, "list meetings")?;
 
     if let Some(search) = input
         .query
@@ -231,18 +232,18 @@ fn list_meetings_sync(vault: &Path, input: ListMeetingsInput) -> Result<MeetingP
         .filter(|query| !query.is_empty())
     {
         let search = search.to_lowercase();
-        metas.retain(|meta| {
+        sessions.retain(|(_, meta)| {
             meta.title.to_lowercase().contains(&search) || meta.id.to_lowercase().contains(&search)
         });
     }
 
-    sort_metas_recent_first(&mut metas);
+    sort_sessions_recent_first(&mut sessions);
 
-    let mut meetings = metas
+    let mut meetings = sessions
         .into_iter()
         .skip(offset as usize)
         .take(limit as usize + 1)
-        .map(|meta| meeting_list_item(vault, meta))
+        .map(|(location, meta)| meeting_list_item(vault, &location, meta))
         .collect::<Vec<_>>();
     let has_more = meetings.len() > limit as usize;
     meetings.truncate(limit as usize);
@@ -254,26 +255,60 @@ fn list_meetings_sync(vault: &Path, input: ListMeetingsInput) -> Result<MeetingP
     })
 }
 
-fn get_meeting_sync(vault: &Path, meeting_id: &str) -> Result<Meeting> {
-    let meta = hypr_vault_read::meta::read_session_meta(vault, meeting_id)
-        .map_err(vault_error("load meeting"))?
-        .ok_or_else(|| Error::NotFound(format!("meeting '{meeting_id}'")))?;
+/// Discovered sessions with their physical locations; discovery diagnostics
+/// (corrupt/duplicate entries) never hide the healthy sessions.
+fn discover_sessions(
+    vault: &Path,
+    action: &'static str,
+) -> Result<Vec<(SessionLocation, hypr_vault_read::SessionMeta)>> {
+    Ok(hypr_vault_read::discover_sessions(vault)
+        .map_err(vault_error(action))?
+        .sessions)
+}
 
-    let note = hypr_vault_read::meta::read_note(vault, meeting_id)
+/// Resolve one meeting id to its physical location; identity is `_meta.json.id`,
+/// never the directory basename, so both legacy UUID-named and readable
+/// directories resolve identically.
+fn find_meeting(
+    vault: &Path,
+    meeting_id: &str,
+) -> Result<(SessionLocation, hypr_vault_read::SessionMeta)> {
+    match hypr_vault_read::find_session(vault, meeting_id) {
+        Ok(Some(found)) => Ok(found),
+        Ok(None) => Err(Error::NotFound(format!("meeting '{meeting_id}'"))),
+        Err(error) => Err(Error::Vault {
+            action: "load meeting",
+            reason: error.to_string(),
+        }),
+    }
+}
+
+fn get_meeting_sync(vault: &Path, meeting_id: &str) -> Result<Meeting> {
+    let (location, meta) = find_meeting(vault, meeting_id)?;
+    assemble_meeting_sync(vault, &location, meta)
+}
+
+fn assemble_meeting_sync(
+    vault: &Path,
+    location: &SessionLocation,
+    meta: hypr_vault_read::SessionMeta,
+) -> Result<Meeting> {
+    let session_dir = &location.relative_dir;
+    let note = hypr_vault_read::meta::read_note_in(vault, session_dir)
         .map_err(vault_error("load meeting"))?
         .map(|markdown| Document {
-            id: format!("{meeting_id}:note"),
+            id: format!("{}:note", location.id),
             kind: "note".to_string(),
             template_id: String::new(),
             title: String::new(),
             markdown,
             sort_order: 0,
-            updated_at: file_updated_at(vault, &hypr_vault_read::paths::note_path(meeting_id)),
+            updated_at: file_updated_at(vault, &hypr_vault_read::paths::note_path_in(session_dir)),
         });
 
-    let summaries = load_summaries_sync(vault, meeting_id)?;
+    let summaries = load_summaries_sync(vault, location)?;
 
-    let mut tasks = hypr_vault_read::tasks::read_session_tasks(vault, meeting_id)
+    let mut tasks = hypr_vault_read::tasks::read_session_tasks_in(vault, session_dir)
         .map_err(vault_error("load meeting"))?;
     tasks.sort_by(|a, b| {
         (a.source_order, &a.created_at, &a.id).cmp(&(b.source_order, &b.created_at, &b.id))
@@ -291,7 +326,7 @@ fn get_meeting_sync(vault: &Path, meeting_id: &str) -> Result<Meeting> {
         .collect();
 
     Ok(Meeting {
-        updated_at: file_updated_at(vault, &hypr_vault_read::paths::meta_path(meeting_id)),
+        updated_at: file_updated_at(vault, &hypr_vault_read::paths::meta_path_in(session_dir)),
         id: meta.id,
         title: meta.title,
         kind: "meeting".to_string(),
@@ -308,21 +343,22 @@ fn get_meeting_sync(vault: &Path, meeting_id: &str) -> Result<Meeting> {
 }
 
 // The old session_documents read returned both legacy single-slot docs
-// (`sessions/<id>/<kind>.md`, indexed with id `<id>:<kind>`) and per-doc enhanced files,
+// (`<session dir>/<kind>.md`, indexed with id `<id>:<kind>`) and per-doc enhanced files,
 // filtered to the summary/template_output kinds and ordered by (sort_order, id).
-fn load_summaries_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Document>> {
+fn load_summaries_sync(vault: &Path, location: &SessionLocation) -> Result<Vec<Document>> {
+    let session_dir = &location.relative_dir;
     let mut summaries = Vec::new();
-    for doc in hypr_vault_read::meta::list_legacy_docs(vault, meeting_id)
+    for doc in hypr_vault_read::meta::list_legacy_docs_in(vault, session_dir)
         .map_err(vault_error("load meeting"))?
     {
         if !hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str()) {
             continue;
         }
         summaries.push(Document {
-            id: format!("{meeting_id}:{}", doc.kind),
+            id: format!("{}:{}", location.id, doc.kind),
             updated_at: file_updated_at(
                 vault,
-                &hypr_vault_read::paths::document_path(meeting_id, &doc.kind),
+                &hypr_vault_read::paths::document_path_in(session_dir, &doc.kind),
             ),
             kind: doc.kind,
             template_id: String::new(),
@@ -331,13 +367,13 @@ fn load_summaries_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Document>> 
             sort_order: 0,
         });
     }
-    for doc in hypr_vault_read::enhanced::list_enhanced_docs(vault, meeting_id)
+    for doc in hypr_vault_read::enhanced::list_enhanced_docs_in(vault, session_dir, &location.id)
         .map_err(vault_error("load meeting"))?
     {
         summaries.push(Document {
             updated_at: file_updated_at(
                 vault,
-                &hypr_vault_read::paths::enhanced_doc_path(meeting_id, &doc.id),
+                &hypr_vault_read::paths::enhanced_doc_path_in(session_dir, &doc.id),
             ),
             id: doc.id,
             kind: doc.kind,
@@ -355,14 +391,8 @@ fn get_meeting_transcript_sync(
     vault: &Path,
     input: GetMeetingTranscriptInput,
 ) -> Result<MeetingTranscript> {
-    let exists = hypr_vault_read::meta::read_session_meta(vault, &input.meeting_id)
-        .map_err(vault_error("load meeting"))?
-        .is_some();
-    if !exists {
-        return Err(Error::NotFound(format!("meeting '{}'", input.meeting_id)));
-    }
-
-    let transcripts = load_raw_transcripts_sync(vault, &input.meeting_id)?;
+    let (location, _) = find_meeting(vault, &input.meeting_id)?;
+    let transcripts = load_raw_transcripts_sync(vault, &location)?;
     Ok(MeetingTranscript {
         text: render::render_meeting_transcript(vault, &transcripts),
         meeting_id: input.meeting_id,
@@ -371,9 +401,9 @@ fn get_meeting_transcript_sync(
 
 fn load_raw_transcripts_sync(
     vault: &Path,
-    meeting_id: &str,
+    location: &SessionLocation,
 ) -> Result<Vec<hypr_vault_read::TranscriptWithData>> {
-    let file = hypr_vault_read::transcript::read_transcript_json(vault, meeting_id)
+    let file = hypr_vault_read::transcript::read_transcript_json_in(vault, &location.relative_dir)
         .map_err(vault_error("load transcript"))?;
     let mut transcripts = file.transcripts;
     transcripts.sort_by(|a, b| {
@@ -382,8 +412,8 @@ fn load_raw_transcripts_sync(
     Ok(transcripts)
 }
 
-fn load_transcripts_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Transcript>> {
-    Ok(load_raw_transcripts_sync(vault, meeting_id)?
+fn load_transcripts_sync(vault: &Path, location: &SessionLocation) -> Result<Vec<Transcript>> {
+    Ok(load_raw_transcripts_sync(vault, location)?
         .into_iter()
         .map(Transcript::from)
         .collect())
@@ -391,8 +421,8 @@ fn load_transcripts_sync(vault: &Path, meeting_id: &str) -> Result<Vec<Transcrip
 
 // Matches the retired SQL ordering: most recent first by started_at (falling back to
 // created_at when a session never started), then created_at, then id.
-fn sort_metas_recent_first(metas: &mut [hypr_vault_read::SessionMeta]) {
-    metas.sort_by(|a, b| {
+fn sort_sessions_recent_first(sessions: &mut [(SessionLocation, hypr_vault_read::SessionMeta)]) {
+    sessions.sort_by(|(_, a), (_, b)| {
         let a_key = (occurred_at(a), a.created_at.as_str(), a.id.as_str());
         let b_key = (occurred_at(b), b.created_at.as_str(), b.id.as_str());
         b_key.cmp(&a_key)
@@ -406,9 +436,16 @@ fn occurred_at(meta: &hypr_vault_read::SessionMeta) -> &str {
     }
 }
 
-fn meeting_list_item(vault: &Path, meta: hypr_vault_read::SessionMeta) -> MeetingListItem {
+fn meeting_list_item(
+    vault: &Path,
+    location: &SessionLocation,
+    meta: hypr_vault_read::SessionMeta,
+) -> MeetingListItem {
     MeetingListItem {
-        updated_at: file_updated_at(vault, &hypr_vault_read::paths::meta_path(&meta.id)),
+        updated_at: file_updated_at(
+            vault,
+            &hypr_vault_read::paths::meta_path_in(&location.relative_dir),
+        ),
         id: meta.id,
         title: meta.title,
         kind: "meeting".to_string(),
@@ -750,6 +787,106 @@ mod tests {
         assert_eq!(first.meetings[0].id, "alpha-new");
         assert_eq!(second.meetings[0].id, "alpha-old");
         assert_eq!(by_id.meetings[0].id, "alpha-old");
+    }
+
+    #[tokio::test]
+    async fn readable_and_nested_directories_read_identically_by_full_id() {
+        let vault = tempfile::tempdir().unwrap();
+        let readable_id = "6ba7b810-9dad-11d1-80b4-00c04fd430c8";
+        let dir = vault
+            .path()
+            .join("sessions/Work/2026-07-13 — Product planning — 6ba7b8");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::json!({
+                "id": readable_id,
+                "title": "Product planning",
+                "started_at": "2026-07-13",
+                "ended_at": null,
+                "created_at": "2026-07-01T00:00:00Z",
+                "tags": [],
+            })
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(dir.join("_memo.md"), "Launch decision").unwrap();
+        std::fs::write(
+            dir.join("transcript.json"),
+            serde_json::json!({
+                "transcripts": [{
+                    "id": "t1",
+                    "session_id": readable_id,
+                    "started_at": 0.0,
+                    "words": [
+                        {"text": "budget", "start_ms": 0.0, "end_ms": 1.0, "channel": 0.0},
+                    ],
+                }],
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        let listed = list_meetings(vault.path(), ListMeetingsInput::default())
+            .await
+            .unwrap();
+        assert_eq!(listed.meetings[0].id, readable_id);
+        assert!(
+            !listed.meetings[0].updated_at.is_empty(),
+            "updated_at must come from the real physical meta path"
+        );
+
+        let meeting = get_meeting(
+            vault.path(),
+            GetMeetingInput {
+                meeting_id: readable_id.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(meeting.id, readable_id);
+        assert_eq!(meeting.note.as_ref().unwrap().markdown, "Launch decision");
+        assert!(!meeting.updated_at.is_empty());
+        assert!(!meeting.note.as_ref().unwrap().updated_at.is_empty());
+
+        let transcript = get_meeting_transcript(
+            vault.path(),
+            GetMeetingTranscriptInput {
+                meeting_id: readable_id.to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(transcript.text.contains("budget"));
+
+        let export = get_meeting_export(vault.path(), readable_id.to_string())
+            .await
+            .unwrap();
+        assert_eq!(export.transcripts.len(), 1);
+
+        let hits = search_meetings(
+            vault.path(),
+            SearchMeetingsInput {
+                query: Some("budget".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(hits.hits.len(), 1);
+        assert_eq!(hits.hits[0].meeting_id, readable_id);
+        assert_eq!(hits.hits[0].kind, "transcript");
+
+        // The directory basename is presentation, never identity.
+        let error = get_meeting(
+            vault.path(),
+            GetMeetingInput {
+                meeting_id: "2026-07-13 — Product planning — 6ba7b8".to_string(),
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::NotFound(_)));
     }
 
     #[tokio::test]

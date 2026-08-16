@@ -6,12 +6,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
 
-use hypr_vault_read::{SessionMeta, TranscriptWithData};
+use hypr_vault_read::{SessionLocation, SessionMeta, TranscriptWithData};
 
 use crate::render::object_hint_value;
 use crate::{
-    Error, Pagination, Result, load_summaries_sync, occurred_at, pagination, run_blocking,
-    sort_metas_recent_first, vault_error,
+    Error, Pagination, Result, discover_sessions, load_summaries_sync, occurred_at, pagination,
+    run_blocking, sort_sessions_recent_first,
 };
 
 pub const DEFAULT_SEARCH_LIMIT: u32 = 20;
@@ -150,9 +150,8 @@ fn search_meetings_sync(vault: &Path, input: SearchMeetingsInput) -> Result<Sear
     let offset = input.offset.unwrap_or(0);
     let needed = offset as usize + limit as usize + 1;
 
-    let mut metas =
-        hypr_vault_read::meta::list_session_metas(vault).map_err(vault_error("search meetings"))?;
-    sort_metas_recent_first(&mut metas);
+    let mut sessions = discover_sessions(vault, "search meetings")?;
+    sort_sessions_recent_first(&mut sessions);
 
     // A speaker filter only makes sense against transcript words, so it narrows the
     // search to transcripts no matter which kinds were requested.
@@ -174,11 +173,11 @@ fn search_meetings_sync(vault: &Path, input: SearchMeetingsInput) -> Result<Sear
             .collect(),
     };
 
-    // Metas are already recency-sorted, so scanning can stop as soon as the page
+    // Sessions are already recency-sorted, so scanning can stop as soon as the page
     // (plus one hit to drive next_offset) is full.
     let mut hits = Vec::new();
-    for meta in &metas {
-        collect_session_hits(vault, meta, &ctx, &mut hits);
+    for (location, meta) in &sessions {
+        collect_session_hits(vault, location, meta, &ctx, &mut hits);
         if hits.len() >= needed {
             break;
         }
@@ -198,6 +197,7 @@ fn search_meetings_sync(vault: &Path, input: SearchMeetingsInput) -> Result<Sear
 
 fn collect_session_hits(
     vault: &Path,
+    location: &SessionLocation,
     meta: &SessionMeta,
     ctx: &SearchContext,
     hits: &mut Vec<SearchHit>,
@@ -213,7 +213,7 @@ fn collect_session_hits(
     // A single unreadable file must never hide the rest of the vault from search, so
     // per-session read failures degrade to "no hits from that source".
     if ctx.wants(SearchKind::Note)
-        && let Some(markdown) = hypr_vault_read::meta::read_note(vault, &meta.id)
+        && let Some(markdown) = hypr_vault_read::meta::read_note_in(vault, &location.relative_dir)
             .ok()
             .flatten()
         && let Some((start, end)) = find_match(&markdown, &ctx.terms)
@@ -224,7 +224,7 @@ fn collect_session_hits(
     }
 
     if ctx.wants(SearchKind::Summary) {
-        for doc in load_summaries_sync(vault, &meta.id).unwrap_or_default() {
+        for doc in load_summaries_sync(vault, location).unwrap_or_default() {
             let haystack = if doc.title.trim().is_empty() {
                 doc.markdown
             } else {
@@ -244,7 +244,7 @@ fn collect_session_hits(
     }
 
     if ctx.wants(SearchKind::Transcript) {
-        collect_transcript_hits(vault, meta, ctx, hits);
+        collect_transcript_hits(vault, location, meta, ctx, hits);
     }
 }
 
@@ -257,11 +257,14 @@ struct WordRecord {
 
 fn collect_transcript_hits(
     vault: &Path,
+    location: &SessionLocation,
     meta: &SessionMeta,
     ctx: &SearchContext,
     hits: &mut Vec<SearchHit>,
 ) {
-    let Ok(file) = hypr_vault_read::transcript::read_transcript_json(vault, &meta.id) else {
+    let Ok(file) =
+        hypr_vault_read::transcript::read_transcript_json_in(vault, &location.relative_dir)
+    else {
         return;
     };
     let mut transcripts = file.transcripts;

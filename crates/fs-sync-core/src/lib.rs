@@ -21,6 +21,9 @@ pub use path::{build_session_dir, is_uuid, normalize_folder_path, resolve_path_i
 pub use session::find_session_dir;
 pub use types::*;
 
+use hypr_vault_read::layout::{eq_nfc, paths_eq_nfc};
+use session::{DirClass, classify_dir};
+
 use std::path::PathBuf;
 
 pub struct FsSyncCore {
@@ -57,16 +60,27 @@ impl FsSyncCore {
         let from_folder_path = normalize_folder_path(from_folder_path)?;
         let target_folder_path = normalize_folder_path(target_folder_path)?;
 
-        if from_folder_path == target_folder_path {
+        if eq_nfc(&from_folder_path, &target_folder_path) {
             return Err(Error::Path("session_move_noop".into()));
         }
 
-        let source = build_session_dir(&self.sessions_dir, &from_folder_path, session_id)?;
+        let source = self.resolve_session_dir(session_id)?;
         if !source.exists() {
             return Err(Error::Path("session_source_missing".into()));
         }
 
-        let target = build_session_dir(&self.sessions_dir, &target_folder_path, session_id)?;
+        // Moves keep the current physical basename: readable names survive the
+        // move, and the name is never rebuilt from the id.
+        let dir_name = source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| Error::Path("session_dir_name_invalid".into()))?
+            .to_string();
+
+        let target = build_session_dir(&self.sessions_dir, &target_folder_path, &dir_name)?;
+        if paths_eq_nfc(&source, &target) {
+            return Err(Error::Path("session_move_noop".into()));
+        }
         if target.exists() {
             return Err(Error::Path("session_target_exists".into()));
         }
@@ -109,7 +123,7 @@ impl FsSyncCore {
         if old_path.is_empty() || new_path.is_empty() {
             return Err(Error::Path("folder_rename_root_not_allowed".into()));
         }
-        if old_path == new_path {
+        if eq_nfc(&old_path, &new_path) {
             return Err(Error::Path("folder_rename_noop".into()));
         }
 
@@ -161,6 +175,9 @@ impl FsSyncCore {
         Ok(())
     }
 
+    /// Guards `delete_folder`: any directory holding `_meta.json` — readable-named,
+    /// uuid-named, or with an unreadable meta — counts as a session and blocks the
+    /// delete; only meta-less directories are traversed as folders.
     fn folder_contains_sessions(&self, folder: &PathBuf) -> Result<bool> {
         let entries = std::fs::read_dir(folder)?;
 
@@ -170,16 +187,13 @@ impl FsSyncCore {
                 continue;
             }
 
-            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-                continue;
-            };
-
-            if is_uuid(name) && path.join("_meta.json").exists() {
-                return Ok(true);
-            }
-
-            if !is_uuid(name) && self.folder_contains_sessions(&path)? {
-                return Ok(true);
+            match classify_dir(&path) {
+                DirClass::Session(_) => return Ok(true),
+                DirClass::Folder => {
+                    if self.folder_contains_sessions(&path)? {
+                        return Ok(true);
+                    }
+                }
             }
         }
 
@@ -285,7 +299,7 @@ impl FsSyncCore {
                 None => continue,
             };
 
-            if filename == attachment_id {
+            if eq_nfc(filename, attachment_id) {
                 std::fs::remove_file(&path)?;
                 return Ok(());
             }
@@ -391,20 +405,20 @@ mod tests {
     use assert_fs::prelude::*;
 
     use super::*;
-    use crate::test_fixtures::{UUID_1, UUID_2};
+    use crate::test_fixtures::{UUID_1, UUID_2, session_meta_json};
+
+    fn write_session_at(temp: &TempDir, relative_dir: &str, id: &str) {
+        let dir = temp.child(relative_dir);
+        dir.create_dir_all().unwrap();
+        dir.child("_meta.json")
+            .write_str(&session_meta_json(id))
+            .unwrap();
+    }
 
     #[test]
     fn move_session_to_folder() {
         let temp = TempDir::new().unwrap();
-        temp.child("sessions")
-            .child(UUID_1)
-            .create_dir_all()
-            .unwrap();
-        temp.child("sessions")
-            .child(UUID_1)
-            .child("_meta.json")
-            .write_str("{}")
-            .unwrap();
+        write_session_at(&temp, &format!("sessions/{UUID_1}"), UUID_1);
 
         let core = FsSyncCore::new(temp.path().to_path_buf());
         let result = core.move_session(UUID_1, "", "work").unwrap();
@@ -425,17 +439,7 @@ mod tests {
     #[test]
     fn move_session_to_root() {
         let temp = TempDir::new().unwrap();
-        temp.child("sessions")
-            .child("work")
-            .child(UUID_1)
-            .create_dir_all()
-            .unwrap();
-        temp.child("sessions")
-            .child("work")
-            .child(UUID_1)
-            .child("_meta.json")
-            .write_str("{}")
-            .unwrap();
+        write_session_at(&temp, &format!("sessions/work/{UUID_1}"), UUID_1);
 
         let core = FsSyncCore::new(temp.path().to_path_buf());
         let result = core.move_session(UUID_1, "work", "").unwrap();
@@ -448,6 +452,31 @@ mod tests {
             MoveSessionResult {
                 session_id: UUID_1.into(),
                 folder_id: "".into(),
+            }
+        );
+    }
+
+    #[test]
+    fn move_session_preserves_readable_basename() {
+        let temp = TempDir::new().unwrap();
+        write_session_at(&temp, "sessions/2026-03-20 — Planning — 550e84", UUID_1);
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        let result = core.move_session(UUID_1, "", "work").unwrap();
+
+        temp.child("sessions")
+            .child("work")
+            .child("2026-03-20 — Planning — 550e84")
+            .assert(predicates::path::exists());
+        temp.child("sessions")
+            .child("work")
+            .child(UUID_1)
+            .assert(predicates::path::missing());
+        assert_eq!(
+            result,
+            MoveSessionResult {
+                session_id: UUID_1.into(),
+                folder_id: "work".into(),
             }
         );
     }
@@ -466,31 +495,23 @@ mod tests {
     #[test]
     fn move_session_existing_target_errors() {
         let temp = TempDir::new().unwrap();
-        temp.child("sessions")
-            .child(UUID_1)
-            .create_dir_all()
-            .unwrap();
-        temp.child("sessions")
-            .child(UUID_1)
-            .child("_meta.json")
-            .write_str("{}")
-            .unwrap();
-        temp.child("sessions")
-            .child("work")
-            .child(UUID_1)
-            .create_dir_all()
-            .unwrap();
-        temp.child("sessions")
-            .child("work")
-            .child(UUID_1)
-            .child("_meta.json")
-            .write_str("{}")
-            .unwrap();
+        write_session_at(&temp, "sessions/Planning", UUID_1);
+        write_session_at(&temp, "sessions/work/Planning", UUID_2);
 
         let core = FsSyncCore::new(temp.path().to_path_buf());
         let result = core.move_session(UUID_1, "", "work");
 
         assert!(matches!(result, Err(Error::Path(message)) if message == "session_target_exists"));
+        // Never merge: both directories stay untouched.
+        temp.child("sessions")
+            .child("Planning")
+            .child("_meta.json")
+            .assert(predicates::path::exists());
+        temp.child("sessions")
+            .child("work")
+            .child("Planning")
+            .child("_meta.json")
+            .assert(predicates::path::exists());
     }
 
     #[test]
@@ -514,30 +535,12 @@ mod tests {
     #[test]
     fn rename_folder_returns_updated_sessions() {
         let temp = TempDir::new().unwrap();
-        temp.child("sessions")
-            .child("old")
-            .child(UUID_1)
-            .create_dir_all()
-            .unwrap();
-        temp.child("sessions")
-            .child("old")
-            .child(UUID_1)
-            .child("_meta.json")
-            .write_str("{}")
-            .unwrap();
-        temp.child("sessions")
-            .child("old")
-            .child("nested")
-            .child(UUID_2)
-            .create_dir_all()
-            .unwrap();
-        temp.child("sessions")
-            .child("old")
-            .child("nested")
-            .child(UUID_2)
-            .child("_meta.json")
-            .write_str("{}")
-            .unwrap();
+        write_session_at(&temp, &format!("sessions/old/{UUID_1}"), UUID_1);
+        write_session_at(
+            &temp,
+            "sessions/old/nested/2026-04-01 — Retro — 550e84",
+            UUID_2,
+        );
 
         let core = FsSyncCore::new(temp.path().to_path_buf());
         let result = core.rename_folder("old", "new").unwrap();
@@ -562,17 +565,7 @@ mod tests {
     #[test]
     fn delete_folder_with_sessions_errors() {
         let temp = TempDir::new().unwrap();
-        temp.child("sessions")
-            .child("work")
-            .child(UUID_1)
-            .create_dir_all()
-            .unwrap();
-        temp.child("sessions")
-            .child("work")
-            .child(UUID_1)
-            .child("_meta.json")
-            .write_str("{}")
-            .unwrap();
+        write_session_at(&temp, &format!("sessions/work/{UUID_1}"), UUID_1);
 
         let core = FsSyncCore::new(temp.path().to_path_buf());
         let result = core.delete_folder("work");
@@ -581,6 +574,51 @@ mod tests {
         temp.child("sessions")
             .child("work")
             .assert(predicates::path::exists());
+    }
+
+    #[test]
+    fn delete_folder_with_only_readable_named_sessions_errors() {
+        let temp = TempDir::new().unwrap();
+        write_session_at(
+            &temp,
+            "sessions/work/2026-03-20 — Planning — 550e84",
+            UUID_1,
+        );
+        write_session_at(
+            &temp,
+            "sessions/work/nested/2026-04-01 — Retro — 550e84",
+            UUID_2,
+        );
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        let result = core.delete_folder("work");
+
+        assert!(result.is_err());
+        temp.child("sessions")
+            .child("work")
+            .child("2026-03-20 — Planning — 550e84")
+            .child("_meta.json")
+            .assert(predicates::path::exists());
+        temp.child("sessions")
+            .child("work")
+            .child("nested")
+            .child("2026-04-01 — Retro — 550e84")
+            .child("_meta.json")
+            .assert(predicates::path::exists());
+    }
+
+    #[test]
+    fn delete_folder_blocked_by_session_with_unreadable_meta() {
+        let temp = TempDir::new().unwrap();
+        let broken = temp.child("sessions").child("work").child("Broken notes");
+        broken.create_dir_all().unwrap();
+        broken.child("_meta.json").write_str("{ invalid").unwrap();
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        let result = core.delete_folder("work");
+
+        assert!(result.is_err());
+        broken.assert(predicates::path::exists());
     }
 
     #[test]

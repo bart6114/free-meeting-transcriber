@@ -5120,6 +5120,7 @@ dependencies = [
  "tiptap",
  "tracing",
  "uuid",
+ "vault-read",
 ]
 
 [[package]]
@@ -9241,8 +9242,8 @@ dependencies = [
  "tracing-subscriber",
  "transcribe-soniqo",
  "transcript",
- "uuid",
  "vad-masking",
+ "vault-read",
  "vorbis_rs",
 ]
 
@@ -15794,6 +15795,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "vault-write",
 ]
 
 [[package]]
@@ -16536,6 +16538,7 @@ dependencies = [
  "tauri-plugin-local-stt",
  "tauri-plugin-settings",
  "tauri-specta",
+ "tempfile",
  "thiserror 2.0.18",
  "tokio",
  "tokio-util",
@@ -16543,6 +16546,7 @@ dependencies = [
  "transcribe-soniqo",
  "transcript",
  "transcription-core",
+ "vault-read",
 ]
 
 [[package]]
@@ -18791,6 +18795,7 @@ dependencies = [
  "specta",
  "tempfile",
  "thiserror 2.0.18",
+ "unicode-normalization",
 ]
 
 [[package]]
@@ -18808,6 +18813,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tracing",
+ "unicode-normalization",
  "vault-read",
 ]
 

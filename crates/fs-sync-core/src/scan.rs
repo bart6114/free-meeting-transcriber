@@ -4,7 +4,8 @@ use std::path::{Path, PathBuf};
 use glob::Pattern;
 use rayon::prelude::*;
 
-use crate::path::{is_uuid, to_relative_path};
+use crate::path::to_relative_path;
+use crate::session::{DirClass, classify_dir};
 use crate::types::ScanResult;
 
 pub fn scan_and_read(
@@ -75,18 +76,43 @@ fn scan_directory_for_files(
         };
 
         if path.is_dir() {
-            let rel_path = to_relative_path(&path, base_path);
-
-            if !is_uuid(name) {
-                dirs.push(rel_path);
-            }
-
-            if recursive && !is_uuid(name) {
-                scan_directory_for_files(base_path, &path, patterns, recursive, files, dirs);
-            } else if is_uuid(name) {
-                scan_directory_for_files(base_path, &path, patterns, false, files, dirs);
+            match classify_dir(&path) {
+                // A session directory is not a user folder: its artifacts live at
+                // the top level, and its content (`enhanced/`, `attachments/`) is
+                // never recursed into.
+                DirClass::Session(_) => scan_session_files(base_path, &path, patterns, files),
+                DirClass::Folder => {
+                    dirs.push(to_relative_path(&path, base_path));
+                    if recursive {
+                        scan_directory_for_files(
+                            base_path, &path, patterns, recursive, files, dirs,
+                        );
+                    }
+                }
             }
         } else if path.is_file() && patterns.iter().any(|p| p.matches(name)) {
+            files.insert(to_relative_path(&path, base_path), path);
+        }
+    }
+}
+
+fn scan_session_files(
+    base_path: &Path,
+    session_dir: &Path,
+    patterns: &[Pattern],
+    files: &mut HashMap<String, PathBuf>,
+) {
+    let entries = match std::fs::read_dir(session_dir) {
+        Ok(e) => e,
+        Err(_) => return,
+    };
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+            continue;
+        };
+        if path.is_file() && patterns.iter().any(|p| p.matches(name)) {
             files.insert(to_relative_path(&path, base_path), path);
         }
     }
@@ -95,7 +121,7 @@ fn scan_directory_for_files(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_fixtures::{TestEnv, UUID_1};
+    use crate::test_fixtures::{TestEnv, UUID_1, session_meta_json};
     use assert_fs::TempDir;
 
     #[test]
@@ -169,9 +195,10 @@ mod tests {
     }
 
     #[test]
-    fn uuid_dirs_not_in_dirs_list_but_files_are_scanned() {
+    fn session_dirs_not_in_dirs_list_but_files_are_scanned() {
         let env = TestEnv::new()
             .folder(UUID_1)
+            .file("_meta.json", &session_meta_json(UUID_1))
             .file("note.txt", "inside uuid")
             .done()
             .build();
@@ -182,6 +209,34 @@ mod tests {
         assert_eq!(
             result.files.get(&format!("{UUID_1}/note.txt")),
             Some(&"inside uuid".into())
+        );
+    }
+
+    #[test]
+    fn readable_session_dir_is_a_session_not_a_user_folder() {
+        let dir_name = "2026-03-20 — Planning — 550e84";
+        let env = TestEnv::new()
+            .folder(dir_name)
+            .file("_meta.json", &session_meta_json(UUID_1))
+            .file("note.txt", "inside session")
+            .done()
+            .folder(&format!("{dir_name}/enhanced"))
+            .file("doc.txt", "content")
+            .done()
+            .build();
+
+        let result = scan_and_read(env.path(), env.path(), &["*.txt".into()], true, None);
+
+        assert!(result.dirs.is_empty(), "{:?}", result.dirs);
+        assert_eq!(
+            result.files.get(&format!("{dir_name}/note.txt")),
+            Some(&"inside session".into())
+        );
+        assert!(
+            !result
+                .files
+                .contains_key(&format!("{dir_name}/enhanced/doc.txt")),
+            "session content must never be recursed into"
         );
     }
 

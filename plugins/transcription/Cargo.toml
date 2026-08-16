@@ -12,6 +12,7 @@ tauri-plugin = { workspace = true, features = ["build"] }
 
 [dev-dependencies]
 specta-typescript = { workspace = true }
+tempfile = { workspace = true }
 
 [dependencies]
 hypr-audio = { workspace = true }
@@ -20,6 +21,7 @@ hypr-storage = { workspace = true }
 hypr-transcribe-soniqo = { workspace = true }
 hypr-transcript = { workspace = true }
 hypr-transcription-core = { workspace = true, features = ["specta", "tauri-event"] }
+hypr-vault-read = { workspace = true }
 
 owhisper-client = { workspace = true }
 owhisper-interface = { workspace = true }

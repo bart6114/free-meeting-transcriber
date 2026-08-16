@@ -187,9 +187,27 @@ pub(crate) async fn move_session<R: tauri::Runtime>(
     from_folder_path: String,
     target_folder_path: String,
 ) -> Result<MoveSessionResult, String> {
-    app.fs_sync()
+    let result = app
+        .fs_sync()
         .move_session(&session_id, &from_folder_path, &target_folder_path)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    refresh_session_catalog(&app).await;
+    Ok(result)
+}
+
+/// A physical session-directory move/rename happened outside the session store's
+/// write path, so its location catalog is stale until rediscovery. Waiting for the
+/// watcher's coalesced rebuild (~2s) leaves a window where a store write would
+/// recreate the old directory; rebuilding here closes it. Best-effort: the watcher
+/// still covers a failure.
+async fn refresh_session_catalog<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    use tauri::Manager;
+    let Some(store) = app.try_state::<std::sync::Arc<hypr_vault_write::SessionStore>>() else {
+        return;
+    };
+    if let Err(error) = store.rebuild_index().await {
+        tracing::warn!(%error, "session catalog rebuild after folder move failed");
+    }
 }
 
 #[tauri::command]
@@ -210,9 +228,12 @@ pub(crate) async fn rename_folder<R: tauri::Runtime>(
     old_path: String,
     new_path: String,
 ) -> Result<RenameFolderResult, String> {
-    app.fs_sync()
+    let result = app
+        .fs_sync()
         .rename_folder(&old_path, &new_path)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    refresh_session_catalog(&app).await;
+    Ok(result)
 }
 
 #[tauri::command]
