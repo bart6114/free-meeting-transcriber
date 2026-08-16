@@ -933,3 +933,73 @@ async fn writes_after_the_reconcile_rename_stay_journal_silent() {
         "own writes across the rename must never be treated as foreign bytes"
     );
 }
+
+/// The F1 hole: with one claimant at the canonical legacy `sessions/<id>` path,
+/// `find_session`'s fast path can't see the second claimant — after a rebuild has
+/// recorded the duplicate, lazy resolution must stay blocked instead of quietly
+/// re-adopting the legacy copy and diverging the two.
+#[tokio::test]
+async fn a_rebuild_recorded_duplicate_blocks_lazy_resolution_of_the_legacy_claimant() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), &format!("sessions/{ID}"), ID, "Canonical");
+    seed_session_at(vault.path(), "sessions/Synced copy", ID, "Copy");
+
+    let report = store.rebuild_index().await.unwrap();
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|e| e.contains("multiple directories"))
+    );
+    assert!(store.session_get(ID).is_none());
+
+    assert!(
+        store
+            .write_note(ID, "must not land anywhere")
+            .await
+            .is_err(),
+        "resolution must not fall back to find_session's legacy fast path"
+    );
+    assert!(store.read_meta(ID).await.is_err());
+    assert!(
+        !vault
+            .path()
+            .join(format!("sessions/{ID}/_memo.md"))
+            .exists(),
+        "no bytes may be written into either claimant"
+    );
+
+    // Removing one claimant and rebuilding clears the block.
+    std::fs::remove_dir_all(vault.path().join("sessions/Synced copy")).unwrap();
+    store.rebuild_index().await.unwrap();
+    assert_eq!(store.session_get(ID).unwrap().meta.title, "Canonical");
+    store.write_note(ID, "usable again").await.unwrap();
+}
+
+/// A permission failure on a personal folder must not make the sessions homed
+/// under it look deleted: the prune protects descendants of unreadable dirs.
+#[tokio::test]
+async fn an_unreadable_personal_folder_does_not_prune_its_sessions() {
+    use std::os::unix::fs::PermissionsExt;
+    let (store, vault) = test_store().await;
+    seed_session_at(
+        vault.path(),
+        "sessions/Work/2026-03-20 — Planning — 6ba7b8",
+        ID,
+        "Nested",
+    );
+    store.rebuild_index().await.unwrap();
+    assert!(store.session_get(ID).is_some());
+
+    let folder = vault.path().join("sessions/Work");
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o000)).unwrap();
+    let report = store.rebuild_index().await.unwrap();
+    std::fs::set_permissions(&folder, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(
+        store.session_get(ID).is_some(),
+        "a transiently unreadable parent folder must never look like deletion: {:?}",
+        report.errors
+    );
+    assert!(!report.errors.is_empty());
+}

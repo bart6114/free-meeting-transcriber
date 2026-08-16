@@ -145,21 +145,27 @@ pub fn session_date(
     created_at: &str,
     today_local: &str,
 ) -> (String, Option<String>) {
-    let source = match started_at.map(str::trim).filter(|s| !s.is_empty()) {
-        Some(started_at) => started_at,
-        None => created_at.trim(),
-    };
-
-    if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(source) {
-        let local = parsed.with_timezone(&chrono::Local);
-        return (local.format("%Y-%m-%d").to_string(), None);
-    }
-    if let Some(prefix) = valid_date_prefix(source) {
-        return (prefix.to_string(), None);
+    // A malformed started_at falls through to created_at rather than straight to
+    // "today": a legacy session with junk in one field but a valid timestamp in the
+    // other must not be permanently named with the migration date.
+    let sources = [
+        started_at.map(str::trim).filter(|s| !s.is_empty()),
+        Some(created_at.trim()).filter(|s| !s.is_empty()),
+    ];
+    for source in sources.iter().flatten() {
+        if let Ok(parsed) = chrono::DateTime::parse_from_rfc3339(source) {
+            let local = parsed.with_timezone(&chrono::Local);
+            return (local.format("%Y-%m-%d").to_string(), None);
+        }
+        if let Some(prefix) = valid_date_prefix(source) {
+            return (prefix.to_string(), None);
+        }
     }
     (
         today_local.to_string(),
-        Some(format!("unusable session timestamp {source:?}")),
+        Some(format!(
+            "unusable session timestamps (started_at {started_at:?}, created_at {created_at:?})"
+        )),
     )
 }
 
@@ -367,6 +373,14 @@ mod tests {
         let (date, diag) = session_date(Some("not a time"), "also junk", "2026-08-16");
         assert_eq!(date, "2026-08-16");
         assert!(diag.is_some());
+
+        let (date, diag) = session_date(Some("unknown"), "2026-03-01T00:00:00Z", "2026-08-16");
+        assert_eq!(date.len(), 10);
+        assert_ne!(
+            date, "2026-08-16",
+            "a malformed started_at must fall through to created_at, not to today"
+        );
+        assert!(diag.is_none());
 
         let (date, _) = session_date(Some("   "), "2026-05-05T10:00:00+02:00", "2026-08-16");
         assert_eq!(

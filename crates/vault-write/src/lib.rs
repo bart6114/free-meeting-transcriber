@@ -57,6 +57,11 @@ pub struct SessionStore {
     /// here: `listener-core`'s DiskSink holds absolute paths into the directory and
     /// uses them during finalization, so renaming mid-recording is unsafe.
     active_recordings: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// Ids the last rebuild scan found claimed by more than one directory. Resolution
+    /// checks this before `find_session`, whose legacy fast path would otherwise
+    /// silently pick the canonical claimant and let reads/writes diverge the copies
+    /// while rebuild keeps the id unindexed.
+    known_duplicates: Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
 }
 
 #[derive(Debug)]
@@ -105,6 +110,7 @@ impl SessionStore {
             locations: Arc::new(std::sync::RwLock::new(HashMap::new())),
             recent_deletions: Arc::new(std::sync::Mutex::new(HashMap::new())),
             active_recordings: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+            known_duplicates: Arc::new(std::sync::RwLock::new(std::collections::HashSet::new())),
         }
     }
 

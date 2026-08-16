@@ -45,7 +45,21 @@ impl SessionStore {
         self.resolve_session_dir(id).await
     }
 
+    /// A duplicate claim recorded by the last rebuild blocks resolution outright:
+    /// `find_session`'s legacy fast path can't see the second claimant, so without
+    /// this check a lazy lookup would quietly re-adopt one copy after rebuild
+    /// deliberately unindexed the id.
+    fn ensure_not_duplicated(&self, id: &str) -> Result<(), StoreError> {
+        if self.known_duplicates.read().unwrap().contains(id) {
+            return Err(StoreError::Io(format!(
+                "session id '{id}' is claimed by multiple directories; refusing to pick one"
+            )));
+        }
+        Ok(())
+    }
+
     async fn resolve_session_dir(&self, id: &str) -> Result<PathBuf, StoreError> {
+        self.ensure_not_duplicated(id)?;
         if let Some(dir) = self.locations.read().unwrap().get(id) {
             return Ok(dir.clone());
         }
@@ -84,6 +98,7 @@ impl SessionStore {
         _guard: &WriteGuard<'_>,
         meta: &super::SessionMeta,
     ) -> Result<PathBuf, StoreError> {
+        self.ensure_not_duplicated(&meta.id)?;
         if let Some(dir) = self.locations.read().unwrap().get(&meta.id) {
             return Ok(dir.clone());
         }
@@ -220,6 +235,12 @@ impl SessionStore {
         if title.is_empty() {
             return;
         }
+        // A title that sanitizes to the provisional word itself (literal "Untitled",
+        // or pure punctuation) would produce another provisional-shaped name: the
+        // rename would ping-pong between suffix widths on every meta write.
+        if super::layout_name::sanitize_title(title) == super::layout_name::UNTITLED {
+            return;
+        }
         if self.active_recordings.lock().unwrap().contains(id) {
             return;
         }
@@ -305,6 +326,18 @@ impl SessionStore {
             )
             .await;
         }
+    }
+
+    /// Synchronous half of the recording-lifecycle guard: registers the session as
+    /// actively recording the moment the capture event arrives, before any async
+    /// meta stamping gets scheduled. Narrows the window in which a first-title
+    /// directory rename could race the recorder's already-captured absolute paths.
+    /// Cleared by `mark_recording_ended` (or `delete_session`).
+    pub fn note_recording_active(&self, id: &str) {
+        self.active_recordings
+            .lock()
+            .unwrap()
+            .insert(id.to_string());
     }
 
     pub(crate) fn catalog_insert(&self, id: &str, dir: PathBuf) {

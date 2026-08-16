@@ -166,6 +166,13 @@ pub fn classify_event(
     }
 
     if is_sessions_path(relative) {
+        // Hidden entries (`.DS_Store`, AppleDouble `._*`, sync-client dot-dirs)
+        // are never session artifacts and layout discovery skips them entirely,
+        // so they must not read as structural changes -- every Finder-touched
+        // `sessions/.DS_Store` would otherwise trigger a full rebuild.
+        if has_hidden_session_component(relative) {
+            return WatchAction::Ignore;
+        }
         return match catalog_session_id {
             Some(id) => WatchAction::Refresh(id.to_string()),
             None => WatchAction::RebuildSessions,
@@ -173,6 +180,15 @@ pub fn classify_event(
     }
 
     WatchAction::Ignore
+}
+
+/// Any dot-prefixed component below the `sessions/` root (the file itself or a
+/// containing directory).
+fn has_hidden_session_component(relative: &str) -> bool {
+    relative
+        .split('/')
+        .skip(1)
+        .any(|component| component.starts_with('.'))
 }
 
 /// Any change under `templates/` (including `.deleted-defaults.json` -- a tombstone
@@ -330,6 +346,9 @@ async fn handle_batch(store: &SessionStore, changed: &HashSet<String>) {
             }
             Err(error) => {
                 tracing::warn!(%error, "vault watch: failed to rebuild session index");
+                // The rebuild was meant to subsume these; a failed rebuild must
+                // not also swallow the batch's known-session edits.
+                refresh_ids(store, plan.session_ids).await;
             }
         }
     } else {
@@ -630,6 +649,31 @@ mod tests {
         assert!(matches!(
             classify_event("sessions/unknown dir/.tmp-1234-5678-_memo.md", false, None),
             WatchAction::Ignore
+        ));
+    }
+
+    /// Finder/sync droppings (`.DS_Store`, AppleDouble `._*`, dot-dirs like
+    /// `.stversions`) are invisible to layout discovery, so they must never read
+    /// as structural changes -- otherwise every Finder browse of the vault would
+    /// trigger a full rebuild.
+    #[test]
+    fn hidden_entries_under_sessions_are_ignored_not_structural() {
+        for path in [
+            "sessions/.DS_Store",
+            "sessions/Work/.DS_Store",
+            "sessions/._resource-fork",
+            "sessions/.stversions/2026-01-01 — Old — abc123/_meta.json",
+            "sessions/s1/.hidden-file",
+        ] {
+            assert!(
+                matches!(classify_event(path, false, None), WatchAction::Ignore),
+                "{path}"
+            );
+        }
+        // The bare root itself stays structural.
+        assert!(matches!(
+            classify_event("sessions", false, None),
+            WatchAction::RebuildSessions
         ));
     }
 

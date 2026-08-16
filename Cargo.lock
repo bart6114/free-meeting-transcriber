@@ -15795,6 +15795,7 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+ "vault-write",
 ]
 
 [[package]]

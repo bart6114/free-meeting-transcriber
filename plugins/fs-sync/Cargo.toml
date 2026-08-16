@@ -16,6 +16,7 @@ tempfile = { workspace = true }
 
 [dependencies]
 hypr-fs-sync-core = { workspace = true, features = ["tauri-event"] }
+hypr-vault-write = { workspace = true }
 
 tauri = { workspace = true, features = ["test"] }
 tauri-plugin-notify = { workspace = true }

@@ -272,6 +272,11 @@ impl SessionStore {
         // the directory mid-move and recreating it.
         let guard = self.lock_writes().await;
 
+        // Resolve before touching any in-memory state: a failed resolution
+        // (ambiguous id, I/O error) must leave the live buffer and the
+        // recording-deferral guard intact -- the session survives the failed delete.
+        let relative_dir = self.session_dir_locked(&guard, id).await?;
+
         // Drop the session's live transcript buffer *before* trashing the folder, and keep
         // the `live` lock held across the trash. A debounced flush still holding words for
         // this session would otherwise fire afterwards, and `persist_transcript` ->
@@ -285,7 +290,6 @@ impl SessionStore {
         live.remove(id);
         self.active_recordings.lock().unwrap().remove(id);
 
-        let relative_dir = self.session_dir_locked(&guard, id).await?;
         let vault_base = self.vault_base.clone();
         let dir_to_move = relative_dir.clone();
         let trash_path = tokio::task::spawn_blocking(

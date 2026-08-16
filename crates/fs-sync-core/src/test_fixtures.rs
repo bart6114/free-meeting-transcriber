@@ -165,6 +165,8 @@ impl SessionBuilder {
         self
     }
 
+    // Kept for fixture completeness even while no current test seeds notes/memos.
+    #[allow(dead_code)]
     pub fn note(mut self, id: &str, content: &str) -> Self {
         self.session.notes.push(Note {
             id: id.to_string(),
@@ -173,6 +175,7 @@ impl SessionBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub fn memo(mut self, content: &str) -> Self {
         self.session.memo = Some(content.to_string());
         self

@@ -372,17 +372,12 @@ fn delete_orphaned_expired_in_dir(
         };
 
         match classify_dir(&path) {
-            DirClass::Session(Some(id)) => {
-                if known_session_ids.contains(nfc(&id).as_ref()) {
-                    continue;
-                }
-                if orphan_audio_expired(&path, expires_before_ms)? {
-                    delete(&path)?;
-                    deleted.push(id);
-                }
-            }
-            // Unreadable meta: corrupt, not orphaned — leave the directory untouched.
-            DirClass::Session(None) => {}
+            // Any `_meta.json` -- parseable or not -- protects the directory: a
+            // session's identity being absent from the caller's known-id list only
+            // proves the list is stale or the id was deliberately unindexed
+            // (duplicate-id conflicts), never that the audio is disposable. Only
+            // meta-less recorder-fallback dirs below are true orphan candidates.
+            DirClass::Session(_) => {}
             DirClass::Folder if is_uuid(name) => {
                 // Legacy recorder fallback: `sessions/<id>` created for a recording
                 // before any `_meta.json` exists, so the basename is the id it was
@@ -678,15 +673,19 @@ mod tests {
         assert!(corrupt_dir.join("audio.wav").exists());
     }
 
+    /// A directory carrying any `_meta.json` is a session, not an orphan -- an id
+    /// missing from the caller's known list only proves the list is stale (or the
+    /// id was deliberately unindexed by a duplicate-id conflict), never that the
+    /// audio is disposable.
     #[test]
-    fn delete_orphaned_expired_reports_full_ids_from_meta_for_readable_dirs() {
+    fn delete_orphaned_expired_protects_any_dir_with_a_meta_even_if_unknown() {
         let temp = TempDir::new().unwrap();
         let sessions_dir = temp.path();
-        let orphan_dir = sessions_dir.join("2026-03-20 — Planning — 222222");
-        std::fs::create_dir_all(&orphan_dir).unwrap();
-        write_audio(&orphan_dir.join("audio.wav"));
+        let readable_dir = sessions_dir.join("2026-03-20 — Planning — 222222");
+        std::fs::create_dir_all(&readable_dir).unwrap();
+        write_audio(&readable_dir.join("audio.wav"));
         std::fs::write(
-            orphan_dir.join("_meta.json"),
+            readable_dir.join("_meta.json"),
             crate::test_fixtures::session_meta_json(ORPHAN_SESSION_ID),
         )
         .unwrap();
@@ -695,8 +694,8 @@ mod tests {
             delete_orphaned_expired(sessions_dir, &[KNOWN_SESSION_ID.to_string()], 0, now_ms())
                 .unwrap();
 
-        assert_eq!(deleted, vec![ORPHAN_SESSION_ID.to_string()]);
-        assert!(!orphan_dir.join("audio.wav").exists());
+        assert!(deleted.is_empty());
+        assert!(readable_dir.join("audio.wav").exists());
     }
 
     #[test]

@@ -32,17 +32,27 @@ impl SessionStore {
     pub async fn rebuild_index(&self) -> Result<RebuildReport, StoreError> {
         let mut report = RebuildReport::default();
 
+        // The scan and the catalog swap run under the store write lock: renames
+        // (provisional reconcile, migration) also hold it, so the swap can never
+        // revert the catalog to a directory a concurrent rename just moved away
+        // from -- which would make the next write recreate the old path.
+        let guard = self.lock_writes().await;
         let scan = self.scan_session_locations().await?;
 
-        // Ids the prune below must not touch: an id claimed by multiple directories is
-        // ambiguous (not gone), and an id whose known directory now has unreadable
-        // metadata is corrupt (not gone) -- corruption must never look like deletion.
+        // Ids the prune below must not touch: an id claimed by multiple directories
+        // is ambiguous (not gone), and an id whose known directory -- or any parent
+        // of it -- is now corrupt/unreadable is broken (not gone). Descendant
+        // matching matters for the unreadable case: a permission error on a personal
+        // folder must not make every session homed under it look deleted.
         let protected: HashSet<String> = {
             let catalog = self.locations.read().unwrap();
-            let broken_dirs: HashSet<&PathBuf> = scan.broken_dirs.iter().collect();
             catalog
                 .iter()
-                .filter(|(_, dir)| broken_dirs.contains(dir))
+                .filter(|(_, dir)| {
+                    scan.broken_dirs
+                        .iter()
+                        .any(|broken| hypr_vault_read::layout::path_starts_with_nfc(dir, broken))
+                })
                 .map(|(id, _)| id.clone())
                 .chain(scan.duplicate_ids.iter().cloned())
                 .collect()
@@ -68,6 +78,11 @@ impl SessionStore {
                 }
             }
         }
+        // Duplicate claims persist past the rebuild so lazy per-id resolution can't
+        // sidestep them (find_session's legacy fast path would otherwise silently
+        // pick the canonical claimant and let writes diverge the copies).
+        *self.known_duplicates.write().unwrap() = scan.duplicate_ids.iter().cloned().collect();
+        drop(guard);
 
         report.errors.extend(scan.errors.iter().cloned());
         report.ghost_sessions = scan.ghost_dirs.clone();
@@ -594,7 +609,11 @@ fn scan_ghost_dirs(vault_base: &std::path::Path) -> Result<Vec<String>, StoreErr
                 continue; // a session (or corrupt session) directory, never a parent
             }
             if dir_has_session_content(&child_abs)? {
+                // A ghost's own subdirectories (enhanced/, attachments/) are its
+                // content, not further ghosts -- report the orphan once, don't
+                // descend and double-count its interior.
                 ghosts.push(child_rel.to_string_lossy().into_owned());
+                continue;
             }
             pending.push(child_rel);
         }
