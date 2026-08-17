@@ -34,6 +34,39 @@ impl SessionStore {
         self.resolve_session_dir(id).await
     }
 
+    /// Cache-only synchronous lookup for callers that must stay O(1) in session
+    /// count (the fs-sync plugin's per-artifact resolution): a validated catalog
+    /// hit or `Ok(None)`, never a discovery scan. A hit is verified against the
+    /// filesystem with at most one metadata read before it is trusted, because an
+    /// external rename can leave the catalog stale until the watcher/focus rebuild:
+    ///
+    /// - directory or `_meta.json` gone → `None` (the caller's fallback re-resolves);
+    /// - parseable meta claiming a different id → `None` (stale entry);
+    /// - parseable matching meta → the cataloged vault-relative directory;
+    /// - unreadable/corrupt meta → still the cataloged directory, matching the
+    ///   corruption tolerance of every other artifact-access path.
+    ///
+    /// Duplicate-claimed ids error exactly like the async resolver: writes and
+    /// reads must block on a duplicate, never pick a winner.
+    pub fn session_dir_cached(&self, id: &str) -> Result<Option<PathBuf>, StoreError> {
+        validate_session_id(id)?;
+        self.ensure_not_duplicated(id)?;
+        let Some(dir) = self.locations.read().unwrap().get(id).cloned() else {
+            return Ok(None);
+        };
+        match hypr_vault_read::classify_session_dir(&self.vault_base.join(&dir)) {
+            hypr_vault_read::SessionDirKind::Session(meta)
+                if hypr_vault_read::layout::eq_nfc(&meta.id, id) =>
+            {
+                Ok(Some(dir))
+            }
+            hypr_vault_read::SessionDirKind::Session(_) => Ok(None),
+            hypr_vault_read::SessionDirKind::Corrupt(_) => Ok(Some(dir)),
+            // Covers both a vanished directory and a vanished `_meta.json`.
+            hypr_vault_read::SessionDirKind::Folder => Ok(None),
+        }
+    }
+
     /// `session_dir` for write paths: the guard is a proof token that the store write
     /// lock is held, so the resolved location cannot be renamed out from under the
     /// write that follows (renames also run under the write lock).
@@ -72,17 +105,30 @@ impl SessionStore {
         let vault_base = self.vault_base.clone();
         let id_owned = id.to_string();
         let found = tokio::task::spawn_blocking(move || {
-            hypr_vault_read::find_session(&vault_base, &id_owned)
+            hypr_vault_read::find_session_and_scan(&vault_base, &id_owned)
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))?;
 
         match found {
-            Ok(Some((location, _))) => {
-                self.catalog_insert(id, location.relative_dir.clone());
-                Ok(Some(location.relative_dir))
+            Ok((found, scan)) => {
+                // A cold miss pays for a full discovery walk; warm every healthy
+                // non-duplicate location from it (fill-only -- an entry a concurrent
+                // rename just updated must not be clobbered with pre-scan data), so
+                // the next lookup for any of them is a validated cache hit.
+                if let Some(discovery) = scan {
+                    let mut catalog = self.locations.write().unwrap();
+                    for (location, _) in &discovery.sessions {
+                        catalog
+                            .entry(location.id.clone())
+                            .or_insert_with(|| location.relative_dir.clone());
+                    }
+                }
+                Ok(found.map(|(location, _)| {
+                    self.catalog_insert(id, location.relative_dir.clone());
+                    location.relative_dir
+                }))
             }
-            Ok(None) => Ok(None),
             // A corrupt legacy meta doesn't unhome the directory: artifact reads keep
             // their historical tolerance there, and read_meta surfaces the parse error
             // itself.

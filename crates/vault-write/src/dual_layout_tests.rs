@@ -1003,3 +1003,123 @@ async fn an_unreadable_personal_folder_does_not_prune_its_sessions() {
     );
     assert!(!report.errors.is_empty());
 }
+
+// -- cache-only resolution (`session_dir_cached`) ---------------------------------
+
+#[tokio::test]
+async fn session_dir_cached_returns_a_validated_hit_without_discovery() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let expected = store.session_dir(ID).await.unwrap();
+
+    let hit = store.session_dir_cached(ID).unwrap();
+    assert_eq!(hit, Some(expected));
+}
+
+#[tokio::test]
+async fn session_dir_cached_misses_when_the_directory_vanished() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let dir = vault.path().join(store.session_dir(ID).await.unwrap());
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(store.session_dir_cached(ID).unwrap(), None);
+}
+
+#[tokio::test]
+async fn session_dir_cached_misses_when_the_cataloged_path_claims_another_id() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let dir = vault.path().join(store.session_dir(ID).await.unwrap());
+    // An external process replaced the directory's identity out from under the
+    // catalog: the stale entry must fall through, never serve the wrong session.
+    std::fs::write(
+        dir.join("_meta.json"),
+        serde_json::to_vec_pretty(&meta(LEGACY_ID, "Impostor")).unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(store.session_dir_cached(ID).unwrap(), None);
+}
+
+#[tokio::test]
+async fn session_dir_cached_tolerates_a_corrupt_meta_at_the_cataloged_path() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let relative = store.session_dir(ID).await.unwrap();
+    std::fs::write(vault.path().join(&relative).join("_meta.json"), "{ invalid").unwrap();
+
+    // The warm catalog is still the best known home; artifact access keeps its
+    // corruption tolerance.
+    assert_eq!(store.session_dir_cached(ID).unwrap(), Some(relative));
+}
+
+#[tokio::test]
+async fn session_dir_cached_errors_on_a_duplicate_claimed_id() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), &format!("sessions/{ID}"), ID, "One");
+    seed_session_at(vault.path(), "sessions/Copy", ID, "Two");
+    store.rebuild_index().await.unwrap();
+
+    assert!(store.session_dir_cached(ID).is_err());
+}
+
+#[tokio::test]
+async fn a_cold_scan_warms_the_whole_catalog_so_later_lookups_are_cache_hits() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), READABLE_DIR, ID, "Readable");
+    seed_session_at(vault.path(), "sessions/Other notes", LEGACY_ID, "Other");
+
+    // Cold store: resolving one id pays for a discovery walk...
+    assert_eq!(store.session_dir_cached(ID).unwrap(), None, "cold cache");
+    store.session_dir(ID).await.unwrap();
+
+    // ...which must warm every healthy location, not just the requested one.
+    assert_eq!(
+        store.session_dir_cached(LEGACY_ID).unwrap(),
+        Some(PathBuf::from("sessions/Other notes"))
+    );
+}
+
+/// The warmed fs-sync command path performs zero discovery walks: a counting
+/// resolver backed by the store proves every per-artifact resolution is a
+/// validated catalog hit, so `FsSyncCore`'s discovery fallback never runs.
+#[tokio::test]
+async fn warmed_fs_sync_resolution_never_falls_back_to_discovery() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let store = Arc::new(store);
+
+    let misses = Arc::new(AtomicUsize::new(0));
+    let resolver_store = store.clone();
+    let resolver_misses = misses.clone();
+    let vault_base = vault.path().to_path_buf();
+    let resolver_base = vault_base.clone();
+    let core = hypr_fs_sync_core::FsSyncCore::with_resolver(
+        vault_base.clone(),
+        Arc::new(move |id: &str| {
+            let hit = resolver_store
+                .session_dir_cached(id)
+                .map_err(|e| hypr_fs_sync_core::Error::Path(e.to_string()))?;
+            if hit.is_none() {
+                resolver_misses.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(hit.map(|relative| resolver_base.join(relative)))
+        }),
+    );
+
+    let saved = core.attachment_save(ID, b"bytes", "file.txt").unwrap();
+    assert_eq!(core.attachment_list(ID).unwrap().len(), 1);
+    assert_eq!(core.attachment_read(ID, &saved.attachment_id).unwrap(), b"bytes");
+    let resolved = core.resolve_session_dir(ID).unwrap();
+    assert_eq!(resolved, vault_base.join(store.session_dir(ID).await.unwrap()));
+
+    assert_eq!(
+        misses.load(Ordering::SeqCst),
+        0,
+        "every warmed resolution must be a catalog hit -- zero discovery fallbacks"
+    );
+}

@@ -267,17 +267,34 @@ pub fn find_session(
     vault: &Path,
     id: &str,
 ) -> std::result::Result<Option<(SessionLocation, SessionMeta)>, SessionLookupError> {
+    find_session_and_scan(vault, id).map(|(found, _)| found)
+}
+
+/// `find_session`, additionally handing back the discovery scan when one was
+/// performed, so a caller maintaining a location cache can warm every healthy
+/// location from the walk it already paid for. `None` for the scan means the
+/// legacy `sessions/<id>` fast path answered without scanning.
+pub fn find_session_and_scan(
+    vault: &Path,
+    id: &str,
+) -> std::result::Result<
+    (Option<(SessionLocation, SessionMeta)>, Option<SessionDiscovery>),
+    SessionLookupError,
+> {
     let legacy_dir = paths::sessions_root().join(id);
     let mut legacy_corrupt = None;
     match classify_session_dir(&vault.join(&legacy_dir)) {
         SessionDirKind::Session(meta) if eq_nfc(&meta.id, id) => {
-            return Ok(Some((
-                SessionLocation {
-                    id: meta.id.clone(),
-                    relative_dir: legacy_dir,
-                },
-                *meta,
-            )));
+            return Ok((
+                Some((
+                    SessionLocation {
+                        id: meta.id.clone(),
+                        relative_dir: legacy_dir,
+                    },
+                    *meta,
+                )),
+                None,
+            ));
         }
         SessionDirKind::Corrupt(reason) => legacy_corrupt = Some((legacy_dir, reason)),
         _ => {}
@@ -296,14 +313,15 @@ pub fn find_session(
     }
     if let Some(found) = discovery
         .sessions
-        .into_iter()
+        .iter()
         .find(|(location, _)| eq_nfc(&location.id, id))
+        .cloned()
     {
-        return Ok(Some(found));
+        return Ok((Some(found), Some(discovery)));
     }
     match legacy_corrupt {
         Some((dir, reason)) => Err(SessionLookupError::Corrupt { dir, reason }),
-        None => Ok(None),
+        None => Ok((None, Some(discovery))),
     }
 }
 

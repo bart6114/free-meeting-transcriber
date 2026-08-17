@@ -24,15 +24,35 @@ pub use types::*;
 use hypr_vault_read::layout::{eq_nfc, paths_eq_nfc};
 
 use std::path::PathBuf;
+use std::sync::Arc;
+
+/// Optional fast-path session-directory resolver: `Ok(Some(abs_dir))` is used
+/// verbatim, `Ok(None)` falls back to this crate's own `find_session_dir`
+/// discovery (preserving its corrupt/ghost adoption semantics), and an `Err`
+/// (e.g. a duplicate-claimed id) propagates. The desktop plugin installs one
+/// backed by the store's warm location catalog; standalone users never pay for it.
+pub type SessionDirResolver = Arc<dyn Fn(&str) -> Result<Option<PathBuf>> + Send + Sync>;
 
 pub struct FsSyncCore {
     sessions_dir: PathBuf,
+    resolver: Option<SessionDirResolver>,
 }
 
 impl FsSyncCore {
     pub fn new(base_dir: PathBuf) -> Self {
         let sessions_dir = base_dir.join("sessions");
-        Self { sessions_dir }
+        Self {
+            sessions_dir,
+            resolver: None,
+        }
+    }
+
+    pub fn with_resolver(base_dir: PathBuf, resolver: SessionDirResolver) -> Self {
+        let sessions_dir = base_dir.join("sessions");
+        Self {
+            sessions_dir,
+            resolver: Some(resolver),
+        }
     }
 
     pub fn list_folders(&self) -> Result<ListFoldersResult> {
@@ -315,6 +335,16 @@ impl FsSyncCore {
     }
 
     pub fn resolve_session_dir(&self, session_id: &str) -> Result<PathBuf> {
+        // Validation stays in front of the override: a warm store catalog must not
+        // make fs-sync accept ids that its own resolution would reject.
+        if !is_uuid(session_id) {
+            return Err(Error::Path("session_id_invalid".into()));
+        }
+        if let Some(resolver) = &self.resolver
+            && let Some(dir) = resolver(session_id)?
+        {
+            return Ok(dir);
+        }
         find_session_dir(&self.sessions_dir, session_id)
     }
 }
@@ -800,6 +830,84 @@ mod tests {
 
         assert!(matches!(result, Err(Error::Path(message)) if message == "session_id_invalid"));
         temp.child("outside").assert(predicates::path::missing());
+    }
+
+    #[test]
+    fn resolver_hit_is_used_verbatim_for_attachments_and_moves() {
+        let temp = TempDir::new().unwrap();
+        // The physical home has a name the fallback could never derive from the id;
+        // only the injected resolver knows it.
+        write_session_at(&temp, "sessions/2026-03-20 — Planning — 550e84", UUID_1);
+        let hit = temp.path().join("sessions/2026-03-20 — Planning — 550e84");
+
+        let resolver_hit = hit.clone();
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let resolver_calls = calls.clone();
+        let core = FsSyncCore::with_resolver(
+            temp.path().to_path_buf(),
+            Arc::new(move |id: &str| {
+                resolver_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                assert_eq!(id, UUID_1);
+                Ok(Some(resolver_hit.clone()))
+            }),
+        );
+
+        core.attachment_save(UUID_1, b"hello", "file.txt").unwrap();
+        assert!(hit.join("attachments/file.txt").is_file());
+
+        core.move_session(UUID_1, "", "work").unwrap();
+        temp.child("sessions")
+            .child("work")
+            .child("2026-03-20 — Planning — 550e84")
+            .child("attachments")
+            .child("file.txt")
+            .assert(predicates::path::exists());
+        assert!(calls.load(std::sync::atomic::Ordering::SeqCst) >= 2);
+    }
+
+    #[test]
+    fn resolver_none_preserves_nested_unclaimed_dir_adoption() {
+        // A nested uuid-named directory with a corrupt meta: the resolver misses,
+        // and the fallback must still adopt it instead of inventing a root path.
+        let temp = TempDir::new().unwrap();
+        let corrupt = temp.path().join("sessions/work").join(UUID_1);
+        std::fs::create_dir_all(&corrupt).unwrap();
+        std::fs::write(corrupt.join("_meta.json"), "{ invalid").unwrap();
+
+        let core =
+            FsSyncCore::with_resolver(temp.path().to_path_buf(), Arc::new(|_id: &str| Ok(None)));
+
+        assert_eq!(core.resolve_session_dir(UUID_1).unwrap(), corrupt);
+    }
+
+    #[test]
+    fn resolver_errors_propagate_instead_of_falling_back() {
+        let temp = TempDir::new().unwrap();
+        write_session_at(&temp, &format!("sessions/{UUID_1}"), UUID_1);
+
+        let core = FsSyncCore::with_resolver(
+            temp.path().to_path_buf(),
+            Arc::new(|_id: &str| Err(Error::Path("duplicate id".into()))),
+        );
+
+        assert!(matches!(
+            core.resolve_session_dir(UUID_1),
+            Err(Error::Path(message)) if message == "duplicate id"
+        ));
+    }
+
+    #[test]
+    fn resolver_is_never_consulted_for_an_invalid_session_id() {
+        let temp = TempDir::new().unwrap();
+        let core = FsSyncCore::with_resolver(
+            temp.path().to_path_buf(),
+            Arc::new(|_id: &str| panic!("a non-uuid id must be rejected before the resolver")),
+        );
+
+        assert!(matches!(
+            core.resolve_session_dir("../outside"),
+            Err(Error::Path(message)) if message == "session_id_invalid"
+        ));
     }
 
     #[test]

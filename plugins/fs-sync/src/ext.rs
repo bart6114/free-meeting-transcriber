@@ -1,4 +1,32 @@
+use std::sync::Arc;
+
+use tauri::Manager;
 use tauri_plugin_settings::SettingsPluginExt;
+
+/// An `FsSyncCore` whose session-directory resolution consults the managed
+/// `SessionStore`'s warm location catalog first (validated cache hits are O(1)
+/// in session count), falling back to fs-sync's own discovery -- with its
+/// corrupt/ghost adoption semantics -- on a miss or when no store is managed
+/// (standalone plugin use).
+pub(crate) fn store_backed_core<R: tauri::Runtime>(
+    app: &tauri::AppHandle<R>,
+    base_dir: std::path::PathBuf,
+) -> hypr_fs_sync_core::FsSyncCore {
+    let Some(store) = app.try_state::<Arc<hypr_vault_write::SessionStore>>() else {
+        return hypr_fs_sync_core::FsSyncCore::new(base_dir);
+    };
+    let store = store.inner().clone();
+    let vault_base = base_dir.clone();
+    hypr_fs_sync_core::FsSyncCore::with_resolver(
+        base_dir,
+        Arc::new(move |id: &str| {
+            store
+                .session_dir_cached(id)
+                .map(|hit| hit.map(|relative| vault_base.join(relative)))
+                .map_err(|e| hypr_fs_sync_core::Error::Path(e.to_string()))
+        }),
+    )
+}
 
 pub struct FsSync<'a, R: tauri::Runtime, M: tauri::Manager<R>> {
     manager: &'a M,
@@ -7,15 +35,14 @@ pub struct FsSync<'a, R: tauri::Runtime, M: tauri::Manager<R>> {
 
 impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> FsSync<'a, R, M> {
     fn core(&self) -> Result<hypr_fs_sync_core::FsSyncCore, crate::Error> {
-        let base_dir = self
-            .manager
-            .app_handle()
+        let app = self.manager.app_handle();
+        let base_dir = app
             .settings()
             .vault_base()
             .map(|p| p.into_std_path_buf())
             .map_err(|e| crate::Error::Path(e.to_string()))?;
 
-        Ok(hypr_fs_sync_core::FsSyncCore::new(base_dir))
+        Ok(store_backed_core(app, base_dir))
     }
 
     pub fn list_folders(&self) -> Result<crate::ListFoldersResult, crate::Error> {

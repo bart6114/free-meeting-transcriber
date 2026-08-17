@@ -10,7 +10,6 @@ use tauri_plugin_settings::SettingsPluginExt;
 
 use crate::FsSyncPluginExt;
 use crate::frontmatter::ParsedDocument;
-use crate::session::find_session_dir;
 use crate::session_content::load_session_content as load_session_content_from_fs;
 use crate::types::{
     ListFoldersResult, MoveSessionResult, RenameFolderResult, ScanResult, SessionContentData,
@@ -29,7 +28,8 @@ fn resolve_session_dir<R: tauri::Runtime>(
     session_id: &str,
 ) -> Result<PathBuf, String> {
     let base = app.settings().vault_base().map_err(|e| e.to_string())?;
-    find_session_dir(&base.join("sessions").into_std_path_buf(), session_id)
+    crate::ext::store_backed_core(app, base.into_std_path_buf())
+        .resolve_session_dir(session_id)
         .map_err(|e| e.to_string())
 }
 
