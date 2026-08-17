@@ -109,6 +109,10 @@ vi.mock("~/session/components/session-people", () => ({
   }),
 }));
 
+vi.mock("~/session/components/session-tags", () => ({
+  SessionTags: () => <div data-testid="session-tags" />,
+}));
+
 vi.mock("~/session/components/shared", () => ({
   useCurrentNoteTab: () => ({ type: "raw" }),
 }));

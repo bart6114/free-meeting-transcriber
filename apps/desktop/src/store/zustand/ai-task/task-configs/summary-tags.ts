@@ -1,8 +1,9 @@
 import type { TaskArgsMapTransformed } from ".";
 
+import { normalizeTagNames, TAG_NAME_RE } from "~/tags/normalize";
+
 type EnhanceArgs = TaskArgsMapTransformed["enhance"];
 
-const TAG_NAME_RE = /^[\p{L}_][\p{L}\p{N}_-]*$/u;
 const HASHTAG_RE = /(^|[^\p{L}\p{N}_/#])#([\p{L}_][\p{L}\p{N}_-]*)/gu;
 
 export function extractEnhanceTagNames(
@@ -56,21 +57,6 @@ function extractHashtagNames(sources: Array<string | null | undefined>) {
   }
 
   return normalizeTagNames(tagNames);
-}
-
-function normalizeTagNames(tagNames: string[]) {
-  const result = new Map<string, string>();
-
-  for (const rawTagName of tagNames) {
-    const tagName = rawTagName.replace(/^#/, "").trim().toLowerCase();
-    if (!TAG_NAME_RE.test(tagName)) {
-      continue;
-    }
-
-    result.set(tagName, tagName);
-  }
-
-  return [...result.values()];
 }
 
 function stripTrailingTagLines(markdown: string) {

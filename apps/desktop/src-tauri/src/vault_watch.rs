@@ -124,6 +124,9 @@ pub enum WatchAction {
     /// An external edit of the vault-root `people.json` -- rescans the in-memory
     /// people index (same shape as templates: file-canonical, no per-id granularity).
     RefreshPeople,
+    /// An external edit of the vault-root `tags.json` -- rescans the in-memory
+    /// tags index (same shape as people).
+    RefreshTags,
 }
 
 /// Pure routing decision: given a vault-relative path, whether its current
@@ -165,6 +168,10 @@ pub fn classify_event(
         return WatchAction::RefreshPeople;
     }
 
+    if is_tags_path(relative) {
+        return WatchAction::RefreshTags;
+    }
+
     if is_sessions_path(relative) {
         // Hidden entries (`.DS_Store`, AppleDouble `._*`, sync-client dot-dirs)
         // are never session artifacts and layout discovery skips them entirely,
@@ -200,6 +207,10 @@ fn is_templates_path(relative: &str) -> bool {
 
 fn is_people_path(relative: &str) -> bool {
     relative == "people.json"
+}
+
+fn is_tags_path(relative: &str) -> bool {
+    relative == "tags.json"
 }
 
 /// Anything at or under the `sessions/` root, including the bare root
@@ -293,6 +304,7 @@ async fn ids_to_refresh(store: &SessionStore, changed: &HashSet<String>) -> Refr
             WatchAction::RebuildSessions => plan.rebuild_sessions = true,
             WatchAction::RefreshTemplates => plan.templates = true,
             WatchAction::RefreshPeople => plan.people = true,
+            WatchAction::RefreshTags => plan.tags = true,
             WatchAction::Ignore => {}
         }
     }
@@ -308,6 +320,7 @@ struct RefreshPlan {
     rebuild_sessions: bool,
     templates: bool,
     people: bool,
+    tags: bool,
 }
 
 /// Refreshes every id in `ids`, one at a time. A failure on one session is
@@ -361,6 +374,10 @@ async fn handle_batch(store: &SessionStore, changed: &HashSet<String>) {
     if plan.people {
         store.index_refresh_people().await;
         tracing::info!("vault watch: refreshed people index from external change");
+    }
+    if plan.tags {
+        store.index_refresh_tags().await;
+        tracing::info!("vault watch: refreshed tags index from external change");
     }
 }
 
@@ -573,6 +590,27 @@ mod tests {
         ));
         assert!(matches!(
             classify_event("sessions/s1/people.json", false, Some("s1")),
+            WatchAction::Refresh(id) if id == "s1"
+        ));
+    }
+
+    /// Same contract as `people.json` for the vault-root `tags.json` registry.
+    #[test]
+    fn tags_path_refreshes_tags_unless_own_write_or_trash() {
+        assert!(matches!(
+            classify_event("tags.json", false, None),
+            WatchAction::RefreshTags
+        ));
+        assert!(matches!(
+            classify_event("tags.json", true, None),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event(".trash/2026-08-06/tags.json", false, None),
+            WatchAction::Ignore
+        ));
+        assert!(matches!(
+            classify_event("sessions/s1/tags.json", false, Some("s1")),
             WatchAction::Refresh(id) if id == "s1"
         ));
     }

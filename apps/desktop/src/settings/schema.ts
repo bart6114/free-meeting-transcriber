@@ -94,6 +94,17 @@ export const SETTING_DEFINITIONS = {
     path: ["language", "ai_language"],
     default: "en" as string,
   },
+  sidebar_group_by: {
+    type: "string",
+    path: ["general", "sidebar_group_by"],
+    default: "date" as string,
+  },
+  // JSON array of collapsed tag names (not expanded ones), so new tags start open.
+  sidebar_collapsed_tags: {
+    type: "string",
+    path: ["general", "sidebar_collapsed_tags"],
+    default: "[]" as string,
+  },
   spoken_languages: {
     type: "string",
     path: ["language", "spoken_languages"],

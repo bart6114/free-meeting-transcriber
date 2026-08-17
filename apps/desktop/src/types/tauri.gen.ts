@@ -207,6 +207,22 @@ async peopleEnsure(name: string) : Promise<Result<PersonItem, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async tagsList() : Promise<Result<TagItem[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tags_list") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async tagsEnsure(name: string) : Promise<Result<TagItem, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("tags_ensure", { name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async sessionListTasks(sourceType: string, sourceId: string) : Promise<Result<TaskItem[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_list_tasks", { sourceType, sourceId }) };
@@ -482,6 +498,11 @@ export type IndexChanged = { entity: IndexEntity; ids: string[] }
  */
 export type IndexEntity = "sessions" | "docs" | "transcripts" | "tasks" | "templates" | "people" | 
 /**
+ * The vault-root `tags.json` registry changed (not a session's `_meta.json`
+ * tags -- those ride `Sessions`).
+ */
+"tags" | 
+/**
  * A session's *physical directory* changed (rename, move, delete/restore,
  * external relocation caught by a rebuild) -- content-free, so the search
  * projection ignores it; the frontend uses it to invalidate every cache
@@ -546,6 +567,14 @@ export type SessionMetaPatch = { title?: string | null; started_at?: string | nu
  * permanently-empty placeholder, so preferring the file loses nothing.
  */
 export type SessionRecord = { meta: SessionMeta; note_markdown: string | null }
+/**
+ * One tag, file-canonical in the vault-root `tags.json`. The id is the normalized
+ * (lowercased) name itself — unlike people's lossy slug, two names normalizing
+ * identically are by definition the same tag, so no collision suffixing is needed.
+ * Sessions keep storing raw tag strings in `_meta.json` and degrade gracefully if
+ * `tags.json` disappears.
+ */
+export type TagItem = { id: string; name?: string }
 /**
  * What the frontend sends on a write: source coordinates come from the command arguments,
  * timestamps and `assignee` are managed store-side (preserved from the existing entry when

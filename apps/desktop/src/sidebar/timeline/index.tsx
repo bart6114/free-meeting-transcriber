@@ -1,5 +1,11 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import { ArrowDownIcon, ArrowUpIcon, SunIcon } from "lucide-react";
+import {
+  ArrowDownIcon,
+  ArrowUpIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  SunIcon,
+} from "lucide-react";
 import {
   type ReactNode,
   memo,
@@ -28,6 +34,7 @@ import {
   useUpcomingMeetingLabelFormatter,
 } from "./upcoming-meeting";
 import {
+  buildTagTimelineBuckets,
   buildTimelineBuckets,
   calculateTodayIndicatorPlacement,
   deriveTimelineWindowData,
@@ -41,6 +48,7 @@ import {
 } from "./utils";
 
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
+import { setSettingValue } from "~/settings/queries";
 import { useConfigValue } from "~/shared/config";
 import { scrollElementByWheel } from "~/shared/dom/scroll-wheel";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
@@ -48,6 +56,8 @@ import { useNativeContextMenu } from "~/shared/hooks/useNativeContextMenu";
 import { useTabs } from "~/store/zustand/tabs";
 import { useTimelineSelection } from "~/store/zustand/timeline-selection";
 import { useListener } from "~/stt/contexts";
+
+const EMPTY_BUCKETS: TimelineBucket[] = [];
 
 export const TimelineView = memo(function TimelineView({
   topChipsOverlapHeader = false,
@@ -58,21 +68,52 @@ export const TimelineView = memo(function TimelineView({
 } = {}) {
   const { t } = useLingui();
   const timezone = useConfigValue("timezone") || undefined;
+  const groupBy: "date" | "tag" =
+    useConfigValue("sidebar_group_by") === "tag" ? "tag" : "date";
+  const collapsedTags = useConfigValue("sidebar_collapsed_tags");
   const timelineSessionsTable = useTimelineSessionsTable();
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
-  const { buckets, hasMoreFutureItems } = useTimelineData({
+  const { buckets: allBuckets, hasMoreFutureItems } = useTimelineData({
     timelineSessionsTable,
     timezone,
+    groupBy,
   });
+  // Collapsed tag sections keep their header (with the full count) but drop their
+  // items -- also from the flat selection keys below, so keyboard/shift selection
+  // skips hidden rows.
+  const buckets = useMemo(() => {
+    if (groupBy !== "tag" || collapsedTags.length === 0) {
+      return allBuckets;
+    }
+    const collapsed = new Set(collapsedTags);
+    return allBuckets.map((bucket) =>
+      collapsed.has(bucket.label) ? { ...bucket, items: [] } : bucket,
+    );
+  }, [allBuckets, collapsedTags, groupBy]);
+  const bucketItemCounts = useMemo(
+    () =>
+      new Map(allBuckets.map((bucket) => [bucket.label, bucket.items.length])),
+    [allBuckets],
+  );
+  const toggleTagCollapsed = useCallback(
+    (label: string) => {
+      const next = collapsedTags.includes(label)
+        ? collapsedTags.filter((tag) => tag !== label)
+        : [...collapsedTags, label];
+      void setSettingValue("sidebar_collapsed_tags", JSON.stringify(next));
+    },
+    [collapsedTags],
+  );
   const hasToday = useMemo(
-    () => buckets.some((bucket) => bucket.label === "Today"),
-    [buckets],
+    () =>
+      groupBy === "date" && buckets.some((bucket) => bucket.label === "Today"),
+    [buckets, groupBy],
   );
   const indicatorTimeMs = useCurrentTimeMs();
   const formatUpcomingMeetingLabel = useUpcomingMeetingLabelFormatter();
   const upcomingMeetingStatus = useUpcomingMeetingStatus(
-    buckets,
+    groupBy === "date" ? buckets : EMPTY_BUCKETS,
     formatUpcomingMeetingLabel,
     t`Now`,
   );
@@ -114,13 +155,15 @@ export const TimelineView = memo(function TimelineView({
   const deleteSession = useDeleteSession();
 
   const flatItemKeys = useMemo(() => {
-    const keys: string[] = [];
+    // Deduped: in tag mode a multi-tag session appears in several buckets but
+    // must count once for selection.
+    const keys = new Set<string>();
     for (const bucket of buckets) {
       for (const item of bucket.items) {
-        keys.push(`${item.type}-${item.id}`);
+        keys.add(`${item.type}-${item.id}`);
       }
     }
-    return keys;
+    return [...keys];
   }, [buckets]);
   const flatItemKeysRef = useRef(flatItemKeys);
   flatItemKeysRef.current = flatItemKeys;
@@ -290,18 +333,18 @@ export const TimelineView = memo(function TimelineView({
   });
 
   const indicatorIndex = useMemo(() => {
-    if (hasToday) {
+    if (groupBy === "tag" || hasToday) {
       return -1;
     }
     return getFallbackIndicatorIndex(buckets, Date.now());
-  }, [buckets, hasToday, indicatorTimeMs]);
+  }, [buckets, groupBy, hasToday, indicatorTimeMs]);
 
   const hasFutureItems = useMemo(
     () => hasFutureTimelineItems(buckets, Date.now()),
     [buckets, indicatorTimeMs],
   );
   const suppressCurrentTimeIndicator =
-    hasActiveVisibleSession || !hasFutureItems;
+    groupBy === "tag" || hasActiveVisibleSession || !hasFutureItems;
 
   const handleDeleteSelected = useCallback(() => {
     const sessionIds = selectedIds
@@ -381,6 +424,26 @@ export const TimelineView = memo(function TimelineView({
             className={cn([topSpacerClassName, "shrink-0"])}
           />
         )}
+        <div
+          data-sidebar-timeline-group-toggle
+          className="flex shrink-0 items-center gap-2.5 pt-2 pb-1 pl-3"
+        >
+          {(["date", "tag"] as const).map((mode) => (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => void setSettingValue("sidebar_group_by", mode)}
+              className={cn([
+                "text-[10px] font-semibold tracking-[0.09em] uppercase transition-colors",
+                mode === groupBy
+                  ? "text-foreground"
+                  : "text-muted-foreground/50 hover:text-muted-foreground",
+              ])}
+            >
+              {mode === "date" ? t`By date` : t`By tag`}
+            </button>
+          ))}
+        </div>
         {buckets.map((bucket, index) => {
           const isToday = bucket.label === "Today";
           const shouldPlaceIndicatorBefore =
@@ -414,9 +477,31 @@ export const TimelineView = memo(function TimelineView({
                   "bg-background pt-0 pr-1 pb-1 pl-3",
                 ])}
               >
-                <div className="text-muted-foreground/70 pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase">
-                  {bucket.label}
-                </div>
+                {bucket.kind === "tag" ? (
+                  <button
+                    type="button"
+                    aria-expanded={!collapsedTags.includes(bucket.label)}
+                    onClick={() => toggleTagCollapsed(bucket.label)}
+                    className={cn([
+                      "text-muted-foreground/70 hover:text-foreground flex w-full items-center gap-1",
+                      "pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase transition-colors",
+                    ])}
+                  >
+                    {collapsedTags.includes(bucket.label) ? (
+                      <ChevronRightIcon size={12} className="shrink-0" />
+                    ) : (
+                      <ChevronDownIcon size={12} className="shrink-0" />
+                    )}
+                    <span className="truncate">{bucket.label}</span>
+                    <span className="tracking-normal">
+                      ({bucketItemCounts.get(bucket.label) ?? 0})
+                    </span>
+                  </button>
+                ) : (
+                  <div className="text-muted-foreground/70 pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase">
+                    {bucket.label}
+                  </div>
+                )}
               </div>
               {isToday ? (
                 <TodayBucket
@@ -474,7 +559,8 @@ export const TimelineView = memo(function TimelineView({
             </div>
           );
         })}
-        {!hasToday &&
+        {groupBy === "date" &&
+          !hasToday &&
           (indicatorIndex === -1 || indicatorIndex === buckets.length) &&
           (suppressCurrentTimeIndicator ? (
             <CurrentTimeAnchor registerIndicator={setCurrentTimeIndicatorRef} />
@@ -996,28 +1082,40 @@ function isTimelineItemVisible(
 function useTimelineData({
   timelineSessionsTable,
   timezone,
+  groupBy,
 }: {
   timelineSessionsTable: TimelineSessionsTable;
   timezone?: string;
+  groupBy: "date" | "tag";
 }): {
   buckets: TimelineBucket[];
   hasMoreFutureItems: boolean;
 } {
+  // Tag mode has no date window: every session shows under its tags, so the
+  // future-items filtering (and its "more" affordance) doesn't apply.
   const windowData = useMemo(
-    () => deriveTimelineWindowData({ timelineSessionsTable, timezone }),
-    [timelineSessionsTable, timezone],
+    () =>
+      groupBy === "tag"
+        ? { timelineSessionsTable, hasMoreFutureItems: false }
+        : deriveTimelineWindowData({ timelineSessionsTable, timezone }),
+    [groupBy, timelineSessionsTable, timezone],
   );
   const currentTimeMs = useSmartCurrentTime(windowData.timelineSessionsTable);
 
   return useMemo(() => {
-    const buckets = buildTimelineBuckets({
-      timelineSessionsTable: windowData.timelineSessionsTable,
-      timezone,
-    });
+    const buckets =
+      groupBy === "tag"
+        ? buildTagTimelineBuckets({
+            timelineSessionsTable: windowData.timelineSessionsTable,
+          })
+        : buildTimelineBuckets({
+            timelineSessionsTable: windowData.timelineSessionsTable,
+            timezone,
+          });
 
     return {
       buckets,
       hasMoreFutureItems: windowData.hasMoreFutureItems,
     };
-  }, [windowData, currentTimeMs, timezone]);
+  }, [groupBy, windowData, currentTimeMs, timezone]);
 }

@@ -22,6 +22,9 @@ const VAULT_FILES: &[&str] = &[
     "calendars.json",
     "templates.json",
     "store.json",
+    "people.json",
+    "tasks.json",
+    "tags.json",
 ];
 
 pub async fn copy_vault_items(src: &Path, dst: &Path) -> std::io::Result<()> {

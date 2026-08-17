@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 import {
+  buildTagTimelineBuckets,
   buildTimelineBuckets,
   calculateTodayIndicatorPlacement,
   deriveTimelineWindowData,
@@ -40,6 +41,56 @@ describe("timeline utils", () => {
   test("getBucketInfo groups distant future months", () => {
     const info = getBucketInfo(new Date("2024-03-20T12:00:00.000Z"));
     expect(info).toMatchObject({ label: "in 2 months", precision: "date" });
+  });
+
+  test("buildTagTimelineBuckets groups by tag alphabetically with Untagged last", () => {
+    const table: TimelineSessionsTable = {
+      "session-1": {
+        title: "Sprint planning",
+        created_at: "2024-01-14T10:00:00.000Z",
+        tags: ["project-x"],
+      },
+      "session-2": {
+        title: "Interview",
+        created_at: "2024-01-15T10:00:00.000Z",
+        tags: ["hiring", "project-x"],
+      },
+      "session-3": {
+        title: "Quick memo",
+        created_at: "2024-01-13T10:00:00.000Z",
+        tags: [],
+      },
+    };
+
+    const buckets = buildTagTimelineBuckets({ timelineSessionsTable: table });
+
+    expect(
+      buckets.map((bucket) => ({
+        label: bucket.label,
+        kind: bucket.kind,
+        ids: bucket.items.map((item) => item.id),
+      })),
+    ).toEqual([
+      { label: "hiring", kind: "tag", ids: ["session-2"] },
+      // Multi-tag sessions appear under every tag; newest-first within a bucket.
+      { label: "project-x", kind: "tag", ids: ["session-2", "session-1"] },
+      { label: "Untagged", kind: "tag", ids: ["session-3"] },
+    ]);
+    expect(buckets.every((bucket) => bucket.precision === "date")).toBe(true);
+  });
+
+  test("buildTagTimelineBuckets omits the Untagged bucket when every session is tagged", () => {
+    const buckets = buildTagTimelineBuckets({
+      timelineSessionsTable: {
+        "session-1": {
+          title: "Standup",
+          created_at: "2024-01-15T10:00:00.000Z",
+          tags: ["standup"],
+        },
+      },
+    });
+
+    expect(buckets.map((bucket) => bucket.label)).toEqual(["standup"]);
   });
 
   test("calculateTodayIndicatorPlacement places indicator inside an active timed session", () => {
