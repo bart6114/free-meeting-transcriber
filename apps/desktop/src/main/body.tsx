@@ -499,7 +499,7 @@ export function ClassicMainBody() {
         ) : null}
       </div>
       {showSidebarTimeline ? (
-        <div className="flex flex-col px-2 pt-1 pb-1">
+        <div className="flex flex-col px-2 pt-4 pb-1">
           <SidebarActionRow
             icon={<PlusIcon className="size-4" />}
             label="New note"
