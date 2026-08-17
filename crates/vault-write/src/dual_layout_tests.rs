@@ -1231,3 +1231,143 @@ async fn delete_and_restore_both_emit_locations_events() {
         "{restored_changes:?}"
     );
 }
+
+// -- recording path leases (`prepare_recording` / `release_recording_prepare`) ----
+
+#[tokio::test]
+async fn prepare_recording_blocks_a_first_title_rename_until_the_last_lease_drops() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let provisional = store.session_dir(ID).await.unwrap();
+
+    let prepared = store.prepare_recording(ID).await.unwrap();
+    assert_eq!(prepared, provisional);
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Roadmap review".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        store.session_dir(ID).await.unwrap(),
+        provisional,
+        "the rename must stay deferred while a lease is held"
+    );
+    assert!(vault.path().join(&provisional).is_dir());
+
+    store.release_recording_prepare(ID).await.unwrap();
+
+    let renamed = store.session_dir(ID).await.unwrap();
+    assert_ne!(renamed, provisional, "the last release retries the rename");
+    let basename = renamed.file_name().unwrap().to_str().unwrap();
+    assert!(basename.contains("Roadmap review"), "{basename}");
+    assert!(vault.path().join(&renamed).is_dir());
+}
+
+#[tokio::test]
+async fn releasing_one_of_multiple_leases_does_not_unprotect_the_recording() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let provisional = store.session_dir(ID).await.unwrap();
+
+    // The frontend's prepare and the transcription command's own lease.
+    store.prepare_recording(ID).await.unwrap();
+    store.prepare_recording(ID).await.unwrap();
+
+    // A failed duplicate start releases only its own reservation.
+    store.release_recording_prepare(ID).await.unwrap();
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Still recording".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        store.session_dir(ID).await.unwrap(),
+        provisional,
+        "the surviving lease must keep the rename deferred"
+    );
+}
+
+#[tokio::test]
+async fn a_successful_stop_clears_every_lease_and_reconciles() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let provisional = store.session_dir(ID).await.unwrap();
+
+    store.prepare_recording(ID).await.unwrap();
+    store.note_recording_active(ID); // Started lifecycle: ensure >= 1, never stack
+    store.prepare_recording(ID).await.unwrap();
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Sprint sync".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(store.session_dir(ID).await.unwrap(), provisional);
+
+    // Stopped fires after recorder finalization and clears the whole session.
+    store
+        .mark_recording_ended(ID, "2026-07-31T10:30:00.000Z")
+        .await
+        .unwrap();
+
+    let renamed = store.session_dir(ID).await.unwrap();
+    assert_ne!(renamed, provisional);
+    assert!(
+        renamed
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("Sprint sync")
+    );
+}
+
+#[tokio::test]
+async fn a_failed_start_round_trip_leaves_no_permanent_lease() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+
+    store.prepare_recording(ID).await.unwrap();
+    store.release_recording_prepare(ID).await.unwrap();
+    // Releasing without a lease is a safe no-op (paired failure cleanup).
+    store.release_recording_prepare(ID).await.unwrap();
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("After the failure".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        store
+            .session_dir(ID)
+            .await
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("After the failure"),
+        "no leftover lease may keep deferring the rename"
+    );
+}

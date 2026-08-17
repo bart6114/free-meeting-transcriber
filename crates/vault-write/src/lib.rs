@@ -52,11 +52,15 @@ pub struct SessionStore {
     /// Recent `delete_session` records backing the process-local undo toast
     /// (see `locations::DeletedSession`).
     recent_deletions: Arc<std::sync::Mutex<HashMap<String, locations::DeletedSession>>>,
-    /// Sessions currently recording (`mark_recording_started`..`mark_recording_ended`).
-    /// The provisional-to-final directory rename is deferred while a session is in
-    /// here: `listener-core`'s DiskSink holds absolute paths into the directory and
-    /// uses them during finalization, so renaming mid-recording is unsafe.
-    active_recordings: Arc<std::sync::Mutex<std::collections::HashSet<String>>>,
+    /// Per-session recording path leases. The provisional-to-final directory rename
+    /// is deferred while a session holds any lease: `listener-core`'s DiskSink holds
+    /// absolute paths into the directory and uses them during finalization, so
+    /// renaming mid-recording is unsafe. A count (not a set) because both the
+    /// frontend's `prepare_recording` and the transcription command reserve the path
+    /// independently -- a failed duplicate start must release only its own
+    /// reservation, never unprotect an already-active recording. The `Stopped`
+    /// lifecycle (`mark_recording_ended`) clears every lease for the session.
+    active_recordings: Arc<std::sync::Mutex<HashMap<String, usize>>>,
     /// Ids the last rebuild scan found claimed by more than one directory. Resolution
     /// checks this before `find_session`, whose legacy fast path would otherwise
     /// silently pick the canonical claimant and let reads/writes diverge the copies
@@ -109,9 +113,13 @@ impl SessionStore {
             index_change_taps: Arc::new(std::sync::Mutex::new(Vec::new())),
             locations: Arc::new(std::sync::RwLock::new(HashMap::new())),
             recent_deletions: Arc::new(std::sync::Mutex::new(HashMap::new())),
-            active_recordings: Arc::new(std::sync::Mutex::new(std::collections::HashSet::new())),
+            active_recordings: Arc::new(std::sync::Mutex::new(HashMap::new())),
             known_duplicates: Arc::new(std::sync::RwLock::new(std::collections::HashSet::new())),
         }
+    }
+
+    pub fn vault_base(&self) -> &std::path::Path {
+        &self.vault_base
     }
 
     /// Whether the current on-disk bytes at `relative` match the hash this store itself last

@@ -278,7 +278,7 @@ impl SessionStore {
         if super::layout_name::sanitize_title(title) == super::layout_name::UNTITLED {
             return;
         }
-        if self.active_recordings.lock().unwrap().contains(id) {
+        if self.active_recordings.lock().unwrap().contains_key(id) {
             return;
         }
         let Some(basename) = current_dir.file_name().and_then(|n| n.to_str()) else {
@@ -361,16 +361,72 @@ impl SessionStore {
         }
     }
 
-    /// Synchronous half of the recording-lifecycle guard: registers the session as
-    /// actively recording the moment the capture event arrives, before any async
-    /// meta stamping gets scheduled. Narrows the window in which a first-title
-    /// directory rename could race the recorder's already-captured absolute paths.
-    /// Cleared by `mark_recording_ended` (or `delete_session`).
+    /// Synchronous half of the recording-lifecycle guard: ensures the session holds
+    /// at least one path lease the moment the `Started` capture event arrives,
+    /// before any async meta stamping gets scheduled -- an idempotent defense for
+    /// capture callers that bypassed `prepare_recording`. Deliberately does NOT
+    /// increment an existing lease: the preparer already holds one for this
+    /// recording, and stacking another here would survive `Stopped`'s clear only by
+    /// accident. Cleared by `mark_recording_ended` (or `delete_session`).
     pub fn note_recording_active(&self, id: &str) {
         self.active_recordings
             .lock()
             .unwrap()
-            .insert(id.to_string());
+            .entry(id.to_string())
+            .or_insert(1);
+    }
+
+    /// Reserve the session's physical directory ahead of a recording: resolves the
+    /// current directory under the write lock and takes one path lease before
+    /// releasing it, so the returned path cannot be renamed away by a first-title
+    /// reconcile between now and recorder open (the pre-start hook and the recorder
+    /// both use it). Every prepare is paired with either `release_recording_prepare`
+    /// (start failed) or the `Stopped` lifecycle clearing the session's leases.
+    pub async fn prepare_recording(&self, id: &str) -> Result<PathBuf, StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+        let dir = self.session_dir_locked(&guard, id).await?;
+        *self
+            .active_recordings
+            .lock()
+            .unwrap()
+            .entry(id.to_string())
+            .or_insert(0) += 1;
+        drop(guard);
+        Ok(dir)
+    }
+
+    /// Release exactly one path lease taken by `prepare_recording`. Only when the
+    /// last lease drops does the deferred provisional-title rename get retried --
+    /// releasing one of several reservations (a failed duplicate start) must never
+    /// unprotect a recording that is still active. Safe to call from paired failure
+    /// cleanup even when no lease is held.
+    pub async fn release_recording_prepare(&self, id: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+        let now_unprotected = {
+            let mut leases = self.active_recordings.lock().unwrap();
+            match leases.get_mut(id) {
+                Some(count) if *count > 1 => {
+                    *count -= 1;
+                    false
+                }
+                Some(_) => {
+                    leases.remove(id);
+                    true
+                }
+                None => false,
+            }
+        };
+        if now_unprotected
+            && let Ok(Some(meta)) = self.read_meta(id).await
+            && !meta.title.trim().is_empty()
+            && let Ok(dir) = self.session_dir_locked(&guard, id).await
+        {
+            self.reconcile_provisional_name_locked(&guard, id, &meta.title, &dir)
+                .await;
+        }
+        Ok(())
     }
 
     /// Catalog writes announce genuine physical-location changes on the index bus

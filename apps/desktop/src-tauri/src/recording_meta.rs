@@ -13,6 +13,19 @@ use tauri_specta::Event;
 
 use crate::session_store::SessionStore;
 
+/// Emitted after every `Stopped`-driven metadata attempt has finished -- including
+/// the missing-store and failed-write branches. It means "the end-of-recording
+/// meta stamp (and any provisional directory rename it triggered) is no longer in
+/// flight", not that it succeeded: the frontend waits for it before resolving
+/// `resource_dir` for the post-stop hook, so the hook can never receive a path the
+/// pending rename is about to move.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type, tauri_specta::Event)]
+#[serde(rename_all = "camelCase")]
+pub struct RecordingMetaSettled {
+    pub session_id: String,
+    pub succeeded: bool,
+}
+
 pub fn spawn(app: AppHandle) {
     let handle = app.clone();
     CaptureLifecycleEvent::listen(&app, move |event| {
@@ -30,6 +43,14 @@ pub fn spawn(app: AppHandle) {
                 %session_id,
                 "session store is not managed; recording timestamps will stay null"
             );
+            // Nothing will be stamped or renamed, and a waiter must not hang on it.
+            if is_end {
+                let _ = RecordingMetaSettled {
+                    session_id,
+                    succeeded: false,
+                }
+                .emit(&handle);
+            }
             return;
         };
 
@@ -45,18 +66,26 @@ pub fn spawn(app: AppHandle) {
         // Stamped here rather than inside the spawned task: the event marks the actual
         // lifecycle moment, the store write merely persists it.
         let at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let emit_handle = handle.clone();
         tauri::async_runtime::spawn(async move {
             let result = if is_end {
                 store.mark_recording_ended(&session_id, &at).await
             } else {
                 store.mark_recording_started(&session_id, &at).await
             };
-            if let Err(error) = result {
+            if let Err(error) = &result {
                 tracing::warn!(
                     %session_id,
                     %error,
                     "failed to stamp recording timestamp in _meta.json"
                 );
+            }
+            if is_end {
+                let _ = RecordingMetaSettled {
+                    session_id,
+                    succeeded: result.is_ok(),
+                }
+                .emit(&emit_handle);
             }
         });
     });

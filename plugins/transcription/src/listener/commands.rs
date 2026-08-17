@@ -50,10 +50,37 @@ pub async fn start_capture<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     params: CaptureParams,
 ) -> Result<(), String> {
-    app.listener()
+    use tauri::Manager;
+
+    // Reserve the session's directory before listener-core resolves it: the
+    // recorder opens absolute paths strictly before the Started lifecycle event
+    // registers the recording guard, so without this lease a first-title rename
+    // could move the directory inside that window. Best-effort: a store that is
+    // not managed (standalone plugin use) or a failed reservation never blocks
+    // capture -- the Started-event guard still applies as before.
+    let store = app
+        .try_state::<std::sync::Arc<hypr_vault_write::SessionStore>>()
+        .map(|state| state.inner().clone());
+    let session_id = params.session_id.clone();
+    let leased = match &store {
+        Some(store) => store.prepare_recording(&session_id).await.is_ok(),
+        None => false,
+    };
+
+    let result = app
+        .listener()
         .start_capture(params)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+    // Release only this command's own lease on startup failure: a concurrent
+    // recording's reservation must stay intact.
+    if result.is_err()
+        && leased
+        && let Some(store) = &store
+    {
+        let _ = store.release_recording_prepare(&session_id).await;
+    }
+    result
 }
 
 #[tauri::command]

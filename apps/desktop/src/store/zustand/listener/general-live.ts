@@ -33,10 +33,12 @@ import {
   updateLiveAmplitude,
   updateLiveProgress,
 } from "./general-shared";
+import { createRecordingMetaSettledWaiter } from "./recording-meta-settled";
 import type { TranscriptActions, TranscriptState } from "./transcript";
 
 import { getSessionResourcePath } from "~/session/resource-path";
 import { fromResult } from "~/stt/fromResult";
+import { commands as sessionCommands } from "~/types/tauri.gen";
 
 type EventListeners = {
   lifecycle: (payload: CaptureLifecycleEvent) => void;
@@ -312,6 +314,11 @@ export const startLiveSession = <T extends LiveStore>(
 
   const handlers = createSessionEventHandlers(set, get, targetSessionId);
 
+  // Whether this start's own path lease was taken. Only a held lease may be
+  // released on failure -- releasing without one could unprotect a concurrent
+  // recording of the same session.
+  let prepared = false;
+
   const program = Effect.gen(function* () {
     const unlisteners = yield* listenToAllSessionEvents(handlers);
 
@@ -322,15 +329,14 @@ export const startLiveSession = <T extends LiveStore>(
     const [sessionPath, micUsingApps, bundleId] = yield* Effect.tryPromise({
       try: () =>
         Promise.all([
-          settingsCommands
-            .vaultBase()
-            .then((r) => {
-              if (r.status === "error") throw new Error(r.error);
-              return r.data;
-            })
-            .then((dataDirPath) =>
-              getSessionResourcePath(dataDirPath, targetSessionId),
-            ),
+          // Reserves the directory (a recording path lease) and returns the
+          // stable absolute path: the pre-start hook and the recorder both see
+          // a directory the first-title rename cannot move mid-start.
+          sessionCommands.sessionPrepareRecording(targetSessionId).then((r) => {
+            if (r.status === "error") throw new Error(r.error);
+            prepared = true;
+            return r.data;
+          }),
           detectCommands
             .listMicUsingApplications()
             .then((r) =>
@@ -382,6 +388,16 @@ export const startLiveSession = <T extends LiveStore>(
     Exit.match(exit, {
       onFailure: (cause) => {
         console.error(JSON.stringify(cause));
+        if (prepared) {
+          // Capture never started; release this start's own lease so the
+          // deferred first-title rename is not blocked forever. A concurrent
+          // recording's leases are untouched.
+          void sessionCommands
+            .sessionReleaseRecordingPrepare(targetSessionId)
+            .catch((error) => {
+              console.error("Failed to release recording preparation:", error);
+            });
+        }
         const currentLive = get().live;
         clearLiveInterval(currentLive.intervalId);
         clearLiveEventUnlisteners(
@@ -537,6 +553,14 @@ export const stopLiveSession = <T extends GeneralState>(
     });
   }
 
+  // Installed before the stop request: `stopCapture` returns after requesting
+  // shutdown, while `mark_recording_ended`'s rename runs later off the Stopped
+  // lifecycle -- the post-stop hook must not resolve its directory in between.
+  // Listening first means even an instant finalization cannot be missed.
+  const metaSettled = sessionId
+    ? createRecordingMetaSettledWaiter(sessionId)
+    : null;
+
   const program = Effect.gen(function* () {
     yield* stopSessionEffect();
   });
@@ -544,6 +568,7 @@ export const stopLiveSession = <T extends GeneralState>(
   void Effect.runPromiseExit(program).then((exit) => {
     Exit.match(exit, {
       onFailure: (cause) => {
+        metaSettled?.dispose();
         console.error("Failed to stop session:", cause);
         setLiveState(set, (live) => {
           if (sessionId && live.sessionId === sessionId) {
@@ -564,21 +589,28 @@ export const stopLiveSession = <T extends GeneralState>(
       },
       onSuccess: () => {
         if (!sessionId) {
+          metaSettled?.dispose();
           return;
         }
 
-        void Promise.all([
-          settingsCommands
-            .vaultBase()
-            .then((r) => {
-              if (r.status === "error") throw new Error(r.error);
-              return r.data;
-            })
-            .then((dataDirPath) =>
-              getSessionResourcePath(dataDirPath, sessionId),
-            ),
-          getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
-        ])
+        // Wait for the end-of-recording meta stamp (and its possible directory
+        // rename) to settle before resolving the hook's resource_dir, so the
+        // path handed to the hook is not moved out from under it by the app.
+        void (metaSettled?.wait() ?? Promise.resolve(false))
+          .then(() =>
+            Promise.all([
+              settingsCommands
+                .vaultBase()
+                .then((r) => {
+                  if (r.status === "error") throw new Error(r.error);
+                  return r.data;
+                })
+                .then((dataDirPath) =>
+                  getSessionResourcePath(dataDirPath, sessionId),
+                ),
+              getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
+            ]),
+          )
           .then(([sessionPath, bundleId]) => {
             return hooksCommands.runEventHooks({
               afterListeningStopped: {
