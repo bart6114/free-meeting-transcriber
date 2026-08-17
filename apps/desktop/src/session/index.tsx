@@ -252,12 +252,17 @@ function TabContentNoteInner({
                   />
                 </div>
                 {showTopAudioPlayer ? (
-                  <div
-                    data-session-top-audio-player
-                    className="border-border bg-card h-7 w-56 shrink-0 overflow-hidden rounded-full border"
-                  >
-                    <AudioPlayer.Timeline contentClassName="gap-2 py-[3px] pr-2.5 pl-[3px]" />
-                  </div>
+                  <>
+                    <div
+                      data-session-top-audio-player
+                      className="border-border bg-card hidden h-7 w-56 shrink-0 overflow-hidden rounded-full border @[36rem]:block"
+                    >
+                      <AudioPlayer.Timeline contentClassName="gap-2 py-[3px] pr-2.5 pl-[3px]" />
+                    </div>
+                    <div className="shrink-0 @[36rem]:hidden">
+                      <AudioPlayer.CompactPlayButton />
+                    </div>
+                  </>
                 ) : null}
               </div>
             }

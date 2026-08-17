@@ -11,6 +11,40 @@ import { useNativeContextMenu } from "~/shared/hooks/useNativeContextMenu";
 
 const PLAYBACK_RATES = [0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 
+export function CompactPlayButton() {
+  const { state, pause, resume, start } = useAudioPlayer();
+
+  const handleClick = () => {
+    if (state === "playing") {
+      pause();
+    } else if (state === "paused") {
+      resume();
+    } else if (state === "stopped") {
+      start();
+    }
+  };
+
+  return (
+    <button
+      onClick={handleClick}
+      aria-label={state === "playing" ? "Pause recording" : "Play recording"}
+      className={cn([
+        "flex items-center justify-center",
+        "h-6 w-6 rounded-full",
+        "bg-foreground",
+        "transition-all hover:opacity-85",
+        "shrink-0 select-none",
+      ])}
+    >
+      {state === "playing" ? (
+        <Pause className="text-background h-3 w-3" fill="currentColor" />
+      ) : (
+        <Play className="text-background ml-px h-3 w-3" fill="currentColor" />
+      )}
+    </button>
+  );
+}
+
 export function Timeline({
   contentClassName,
 }: {
