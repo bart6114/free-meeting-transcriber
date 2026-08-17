@@ -1,280 +1,454 @@
-# Plan: session-layout follow-ups (perf, races, dedup)
+# Plan: finish the session-layout work
 
 Status: proposed
 
+## Delivery rule
+
+Implement this plan as one complete effort. The work may be split into reviewable commits in the order below, but nothing in the plan is optional and the change is not complete until every workstream and acceptance test has landed.
+
+The scope is intentionally limited to problems created or exposed by the readable-session-folder layout. It does not include unrelated cleanup.
+
 ## Context
 
-The readable-session-folders feature (PR #29, v0.16.0; see
-`docs/plans/human-readable-personal-session-folders.md`, now marked implemented) shipped
-with a set of review findings deliberately deferred: none are correctness bugs, but one
-is a recurring user-facing performance regression that got strictly worse the moment the
-one-way migration ran, two are narrow-but-real races, and the rest are duplication that
-will drift if left. This plan sequences all of them. Every claim below was re-verified
-against the code on `main` at v0.16.0 (`03c07b60e`).
+The readable-session-folders feature shipped in PR #29 (`v0.16.0`; see `docs/plans/human-readable-personal-session-folders.md`). The implementation is fundamentally sound: `_meta.json.id` is identity, the store has an ID-to-physical-directory catalog, reads support legacy and readable layouts, and migration is idempotent.
 
-Phases are independent — each lands (and is verifiable) on its own. Phase 1 is the only
-one with day-to-day user impact; Phases 3–4 are pure refactors that must not change any
-observable behavior and should each be a small, separately revertable commit series.
+The remaining work falls into four categories:
 
-## Phase 1: stop paying a full vault scan per UI interaction
+1. Desktop fs-sync commands ignore the warm store catalog and recursively scan the whole vault for routine path lookups.
+2. Physical-path caches and recording hooks can observe stale paths when a provisional directory is renamed.
+3. A few layout boundary, traversal, lookup, and naming rules remain duplicated.
+4. Startup and rebuild repeat layout scans that can be shared safely.
 
-### The problem
+These are not known data-loss bugs, but the stale-path cases are correctness issues and the repeated full scans are a user-facing performance regression. The plan below fixes all of them without changing naming, identity, migration, or delete/undo behavior.
 
-`plugins/fs-sync/src/commands.rs` has one resolver helper (`resolve_session_dir`,
-~line 27) used by `audio_exist`, `audio_peaks`, `audio_path`, `audio_import`,
-`session_dir` (which also backs Show in Finder and the TS `getSessionResourcePath`),
-attachment path commands, and `load_session_content`. It calls
-`hypr_fs_sync_core::session::find_session_dir`, whose fast path probes the legacy
-`sessions/<id>` directory. Since the v0.16.0 migration renamed every directory to the
-readable form, that probe now always misses, so **every one of these commands runs
-`hypr_vault_read::find_session`'s full recursive discovery — reading and JSON-parsing
-every `_meta.json` in the vault**. Opening a note fires several of these (audio exists +
-peaks + path at minimum). The same cost applies to `FsSyncCore`'s *internal* resolutions
-(`crates/fs-sync-core/src/lib.rs` calls `self.resolve_session_dir` at ~lines 67, 209,
-225, 274, 282 for move/attachment/audio operations reached through `app.fs_sync()`).
-On top of that, an identity miss now also triggers the `find_unclaimed_dir_named`
-recursive walk added by the review hardening (`crates/fs-sync-core/src/session.rs`).
+## Current behavior and verified findings
 
-Meanwhile `SessionStore` holds a warm, always-current location catalog
-(`crates/vault-write/src/locations.rs`, `session_dir()` is `pub`), maintained by every
-write, rename, delete, restore, and rebuild — and the desktop manages
-`Arc<hypr_vault_write::SessionStore>` in Tauri state. The original plan even prescribed
-this: "Where a component already has access to SessionStore, expose a store-backed
-`session_dir` operation so it uses the warm catalog." The fs-sync plugin already depends
-on `hypr-vault-write` (added for the post-move catalog refresh), so no new dependency is
-needed.
+### Routine fs-sync lookups perform full vault discovery
 
-### Design
+`plugins/fs-sync/src/commands.rs::resolve_session_dir` calls `hypr_fs_sync_core::session::find_session_dir` for audio existence, metadata, peaks, path, import, `sessionDir`, session-content loading, and direct deletion.
 
-1. In `plugins/fs-sync/src/commands.rs`, make the `resolve_session_dir` helper async and
-   store-first:
-   - `app.try_state::<Arc<hypr_vault_write::SessionStore>>()` present →
-     `store.session_dir(id).await` (O(1) catalog hit; misses fall through to the
-     store's own targeted discovery, which caches). Map `StoreError` to the command's
-     `String` error.
-   - store not managed (plugin tests, hypothetical headless use) → current
-     `find_session_dir` behavior, unchanged.
-   Note the store's answer is vault-relative — join it onto the vault base exactly as
-   the current helper joins under `sessions/`. Behavioral deltas to preserve/accept:
-   the store errors on rebuild-recorded duplicate ids (`known_duplicates`) where the
-   core resolver errors on discovery-detected ones — same intent, keep the store's
-   answer authoritative.
-2. For `FsSyncCore`-internal resolutions, inject the fast path instead of duplicating
-   it: give `FsSyncCore` an optional resolver override, e.g.
-   `FsSyncCore::with_resolver(base_dir, resolver: Arc<dyn Fn(&str) -> Option<PathBuf> + Send + Sync>)`,
-   consulted first by `FsSyncCore::resolve_session_dir` (fall through to
-   `find_session_dir` on `None`). The plugin's `ext.rs` `core()` builds it from the
-   managed store when available. The closure must be synchronous — the core is sync —
-   so it can only serve *catalog hits*: expose a small sync
-   `SessionStore::session_dir_cached(&self, id) -> Option<PathBuf>` (a read-lock map
-   lookup, no discovery) in `crates/vault-write/src/locations.rs` for this purpose.
-   A cache miss then costs what it costs today, which is fine: after startup rebuild
-   the catalog contains every session.
-3. Do NOT route the resolver through the store for `move_session` — its source
-   resolution participates in fs-sync's own move semantics and the command already
-   rebuilds the store catalog afterward. Leave it on the core path (the injected
-   cached-hit resolver still speeds it up harmlessly).
+After migration, the resolver's `sessions/<id>` fast path always misses. It then calls `hypr_vault_read::find_session`, which recursively walks `sessions/` and parses every `_meta.json`. A mounted note normally requests at least audio existence, audio path, and audio peaks, so one note open can pay for several full scans.
 
-### Also in this phase: audio-path query staleness on title-driven rename
+Attachment commands and folder operations go through `FsSyncCore::resolve_session_dir` and pay the same cost. `FsSyncCore` is reconstructed per plugin call, so caching inside it would not help.
 
-`apps/desktop/src/session/index.tsx` caches `fsSyncCommands.audioPath(tab.id)` under
-`queryKey: ["audio", tab.id, "url"]` and only invalidates on the capturing→idle
-transition (~line 74). The provisional-to-final directory rename triggered by a *title*
-write (session titled while not recording, e.g. an untitled session with imported audio)
-leaves that cached absolute path stale until refetch. Fix: invalidate
-`{ queryKey: ["audio", sessionId] }` when a title update mutation succeeds. Find the
-mutation site in `apps/desktop/src/session/queries.ts` (~line 253, the store-canonical
-title write) / its tanstack-mutation wrapper and add the invalidation there — mirror how
-the existing capturing-transition invalidation is written. Cheap; do not build anything
-rename-aware in the frontend (renames are invisible to it by design; the id is stable).
+`SessionStore` already has a warm location catalog populated by startup rebuild and maintained by store writes, app-driven renames, delete/restore, fs-sync move-triggered rebuilds, watcher rebuilds, and focus rebuilds.
+
+### The current core fallback is more tolerant than `SessionStore::session_dir`
+
+The optimization must not blindly replace the core resolver with `SessionStore::session_dir`.
+
+`fs-sync-core::find_session_dir` has a hardening fallback that recursively finds a UUID-named directory whose `_meta.json` is corrupt or missing. This keeps audio and attachments with a nested legacy recorder ghost instead of forking them into a new root `sessions/<id>` directory.
+
+`SessionStore::session_dir` does not perform that `find_unclaimed_dir_named` fallback. Therefore the safe optimization is:
+
+- use the store only for a validated catalog hit;
+- fall back to the existing fs-sync resolver on a cache miss or stale entry.
+
+This preserves all current corrupt/ghost behavior.
+
+### The catalog is warm but not literally always current
+
+An external Finder or sync-provider rename can make the catalog stale until the watcher/focus rebuild runs. A cached resolver must validate that the cataloged directory still exists before using it. If parseable metadata at that path now claims a different ID, it is stale and must fall through. If metadata became corrupt, the existing catalog claim remains usable, matching current corruption tolerance.
+
+### Absolute-path query data can become stale
+
+A provisional directory can rename after a title write. The frontend caches:
+
+- audio URL/path under `['audio', sessionId, 'url']`;
+- audio existence and peaks under the same `['audio', sessionId]` prefix;
+- attachment absolute paths and converted asset URLs under `['session', sessionId, 'attachment-paths']`.
+
+Invalidating only one title mutation site is insufficient: titles can be persisted through `queries.ts`, `content-mutations.ts`, enhanced-note title propagation, onboarding, and AI title generation. It would also miss manual external directory renames.
+
+The backend catalog knows when a physical location actually changes, so location changes need their own index event and one centralized frontend invalidation path.
+
+### Recording has start-side and stop-side path races
+
+The existing active-recording guard is registered from `CaptureLifecycleEvent::Started`. That event fires only after the recorder has resolved and opened its directory. A title write can therefore race in the interval between capture startup and the Started event.
+
+`BeforeListeningStarted` resolves `resource_dir` before starting capture. A long-running hook widens the same window: the provisional directory can rename while the hook is using it.
+
+At stop, `listenerCommands.stopCapture()` returns after requesting shutdown, not after recorder finalization. `CaptureLifecycleEvent::Stopped` then causes both of these independently:
+
+- the frontend starts resolving `resource_dir` for `AfterListeningStopped`;
+- `recording_meta.rs` asynchronously calls `mark_recording_ended`, which may rename the provisional directory.
+
+The post-stop hook can consequently receive a path that disappears immediately afterward.
+
+### Layout invariants remain duplicated
+
+The remaining meaningful duplication is:
+
+- session-directory classification in `vault-read/layout.rs` and `fs-sync-core/session.rs`;
+- recursive traversal rules across vault discovery, folder listing, generic scan, orphan-audio retention, and folder-update collection;
+- readable-name candidate construction in create, provisional reconciliation, and migration;
+- existing-location lookup in `SessionStore::resolve_session_dir` and `creation_dir_locked`.
+
+Low-value style cleanup and cross-crate test-fixture frameworks are deliberately not part of this plan.
+
+### Startup and rebuild repeat work
+
+Desktop startup currently performs:
+
+1. `migrate_legacy_session_directories` → full discovery;
+2. `reconcile_provisional_names` → full discovery;
+3. `rebuild_index` → full discovery plus a second ghost-directory walk.
+
+Every focus rebuild also runs discovery and then the separate ghost walk.
+
+The discovery pass already visits every relevant directory. It can report ghost directories during that walk. Startup migration and reconciliation can share one mutable discovery snapshot, update physical paths after successful renames, and hand the final snapshot to rebuild.
+
+`refresh_one` should continue rereading `_meta.json`. Reusing discovery's parsed metadata after dropping the store lock would widen the race with external editors during startup/focus rebuild and could index stale metadata without a later watcher event. Saving that one read is not worth weakening consistency.
+
+## Workstreams
+
+### 1. Catalog-first fs-sync resolution with exact fallback semantics
+
+### Store API
+
+Add a synchronous cache-only method in `crates/vault-write/src/locations.rs`:
+
+```rust
+pub fn session_dir_cached(&self, id: &str) -> Result<Option<PathBuf>, StoreError>
+```
+
+It must:
+
+1. validate the logical session ID;
+2. reject IDs in `known_duplicates`;
+3. read the location catalog without running discovery;
+4. return `None` when there is no catalog entry;
+5. validate a hit against the filesystem:
+   - missing directory → `None`;
+   - missing `_meta.json` → `None`;
+   - parseable `_meta.json` with a different NFC-normalized ID → `None`;
+   - parseable matching metadata → `Some(relative_dir)`;
+   - unreadable/corrupt `_meta.json` → retain `Some(relative_dir)`, because the warm catalog is still the best known home and current artifact access intentionally tolerates corruption.
+
+This remains O(1) in session count: at most one catalog lookup and one metadata read.
+
+Also change the async cold-miss path in `SessionStore` to warm all healthy, non-duplicate locations from the discovery it already paid for, instead of caching only the requested ID.
+
+### FsSyncCore resolver override
+
+Add an optional resolver override to `FsSyncCore`:
+
+```rust
+type SessionDirResolver =
+    Arc<dyn Fn(&str) -> Result<Option<PathBuf>> + Send + Sync>;
+```
+
+Provide constructors equivalent to:
+
+```rust
+FsSyncCore::new(base_dir)
+FsSyncCore::with_resolver(base_dir, resolver)
+```
+
+`FsSyncCore::resolve_session_dir` must preserve its current UUID validation before consulting the override, then:
+
+1. return a resolver hit verbatim;
+2. propagate a resolver error, including duplicate-ID errors;
+3. on `Ok(None)`, call the current `find_session_dir` unchanged.
+
+Keeping validation outside the override prevents a warm store catalog from making fs-sync accept non-UUID IDs that it rejects today.
+
+The plugin's `ext.rs::core()` installs an override backed by the managed `Arc<SessionStore>` when present. It converts the store's vault-relative hit to an absolute path. Plugin tests and standalone/core users continue to use `FsSyncCore::new` and retain current behavior.
+
+The override is also used by `move_session`. This is safe because stale entries return `None`, source semantics still fall back to fs-sync discovery, and the command continues rebuilding the store catalog immediately after a successful move.
+
+### Direct fs-sync commands
+
+Keep `plugins/fs-sync/src/commands.rs::resolve_session_dir` synchronous. Preserve the current UUID validation, then use the same cache-only store lookup and fall back to the existing `find_session_dir` implementation. Do not call async `SessionStore::session_dir` here.
+
+No Tauri command signature or generated TypeScript binding changes are needed for this resolver work.
 
 ### Tests
 
-- Plugin: a readable-layout session resolved through the command path with a managed
-  store hits the catalog (assert via behavior: seed a vault, warm the store, remove
-  read permission from... — impractical; instead unit-test
-  `session_dir_cached` in vault-write and the `with_resolver` override in fs-sync-core:
-  resolver returning a dir is used verbatim; returning `None` falls through).
-- Existing `tauri-plugin-fs-sync` `export_types` binding-stability test must stay green
-  (no command signature changes).
-- Frontend: extend the existing audio-query test coverage (vitest) if a natural seam
-  exists; otherwise the invalidation is covered by typecheck + manual QA (title an
-  untitled session with imported audio → player still resolves).
+Add tests proving:
 
-### Acceptance
+- a valid cached readable directory is returned without invoking fallback;
+- a missing cached directory falls through;
+- a cached path whose parseable metadata claims another ID falls through;
+- a cached path whose metadata became corrupt remains usable;
+- a duplicate ID returns an error;
+- `FsSyncCore` uses an injected resolver hit for attachments and moves;
+- resolver `None` preserves nested corrupt/meta-less UUID-directory adoption;
+- resolver errors are not silently converted into fallback paths.
 
-Opening a note in a migrated vault performs zero full-vault scans on the audio/session
-path commands (verify by tracing/instrumenting locally or by test on
-`session_dir_cached` usage). No behavior change for headless/core users.
+Instrument one integration test with a counting fallback closure so the warmed command path proves it performs zero full discovery calls.
 
-## Phase 2: sequence the stop-time rename against the hooks path (optional)
+### 2. Make physical-location changes observable to frontend caches
 
-### The problem
+Add `Locations` to `crates/vault-write/src/index.rs::IndexEntity` and to the stable coalescing order.
 
-`apps/desktop/src/store/zustand/listener/general-live.ts` (~line 578) resolves
-`resource_dir` for the `AfterListeningStopped` hook via `getSessionResourcePath`
-concurrently with the Rust side reacting to the same `CaptureLifecycleEvent::Stopped`:
-`apps/desktop/src-tauri/src/recording_meta.rs` spawns `mark_recording_ended`, whose
-meta write reconciles the deferred provisional rename
-(`reconcile_provisional_name_locked`). A hook script can therefore receive a directory
-path that is renamed milliseconds later. Preconditions: user hooks configured AND the
-session was untitled at record-start AND titled during recording — narrow, but the
-failure (hook writes into a vanished path, or reads nothing) is confusing when hit.
+Emit `IndexEntity::Locations` only when an ID's physical directory changes:
 
-### Design
+- `catalog_insert` compares old and new NFC-normalized paths before notifying;
+- `catalog_remove` notifies when an entry existed;
+- rebuild compares the previous and replacement catalogs and notifies changed/added/removed IDs;
+- app-driven rename, migration, provisional reconciliation, delete/restore, fs-sync moves, and external watcher/focus rebuilds consequently converge on the same event.
 
-Deterministic ordering, not retries: after `mark_recording_ended` completes (success or
-failure), `recording_meta.rs` emits a dedicated Tauri event, e.g.
-`RecordingMetaSettled { session_id }` (tauri-specta event alongside the existing ones).
-The JS stop path awaits that event for the session id — with a short timeout fallback
-(~2s) so a missing event can never wedge the stop flow — *before* resolving
-`resource_dir`. After the event, the store-backed `sessionDir` command returns the
-post-rename directory. `BeforeListeningStarted` (~line 332) needs no change: no rename
-can happen between its resolution and recording start (the synchronous
-`note_recording_active` guard covers the start race).
+Search projection continues ignoring this entity because search documents contain logical IDs and content, not physical paths.
 
-If this proves noisier than it is worth during implementation (event plumbing through
-tauri-specta bindings), the documented fallback position is acceptable: keep it a
-release-notes caveat. Do not ship a sleep-based "fix".
+In the desktop frontend, add one mounted subscriber for `locations` events. For every changed session ID, invalidate:
 
-### Tests
+```text
+["audio", sessionId]
+["session", sessionId, "attachment-paths"]
+```
 
-- Rust: none new (event emission is glue); keep `recording_meta` behavior covered by
-  existing store tests.
-- TS: unit-test the await-with-timeout helper (event arrives → resolves after it;
-  event never arrives → resolves after timeout).
+This replaces mutation-site-specific invalidation. It covers manual titles, generated titles, onboarding, external Finder renames, personal-folder moves, delete/restore, and any future rename path.
 
-## Phase 3: deduplicate the layout invariants (pure refactor)
+Tests must verify event coalescing and exact query-prefix invalidation. Manual QA must cover an untitled session with both imported audio and an image attachment: title it and confirm playback, waveform, and image rendering continue using the renamed directory.
 
-No observable behavior may change in this phase; the existing suites are the oracle.
-Order within the phase is by drift-risk of the duplicated rule.
+### 3. Sequence recording path leases and hook paths
 
-1. **`classify_dir` exists twice** — `crates/vault-read/src/layout.rs` (~line 118,
-   private `DirKind`: `Session(Box<SessionMeta>) / Corrupt(String) / Folder`) and
-   `crates/fs-sync-core/src/session.rs` (~line 18, `DirClass::Session(Option<String>) /
-   Folder`). Same core identity rule ("a dir holding `_meta.json` is a session even
-   when unreadable; only meta-less dirs are folders") encoded independently.
-   Fix: make vault-read's `classify_dir`/`DirKind` `pub` (it carries strictly more
-   information) and reimplement fs-sync-core's `DirClass` as a thin mapping over it.
-   fs-sync-core already depends on `hypr-vault-read`.
-2. **Traversal divergence (review S5)**: fs-sync-core's folder traversal
-   (`folder.rs::scan_directory_recursive`) and file scan (`scan.rs`) have **no
-   dot-directory skip** (verified: no `starts_with('.')` in either file), while
-   vault-read discovery and the watcher both skip hidden entries. A sync client's
-   `.stversions/` under `sessions/` is invisible to the index but shows in the folders
-   sidebar. Fix while touching these files for (1): skip dot-prefixed directories in
-   both traversals, with a test (hidden folder is not listed; hidden dir contents not
-   scanned).
-3. **Collision-policy block written three times** — the
-   `short_id_candidates → format_session_dir_name → first free target` loop appears in
-   `crates/vault-write/src/locations.rs` `choose_new_session_dir` (~line 126, plus a
-   legacy ghost-dir adoption check), `reconcile_provisional_name_locked` (~line 239
-   region, plus a `paths_eq_nfc` self-filter), and `crates/vault-write/src/migrate.rs`
-   (~line 62, plus a `claimed`-set predicate). This is the invariant the whole naming
-   feature hangs on. Fix: one helper in `layout_name.rs` or `locations.rs`, e.g.
-   `first_free_dir_name(parent, date, title, id, is_taken: impl Fn(&Path) -> bool) -> Option<PathBuf>`,
-   with each caller supplying its extra predicate (claimed-set, self-equality, ghost
-   adoption stays caller-side). Side effect: removes the `position + swap_remove` dance
-   (plain `find` returning owned works once the helper owns the vec).
-4. **`creation_dir_locked` duplicates `resolve_session_dir`**
-   (`crates/vault-write/src/locations.rs` ~lines 61–124): identical
-   catalog-check + `spawn_blocking find_session` + error arms, differing only in the
-   `Ok(None)` arm. Fix: private
-   `lookup_existing_dir(id) -> Result<Option<PathBuf>, StoreError>` shared by both;
-   `resolve_session_dir` maps `None → legacy_session_dir(id)`, `creation_dir_locked`
-   maps `None → choose_new_session_dir(meta)`. Both keep `ensure_not_duplicated` first.
-5. **Retention copy-paste (review S6)**:
-   `crates/fs-sync-core/src/audio/mod.rs::delete_orphaned_expired_in_dir` — after the
-   hardening, the parseable-meta arm is a no-op (`DirClass::Session(_) => {}`), so only
-   the meta-less `is_uuid(name)` arm deletes; the duplication mostly evaporated.
-   Verify and simplify residue only.
-6. **Small fry** (all in `crates/vault-write/src/layout_name.rs`):
-   `short_id_candidates`' collect-then-fold is a hand-rolled `Vec::dedup` — use
-   `dedup()`. `is_uuid_shaped`/`id_hex` hand-roll what `uuid::Uuid::try_parse` +
-   `.simple()` provide — acceptable to keep IF documented as deliberate looseness
-   (dash placement) — decide in-implementation; if switching to `uuid`, add the crate
-   dep from the workspace and keep the hashed-fallback branch for non-UUID ids intact.
-7. **Test-fixture seeding is re-rolled in four places** (review M7):
-   `migrate.rs::tests::seed`, `dual_layout_tests.rs::seed_session_at`, vault-read
-   `layout.rs` tests, `vault-read/tests/dual_layout.rs`. Optional: a
-   `#[cfg(test)]`-shared helper in vault-read (usable by vault-write via dev-dep is NOT
-   currently wired — likely not worth cross-crate plumbing; unify within each crate
-   only).
+### Prepare before the pre-start hook
 
-## Phase 4: single-scan startup and rebuild (efficiency)
+Replace the boolean `active_recordings` set with a small per-session lease count. A plain set is insufficient once both the frontend and the transcription command can reserve the path: a failed duplicate start must release only its own reservation, not clear the marker protecting an already-active recording.
 
-Only worthwhile once vault sizes make it measurable (1000+ sessions) or if startup
-metrics complain; land after Phase 3 so the code being optimized is already deduped.
+Add store operations and desktop IPC commands:
 
-1. **Triple startup scan** (`apps/desktop/src-tauri/src/lib.rs` ~line 332 region):
-   `migrate_legacy_session_directories` → `reconcile_provisional_names` →
-   `rebuild_index`, each running its own full `discover_sessions`, all under `block_on`
-   before the UI proceeds. Fix: let migration and reconciliation *return/accept* a
-   discovery snapshot, or fold both into a store-level
-   `startup_normalize_layout()` that scans once, migrates, reconciles (renames update
-   the in-memory snapshot), then hands the final snapshot to `rebuild_index` (which
-   needs a parameterized variant taking a pre-computed `SessionLayoutScan`). Preserve
-   the write-lock discipline established in the hardening pass: the scan+catalog-swap
-   stays under the store write lock; renames stay under the same guard.
-2. **Rebuild double-walk + meta re-read** (review M1):
-   `crates/vault-write/src/rebuild.rs` `scan_session_locations` (~line 389) runs
-   discovery, then `scan_ghost_dirs` (~line 583) re-walks the same tree, then
-   `refresh_one` (~line 175) re-reads every `_meta.json` discovery just parsed. Fix:
-   emit ghost candidates from the discovery walk (requires extending vault-read
-   discovery to optionally report meta-less content-bearing dirs — keep it opt-in so
-   CLI listing semantics don't change) and thread the parsed metas into `refresh_one`
-   so the meta read is skipped when the scan already has it (keep the read-fallback
-   for `refresh_session`'s single-id path).
-3. **Micro items** (review M3, L3, L4 — take only if touching the files anyway):
-   `scan.rs` classification only needs the session-vs-folder bit; a
-   `_meta.json` existence stat is cheaper than read+parse — but after Phase 3.1 the
-   classification is shared, so add a cheap existence-only variant rather than forking
-   the rule. vault-write `resolve_session_dir` cold misses run full discovery but cache
-   only the queried id — have the miss path warm the whole catalog from the discovery
-   it already paid for (careful: only insert ids that are not duplicates). Watcher
-   reverse lookup is O(sessions) per path — fine at current scale; skip unless
-   profiling says otherwise.
+```rust
+prepare_recording(session_id) -> Result<PathBuf, StoreError>
+release_recording_prepare(session_id) -> Result<(), StoreError>
+```
 
-## Explicitly not in scope
+`prepare_recording` acquires the store write lock, resolves the current session directory, and increments that session's lease count before releasing the lock. The Tauri command returns the absolute directory path.
 
-- Any behavior change to naming, migration, identity rules, or delete/undo.
-- Caching in `FsSyncCore` itself (state in a per-command-constructed struct is a trap;
-  the store catalog is the cache).
-- The remaining accepted-race residue after Phase 2's ordering fix (a hook script that
-  itself holds the path across minutes was never guaranteed stability — directory
-  renames are a documented property of the vault now).
-- Frontend rename-awareness beyond the audio-query invalidation (ids are stable; paths
-  are resolved on demand).
+`release_recording_prepare` acquires the write lock, decrements only one lease, and retries provisional-name reconciliation only when the count reaches zero. It is safe to call from paired failure cleanup. The Started lifecycle ensures the count is at least one without incrementing an existing lease; the Stopped lifecycle clears the session's leases after recorder finalization.
+
+Change `startLiveSession` to:
+
+1. prepare the recording and receive the stable physical path;
+2. pass that path to `BeforeListeningStarted`;
+3. call `startCapture`;
+4. on any failure before capture starts, release the frontend's recording preparation.
+
+Keep the existing synchronous `note_recording_active` call on the Started lifecycle event as an idempotent defense for non-frontend capture callers.
+
+Also have the transcription plugin's `start_capture` command acquire its own lease when a managed store is available, before it asks listener-core to start. On startup failure it releases only that lease. The frontend releases its separate lease through its own failure cleanup; successful starts retain their leases until Stopped clears the session. This closes the recorder-open-to-Started race for callers that bypass `startLiveSession` without allowing a failed duplicate start to unprotect a real recording. Add `hypr-vault-write` as a workspace dependency of `tauri-plugin-transcription`; it introduces no dependency cycle, and `try_state` preserves standalone plugin behavior when no store is managed.
+
+### Settle metadata before the post-stop hook
+
+Add a desktop Tauri event:
+
+```rust
+RecordingMetaSettled {
+    session_id: String,
+    succeeded: bool,
+}
+```
+
+`recording_meta.rs` emits it after every Stopped-event attempt, including missing-store and failed-meta-write branches. The event means the rename attempt has finished, not that it necessarily succeeded.
+
+Before calling `stopCapture`, the frontend installs a one-shot waiter for the matching session ID. After requesting stop, it waits for `RecordingMetaSettled` before resolving `resource_dir` and invoking `AfterListeningStopped`. Registering the listener first prevents an instant finalization from being missed.
+
+Use a bounded timeout as a crash/fault safeguard, not as ordering logic. A normal path must always complete by event. On timeout, log a warning, resolve the directory afresh, and continue so a broken event listener cannot permanently wedge stop handling.
+
+Tests must cover:
+
+- prepare blocks a first-title rename;
+- releasing the final lease reconciles the pending title;
+- releasing one of multiple leases does not unprotect the session;
+- successful stop clears all leases and reconciles;
+- start failure does not leave a permanent lease;
+- a failed duplicate start does not clear an existing recording's protection;
+- the waiter is installed before `stopCapture`;
+- matching event resolves it;
+- unrelated session events are ignored;
+- timeout continues with a warning;
+- both successful and failed metadata stamping emit `RecordingMetaSettled`.
+
+Manual QA: configure both before/after hooks, title the session while each lifecycle is in progress, and confirm each hook sees a directory that is not moved by the app during its phase. An unrelated external process can still rename a folder at any time and is outside this lease guarantee.
+
+### 4. Centralize the layout invariants
+
+### Shared directory classification
+
+Expose a stable classifier from `crates/vault-read/src/layout.rs` rather than making the current private implementation details public verbatim.
+
+The shared result must preserve the key boundary rule:
+
+- `_meta.json` absent → personal folder;
+- `_meta.json` present and parseable → session with `SessionMeta`;
+- `_meta.json` present but unreadable/corrupt → corrupt session boundary, never a folder.
+
+Use it from vault discovery and map it in fs-sync-core. Remove fs-sync-core's duplicate metadata reader.
+
+Also expose a cheap shared `has_session_boundary(dir)` helper for callers that only need “may recurse” versus “must stop.” It probes `_meta.json` without parsing: present is a boundary, `NotFound` is a folder, and any other stat/read error is conservatively a boundary. Do not use `Path::exists()`, which hides permission errors as absence. Use the full classifier only where the metadata ID is needed. This avoids both duplicated rules and needless JSON parsing in generic scan/folder-delete paths.
+
+### One hidden-directory rule
+
+Every recursive traversal rooted at `sessions/` must skip dot-prefixed directories before classification or recursion:
+
+- `vault-read` discovery;
+- fs-sync folder listing;
+- folder-update collection;
+- `folder_contains_sessions`;
+- generic `scan_and_read` traversal;
+- orphan-audio retention traversal;
+- unclaimed UUID-directory fallback;
+- ghost detection.
+
+Reject dot-prefixed segments in `normalize_folder_path` so the app cannot create or rename a personal folder into a part of the tree that every layout reader intentionally ignores.
+
+Add regression fixtures containing `.stversions`, `.trash`, and `.tmp-*` directories. Their contents must not appear as sessions/folders, be scanned as artifacts, block ordinary folder operations, or be considered orphan audio.
+
+### One candidate generator
+
+Add one pure helper that returns readable directory candidates:
+
+```rust
+session_dir_candidates(parent, date, title, id) -> Vec<PathBuf>
+```
+
+It owns the invariant:
+
+```text
+6-character suffix → 8 → 12 → full hex
+```
+
+Creation, provisional reconciliation, and migration each call this helper and retain only their genuinely different occupancy rules:
+
+- creation's legacy ghost adoption;
+- reconciliation's current-directory NFC self-filter;
+- migration's preflight `claimed` set.
+
+Do not hide those differences behind a generic callback abstraction.
+
+Simplify `short_id_candidates` with `Vec::dedup`. Keep the current permissive UUID-shaped check and document why: changing to `Uuid::try_parse` would alter the stable hashed fallback for legacy IDs with noncanonical dash placement without providing a correctness benefit.
+
+### One existing-location lookup
+
+Extract a private `lookup_existing_dir(id) -> Result<Option<PathBuf>, StoreError>` used by both `resolve_session_dir` and `creation_dir_locked`. It owns:
+
+- validation and duplicate rejection;
+- catalog lookup;
+- full discovery on a cold miss;
+- catalog warming;
+- corrupt and ambiguous error mapping.
+
+The callers differ only for `None`:
+
+- normal artifact lookup → legacy `sessions/<id>` fallback;
+- creation → collision-free readable candidate selection.
+
+All existing dual-layout and corruption tests remain behaviorally unchanged.
+
+### 5. Perform one layout traversal per rebuild/startup normalization
+
+### Report ghosts during discovery
+
+Extend `SessionDiscovery` with ghost-directory diagnostics gathered during its existing traversal. A meta-less directory that directly contains a recognized session artifact (`*.md` or `transcript.json`) is reported as one ghost boundary and is not descended into.
+
+Remove `vault-write::rebuild::scan_ghost_dirs`. `scan_session_locations` derives healthy locations, duplicate IDs, broken directories, and ghosts from one discovery result.
+
+This does not alter CLI listing semantics; consumers that do not care about ghosts ignore the additional field.
+
+### Share one startup snapshot
+
+Add a store-level startup operation, for example:
+
+```rust
+normalize_startup_layout() -> Result<StartupLayoutSnapshot, StoreError>
+```
+
+It:
+
+1. acquires the store write lock;
+2. runs discovery once;
+3. preflights and performs legacy migration from that snapshot;
+4. performs provisional-name reconciliation from the updated snapshot;
+5. updates snapshot paths after each successful rename;
+6. refreshes the location and duplicate catalogs;
+7. returns the final snapshot plus migration/reconciliation diagnostics.
+
+Add an internal `rebuild_index_from_layout(snapshot)` used immediately afterward. Normal watcher/focus/manual rebuild calls discovery once and delegates to the same internal reconciliation code.
+
+Do not hold the store write lock while reading every note, transcript, enhanced document, and task. Preserve the current lock boundary: protect layout scan/catalog swap/renames, then release before content refresh.
+
+Keep per-session `_meta.json` rereads in `refresh_one` for consistency with external filesystem edits.
+
+### Warm the catalog on a paid cold scan
+
+The shared existing-location lookup must insert every healthy non-duplicate location from a cold discovery, not only the requested ID. A second lookup then becomes a validated cache hit.
+
+### Tests and measurement
+
+Add tests proving:
+
+- startup migration + provisional reconciliation call discovery once;
+- a normal rebuild calls discovery once and has no ghost second walk;
+- renamed paths in the startup snapshot are the paths rebuild uses;
+- migration failures retain source paths in the snapshot;
+- corrupt/duplicate protection and stale-index pruning remain unchanged;
+- unchanged rebuild still emits no content-index events;
+- location changes emit only `Locations` events when file content is unchanged.
+
+Add lightweight tracing around discovery with duration and healthy/corrupt/duplicate/ghost counts. Compare startup and focus-rescan traces on fixtures with 100, 1,000, and 5,000 sessions. This is measurement, not a benchmark gate.
+
+## Explicitly unchanged
+
+- Session identity remains `_meta.json.id`.
+- Directory naming and one-shot provisional rename policy do not change.
+- Migration remains idempotent and never merges occupied directories.
+- Delete/restore and trash behavior do not change.
+- Legacy UUID layouts, nested personal folders, corrupt metadata tolerance, duplicate blocking, and recorder ghost fallback remain supported.
+- `FsSyncCore` remains usable without Tauri or `SessionStore`.
+- No persistent cache or database is introduced.
+- No frontend component derives a physical path from a session ID.
+
+## Implementation order inside the single effort
+
+1. Add shared classification/candidate/lookup primitives with behavior-preserving tests.
+2. Add validated catalog-only resolution and wire fs-sync direct/internal paths.
+3. Add `Locations` events and centralized path-query invalidation.
+4. Add recording prepare/cancel and post-stop settlement ordering.
+5. Fold ghost reporting and startup normalization into one discovery snapshot.
+6. Run all automated and manual verification before merging the complete effort.
+
+Each step should be a reviewable commit, but partial completion is not the intended shipped state.
 
 ## Verification
 
-Per phase:
+Run after Rust changes:
 
 ```sh
-cargo test -p vault-read -p vault-write -p fs-sync-core -p tauri-plugin-fs-sync -p fmtr-cli -p listener-core -p tauri-plugin-transcription
+cargo test -p vault-read -p vault-write -p fs-sync-core -p tauri-plugin-fs-sync -p listener-core -p tauri-plugin-transcription -p fmtr-cli
 cargo test -p desktop --lib
 cargo check
-cargo clippy --locked -p agent-access -p fmtr-cli -p tiptap --all-targets --no-deps -- -D warnings
-corepack pnpm -F desktop typecheck   # after TS changes; plain pnpm may be missing from PATH
+```
+
+Run after desktop TypeScript changes:
+
+```sh
+pnpm -F desktop typecheck
+```
+
+Run after all edits:
+
+```sh
 pnpm exec dprint fmt
 ```
 
-Phases 3–4 additionally: the full suites must pass **unchanged** (no test edits except
-new coverage) — any test needing modification in a "pure refactor" phase is a signal
-the refactor changed behavior.
+Manual verification:
 
-Manual spot-checks: Phase 1 — open a note with audio in a migrated vault and confirm
-player/attachments/Finder-reveal; title an untitled session that has imported audio and
-confirm the player still resolves. Phase 2 — with a hook configured, title a session
-mid-recording, stop, confirm the hook receives the final (post-rename) directory.
+1. Open a migrated note with audio and attachments; confirm traces show catalog hits and no repeated full discovery.
+2. Title an untitled session containing imported audio and an image; confirm the player, waveform, and image survive the rename.
+3. Move and manually rename a session folder while the app is open; confirm catalog rebuild plus `Locations` invalidation refreshes all path-backed UI.
+4. Configure before/after hooks, title during start and stop, and confirm hook paths remain valid.
+5. Exercise nested legacy ghost/corrupt directories and confirm fs-sync still adopts the existing location instead of creating a root duplicate.
+6. Restart with legacy, provisional, healthy, corrupt, duplicate, hidden, and ghost fixtures; confirm one startup discovery and unchanged indexing semantics.
 
-## Suggested implementation order and sizing
+## Definition of done
 
-| Phase | Size | Urgency |
-| --- | --- | --- |
-| 1 (catalog-first resolution + audio invalidation) | S–M, one PR | Now — recurring UI-path cost in every migrated vault |
-| 3 (dedup) | M, one PR of small commits | Soon, low risk, do before anyone edits the naming policy |
-| 2 (stop-event ordering) | S–M | Opportunistic; skip if event plumbing balloons |
-| 4 (single-scan startup/rebuild) | M–L | Only on measured need |
-
-If time-boxed to one session: do Phase 1 fully, then Phase 3 items 1–4.
+- Routine desktop audio, attachment, Finder, hook, and session path lookups use validated O(1) catalog hits.
+- Cache misses retain the exact current fs-sync corruption/ghost fallback semantics.
+- Physical directory changes invalidate every frontend cache that stores an absolute session path.
+- Pre-start and post-stop hooks resolve paths under deterministic lifecycle ordering.
+- Session-boundary, hidden-directory, readable-candidate, and existing-location rules each have one implementation.
+- Startup normalization performs one discovery; normal rebuild performs one discovery and no second ghost walk.
+- All legacy/readable/nested/corrupt/duplicate/ghost behaviors remain covered.
+- No optional or deferred item remains in this plan.
