@@ -12,7 +12,8 @@ type JsonParsedKeys =
   | "spoken_languages"
   | "personalization_dictionary_terms"
   | "ignored_platforms"
-  | "included_platforms";
+  | "included_platforms"
+  | "sidebar_collapsed_tags";
 
 type ConfigValueType<K extends SettingKey> = K extends JsonParsedKeys
   ? string[]
@@ -27,6 +28,7 @@ const JSON_PARSED_KEYS = new Set<SettingKey>([
   "personalization_dictionary_terms",
   "ignored_platforms",
   "included_platforms",
+  "sidebar_collapsed_tags",
 ]);
 
 export function useConfigValue<K extends SettingKey>(

@@ -1,4 +1,5 @@
 import { enqueueDatabaseWrite } from "~/shared/write-queue";
+import { ensureTag } from "~/tags/queries";
 import { commands } from "~/types/tauri.gen";
 
 // Markdown-based since D-3: `enhanced/<doc-id>.md` is the doc's canonical home, so the
@@ -66,6 +67,18 @@ export function persistGeneratedEnhancedNote({
         throw new Error(
           `Failed to write tags into session ${sessionId} meta: ${result.error}`,
         );
+      }
+
+      // Best-effort registry sync: the vault-root `tags.json` feeds the typeahead,
+      // but a registry failure must never fail the note write itself.
+      for (const tagName of mergedTags) {
+        void ensureTag(tagName).catch((error) => {
+          console.error(
+            "[content-mutations] failed to register tag in tags.json",
+            tagName,
+            error,
+          );
+        });
       }
     }
   });

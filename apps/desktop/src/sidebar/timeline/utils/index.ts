@@ -18,6 +18,7 @@ export type TimelineSessionRow = {
   created_at?: string | null;
   event_json?: string | null;
   folder_id?: string | null;
+  tags?: string[] | null;
 };
 
 export type TimelineSessionsTable =
@@ -37,6 +38,8 @@ export type TimelineBucket = {
   label: string;
   precision: TimelinePrecision;
   items: TimelineItem[];
+  // Absent means "date" -- only `buildTagTimelineBuckets` produces "tag".
+  kind?: "date" | "tag";
 };
 
 export type TimelineWindowData = {
@@ -352,6 +355,67 @@ export function hasTimelineItemsAfterTomorrow({
   );
 }
 
+function compareItemsNewestFirst(a: TimelineItem, b: TimelineItem): number {
+  const timeAValue = getItemTimestamp(a)?.getTime() ?? 0;
+  const timeBValue = getItemTimestamp(b)?.getTime() ?? 0;
+  if (timeBValue == timeAValue) {
+    return (a.data.title ?? "Untitled") > (b.data.title ?? "Untitled")
+      ? 1
+      : (a.data.title ?? "Untitled") < (b.data.title ?? "Untitled")
+        ? -1
+        : 0;
+  }
+  return timeBValue - timeAValue;
+}
+
+export const UNTAGGED_BUCKET_LABEL = "Untagged";
+
+/// Tag-mode grouping: one bucket per tag, alphabetical, a session under every tag
+/// it carries, `Untagged` last. No date windowing -- callers skip
+/// `deriveTimelineWindowData` in tag mode.
+export function buildTagTimelineBuckets({
+  timelineSessionsTable,
+}: {
+  timelineSessionsTable: TimelineSessionsTable;
+}): TimelineBucket[] {
+  const itemsByTag = new Map<string, TimelineItem[]>();
+  const untagged: TimelineItem[] = [];
+
+  for (const [sessionId, row] of Object.entries(timelineSessionsTable ?? {})) {
+    const item: TimelineItem = { type: "session", id: sessionId, data: row };
+    const tags = row.tags ?? [];
+    if (tags.length === 0) {
+      untagged.push(item);
+      continue;
+    }
+    for (const tag of new Set(tags)) {
+      const bucketItems = itemsByTag.get(tag) ?? [];
+      bucketItems.push(item);
+      itemsByTag.set(tag, bucketItems);
+    }
+  }
+
+  const buckets: TimelineBucket[] = [...itemsByTag.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([tag, items]) => ({
+      label: tag,
+      precision: "date" as const,
+      items: items.sort(compareItemsNewestFirst),
+      kind: "tag" as const,
+    }));
+
+  if (untagged.length > 0) {
+    buckets.push({
+      label: UNTAGGED_BUCKET_LABEL,
+      precision: "date",
+      items: untagged.sort(compareItemsNewestFirst),
+      kind: "tag",
+    });
+  }
+
+  return buckets;
+}
+
 export function buildTimelineBuckets({
   timelineSessionsTable,
   timezone,
@@ -380,20 +444,7 @@ export function buildTimelineBuckets({
     });
   }
 
-  items.sort((a, b) => {
-    const dateA = getItemTimestamp(a);
-    const dateB = getItemTimestamp(b);
-    const timeAValue = dateA?.getTime() ?? 0;
-    const timeBValue = dateB?.getTime() ?? 0;
-    if (timeBValue == timeAValue) {
-      return (a.data.title ?? "Untitled") > (b.data.title ?? "Untitled")
-        ? 1
-        : (a.data.title ?? "Untitled") < (b.data.title ?? "Untitled")
-          ? -1
-          : 0;
-    }
-    return timeBValue - timeAValue;
-  });
+  items.sort(compareItemsNewestFirst);
 
   const bucketMap = new Map<
     string,

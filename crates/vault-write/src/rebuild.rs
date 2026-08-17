@@ -187,6 +187,7 @@ impl SessionStore {
 
         self.index_refresh_templates().await;
         self.index_refresh_people().await;
+        self.index_refresh_tags().await;
 
         Ok(report)
     }

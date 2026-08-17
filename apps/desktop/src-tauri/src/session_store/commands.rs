@@ -6,7 +6,7 @@ use hypr_fs_format::TranscriptWithData;
 
 use super::{
     EnhancedDoc, EnhancedDocPatch, PersonItem, RebuildReport, SessionListEntry, SessionMeta,
-    SessionMetaPatch, SessionRecord, SessionStore, TaskInput, TaskItem, TemplateInput,
+    SessionMetaPatch, SessionRecord, SessionStore, TagItem, TaskInput, TaskItem, TemplateInput,
     TemplateItem, TranscriptDelta,
 };
 
@@ -242,6 +242,24 @@ pub async fn people_ensure<R: tauri::Runtime>(
 ) -> Result<PersonItem, String> {
     store(&app)?
         .ensure_person(&name)
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn tags_list<R: tauri::Runtime>(app: AppHandle<R>) -> Result<Vec<TagItem>, String> {
+    store(&app)?.list_tags().await.map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn tags_ensure<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    name: String,
+) -> Result<TagItem, String> {
+    store(&app)?
+        .ensure_tag(&name)
         .await
         .map_err(|e| e.to_string())
 }

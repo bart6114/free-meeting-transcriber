@@ -27,6 +27,7 @@ import {
   SessionPeople,
   useSessionPeopleTitleTrailer,
 } from "~/session/components/session-people";
+import { SessionTags } from "~/session/components/session-tags";
 import { useCurrentNoteTab } from "~/session/components/shared";
 import { TitleInput } from "~/session/components/title-input";
 import { useScrollPreservation } from "~/shared/hooks/useScrollPreservation";
@@ -344,13 +345,16 @@ const NoteInputContent = forwardRef<
 
     const peopleTrailer = useSessionPeopleTitleTrailer(
       sessionId,
-      renderedCurrentTab.type === "enhanced" ? (
-        <MemoImageStrip
-          sessionId={sessionId}
-          className="mt-1 mb-3"
-          onImageClick={handleMemoImageClick}
-        />
-      ) : null,
+      <>
+        <SessionTags sessionId={sessionId} className="mt-1 mb-3" />
+        {renderedCurrentTab.type === "enhanced" && (
+          <MemoImageStrip
+            sessionId={sessionId}
+            className="mt-1 mb-3"
+            onImageClick={handleMemoImageClick}
+          />
+        )}
+      </>,
     );
 
     return (
@@ -424,6 +428,7 @@ const NoteInputContent = forwardRef<
                   {/* mt-2 = the editor title's 0.25rem margin-bottom plus the
                       trailer row's mt-1, so the title→pills gap matches. */}
                   <SessionPeople sessionId={sessionId} className="mt-2" />
+                  <SessionTags sessionId={sessionId} className="mt-2" />
                 </div>
                 <div className="min-h-0 flex-1">
                   <Transcript sessionId={sessionId} scrollRef={scrollRef} />

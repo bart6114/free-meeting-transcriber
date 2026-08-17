@@ -56,6 +56,7 @@ function mapTimelineSessionEntries(
             ? ""
             : JSON.stringify(meta.event),
         folder_id: meta.folder ?? "",
+        tags: meta.tags,
       },
     ]),
   );

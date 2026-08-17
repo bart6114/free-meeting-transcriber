@@ -28,7 +28,7 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use super::{EnhancedDoc, PersonItem, SessionMeta, SessionStore, TaskItem, TemplateItem};
+use super::{EnhancedDoc, PersonItem, SessionMeta, SessionStore, TagItem, TaskItem, TemplateItem};
 use hypr_fs_format::TranscriptWithData;
 
 /// Which index map changed. Serialized as the lowercase strings the frontend matches
@@ -42,6 +42,9 @@ pub enum IndexEntity {
     Tasks,
     Templates,
     People,
+    /// The vault-root `tags.json` registry changed (not a session's `_meta.json`
+    /// tags -- those ride `Sessions`).
+    Tags,
     /// A session's *physical directory* changed (rename, move, delete/restore,
     /// external relocation caught by a rebuild) -- content-free, so the search
     /// projection ignores it; the frontend uses it to invalidate every cache
@@ -106,6 +109,7 @@ pub struct VaultIndex {
     pub tasks: HashMap<String, Vec<TaskItem>>,
     pub templates: HashMap<String, TemplateItem>,
     pub people: HashMap<String, PersonItem>,
+    pub tags: HashMap<String, TagItem>,
 }
 
 pub(crate) type IndexChangeSender = tokio::sync::mpsc::UnboundedSender<(IndexEntity, Vec<String>)>;
@@ -440,6 +444,11 @@ impl SessionStore {
         index.people.insert(person.id.clone(), person.clone());
     }
 
+    pub(super) fn index_upsert_tag(&self, tag: &TagItem) {
+        let mut index = self.index.write().unwrap();
+        index.tags.insert(tag.id.clone(), tag.clone());
+    }
+
     /// Removes every trace of a session (delete path). Returns which entities
     /// actually held something, so the caller only notifies what changed.
     pub(super) fn index_remove_session(&self, session_id: &str) -> Vec<(IndexEntity, String)> {
@@ -542,6 +551,39 @@ impl SessionStore {
         self.notify_index_changed(IndexEntity::People, changed_ids);
     }
 
+    /// Reload the tags map from the vault-root `tags.json` and notify changed tag
+    /// ids -- also the `vault_watch` entry point for external `tags.json` edits. A
+    /// missing file reads as empty, so an external delete notifies every removed id.
+    pub async fn index_refresh_tags(&self) {
+        let tags = match self.list_tags().await {
+            Ok(tags) => tags,
+            Err(error) => {
+                tracing::warn!(%error, "index: failed to rescan tags; keeping current entries");
+                return;
+            }
+        };
+
+        let new_map: HashMap<String, TagItem> =
+            tags.into_iter().map(|tag| (tag.id.clone(), tag)).collect();
+
+        let changed_ids: Vec<String> = {
+            let mut index = self.index.write().unwrap();
+            let mut changed: Vec<String> = index
+                .tags
+                .keys()
+                .chain(new_map.keys())
+                .filter(|id| index.tags.get(*id) != new_map.get(*id))
+                .cloned()
+                .collect::<HashSet<String>>()
+                .into_iter()
+                .collect();
+            changed.sort();
+            index.tags = new_map;
+            changed
+        };
+        self.notify_index_changed(IndexEntity::Tags, changed_ids);
+    }
+
     /// `None` on read/parse failure (keep the old entry); a missing file is an empty
     /// list (remove the entry -- "no tasks" is a real state).
     pub(super) async fn read_index_tasks(
@@ -612,13 +654,14 @@ pub(crate) const COALESCE_WINDOW: std::time::Duration = std::time::Duration::fro
 
 /// Stable emission order so bursts serialize deterministically (and tests can assert
 /// exact sequences).
-const ENTITY_ORDER: [IndexEntity; 7] = [
+const ENTITY_ORDER: [IndexEntity; 8] = [
     IndexEntity::Sessions,
     IndexEntity::Docs,
     IndexEntity::Transcripts,
     IndexEntity::Tasks,
     IndexEntity::Templates,
     IndexEntity::People,
+    IndexEntity::Tags,
     IndexEntity::Locations,
 ];
 

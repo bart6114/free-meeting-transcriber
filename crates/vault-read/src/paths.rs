@@ -104,6 +104,10 @@ pub fn people_path() -> PathBuf {
     PathBuf::from("people.json")
 }
 
+pub fn tags_path() -> PathBuf {
+    PathBuf::from("tags.json")
+}
+
 #[deprecated(
     note = "directory basenames are not guaranteed to equal session ids; resolve the physical directory via `layout` and use `audio_dir_in`"
 )]
@@ -153,6 +157,7 @@ mod tests {
         );
         assert_eq!(vault_tasks_path(), PathBuf::from("tasks.json"));
         assert_eq!(people_path(), PathBuf::from("people.json"));
+        assert_eq!(tags_path(), PathBuf::from("tags.json"));
         assert_eq!(audio_dir("s1"), PathBuf::from("sessions/s1/audio"));
         assert_eq!(templates_root(), PathBuf::from("templates"));
         assert_eq!(template_path("t-1"), PathBuf::from("templates/t-1.json"));

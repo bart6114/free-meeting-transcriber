@@ -23,12 +23,16 @@ export type SessionRecord = {
   event_json: string;
   title: string;
   raw_md: string;
+  tags: string[];
 };
 
 // Note content ("raw_md") is intentionally excluded: it's written exclusively via
 // `sessionWriteNote` now (see raw.tsx's persistChange), never through this SQL path.
 export type SessionChanges = Partial<
-  Pick<SessionRecord, "created_at" | "event_json" | "folder_id" | "title">
+  Pick<
+    SessionRecord,
+    "created_at" | "event_json" | "folder_id" | "title" | "tags"
+  >
 >;
 
 export type SessionSummaryRecord = {
@@ -299,6 +303,7 @@ export function updateSession(
     if (changes.created_at !== undefined) patch.created_at = changes.created_at;
     if (changes.folder_id !== undefined) patch.folder = changes.folder_id;
     if (changes.event_json) patch.event = JSON.parse(changes.event_json);
+    if (changes.tags !== undefined) patch.tags = changes.tags;
 
     if (Object.keys(patch).length === 0) return;
 
@@ -459,6 +464,7 @@ function mapSessionRecord(record: StoreSessionRecord): SessionRecord {
     event_json: stringifyEventJson(record.meta.event),
     title: record.meta.title,
     raw_md: rawMd,
+    tags: record.meta.tags,
   };
 }
 
