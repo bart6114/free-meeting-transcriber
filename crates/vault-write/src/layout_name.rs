@@ -183,6 +183,12 @@ pub fn session_date(
     )
 }
 
+/// Leading `YYYY-MM-DD` calendar date of a directory basename, if it carries one --
+/// used to keep an established date when re-deriving a directory's readable name.
+pub fn leading_date(basename: &str) -> Option<&str> {
+    valid_date_prefix(basename)
+}
+
 fn valid_date_prefix(value: &str) -> Option<&str> {
     let prefix = value.get(..10)?;
     let bytes = prefix.as_bytes();

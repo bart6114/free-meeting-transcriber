@@ -300,6 +300,10 @@ msgstr ""
 msgid "Continue"
 msgstr ""
 
+#: src/sidebar/timeline/item.tsx
+msgid "Could not rename the folder"
+msgstr ""
+
 #: src/session/components/session-tags.tsx
 msgid "Could not update tags."
 msgstr ""
@@ -484,6 +488,10 @@ msgstr ""
 
 #: src/templates/template-icon-picker.tsx
 msgid "Flags"
+msgstr ""
+
+#: src/sidebar/timeline/item.tsx
+msgid "Folder renamed"
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -1001,6 +1009,10 @@ msgstr ""
 
 #: src/session/components/session-tags.tsx
 msgid "Remove tag {tag}"
+msgstr ""
+
+#: src/sidebar/timeline/item.tsx
+msgid "Rename Folder to Match Title"
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx

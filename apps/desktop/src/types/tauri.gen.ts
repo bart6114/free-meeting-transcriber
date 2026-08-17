@@ -444,6 +444,19 @@ async sessionReleaseRecordingPrepare(sessionId: string) : Promise<Result<null, s
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * User-invoked "rename folder to match title": renames the session's physical
+ * directory to the readable name derived from its current title. Refused while the
+ * session holds a recording path lease; returns the resulting directory basename.
+ */
+async sessionRenameDirToTitle(sessionId: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_rename_dir_to_title", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 

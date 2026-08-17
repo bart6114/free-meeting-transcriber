@@ -300,6 +300,10 @@ msgstr "Context always provided"
 msgid "Continue"
 msgstr "Continue"
 
+#: src/sidebar/timeline/item.tsx
+msgid "Could not rename the folder"
+msgstr "Could not rename the folder"
+
 #: src/session/components/session-tags.tsx
 msgid "Could not update tags."
 msgstr "Could not update tags."
@@ -485,6 +489,10 @@ msgstr "Find a note..."
 #: src/templates/template-icon-picker.tsx
 msgid "Flags"
 msgstr "Flags"
+
+#: src/sidebar/timeline/item.tsx
+msgid "Folder renamed"
+msgstr "Folder renamed"
 
 #: src/templates/template-icon-picker.tsx
 msgid "Food & Drink"
@@ -1002,6 +1010,10 @@ msgstr "Remove {term}"
 #: src/session/components/session-tags.tsx
 msgid "Remove tag {tag}"
 msgstr "Remove tag {tag}"
+
+#: src/sidebar/timeline/item.tsx
+msgid "Rename Folder to Match Title"
+msgstr "Rename Folder to Match Title"
 
 #: src/settings/ai/shared/index.tsx
 msgid "Repair Keychain Access"

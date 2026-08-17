@@ -1538,3 +1538,117 @@ async fn prepare_recording_adopts_a_nested_unclaimed_directory_like_the_recorder
     assert_eq!(dir, PathBuf::from(format!("sessions/Work/{ID}")));
     store.release_recording_prepare(ID).await.unwrap();
 }
+
+// -- explicit user-invoked "rename folder to match title" --
+
+#[tokio::test]
+async fn explicit_rename_moves_an_established_directory_to_the_current_title() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), READABLE_DIR, ID, "Renamed since");
+    store.write_note(ID, "kept content").await.unwrap();
+
+    let basename = store.rename_session_dir_to_title(ID).await.unwrap();
+    assert_eq!(basename, "2026-03-20 — Renamed since — 6ba7b8");
+
+    let dir = store.session_dir(ID).await.unwrap();
+    assert_eq!(
+        dir,
+        PathBuf::from("sessions/Work/2026-03-20 — Renamed since — 6ba7b8"),
+        "the date prefix and parent folder are preserved; only the title segment changes"
+    );
+    assert_eq!(
+        std::fs::read_to_string(vault.path().join(&dir).join("_memo.md")).unwrap(),
+        "kept content"
+    );
+    assert!(!vault.path().join(READABLE_DIR).exists());
+}
+
+#[tokio::test]
+async fn explicit_rename_of_an_already_matching_directory_is_a_noop() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), READABLE_DIR, ID, "Product planning");
+
+    let basename = store.rename_session_dir_to_title(ID).await.unwrap();
+    assert_eq!(basename, "2026-03-20 — Product planning — 6ba7b8");
+    assert!(vault.path().join(READABLE_DIR).is_dir());
+}
+
+#[tokio::test]
+async fn explicit_rename_derives_a_date_for_a_legacy_uuid_directory() {
+    let (store, vault) = test_store().await;
+    let mut m = meta(ID, "Adopted legacy");
+    m.started_at = Some("2026-03-20".to_string());
+    let legacy = vault.path().join("sessions").join(ID);
+    std::fs::create_dir_all(&legacy).unwrap();
+    std::fs::write(
+        legacy.join("_meta.json"),
+        serde_json::to_vec_pretty(&m).unwrap(),
+    )
+    .unwrap();
+
+    let basename = store.rename_session_dir_to_title(ID).await.unwrap();
+    assert_eq!(basename, "2026-03-20 — Adopted legacy — 6ba7b8");
+    assert!(!legacy.exists());
+}
+
+#[tokio::test]
+async fn explicit_rename_is_refused_while_a_recording_lease_is_held() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), READABLE_DIR, ID, "Mid-recording title");
+
+    store.prepare_recording(ID).await.unwrap();
+    let error = store.rename_session_dir_to_title(ID).await.unwrap_err();
+    assert!(
+        error.to_string().contains("recording"),
+        "unexpected error: {error}"
+    );
+    assert!(vault.path().join(READABLE_DIR).is_dir());
+
+    store.release_recording_prepare(ID).await.unwrap();
+    store.rename_session_dir_to_title(ID).await.unwrap();
+    assert_eq!(
+        store.session_dir(ID).await.unwrap(),
+        PathBuf::from("sessions/Work/2026-03-20 — Mid-recording title — 6ba7b8")
+    );
+}
+
+#[tokio::test]
+async fn explicit_rename_without_a_title_or_onto_an_occupied_target_errors() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), READABLE_DIR, ID, "");
+    assert!(store.rename_session_dir_to_title(ID).await.is_err());
+
+    seed_session_at(
+        vault.path(),
+        "sessions/Work/2026-03-20 — Blocked — 550e84",
+        LEGACY_ID,
+        "Blocked",
+    );
+    // Occupy every suffix-widening candidate for the new title.
+    let hex = "550e8400e29b41d4a716446655440000";
+    for len in [6usize, 8, 12, hex.len()] {
+        std::fs::create_dir_all(vault.path().join(format!(
+            "sessions/Work/2026-03-20 — Retitled — {}",
+            &hex[..len]
+        )))
+        .unwrap();
+    }
+    store
+        .update_meta(
+            LEGACY_ID,
+            crate::SessionMetaPatch {
+                title: Some("Retitled".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    let error = store
+        .rename_session_dir_to_title(LEGACY_ID)
+        .await
+        .unwrap_err();
+    assert!(
+        error.to_string().contains("occupied"),
+        "unexpected error: {error}"
+    );
+}

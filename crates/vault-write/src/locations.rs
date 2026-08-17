@@ -343,6 +343,102 @@ impl SessionStore {
         }
     }
 
+    /// Explicit, user-invoked rename of the session's directory to the readable name
+    /// derived from its current title. Unlike the one-shot provisional reconcile this
+    /// runs whatever the current basename is -- the user asked for it -- but it still
+    /// refuses while a recording path lease is held (the recorder writes into the
+    /// resolved path), and unlike the reconcile its failures propagate so the UI can
+    /// report them. Renaming to a name the directory already carries is a successful
+    /// no-op. Returns the basename in effect afterwards.
+    pub async fn rename_session_dir_to_title(&self, id: &str) -> Result<String, StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+        if self.active_recordings.lock().unwrap().contains_key(id) {
+            return Err(StoreError::Io(
+                "a recording is in progress for this session; rename the folder after it stops"
+                    .to_string(),
+            ));
+        }
+        let meta = self
+            .read_meta(id)
+            .await?
+            .ok_or_else(|| StoreError::Io(format!("session {id} has no metadata")))?;
+        let title = meta.title.trim().to_string();
+        if title.is_empty() {
+            return Err(StoreError::Io(
+                "the session has no title to name the folder after".to_string(),
+            ));
+        }
+        let current_dir = self
+            .lookup_existing_dir(id)
+            .await?
+            .ok_or_else(|| StoreError::Io(format!("no directory found for session {id}")))?;
+        let basename = current_dir
+            .file_name()
+            .and_then(|n| n.to_str())
+            .ok_or_else(|| {
+                StoreError::Io(format!(
+                    "session directory {} has no usable basename",
+                    current_dir.display()
+                ))
+            })?
+            .to_string();
+
+        // Keep the basename's established date when it carries one (moving a vault
+        // across time zones must not shift dates); a legacy UUID or fully hand-renamed
+        // directory derives its date the same way creation would.
+        let date = match super::layout_name::leading_date(&basename) {
+            Some(date) => date.to_string(),
+            None => {
+                let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+                let (date, diagnostic) = super::layout_name::session_date(
+                    meta.started_at.as_deref(),
+                    &meta.created_at,
+                    &today,
+                );
+                if let Some(diagnostic) = diagnostic {
+                    tracing::warn!(session_id = %id, %diagnostic, "naming renamed session directory from the current date");
+                }
+                date
+            }
+        };
+        let parent = current_dir
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let candidates = super::layout_name::session_dir_candidates(&parent, &date, &title, id);
+        if candidates
+            .iter()
+            .any(|candidate| hypr_vault_read::layout::paths_eq_nfc(candidate, &current_dir))
+        {
+            return Ok(basename);
+        }
+
+        let vault_base = self.vault_base.clone();
+        let probe = candidates.clone();
+        let free = tokio::task::spawn_blocking(move || {
+            probe
+                .into_iter()
+                .find(|candidate| !vault_base.join(candidate).exists())
+        })
+        .await
+        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?;
+        let Some(target) = free else {
+            return Err(StoreError::Io(
+                "every candidate folder name is already occupied".to_string(),
+            ));
+        };
+
+        self.rename_session_dir_locked(&guard, id, &current_dir, &target)
+            .await?;
+        tracing::info!(session_id = %id, from = %current_dir.display(), to = %target.display(), "renamed session directory to match its title");
+        Ok(target
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default()
+            .to_string())
+    }
+
     /// Startup reconciliation: rename every provisional-`Untitled` directory whose
     /// metadata already carries a non-empty title (covers crashes mid-recording and
     /// title writes from older code paths). Idempotent and read-tolerant.

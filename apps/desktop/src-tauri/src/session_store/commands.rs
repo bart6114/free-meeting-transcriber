@@ -496,6 +496,21 @@ pub async fn session_release_recording_prepare<R: tauri::Runtime>(
         .map_err(|e| e.to_string())
 }
 
+/// User-invoked "rename folder to match title": renames the session's physical
+/// directory to the readable name derived from its current title. Refused while the
+/// session holds a recording path lease; returns the resulting directory basename.
+#[tauri::command]
+#[specta::specta]
+pub async fn session_rename_dir_to_title<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<String, String> {
+    store(&app)?
+        .rename_session_dir_to_title(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn session_store_audio<R: tauri::Runtime>(

@@ -12,6 +12,7 @@ import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 import { commands as openerCommands } from "@hypr/plugin-opener2";
 import { DancingSticks } from "@hypr/ui/components/ui/dancing-sticks";
 import { Spinner } from "@hypr/ui/components/ui/spinner";
+import { sonnerToast } from "@hypr/ui/components/ui/toast";
 import { cn, format, getYear, safeParseDate, TZDate } from "@hypr/utils";
 
 import {
@@ -31,6 +32,7 @@ import { useSessionTitle } from "~/store/zustand/live-title";
 import { useTabs } from "~/store/zustand/tabs";
 import { useTimelineSelection } from "~/store/zustand/timeline-selection";
 import { useListener } from "~/stt/contexts";
+import { commands } from "~/types/tauri.gen";
 
 const EMPTY_TIMELINE_ITEM_KEYS: string[] = [];
 
@@ -388,6 +390,19 @@ const SessionItem = memo(
       }
     }, [sessionId]);
 
+    const handleRenameFolder = useCallback(async () => {
+      const result = await commands.sessionRenameDirToTitle(sessionId);
+      if (result.status === "ok") {
+        sonnerToast.success(t`Folder renamed`, { description: result.data });
+      } else {
+        sonnerToast.error(t`Could not rename the folder`, {
+          description: result.error,
+        });
+      }
+    }, [sessionId, t]);
+
+    const recordingHoldsFolder = isLive || isFinalizing;
+
     const contextMenu = useMemo(
       () => [
         {
@@ -400,6 +415,12 @@ const SessionItem = memo(
           text: t`Show in Finder`,
           action: handleShowInFinder,
         },
+        {
+          id: "rename-folder",
+          text: t`Rename Folder to Match Title`,
+          action: handleRenameFolder,
+          disabled: recordingHoldsFolder,
+        },
         { separator: true as const },
         {
           id: "delete",
@@ -407,7 +428,14 @@ const SessionItem = memo(
           action: handleDelete,
         },
       ],
-      [handleOpenStandaloneWindow, handleShowInFinder, handleDelete, t],
+      [
+        handleOpenStandaloneWindow,
+        handleShowInFinder,
+        handleRenameFolder,
+        recordingHoldsFolder,
+        handleDelete,
+        t,
+      ],
     );
 
     return (

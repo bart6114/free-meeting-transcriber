@@ -658,6 +658,7 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::session_find_by_tracking_id::<tauri::Wry>,
             session_store::commands::session_prepare_recording::<tauri::Wry>,
             session_store::commands::session_release_recording_prepare::<tauri::Wry>,
+            session_store::commands::session_rename_dir_to_title::<tauri::Wry>,
         ])
         .events(tauri_specta::collect_events![
             session_store::IndexChanged,
