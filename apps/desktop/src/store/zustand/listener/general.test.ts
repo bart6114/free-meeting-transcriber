@@ -2,6 +2,7 @@ import { create as mutate } from "mutative";
 import { beforeEach, describe, expect, test, vi } from "vitest";
 
 const {
+  audioPathMock,
   getIdentifierMock,
   getCaptureSnapshotMock,
   listenCaptureDataMock,
@@ -12,8 +13,11 @@ const {
   setRecordingIndicatorMock,
   startCaptureMock,
   stopCaptureMock,
+  sessionDirMock,
   vaultBaseMock,
 } = vi.hoisted(() => ({
+  audioPathMock: vi.fn(),
+  sessionDirMock: vi.fn(),
   getIdentifierMock: vi.fn(),
   getCaptureSnapshotMock: vi.fn(),
   listenCaptureDataMock: vi.fn(),
@@ -34,6 +38,13 @@ vi.mock("@tauri-apps/api/app", () => ({
 vi.mock("@hypr/plugin-detect", () => ({
   commands: {
     listMicUsingApplications: listMicUsingApplicationsMock,
+  },
+}));
+
+vi.mock("@hypr/plugin-fs-sync", () => ({
+  commands: {
+    audioPath: audioPathMock,
+    sessionDir: sessionDirMock,
   },
 }));
 
@@ -87,8 +98,19 @@ import {
 } from "./general-shared";
 
 import { enqueueSessionAudioOperation } from "~/session/audio-operations";
+import { events as tauriEvents } from "~/types/tauri.gen";
 
 let store: ReturnType<typeof createListenerStore>;
+
+// Captured from the persistent recording-meta-settled listener (registered once
+// per module lifetime, so it is grabbed at first registration and reused).
+let settleHandler:
+  | ((event: { payload: { sessionId: string; succeeded: boolean } }) => void)
+  | undefined;
+
+function fireRecordingMetaSettled(sessionId: string) {
+  settleHandler?.({ payload: { sessionId, succeeded: true } });
+}
 
 describe("General Listener Slice", () => {
   beforeEach(() => {
@@ -114,6 +136,14 @@ describe("General Listener Slice", () => {
     startCaptureMock.mockResolvedValue({ status: "ok", data: null });
     stopCaptureMock.mockResolvedValue({ status: "ok", data: null });
     vaultBaseMock.mockResolvedValue({ status: "ok", data: "/tmp/fmtr" });
+    audioPathMock.mockResolvedValue({ status: "ok", data: "/tmp/session.wav" });
+    sessionDirMock.mockResolvedValue({ status: "error", error: "unmocked" });
+    (
+      tauriEvents.recordingMetaSettled.listen as ReturnType<typeof vi.fn>
+    ).mockImplementation((handler: typeof settleHandler) => {
+      settleHandler = handler;
+      return Promise.resolve(() => {});
+    });
   });
 
   describe("Initial State", () => {
@@ -792,9 +822,12 @@ describe("General Listener Slice", () => {
         },
       });
 
-      expect(onStopped).toHaveBeenCalledWith(
-        "session-a",
-        expect.objectContaining({ needsBatchRepair: true }),
+      fireRecordingMetaSettled("session-a");
+      await vi.waitFor(() =>
+        expect(onStopped).toHaveBeenCalledWith(
+          "session-a",
+          expect.objectContaining({ needsBatchRepair: true }),
+        ),
       );
     });
 
@@ -850,9 +883,12 @@ describe("General Listener Slice", () => {
         },
       });
 
-      expect(onStopped).toHaveBeenCalledWith(
-        "session-a",
-        expect.objectContaining({ needsBatchRepair: true }),
+      fireRecordingMetaSettled("session-a");
+      await vi.waitFor(() =>
+        expect(onStopped).toHaveBeenCalledWith(
+          "session-a",
+          expect.objectContaining({ needsBatchRepair: true }),
+        ),
       );
     });
 

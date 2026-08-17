@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
-const unlisten = vi.hoisted(() => vi.fn());
 const listen = vi.hoisted(() => vi.fn());
 
 vi.mock("~/types/tauri.gen", () => ({
   events: { recordingMetaSettled: { listen } },
 }));
 
-import { createRecordingMetaSettledWaiter } from "./recording-meta-settled";
+import {
+  ensureRecordingMetaSettledListener,
+  waitForRecordingMetaSettled,
+} from "./recording-meta-settled";
 
 type SettledHandler = (event: {
   payload: { sessionId: string; succeeded: boolean };
@@ -15,9 +17,7 @@ type SettledHandler = (event: {
 
 beforeEach(() => {
   vi.useFakeTimers();
-  listen.mockReset();
-  unlisten.mockReset();
-  listen.mockImplementation(() => Promise.resolve(unlisten));
+  listen.mockImplementation(() => Promise.resolve(() => {}));
 });
 
 afterEach(() => {
@@ -29,14 +29,15 @@ function installedHandler(): SettledHandler {
   return calls[calls.length - 1][0] as SettledHandler;
 }
 
-it("installs the listener immediately, before any stop request runs", () => {
-  createRecordingMetaSettledWaiter("s1");
-  expect(listen).toHaveBeenCalledTimes(1);
+it("registers the persistent listener once, before any stop request runs", () => {
+  const before = listen.mock.calls.length;
+  ensureRecordingMetaSettledListener();
+  ensureRecordingMetaSettledListener();
+  expect(listen.mock.calls.length).toBeLessThanOrEqual(before + 1);
 });
 
 it("resolves when the matching session settles", async () => {
-  const waiter = createRecordingMetaSettledWaiter("s1");
-  const pending = waiter.wait(5_000);
+  const pending = waitForRecordingMetaSettled("s1", 5_000);
   installedHandler()({ payload: { sessionId: "s1", succeeded: true } });
 
   await expect(pending).resolves.toBe(true);
@@ -44,8 +45,7 @@ it("resolves when the matching session settles", async () => {
 
 it("ignores settle events for unrelated sessions", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const waiter = createRecordingMetaSettledWaiter("s1");
-  const pending = waiter.wait(5_000);
+  const pending = waitForRecordingMetaSettled("s1", 5_000);
   installedHandler()({ payload: { sessionId: "other", succeeded: true } });
 
   await vi.advanceTimersByTimeAsync(5_000);
@@ -55,8 +55,7 @@ it("ignores settle events for unrelated sessions", async () => {
 
 it("times out with a warning instead of wedging stop handling", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const waiter = createRecordingMetaSettledWaiter("s1");
-  const pending = waiter.wait(1_000);
+  const pending = waitForRecordingMetaSettled("s1", 1_000);
 
   await vi.advanceTimersByTimeAsync(1_000);
   await expect(pending).resolves.toBe(false);
@@ -65,9 +64,17 @@ it("times out with a warning instead of wedging stop handling", async () => {
 });
 
 it("a failed settle event still resolves the waiter", async () => {
-  const waiter = createRecordingMetaSettledWaiter("s1");
-  const pending = waiter.wait(5_000);
+  const pending = waitForRecordingMetaSettled("s1", 5_000);
   installedHandler()({ payload: { sessionId: "s1", succeeded: false } });
 
   await expect(pending).resolves.toBe(true);
+});
+
+it("multiple waiters for the same session all settle on one event", async () => {
+  const a = waitForRecordingMetaSettled("s1", 5_000);
+  const b = waitForRecordingMetaSettled("s1", 5_000);
+  installedHandler()({ payload: { sessionId: "s1", succeeded: true } });
+
+  await expect(a).resolves.toBe(true);
+  await expect(b).resolves.toBe(true);
 });

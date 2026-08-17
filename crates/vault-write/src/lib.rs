@@ -66,6 +66,12 @@ pub struct SessionStore {
     /// silently pick the canonical claimant and let reads/writes diverge the copies
     /// while rebuild keeps the id unindexed.
     known_duplicates: Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
+    /// Bumped on every `catalog_remove`. A cold-miss discovery scan runs without the
+    /// store write lock; its catalog warming is valid only if no entry was removed
+    /// while the walk ran -- otherwise the scan's snapshot could resurrect a just-
+    /// deleted session's location and let a late write recreate the trashed
+    /// directory (breaking restore, whose rename refuses an occupied destination).
+    catalog_removals: Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Product of `normalize_startup_layout`: one discovery snapshot -- with paths
@@ -124,6 +130,7 @@ impl SessionStore {
             recent_deletions: Arc::new(std::sync::Mutex::new(HashMap::new())),
             active_recordings: Arc::new(std::sync::Mutex::new(HashMap::new())),
             known_duplicates: Arc::new(std::sync::RwLock::new(std::collections::HashSet::new())),
+            catalog_removals: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
     }
 

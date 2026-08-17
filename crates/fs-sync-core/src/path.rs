@@ -21,6 +21,23 @@ pub fn get_parent_folder_path(path: &str) -> Option<String> {
 }
 
 pub fn normalize_folder_path(path: &str) -> Result<String> {
+    let normalized = normalize_existing_folder_path(path)?;
+    // Every layout reader skips dot-prefixed directories, so a folder named into
+    // that part of the tree would be silently invisible.
+    for segment in normalized.split('/') {
+        if segment.starts_with('.') {
+            return Err(crate::Error::Path("folder_path_hidden_not_allowed".into()));
+        }
+    }
+    Ok(normalized)
+}
+
+/// `normalize_folder_path` minus the hidden-segment rejection, for operations whose
+/// argument names a folder that already exists on disk (rename source, delete
+/// target): a vault can legitimately hold dot-named folders created before hidden
+/// paths were rejected, and renaming them to a visible name -- or deleting them --
+/// must remain possible from inside the app.
+pub fn normalize_existing_folder_path(path: &str) -> Result<String> {
     let path = path.replace('\\', "/");
 
     if path.starts_with('/') {
@@ -43,11 +60,6 @@ pub fn normalize_folder_path(path: &str) -> Result<String> {
             return Err(crate::Error::Path(
                 "folder_path_traversal_not_allowed".into(),
             ));
-        }
-        // Every layout reader skips dot-prefixed directories, so a folder named
-        // into that part of the tree would be silently invisible.
-        if segment.starts_with('.') {
-            return Err(crate::Error::Path("folder_path_hidden_not_allowed".into()));
         }
         normalized.push(segment);
     }

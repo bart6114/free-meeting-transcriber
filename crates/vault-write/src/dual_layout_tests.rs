@@ -1523,3 +1523,18 @@ async fn discovery_scale_measurement() {
         );
     }
 }
+
+#[tokio::test]
+async fn prepare_recording_adopts_a_nested_unclaimed_directory_like_the_recorder() {
+    let (store, vault) = test_store().await;
+    // A moved recorder ghost: meta-less, named exactly for the id, nested in a
+    // personal folder. The recorder (fs-sync resolution) adopts it; the prepared
+    // hook path must agree instead of pointing at a fresh legacy directory.
+    let ghost = vault.path().join("sessions/Work").join(ID);
+    std::fs::create_dir_all(&ghost).unwrap();
+    std::fs::write(ghost.join("transcript.json"), "{}").unwrap();
+
+    let dir = store.prepare_recording(ID).await.unwrap();
+    assert_eq!(dir, PathBuf::from(format!("sessions/Work/{ID}")));
+    store.release_recording_prepare(ID).await.unwrap();
+}

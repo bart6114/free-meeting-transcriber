@@ -102,6 +102,9 @@ impl SessionStore {
             return Ok(Some(dir.clone()));
         }
 
+        let removals_before = self
+            .catalog_removals
+            .load(std::sync::atomic::Ordering::SeqCst);
         let vault_base = self.vault_base.clone();
         let id_owned = id.to_string();
         let found = tokio::task::spawn_blocking(move || {
@@ -115,8 +118,18 @@ impl SessionStore {
                 // A cold miss pays for a full discovery walk; warm every healthy
                 // non-duplicate location from it (fill-only -- an entry a concurrent
                 // rename just updated must not be clobbered with pre-scan data), so
-                // the next lookup for any of them is a validated cache hit.
-                if let Some(discovery) = scan {
+                // the next lookup for any of them is a validated cache hit. The scan
+                // ran without the write lock, so if any catalog entry was REMOVED
+                // while it ran (a concurrent delete), the whole snapshot is suspect:
+                // fill-only cannot tell a never-cached id from a just-deleted one,
+                // and re-inserting a trashed directory would let a late write
+                // recreate it. Skip the warm (and the hit insert) in that case; the
+                // resolved answer itself is still returned.
+                let no_concurrent_removal = self
+                    .catalog_removals
+                    .load(std::sync::atomic::Ordering::SeqCst)
+                    == removals_before;
+                if no_concurrent_removal && let Some(discovery) = &scan {
                     let mut catalog = self.locations.write().unwrap();
                     for (location, _) in &discovery.sessions {
                         catalog
@@ -125,7 +138,9 @@ impl SessionStore {
                     }
                 }
                 Ok(found.map(|(location, _)| {
-                    self.catalog_insert(id, location.relative_dir.clone());
+                    if no_concurrent_removal {
+                        self.catalog_insert(id, location.relative_dir.clone());
+                    }
                     location.relative_dir
                 }))
             }
@@ -394,7 +409,27 @@ impl SessionStore {
     pub async fn prepare_recording(&self, id: &str) -> Result<PathBuf, StoreError> {
         validate_session_id(id)?;
         let guard = self.lock_writes().await;
-        let dir = self.session_dir_locked(&guard, id).await?;
+        let dir = match self.lookup_existing_dir(id).await? {
+            Some(dir) => dir,
+            // No directory claims the id: resolve exactly the way the recorder
+            // itself will (fs-sync's discovery adopts a meta-less/corrupt directory
+            // named for the id -- a moved recorder ghost -- before falling back to
+            // the legacy creation target), so the pre-start hook and the recorder
+            // can never disagree about the session's home. Non-UUID legacy ids,
+            // which fs-sync rejects, keep the plain legacy fallback.
+            None => {
+                let vault_base = self.vault_base.clone();
+                let id_owned = id.to_string();
+                tokio::task::spawn_blocking(move || {
+                    hypr_fs_sync_core::find_session_dir(&vault_base.join("sessions"), &id_owned)
+                        .ok()
+                        .and_then(|abs| abs.strip_prefix(&vault_base).ok().map(Path::to_path_buf))
+                })
+                .await
+                .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
+                .unwrap_or_else(|| legacy_session_dir(id))
+            }
+        };
         *self
             .active_recordings
             .lock()
@@ -457,6 +492,8 @@ impl SessionStore {
     }
 
     pub(crate) fn catalog_remove(&self, id: &str) {
+        self.catalog_removals
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         if self.locations.write().unwrap().remove(id).is_some() {
             self.notify_index_changed(super::IndexEntity::Locations, vec![id.to_string()]);
         }

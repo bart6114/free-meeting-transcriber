@@ -136,7 +136,10 @@ impl FsSyncCore {
     }
 
     pub fn rename_folder(&self, old_path: &str, new_path: &str) -> Result<RenameFolderResult> {
-        let old_path = normalize_folder_path(old_path)?;
+        // The source may be a pre-existing hidden folder (rescuing it to a visible
+        // name is the one way its sessions become reachable again); the target must
+        // never be one.
+        let old_path = path::normalize_existing_folder_path(old_path)?;
         let new_path = normalize_folder_path(new_path)?;
 
         if old_path.is_empty() || new_path.is_empty() {
@@ -172,7 +175,9 @@ impl FsSyncCore {
     }
 
     pub fn delete_folder(&self, folder_path: &str) -> Result<()> {
-        let folder_path = normalize_folder_path(folder_path)?;
+        // A pre-existing hidden folder stays deletable; the contains-sessions guard
+        // below still blocks it while any (visible) session lives inside.
+        let folder_path = path::normalize_existing_folder_path(folder_path)?;
         if folder_path.is_empty() {
             return Err(Error::Path("folder_delete_root_not_allowed".into()));
         }
@@ -677,6 +682,35 @@ mod tests {
 
         temp.child("sessions")
             .child("work")
+            .assert(predicates::path::missing());
+    }
+
+    /// Vaults from before hidden paths were rejected can hold dot-named folders.
+    /// The escape hatch: renaming them to a visible name (or deleting them when
+    /// empty) must remain possible, while the contains-sessions guard still
+    /// blocks deleting one with sessions inside.
+    #[test]
+    fn preexisting_hidden_folders_can_be_rescued_by_rename_or_deleted() {
+        let temp = TempDir::new().unwrap();
+        write_session_at(&temp, "sessions/.archive/keep", UUID_1);
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        assert!(core.delete_folder(".archive").is_err());
+
+        core.rename_folder(".archive", "archive").unwrap();
+        temp.child("sessions")
+            .child("archive")
+            .child("keep")
+            .child("_meta.json")
+            .assert(predicates::path::exists());
+
+        temp.child("sessions")
+            .child(".empty")
+            .create_dir_all()
+            .unwrap();
+        core.delete_folder(".empty").unwrap();
+        temp.child("sessions")
+            .child(".empty")
             .assert(predicates::path::missing());
     }
 
