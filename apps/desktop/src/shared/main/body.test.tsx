@@ -209,8 +209,8 @@ describe("ClassicMainBody", () => {
     render(<ClassicMainBody />);
 
     const sidebarToggle = screen.getByRole("button", { name: "Hide sidebar" });
-    const searchButton = screen.getByRole("button", { name: "Search" });
-    const newNoteButton = screen.getByRole("button", { name: "New note" });
+    const searchButton = screen.getByRole("button", { name: /Search notes/ });
+    const newNoteButton = screen.getByRole("button", { name: /New note/ });
     const chrome = sidebarToggle.parentElement?.parentElement;
     const chromeFrame = chrome?.parentElement;
     const timelineHeader = document.querySelector<HTMLElement>(
@@ -233,10 +233,11 @@ describe("ClassicMainBody", () => {
     );
     expect(chrome?.className).toContain("items-center");
     expect(chrome?.className).toContain("w-full");
-    expect(chromeFrame).toBe(timelineHeader);
+    expect(chromeFrame?.parentElement).toBe(timelineHeader);
     expect(chromeFrame?.className).toContain("pr-1");
     expect(chromeFrame?.className).not.toContain("pr-3");
-    expect(timelineHeader?.className).toContain("h-9");
+    expect(chromeFrame?.className).toContain("h-9");
+    expect(timelineHeader?.className).toContain("flex-col");
     expect(timelineHeader?.className).not.toContain("absolute");
     expect(chrome?.hasAttribute("data-tauri-drag-region")).toBe(true);
     expect(
@@ -245,10 +246,10 @@ describe("ClassicMainBody", () => {
     expect(sidebarToggle.getAttribute("data-tauri-drag-region")).toBe("false");
     expect(searchButton.getAttribute("data-tauri-drag-region")).toBe("false");
     expect(newNoteButton.getAttribute("data-tauri-drag-region")).toBe("false");
-    expect(sidebarToggle.compareDocumentPosition(searchButton)).toBe(
+    expect(sidebarToggle.compareDocumentPosition(newNoteButton)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(searchButton.compareDocumentPosition(newNoteButton)).toBe(
+    expect(newNoteButton.compareDocumentPosition(searchButton)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
     expect(mocks.openSearch).toHaveBeenCalledTimes(1);
@@ -309,8 +310,8 @@ describe("ClassicMainBody", () => {
     render(<ClassicMainBody />);
 
     const sidebarToggle = screen.getByRole("button", { name: "Hide sidebar" });
-    const searchButton = screen.getByRole("button", { name: "Search" });
-    const newNoteButton = screen.getByRole("button", { name: "New note" });
+    const searchButton = screen.getByRole("button", { name: /Search notes/ });
+    const newNoteButton = screen.getByRole("button", { name: /New note/ });
     const updateButton = screen.getByTestId("sidebar-update-button");
     const chrome = sidebarToggle.parentElement?.parentElement;
     const chromeFrame = chrome?.parentElement;
@@ -320,16 +321,15 @@ describe("ClassicMainBody", () => {
 
     expect(updateButton).toBeTruthy();
     expect(updateButton.parentElement).toBe(sidebarToggle.parentElement);
-    expect(searchButton.compareDocumentPosition(newNoteButton)).toBe(
+    expect(updateButton.compareDocumentPosition(newNoteButton)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(newNoteButton.compareDocumentPosition(updateButton)).toBe(
+    expect(newNoteButton.compareDocumentPosition(searchButton)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(searchButton.parentElement).toBe(sidebarToggle.parentElement);
-    expect(newNoteButton.parentElement).toBe(sidebarToggle.parentElement);
+    expect(newNoteButton.parentElement).toBe(searchButton.parentElement);
     expect(chrome?.className).toContain("items-center");
-    expect(chromeFrame).toBe(timelineHeader);
+    expect(chromeFrame?.parentElement).toBe(timelineHeader);
     expect(chromeFrame?.className).toContain("pr-1");
     expect(chromeFrame?.className).not.toContain("pr-3");
     expect(
