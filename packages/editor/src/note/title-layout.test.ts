@@ -123,5 +123,9 @@ describe("titleTrailerPlugin", () => {
     ).find();
     expect(found).toHaveLength(1);
     expect(found[0]?.from).toBe(doc.firstChild!.nodeSize);
+    const spec = (
+      found[0] as unknown as { spec: { stopEvent?: () => boolean } }
+    ).spec;
+    expect(spec.stopEvent?.()).toBe(true);
   });
 });

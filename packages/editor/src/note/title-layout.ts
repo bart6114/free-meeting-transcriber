@@ -101,6 +101,10 @@ export function titleTrailerPlugin(element: HTMLElement) {
             key: "title-trailer",
             side: -1,
             ignoreSelection: true,
+            // Interactive chrome (tag/people editors) lives inside this
+            // widget; without stopEvent ProseMirror claims its mousedown and
+            // keystrokes and yanks focus back into the contenteditable.
+            stopEvent: () => true,
           }),
         ]);
       },
