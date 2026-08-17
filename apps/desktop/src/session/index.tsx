@@ -241,14 +241,16 @@ function TabContentNoteInner({
             currentView={currentView}
             standaloneWindow={standaloneWindow}
             title={
-              <div className="flex min-w-0 items-center gap-2">
-                <NoteInputHeader
-                  sessionId={sessionId}
-                  editorTabs={editorTabs}
-                  currentTab={currentView}
-                  handleTabChange={handleTabChange}
-                  isTranscribing={isTranscribing}
-                />
+              <div className="flex min-w-0 items-center gap-3">
+                <div className="min-w-0 shrink">
+                  <NoteInputHeader
+                    sessionId={sessionId}
+                    editorTabs={editorTabs}
+                    currentTab={currentView}
+                    handleTabChange={handleTabChange}
+                    isTranscribing={isTranscribing}
+                  />
+                </div>
                 {showTopAudioPlayer ? (
                   <div
                     data-session-top-audio-player
