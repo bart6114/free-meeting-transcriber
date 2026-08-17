@@ -219,6 +219,40 @@ impl SessionStore {
 
         Ok(())
     }
+
+    /// Prepares the store for an external vault relocation (copy or move of the files on
+    /// disk) and blocks every writer until the returned guard is dropped.
+    ///
+    /// Flushes the live transcript buffers first -- those words exist nowhere else, and the
+    /// flush takes the write lock internally, so it cannot run while the guard is held.
+    /// Refuses when a recording holds a path lease: listener-core's DiskSink writes through
+    /// absolute paths into the vault until finalization, so files would keep landing in the
+    /// old location mid-copy. Holding the store-wide write lock for the relocation's
+    /// duration also blocks `prepare_recording`, so no new lease can appear once this
+    /// returns.
+    pub async fn freeze_for_vault_move(&self) -> Result<VaultMoveGuard<'_>, StoreError> {
+        self.flush_all().await?;
+        let guard = self.lock_writes().await;
+        if !self.active_recordings.lock().unwrap().is_empty() {
+            return Err(StoreError::Conflict(
+                "a recording is in progress; stop it before moving the vault".to_string(),
+            ));
+        }
+        // A dirty buffer here means an append raced in between the flush above and taking
+        // the lock, or the flush failed -- either way the words are not on disk yet.
+        if self.live.lock().await.values().any(|buffer| buffer.dirty) {
+            return Err(StoreError::Conflict(
+                "transcript data is still being saved; try again in a moment".to_string(),
+            ));
+        }
+        Ok(VaultMoveGuard { _guard: guard })
+    }
+}
+
+/// Blocks all store writes and new recording-path leases while a vault relocation copies
+/// files out from under the store. Dropping it unblocks writers.
+pub struct VaultMoveGuard<'a> {
+    _guard: WriteGuard<'a>,
 }
 
 /// Proof that the caller holds the store-wide write lock.
@@ -363,6 +397,73 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let store = SessionStore::new(temp.path().to_path_buf());
         (store, temp)
+    }
+
+    #[tokio::test]
+    async fn freeze_for_vault_move_refuses_while_a_recording_lease_is_held() {
+        let (store, _temp) = test_store().await;
+        store.note_recording_active("s1");
+
+        let err = store
+            .freeze_for_vault_move()
+            .await
+            .err()
+            .expect("freeze must refuse while a recording lease is held");
+        assert!(matches!(err, StoreError::Conflict(_)), "got: {err}");
+    }
+
+    /// The freeze must first land buffered transcript words on disk (they exist nowhere
+    /// else), and must hold the store-wide write lock until dropped so no writer can land
+    /// files in the old location mid-relocation.
+    #[tokio::test]
+    async fn freeze_for_vault_move_flushes_buffers_and_blocks_writes_until_dropped() {
+        let (store, temp) = test_store().await;
+        store
+            .append_transcript(
+                "s1",
+                TranscriptDelta {
+                    transcript_id: "t1".to_string(),
+                    new_words: vec![hypr_fs_format::TranscriptWord {
+                        id: Some("w0".to_string()),
+                        text: "move-survivor".to_string(),
+                        start_ms: 0.0,
+                        end_ms: 0.0,
+                        channel: 0.0,
+                        speaker: None,
+                        metadata: None,
+                    }],
+                    replaced_ids: vec![],
+                    new_hints: vec![],
+                    started_at_ms: 1000.0,
+                },
+            )
+            .await
+            .unwrap();
+
+        let freeze = store.freeze_for_vault_move().await.unwrap();
+
+        let transcript = temp.path().join("sessions/s1/transcript.json");
+        assert!(
+            std::fs::read_to_string(&transcript)
+                .unwrap()
+                .contains("move-survivor")
+        );
+
+        let blocked = tokio::time::timeout(
+            std::time::Duration::from_millis(50),
+            store.write_file(PathBuf::from("sessions/s1/_memo.md"), b"late".to_vec()),
+        )
+        .await;
+        assert!(
+            blocked.is_err(),
+            "write must block while the freeze is held"
+        );
+
+        drop(freeze);
+        store
+            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"late".to_vec())
+            .await
+            .unwrap();
     }
 
     #[tokio::test]

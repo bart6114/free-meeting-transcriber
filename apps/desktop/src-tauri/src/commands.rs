@@ -74,6 +74,47 @@ pub async fn complete_app_exit<R: tauri::Runtime>(app: tauri::AppHandle<R>) {
     app.exit(0);
 }
 
+/// Settings' "change storage location", with the session store frozen for the duration:
+/// the plugin's bare `copy_vault`/`move_vault` know nothing about in-flight writes, so
+/// calling them directly can copy a vault while a recording or a debounced transcript
+/// flush is still landing files in it. Freezing refuses while a recording lease is held,
+/// flushes the live transcript buffers, and blocks every writer until the relocation is
+/// done. `keep_original` picks copy (old vault left behind) over move.
+#[tauri::command]
+#[specta::specta]
+pub async fn relocate_vault<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    new_path: String,
+    keep_original: bool,
+) -> Result<(), String> {
+    use tauri_plugin_settings::SettingsPluginExt;
+
+    let store = app
+        .try_state::<Arc<SessionStore>>()
+        .ok_or_else(|| "session store is not initialized".to_string())?;
+    let _freeze = store
+        .freeze_for_vault_move()
+        .await
+        .map_err(|e| e.to_string())?;
+
+    let new_path = camino::Utf8PathBuf::from(&new_path);
+    if keep_original {
+        app.settings()
+            .copy_vault(new_path.clone())
+            .await
+            .map_err(|e| e.to_string())?;
+        app.settings()
+            .set_vault_base(new_path)
+            .await
+            .map_err(|e| e.to_string())
+    } else {
+        app.settings()
+            .move_vault(new_path)
+            .await
+            .map_err(|e| e.to_string())
+    }
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn get_pinned_tabs<R: tauri::Runtime>(

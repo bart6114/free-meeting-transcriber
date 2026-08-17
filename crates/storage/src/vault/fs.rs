@@ -3,15 +3,18 @@ use std::path::Path;
 use super::path::VAULT_PATH_KEY;
 use crate::fs::copy_dir_recursive;
 
+// `search_index` is deliberately absent: the Tantivy cache lives under the global base
+// (which coincides with the vault at the default location), so copying it would snapshot
+// a live index and removing it would delete one; it rebuilds from the vault anyway.
 const VAULT_DIRECTORIES: &[&str] = &[
     "sessions",
     "humans",
     "organizations",
     "chats",
     "prompts",
-    "search_index",
     "plugins",
     "templates",
+    ".trash",
 ];
 
 const VAULT_FILES: &[&str] = &[
@@ -111,6 +114,14 @@ mod tests {
         fs::write(src.join("store.json"), "store").unwrap();
         fs::create_dir_all(src.join("models")).unwrap();
         fs::write(src.join("models").join("model.gguf"), "model").unwrap();
+        fs::create_dir_all(src.join(".trash").join("2026-08-17")).unwrap();
+        fs::write(
+            src.join(".trash").join("2026-08-17").join("deleted.md"),
+            "gone",
+        )
+        .unwrap();
+        fs::create_dir_all(src.join("search_index")).unwrap();
+        fs::write(src.join("search_index").join("meta.json"), "tantivy").unwrap();
 
         copy_vault_items(&src, &dst).await.unwrap();
 
@@ -119,9 +130,37 @@ mod tests {
         assert!(dst.join("events.json").exists());
         assert!(dst.join("settings.json").exists());
         assert!(dst.join("config.json").exists());
+        assert!(
+            dst.join(".trash")
+                .join("2026-08-17")
+                .join("deleted.md")
+                .exists()
+        );
 
         assert!(dst.join("store.json").exists());
         assert!(!dst.join("models").exists());
+        assert!(!dst.join("search_index").exists());
+    }
+
+    /// The remove side must mirror the copy side: the live Tantivy index (global base ==
+    /// vault base at the default location) must survive a move's cleanup pass.
+    #[tokio::test]
+    async fn remove_vault_items_leaves_search_index_alone() {
+        let temp = tempdir().unwrap();
+        let src = temp.path().join("src");
+
+        fs::create_dir_all(src.join("sessions")).unwrap();
+        fs::create_dir_all(src.join("search_index")).unwrap();
+        fs::write(src.join("search_index").join("meta.json"), "tantivy").unwrap();
+        fs::create_dir_all(src.join(".trash")).unwrap();
+        fs::write(src.join("config.json"), "config").unwrap();
+
+        remove_vault_items(&src).await.unwrap();
+
+        assert!(!src.join("sessions").exists());
+        assert!(!src.join(".trash").exists());
+        assert!(!src.join("config.json").exists());
+        assert!(src.join("search_index").join("meta.json").exists());
     }
 
     #[tokio::test]

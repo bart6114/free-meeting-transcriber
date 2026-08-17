@@ -22,6 +22,7 @@ import { ObsidianVaultList } from "./obsidian-vault-list";
 import { displayPath } from "./path-utils";
 
 import { scheduleAutomaticRelaunch } from "~/shared/relaunch";
+import { commands as tauriCommands } from "~/types/tauri.gen";
 
 const VAULT_BASE_QUERY_KEY = ["vault-base-path"] as const;
 
@@ -63,13 +64,14 @@ export function ChangeLocationRow() {
   });
 
   const changeMutation = useMutation({
-    mutationFn: async (newPath: string) => {
-      const copyResult = await settingsCommands.copyVault(newPath);
-      if (copyResult.status === "error") {
-        throw new Error(copyResult.error);
-      }
-
-      const result = await settingsCommands.setVaultBase(newPath);
+    mutationFn: async ({
+      newPath,
+      keepOriginal,
+    }: {
+      newPath: string;
+      keepOriginal: boolean;
+    }) => {
+      const result = await tauriCommands.relocateVault(newPath, keepOriginal);
       if (result.status === "error") {
         throw new Error(result.error);
       }
@@ -162,7 +164,8 @@ export function ChangeLocationRow() {
               </DialogTitle>
               <DialogDescription>
                 <Trans>
-                  App restarts to apply. Existing files are copied, not moved.
+                  App restarts to apply. Move relocates your files; copy leaves
+                  the originals behind.
                 </Trans>
               </DialogDescription>
             </DialogHeader>
@@ -174,8 +177,8 @@ export function ChangeLocationRow() {
             {destinationHasFiles && (
               <p className="text-brand text-xs">
                 <Trans>
-                  This folder already contains files. Copied vault files will be
-                  mixed in with them.
+                  This folder already contains files, so it can only be copied
+                  into. Vault files will be mixed in with the existing ones.
                 </Trans>
               </p>
             )}
@@ -195,11 +198,36 @@ export function ChangeLocationRow() {
                 <Trans>Cancel</Trans>
               </Button>
               <Button
-                onClick={() => changeMutation.mutate(pendingPath)}
+                variant="outline"
+                onClick={() =>
+                  changeMutation.mutate({
+                    newPath: pendingPath,
+                    keepOriginal: true,
+                  })
+                }
                 disabled={changeMutation.isPending}
               >
-                {changeMutation.isPending ? t`Changing...` : t`Change`}
+                {changeMutation.isPending &&
+                changeMutation.variables?.keepOriginal
+                  ? t`Copying...`
+                  : t`Copy`}
               </Button>
+              {!destinationHasFiles && (
+                <Button
+                  onClick={() =>
+                    changeMutation.mutate({
+                      newPath: pendingPath,
+                      keepOriginal: false,
+                    })
+                  }
+                  disabled={changeMutation.isPending}
+                >
+                  {changeMutation.isPending &&
+                  !changeMutation.variables?.keepOriginal
+                    ? t`Moving...`
+                    : t`Move`}
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         )}

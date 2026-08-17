@@ -95,6 +95,22 @@ async installEmbeddedCli() : Promise<Result<EmbeddedCliStatus, string>> {
     else return { status: "error", error: e  as any };
 }
 },
+/**
+ * Settings' "change storage location", with the session store frozen for the duration:
+ * the plugin's bare `copy_vault`/`move_vault` know nothing about in-flight writes, so
+ * calling them directly can copy a vault while a recording or a debounced transcript
+ * flush is still landing files in it. Freezing refuses while a recording lease is held,
+ * flushes the live transcript buffers, and blocks every writer until the relocation is
+ * done. `keep_original` picks copy (old vault left behind) over move.
+ */
+async relocateVault(newPath: string, keepOriginal: boolean) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("relocate_vault", { newPath, keepOriginal }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async sessionWriteMeta(meta: SessionMeta) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_write_meta", { meta }) };

@@ -615,6 +615,7 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::set_recently_opened_sessions::<tauri::Wry>,
             commands::check_embedded_cli::<tauri::Wry>,
             commands::install_embedded_cli::<tauri::Wry>,
+            commands::relocate_vault::<tauri::Wry>,
             session_store::commands::session_write_meta::<tauri::Wry>,
             session_store::commands::session_update_meta::<tauri::Wry>,
             session_store::commands::session_write_note::<tauri::Wry>,

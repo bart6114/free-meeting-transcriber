@@ -138,8 +138,12 @@ msgid "App"
 msgstr "App"
 
 #: src/settings/general/storage/change-location.tsx
-msgid "App restarts to apply. Existing files are copied, not moved."
-msgstr "App restarts to apply. Existing files are copied, not moved."
+#~ msgid "App restarts to apply. Existing files are copied, not moved."
+#~ msgstr "App restarts to apply. Existing files are copied, not moved."
+
+#: src/settings/general/storage/change-location.tsx
+msgid "App restarts to apply. Move relocates your files; copy leaves the originals behind."
+msgstr "App restarts to apply. Move relocates your files; copy leaves the originals behind."
 
 #: src/settings/general/theme.tsx
 msgid "Appearance"
@@ -213,8 +217,8 @@ msgid "Change storage location?"
 msgstr "Change storage location?"
 
 #: src/settings/general/storage/change-location.tsx
-msgid "Changing..."
-msgstr "Changing..."
+#~ msgid "Changing..."
+#~ msgstr "Changing..."
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Choose a file format and what to include."
@@ -299,6 +303,14 @@ msgstr "Context always provided"
 #: src/onboarding/llm-provider.tsx
 msgid "Continue"
 msgstr "Continue"
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Copy"
+msgstr "Copy"
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Copying..."
+msgstr "Copying..."
 
 #: src/sidebar/timeline/item.tsx
 msgid "Could not rename the folder"
@@ -783,6 +795,10 @@ msgstr "Model being used"
 msgid "More options"
 msgstr "More options"
 
+#: src/settings/general/storage/change-location.tsx
+msgid "Move"
+msgstr "Move"
+
 #: src/templates/sections-editor.tsx
 msgid "Move down"
 msgstr "Move down"
@@ -790,6 +806,10 @@ msgstr "Move down"
 #: src/templates/sections-editor.tsx
 msgid "Move up"
 msgstr "Move up"
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Moving..."
+msgstr "Moving..."
 
 #: src/main/empty.tsx
 msgid "New Note"
@@ -1343,8 +1363,12 @@ msgid "The main language is always included for transcription"
 msgstr "The main language is always included for transcription"
 
 #: src/settings/general/storage/change-location.tsx
-msgid "This folder already contains files. Copied vault files will be mixed in with them."
-msgstr "This folder already contains files. Copied vault files will be mixed in with them."
+msgid "This folder already contains files, so it can only be copied into. Vault files will be mixed in with the existing ones."
+msgstr "This folder already contains files, so it can only be copied into. Vault files will be mixed in with the existing ones."
+
+#: src/settings/general/storage/change-location.tsx
+#~ msgid "This folder already contains files. Copied vault files will be mixed in with them."
+#~ msgstr "This folder already contains files. Copied vault files will be mixed in with them."
 
 #. placeholder {0}: pending.speakerCount
 #: src/session/components/note-input/transcript/regenerate-confirm.tsx
