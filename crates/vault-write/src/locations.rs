@@ -373,11 +373,27 @@ impl SessionStore {
             .insert(id.to_string());
     }
 
+    /// Catalog writes announce genuine physical-location changes on the index bus
+    /// (`IndexEntity::Locations`): every frontend cache holding an absolute session
+    /// path invalidates off that one event, wherever the change originated (app
+    /// rename, migration, delete/restore, fs-sync move, external rename caught by a
+    /// rebuild). Re-inserting the same NFC-normalized path stays silent.
     pub(crate) fn catalog_insert(&self, id: &str, dir: PathBuf) {
-        self.locations.write().unwrap().insert(id.to_string(), dir);
+        let previous = self
+            .locations
+            .write()
+            .unwrap()
+            .insert(id.to_string(), dir.clone());
+        let changed =
+            previous.is_none_or(|prev| !hypr_vault_read::layout::paths_eq_nfc(&prev, &dir));
+        if changed {
+            self.notify_index_changed(super::IndexEntity::Locations, vec![id.to_string()]);
+        }
     }
 
     pub(crate) fn catalog_remove(&self, id: &str) {
-        self.locations.write().unwrap().remove(id);
+        if self.locations.write().unwrap().remove(id).is_some() {
+            self.notify_index_changed(super::IndexEntity::Locations, vec![id.to_string()]);
+        }
     }
 }

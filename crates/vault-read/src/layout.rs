@@ -278,7 +278,10 @@ pub fn find_session_and_scan(
     vault: &Path,
     id: &str,
 ) -> std::result::Result<
-    (Option<(SessionLocation, SessionMeta)>, Option<SessionDiscovery>),
+    (
+        Option<(SessionLocation, SessionMeta)>,
+        Option<SessionDiscovery>,
+    ),
     SessionLookupError,
 > {
     let legacy_dir = paths::sessions_root().join(id);

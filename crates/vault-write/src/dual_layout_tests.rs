@@ -1113,13 +1113,121 @@ async fn warmed_fs_sync_resolution_never_falls_back_to_discovery() {
 
     let saved = core.attachment_save(ID, b"bytes", "file.txt").unwrap();
     assert_eq!(core.attachment_list(ID).unwrap().len(), 1);
-    assert_eq!(core.attachment_read(ID, &saved.attachment_id).unwrap(), b"bytes");
+    assert_eq!(
+        core.attachment_read(ID, &saved.attachment_id).unwrap(),
+        b"bytes"
+    );
     let resolved = core.resolve_session_dir(ID).unwrap();
-    assert_eq!(resolved, vault_base.join(store.session_dir(ID).await.unwrap()));
+    assert_eq!(
+        resolved,
+        vault_base.join(store.session_dir(ID).await.unwrap())
+    );
 
     assert_eq!(
         misses.load(Ordering::SeqCst),
         0,
         "every warmed resolution must be a catalog hit -- zero discovery fallbacks"
+    );
+}
+
+// -- physical-location change events (`IndexEntity::Locations`) -------------------
+
+/// Everything the raw change stream saw, via a tap subscribed before the action.
+fn drain(rx: &mut crate::index::IndexChangeReceiver) -> Vec<(crate::IndexEntity, Vec<String>)> {
+    let mut out = Vec::new();
+    while let Ok(change) = rx.try_recv() {
+        out.push(change);
+    }
+    out
+}
+
+#[tokio::test]
+async fn a_provisional_rename_emits_a_locations_event() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let mut rx = store.subscribe_index_changes();
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Roadmap review".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    let changes = drain(&mut rx);
+    assert!(
+        changes
+            .iter()
+            .any(|(entity, ids)| *entity == crate::IndexEntity::Locations
+                && ids == &vec![ID.to_string()]),
+        "the rename must announce the location change: {changes:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_external_rename_rebuild_emits_only_a_locations_event() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    store.rebuild_index().await.unwrap();
+    let from = vault.path().join(store.session_dir(ID).await.unwrap());
+    let mut rx = store.subscribe_index_changes();
+
+    // Finder-style rename: content is untouched, only the physical home moves.
+    let to = vault.path().join("sessions/Renamed by hand");
+    std::fs::rename(&from, &to).unwrap();
+    store.rebuild_index().await.unwrap();
+
+    let changes = drain(&mut rx);
+    assert_eq!(
+        changes,
+        vec![(crate::IndexEntity::Locations, vec![ID.to_string()])],
+        "unchanged file content must produce no content-entity events"
+    );
+    assert_eq!(
+        store.session_dir_cached(ID).unwrap(),
+        Some(PathBuf::from("sessions/Renamed by hand"))
+    );
+}
+
+#[tokio::test]
+async fn an_unchanged_rebuild_emits_no_locations_events() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    store.rebuild_index().await.unwrap();
+    let mut rx = store.subscribe_index_changes();
+
+    store.rebuild_index().await.unwrap();
+
+    assert_eq!(drain(&mut rx), vec![]);
+}
+
+#[tokio::test]
+async fn delete_and_restore_both_emit_locations_events() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let mut rx = store.subscribe_index_changes();
+
+    store.delete_session(ID).await.unwrap();
+    let deleted_changes = drain(&mut rx);
+    assert!(
+        deleted_changes
+            .iter()
+            .any(|(entity, ids)| *entity == crate::IndexEntity::Locations
+                && ids.contains(&ID.to_string())),
+        "{deleted_changes:?}"
+    );
+
+    assert!(store.restore_session(ID).await.unwrap());
+    let restored_changes = drain(&mut rx);
+    assert!(
+        restored_changes
+            .iter()
+            .any(|(entity, ids)| *entity == crate::IndexEntity::Locations
+                && ids.contains(&ID.to_string())),
+        "{restored_changes:?}"
     );
 }

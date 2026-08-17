@@ -456,7 +456,14 @@ export type IndexChanged = { entity: IndexEntity; ids: string[] }
  * Which index map changed. Serialized as the lowercase strings the frontend matches
  * on in the `index-changed` payload.
  */
-export type IndexEntity = "sessions" | "docs" | "transcripts" | "tasks" | "templates" | "people"
+export type IndexEntity = "sessions" | "docs" | "transcripts" | "tasks" | "templates" | "people" | 
+/**
+ * A session's *physical directory* changed (rename, move, delete/restore,
+ * external relocation caught by a rebuild) -- content-free, so the search
+ * projection ignores it; the frontend uses it to invalidate every cache
+ * holding an absolute session path.
+ */
+"locations"
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
  * One person, file-canonical in the vault-root `people.json`. The id doubles as the

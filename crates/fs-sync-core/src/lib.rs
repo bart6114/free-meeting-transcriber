@@ -666,7 +666,11 @@ mod tests {
             .unwrap();
         // A sync-provider sidecar holding session copies must not block the delete:
         // every layout reader treats dot-prefixed directories as invisible.
-        write_session_at(&temp, &format!("sessions/work/.stversions/{UUID_1}"), UUID_1);
+        write_session_at(
+            &temp,
+            &format!("sessions/work/.stversions/{UUID_1}"),
+            UUID_1,
+        );
 
         let core = FsSyncCore::new(temp.path().to_path_buf());
         core.delete_folder("work").unwrap();
@@ -690,7 +694,10 @@ mod tests {
             .child(".trash")
             .assert(predicates::path::missing());
 
-        temp.child("sessions").child("work").create_dir_all().unwrap();
+        temp.child("sessions")
+            .child("work")
+            .create_dir_all()
+            .unwrap();
         let result = core.rename_folder("work", ".hidden");
         assert!(
             matches!(result, Err(Error::Path(message)) if message == "folder_path_hidden_not_allowed")

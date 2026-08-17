@@ -63,7 +63,7 @@ impl SessionStore {
         // Corrupt-protected ids keep their previous location (their directory is still
         // there, just unreadable); duplicated ids are dropped so writes block instead of
         // silently picking one claimant.
-        {
+        let location_changes: Vec<String> = {
             let mut catalog = self.locations.write().unwrap();
             let previous = std::mem::take(&mut *catalog);
             for (id, dir) in &scan.locations {
@@ -77,12 +77,29 @@ impl SessionStore {
                     catalog.entry(id.clone()).or_insert_with(|| dir.clone());
                 }
             }
-        }
+            // Ids whose physical directory this swap changed, added, or removed --
+            // announced below as `Locations` so path caches invalidate off external
+            // renames/moves too, not just app-driven ones.
+            previous
+                .keys()
+                .chain(catalog.keys())
+                .filter(|id| match (previous.get(*id), catalog.get(*id)) {
+                    (Some(a), Some(b)) => !hypr_vault_read::layout::paths_eq_nfc(a, b),
+                    (None, None) => false,
+                    _ => true,
+                })
+                .cloned()
+                .collect::<HashSet<String>>()
+                .into_iter()
+                .collect()
+        };
         // Duplicate claims persist past the rebuild so lazy per-id resolution can't
         // sidestep them (find_session's legacy fast path would otherwise silently
         // pick the canonical claimant and let writes diverge the copies).
         *self.known_duplicates.write().unwrap() = scan.duplicate_ids.iter().cloned().collect();
         drop(guard);
+
+        self.notify_index_changed(IndexEntity::Locations, location_changes);
 
         report.errors.extend(scan.errors.iter().cloned());
         report.ghost_sessions = scan.ghost_dirs.clone();

@@ -678,7 +678,10 @@ mod tests {
     fn delete_orphaned_expired_never_deletes_inside_hidden_directories() {
         let temp = TempDir::new().unwrap();
         let sessions_dir = temp.path();
-        let trashed = sessions_dir.join(".trash").join("2026-08-01").join(ORPHAN_SESSION_ID);
+        let trashed = sessions_dir
+            .join(".trash")
+            .join("2026-08-01")
+            .join(ORPHAN_SESSION_ID);
         let sidecar = sessions_dir.join(".stversions").join(ORPHAN_SESSION_ID);
         std::fs::create_dir_all(&trashed).unwrap();
         std::fs::create_dir_all(&sidecar).unwrap();
