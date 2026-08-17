@@ -132,7 +132,7 @@ export function useIndexQuery<TData>({
       ids,
       subscriptionKey,
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // queryKey/ids are captured via subscriptionKey, which already encodes them.
   }, [enabled, queryClient, subscriptionKey]);
 
   return query;

@@ -52,6 +52,7 @@ export function OuterHeader({
           data-tauri-drag-region
           className={cn([
             "pointer-events-none absolute inset-y-0 flex items-center",
+            "@container",
             centerTitle && "justify-center",
             "right-[140px]",
             standaloneWindow

@@ -346,7 +346,7 @@ describe("ClassicMainBody", () => {
     expect(sidebarContent?.getAttribute("aria-hidden")).toBe("false");
     expect(sidebarChrome).toBeNull();
     expect(sidebarTimelineHeader).toBeTruthy();
-    expect(sidebarTimelineHeader?.className).toContain("h-9");
+    expect(sidebarTimelineHeader?.className).toContain("flex-col");
     expect(sidebarTimelineHeader?.className).not.toContain("absolute");
 
     const bodyRoot = screen.getByTestId("panel-group").parentElement;
@@ -616,10 +616,10 @@ describe("ClassicMainBody", () => {
 
     render(<ClassicMainBody />);
 
-    const searchButton = screen.getByRole("button", { name: "Search" });
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
     const updateButton = screen.getByRole("button", { name: "Update" });
 
-    expect(updateButton.parentElement).toBe(searchButton.parentElement);
+    expect(updateButton.parentElement).toBe(settingsButton.parentElement);
   });
 
   it("keeps near-equal sidebar size commits in sync with drag-time CSS variables", () => {
@@ -772,19 +772,18 @@ describe("ClassicMainBody", () => {
   it("shows the devtools button until the panel opens, then restores it when closed", async () => {
     render(<ClassicMainBody />);
 
-    const searchButton = screen.getByRole("button", { name: "Search" });
-    const newNoteButton = screen.getByRole("button", { name: "New note" });
+    const newNoteButton = screen.getByRole("button", { name: /New note/ });
+    const searchButton = screen.getByRole("button", { name: /Search notes/ });
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
     const devtoolsButton = await screen.findByRole("button", {
       name: "Show devtools panel",
     });
 
-    expect(searchButton.compareDocumentPosition(newNoteButton)).toBe(
+    expect(newNoteButton.compareDocumentPosition(searchButton)).toBe(
       Node.DOCUMENT_POSITION_FOLLOWING,
     );
-    expect(newNoteButton.compareDocumentPosition(devtoolsButton)).toBe(
-      Node.DOCUMENT_POSITION_FOLLOWING,
-    );
-    expect(devtoolsButton.parentElement).toBe(newNoteButton.parentElement);
+    expect(newNoteButton.parentElement).toBe(searchButton.parentElement);
+    expect(devtoolsButton.parentElement).toBe(settingsButton.parentElement);
 
     fireEvent.click(devtoolsButton);
 
@@ -873,14 +872,18 @@ describe("ClassicMainBody", () => {
       "[data-sidebar-timeline-header]",
     );
     const sidebarToggle = screen.getByRole("button", { name: "Hide sidebar" });
-    const searchButton = screen.getByRole("button", { name: "Search" });
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
+    const newNoteButton = screen.getByRole("button", { name: /New note/ });
+    const searchButton = screen.getByRole("button", { name: /Search notes/ });
 
     expect(sidebarChrome).toBeNull();
     expect(timelineHeader).toBeInstanceOf(HTMLElement);
     expect(timelineHeader?.parentElement?.dataset.testid).toBe(
       "classic-main-sidebar",
     );
-    expect(searchButton.parentElement).toBe(sidebarToggle.parentElement);
+    expect(settingsButton.parentElement).toBe(sidebarToggle.parentElement);
+    expect(timelineHeader?.contains(newNoteButton)).toBe(true);
+    expect(timelineHeader?.contains(searchButton)).toBe(true);
 
     const scroller = document.querySelector<HTMLElement>(
       "[data-sidebar-timeline-scroll]",

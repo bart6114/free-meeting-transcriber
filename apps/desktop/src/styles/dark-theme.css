@@ -28,9 +28,9 @@
 }
 
 .dark ::-webkit-scrollbar-thumb {
-  background: hsl(30 9% 26%);
+  background: hsl(60 2% 26%);
 }
 
 .dark ::-webkit-scrollbar-thumb:hover {
-  background: hsl(30 8% 33%);
+  background: hsl(60 2% 33%);
 }

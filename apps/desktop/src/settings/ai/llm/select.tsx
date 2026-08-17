@@ -187,6 +187,7 @@ export function SelectProviderAndModel({
       current_llm_provider ?? "",
       current_llm_model ?? "",
       configuredProviderIds,
+      fetchModels,
     ],
     queryFn: async () =>
       await getDefaultLlmSelection(

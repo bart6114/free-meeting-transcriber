@@ -78,7 +78,7 @@ export const TitleInput = forwardRef<
           data-tauri-drag-region="false"
           className={cn([
             "flex w-full items-center justify-start",
-            variant === "breadcrumb" ? "h-5" : "h-[2.125rem]",
+            variant === "breadcrumb" ? "h-5" : "h-[1.75rem]",
           ])}
         >
           <span
@@ -86,7 +86,7 @@ export const TitleInput = forwardRef<
               "text-muted-foreground animate-pulse",
               variant === "breadcrumb"
                 ? "text-sm leading-5"
-                : "text-[1.75rem] leading-[2.125rem] font-semibold",
+                : "text-[1.375rem] leading-[1.75rem] font-medium tracking-[-0.01em]",
             ])}
           >
             <Trans>Generating title...</Trans>
@@ -101,7 +101,7 @@ export const TitleInput = forwardRef<
           data-tauri-drag-region="false"
           className={cn([
             "flex w-full items-center justify-start overflow-hidden",
-            variant === "breadcrumb" ? "h-5" : "h-[2.125rem]",
+            variant === "breadcrumb" ? "h-5" : "h-[1.75rem]",
           ])}
         >
           <span
@@ -109,7 +109,7 @@ export const TitleInput = forwardRef<
               "animate-reveal-left whitespace-nowrap",
               variant === "breadcrumb"
                 ? "text-sm leading-5"
-                : "text-[1.75rem] leading-[2.125rem] font-semibold",
+                : "text-[1.375rem] leading-[1.75rem] font-medium tracking-[-0.01em]",
             ])}
           >
             {generatedTitle}
@@ -373,7 +373,7 @@ const TitleInputInner = memo(
             "group/title-input relative flex max-w-full items-center overflow-hidden",
             variant === "breadcrumb"
               ? "h-5 text-sm leading-5"
-              : "h-[2.125rem] text-[1.75rem] leading-[2.125rem] font-semibold",
+              : "h-[1.75rem] text-[1.375rem] leading-[1.75rem] font-medium tracking-[-0.01em]",
           ])}
         >
           <input
@@ -416,7 +416,7 @@ const TitleInputInner = memo(
               "placeholder:text-muted-foreground text-left",
               variant === "breadcrumb"
                 ? "text-muted-foreground h-5 appearance-none p-0 text-sm leading-5 focus:underline"
-                : "text-[1.75rem] leading-[2.125rem] font-semibold",
+                : "text-[1.375rem] leading-[1.75rem] font-medium tracking-[-0.01em]",
               variant === "breadcrumb" &&
                 (isTitleFocused
                   ? "overflow-x-auto whitespace-nowrap"
@@ -435,7 +435,7 @@ const TitleInputInner = memo(
                   "group-hover/title-input:animate-title-hover-scroll whitespace-nowrap group-hover/title-input:will-change-transform",
                   variant === "breadcrumb"
                     ? "text-sm leading-5"
-                    : "text-[1.75rem] leading-[2.125rem] font-semibold",
+                    : "text-[1.375rem] leading-[1.75rem] font-medium tracking-[-0.01em]",
                 ])}
               >
                 {title}

@@ -153,7 +153,7 @@ const ItemBase = memo(function ItemBase({
     <div
       ref={setItemRef}
       data-sidebar-timeline-session-id={timelineSessionId}
-      className="group/sidebar-live-item relative [contain-intrinsic-size:auto_56px] [content-visibility:auto]"
+      className="group/sidebar-live-item relative [contain-intrinsic-size:auto_36px] [content-visibility:auto]"
     >
       <InteractiveButton
         onClick={onClick}
@@ -163,7 +163,7 @@ const ItemBase = memo(function ItemBase({
         onDragStart={onDragStart}
         contextMenu={hasSelection ? undefined : contextMenu}
         className={cn([
-          "w-full rounded-lg px-3 py-2 text-left",
+          "w-full rounded-lg px-3 py-1.5 text-left",
           showUpcomingGauge && "pl-4",
           showTrailingStatus && "pr-10",
           "cursor-pointer",
@@ -183,26 +183,22 @@ const ItemBase = memo(function ItemBase({
         ])}
         draggable={draggable}
       >
-        <div className="flex items-center gap-2">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <div className="flex min-w-0 items-center gap-1.5">
-              <div className="pointer-events-none min-w-0 truncate text-sm font-normal">
-                {title || t`Untitled`}
-              </div>
-            </div>
-            {displayTime && (
-              <div
-                className={cn([
-                  "timecode",
-                  isLive
-                    ? "text-destructive-foreground/65"
-                    : "text-muted-foreground",
-                ])}
-              >
-                {displayTime}
-              </div>
-            )}
+        <div className="flex min-w-0 items-center gap-2">
+          <div className="pointer-events-none min-w-0 flex-1 truncate text-sm font-normal">
+            {title || t`Untitled`}
           </div>
+          {displayTime && (
+            <div
+              className={cn([
+                "timecode shrink-0",
+                isLive
+                  ? "text-destructive-foreground/65"
+                  : "text-muted-foreground/70",
+              ])}
+            >
+              {displayTime}
+            </div>
+          )}
         </div>
       </InteractiveButton>
       {showUpcomingGauge ? (
@@ -456,17 +452,12 @@ function formatDisplayTime(
   }
 
   const date = timezone ? new TZDate(parsed, timezone) : parsed;
-  const time = format(date, "h:mm a").toUpperCase();
 
   if (precision === "time") {
-    return time;
+    return "";
   }
 
   const now = timezone ? new TZDate(new Date(), timezone) : new Date();
   const sameYear = getYear(date) === getYear(now);
-  const dateStr = sameYear
-    ? format(date, "MMM d")
-    : format(date, "MMM d, yyyy");
-
-  return `${dateStr}, ${time}`;
+  return sameYear ? format(date, "MMM d") : format(date, "MMM d, yyyy");
 }

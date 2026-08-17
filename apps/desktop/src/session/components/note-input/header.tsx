@@ -1,14 +1,12 @@
 import { useLingui } from "@lingui/react/macro";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import {
-  AlignLeftIcon,
   AudioLinesIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   HeartIcon,
   PlusIcon,
   SearchIcon,
-  SparklesIcon,
   XIcon,
 } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
@@ -118,8 +116,7 @@ function IconHeaderView({
         isActive,
         size,
         cn([
-          "px-2",
-          isActive ? "max-w-40 min-w-10 gap-1.5" : null,
+          "max-w-40 gap-1.5 px-2.5",
           hoverLabel
             ? "after:hidden after:min-w-0 after:truncate after:text-xs after:font-medium after:content-[attr(data-hover-label)] hover:after:block"
             : null,
@@ -128,16 +125,14 @@ function IconHeaderView({
       )}
     >
       {icon}
-      {isActive && (
-        <span
-          className={cn([
-            "min-w-0 truncate text-xs font-medium",
-            hoverLabel ? "group-hover/header-view:hidden" : null,
-          ])}
-        >
-          {label}
-        </span>
-      )}
+      <span
+        className={cn([
+          "min-w-0 truncate text-xs font-medium",
+          hoverLabel ? "group-hover/header-view:hidden" : null,
+        ])}
+      >
+        {label}
+      </span>
     </button>
   );
 }
@@ -291,8 +286,8 @@ function HeaderViewRawButton({
   return (
     <IconHeaderView
       isActive={isActive}
-      label={t`Memos`}
-      icon={<AlignLeftIcon className="size-4" />}
+      label={t`Note`}
+      icon={null}
       onClick={onClick}
       onContextMenu={onContextMenu}
       size={standalone ? "standalone" : "tray"}
@@ -425,13 +420,14 @@ function HeaderViewEnhancedInactive({
       aria-label={viewTitle}
       onClick={onClick}
       title={templateTooltip}
-      className={iconHeaderViewClassName(false, "tray", "px-2")}
-    >
-      {isGenerating ? (
-        <Spinner size={16} className="shrink-0" />
-      ) : (
-        <SparklesIcon className="size-4" />
+      className={iconHeaderViewClassName(
+        false,
+        "tray",
+        "max-w-40 gap-1.5 px-2.5",
       )}
+    >
+      {isGenerating ? <Spinner size={14} className="shrink-0" /> : null}
+      <span className="min-w-0 truncate text-xs font-medium">{viewTitle}</span>
     </button>
   );
 }
@@ -571,11 +567,7 @@ function HeaderViewEnhancedActive({
         ]),
       )}
     >
-      {isGenerating ? (
-        <Spinner size={16} className="shrink-0" />
-      ) : (
-        <SparklesIcon className="size-4" />
-      )}
+      {isGenerating ? <Spinner size={14} className="shrink-0" /> : null}
       <span className="min-w-0 truncate text-xs font-medium">{viewTitle}</span>
       <ChevronDownIcon className="size-3.5" />
     </button>
@@ -652,10 +644,8 @@ function HeaderViewTranscriptButton({
         live ? (
           <HeaderViewTranscriptLiveIcon live={live} />
         ) : isTranscribing ? (
-          <Spinner size={16} className="shrink-0" />
-        ) : (
-          <AudioLinesIcon className="size-4" />
-        )
+          <Spinner size={14} className="shrink-0" />
+        ) : null
       }
       onClick={onClick}
       onContextMenu={onContextMenu}

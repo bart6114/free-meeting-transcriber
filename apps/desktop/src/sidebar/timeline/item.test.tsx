@@ -217,7 +217,7 @@ describe("TimelineItemComponent", () => {
       "session-live",
     );
     expect(row?.className).toContain("[content-visibility:auto]");
-    expect(row?.className).toContain("[contain-intrinsic-size:auto_56px]");
+    expect(row?.className).toContain("[contain-intrinsic-size:auto_36px]");
     expect(selectedNodeRef.mock.calls.some(([node]) => node === row)).toBe(
       true,
     );

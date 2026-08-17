@@ -4,6 +4,7 @@ import {
   ArrowLeftIcon,
   PanelLeftCloseIcon,
   PanelLeftOpenIcon,
+  PlusIcon,
   SearchIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -474,22 +475,44 @@ export function ClassicMainBody() {
     <div
       data-tauri-drag-region
       data-sidebar-timeline-header
-      className="flex h-9 shrink-0 items-start pt-[9px] pr-1 pl-[var(--traffic-lights-inset)]"
+      className="flex shrink-0 flex-col"
       onWheelCapture={handleSidebarTimelineHeaderWheel}
     >
+      <div
+        data-tauri-drag-region
+        className="flex h-9 items-start pt-[9px] pr-1 pl-[var(--traffic-lights-inset)]"
+      >
+        {showSidebarTimeline ? (
+          <SidebarTimelineChromeWithUpcomingMeeting
+            currentSessionId={currentSessionId}
+            sidebarExpanded
+            showNoteActionIcons={false}
+            showDevtoolsPanelButton={showDevtoolsPanelButton}
+            devtoolsPanelOpen={devtoolsPanelOpen}
+            onNewNote={createNewNote}
+            onSearch={handleOpenNoteDialog}
+            onOpenDevtools={handleOpenDevtoolsPanel}
+            onOpenSettings={handleOpenSettings}
+            onToggleSidebar={handleToggleLeftSidebar}
+            update={update}
+          />
+        ) : null}
+      </div>
       {showSidebarTimeline ? (
-        <SidebarTimelineChromeWithUpcomingMeeting
-          currentSessionId={currentSessionId}
-          sidebarExpanded
-          showDevtoolsPanelButton={showDevtoolsPanelButton}
-          devtoolsPanelOpen={devtoolsPanelOpen}
-          onNewNote={createNewNote}
-          onSearch={handleOpenNoteDialog}
-          onOpenDevtools={handleOpenDevtoolsPanel}
-          onOpenSettings={handleOpenSettings}
-          onToggleSidebar={handleToggleLeftSidebar}
-          update={update}
-        />
+        <div className="flex flex-col px-2 pt-4 pb-1">
+          <SidebarActionRow
+            icon={<PlusIcon className="size-4" />}
+            label="New note"
+            kbd="⌘N"
+            onClick={createNewNote}
+          />
+          <SidebarActionRow
+            icon={<SearchIcon className="size-3.5" />}
+            label="Search notes…"
+            mutedLabel
+            onClick={handleOpenNoteDialog}
+          />
+        </div>
       ) : null}
     </div>
   ) : null;
@@ -867,6 +890,43 @@ function isMainAreaWindowDrag(
   );
 }
 
+function SidebarActionRow({
+  icon,
+  label,
+  kbd,
+  mutedLabel = false,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  kbd?: string;
+  mutedLabel?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      data-tauri-drag-region="false"
+      onClick={onClick}
+      className={cn([
+        "flex h-7 w-full items-center gap-2.5 rounded-md px-2 text-left text-sm",
+        "hover:bg-sidebar-accent transition-colors",
+        mutedLabel ? "text-muted-foreground/80" : "text-foreground/85",
+      ])}
+    >
+      <span className="text-muted-foreground flex size-4 shrink-0 items-center justify-center">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+      {kbd ? (
+        <span className="border-border bg-card text-muted-foreground/80 shrink-0 rounded border px-1 py-px text-[10px]">
+          {kbd}
+        </span>
+      ) : null}
+    </button>
+  );
+}
+
 const SidebarTimelineChromeWithUpcomingMeeting = memo(
   function SidebarTimelineChromeWithUpcomingMeeting({
     currentSessionId,
@@ -878,6 +938,7 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
     onToggleSidebar,
     sidebarExpanded,
     showDevtoolsPanelButton,
+    showNoteActionIcons = true,
     update,
   }: {
     currentSessionId?: string;
@@ -889,6 +950,7 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
     onToggleSidebar: () => void;
     sidebarExpanded: boolean;
     showDevtoolsPanelButton: boolean;
+    showNoteActionIcons?: boolean;
     update: DesktopUpdateControl;
   }) {
     const upcomingMeetingStatus = useSidebarUpcomingMeetingStatus();
@@ -908,6 +970,7 @@ const SidebarTimelineChromeWithUpcomingMeeting = memo(
         onToggleSidebar={onToggleSidebar}
         sidebarExpanded={sidebarExpanded}
         showDevtoolsPanelButton={showDevtoolsPanelButton}
+        showNoteActionIcons={showNoteActionIcons}
         update={update}
       />
     );
@@ -924,6 +987,7 @@ function SidebarTimelineChrome({
   onToggleSidebar,
   sidebarExpanded,
   showDevtoolsPanelButton,
+  showNoteActionIcons = true,
   update,
 }: {
   devtoolsPanelOpen: boolean;
@@ -935,6 +999,7 @@ function SidebarTimelineChrome({
   onToggleSidebar: () => void;
   sidebarExpanded: boolean;
   showDevtoolsPanelButton: boolean;
+  showNoteActionIcons?: boolean;
   update: DesktopUpdateControl;
 }) {
   const updateVisible = Boolean(update.status && update.version);
@@ -963,12 +1028,19 @@ function SidebarTimelineChrome({
         </LeftSurfaceChromeButton>
         {sidebarExpanded ? (
           <>
-            <LeftSurfaceChromeButton ariaLabel="Search" onClick={onSearch}>
-              <SearchIcon size={15} />
-            </LeftSurfaceChromeButton>
-            <LeftSurfaceChromeButton ariaLabel="New note" onClick={onNewNote}>
-              <SquarePenIcon size={15} />
-            </LeftSurfaceChromeButton>
+            {showNoteActionIcons ? (
+              <>
+                <LeftSurfaceChromeButton ariaLabel="Search" onClick={onSearch}>
+                  <SearchIcon size={15} />
+                </LeftSurfaceChromeButton>
+                <LeftSurfaceChromeButton
+                  ariaLabel="New note"
+                  onClick={onNewNote}
+                >
+                  <SquarePenIcon size={15} />
+                </LeftSurfaceChromeButton>
+              </>
+            ) : null}
             <LeftSurfaceChromeButton
               ariaLabel="Settings"
               onClick={onOpenSettings}
