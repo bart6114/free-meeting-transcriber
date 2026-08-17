@@ -16547,6 +16547,7 @@ dependencies = [
  "transcript",
  "transcription-core",
  "vault-read",
+ "vault-write",
 ]
 
 [[package]]

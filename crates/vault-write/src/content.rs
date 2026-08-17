@@ -127,10 +127,13 @@ impl SessionStore {
 
         // Tracked even if the stamp below fails: the recorder holds paths into the
         // directory either way, so the provisional rename must stay deferred.
+        // Ensure-at-least-one (never stack): a `prepare_recording` lease for this
+        // same recording may already be counted.
         self.active_recordings
             .lock()
             .unwrap()
-            .insert(id.to_string());
+            .entry(id.to_string())
+            .or_insert(1);
 
         let mut meta = self
             .read_meta(id)

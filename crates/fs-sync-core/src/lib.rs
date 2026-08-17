@@ -22,18 +22,37 @@ pub use session::find_session_dir;
 pub use types::*;
 
 use hypr_vault_read::layout::{eq_nfc, paths_eq_nfc};
-use session::{DirClass, classify_dir};
 
 use std::path::PathBuf;
+use std::sync::Arc;
+
+/// Optional fast-path session-directory resolver: `Ok(Some(abs_dir))` is used
+/// verbatim, `Ok(None)` falls back to this crate's own `find_session_dir`
+/// discovery (preserving its corrupt/ghost adoption semantics), and an `Err`
+/// (e.g. a duplicate-claimed id) propagates. The desktop plugin installs one
+/// backed by the store's warm location catalog; standalone users never pay for it.
+pub type SessionDirResolver = Arc<dyn Fn(&str) -> Result<Option<PathBuf>> + Send + Sync>;
 
 pub struct FsSyncCore {
     sessions_dir: PathBuf,
+    resolver: Option<SessionDirResolver>,
 }
 
 impl FsSyncCore {
     pub fn new(base_dir: PathBuf) -> Self {
         let sessions_dir = base_dir.join("sessions");
-        Self { sessions_dir }
+        Self {
+            sessions_dir,
+            resolver: None,
+        }
+    }
+
+    pub fn with_resolver(base_dir: PathBuf, resolver: SessionDirResolver) -> Self {
+        let sessions_dir = base_dir.join("sessions");
+        Self {
+            sessions_dir,
+            resolver: Some(resolver),
+        }
     }
 
     pub fn list_folders(&self) -> Result<ListFoldersResult> {
@@ -117,7 +136,10 @@ impl FsSyncCore {
     }
 
     pub fn rename_folder(&self, old_path: &str, new_path: &str) -> Result<RenameFolderResult> {
-        let old_path = normalize_folder_path(old_path)?;
+        // The source may be a pre-existing hidden folder (rescuing it to a visible
+        // name is the one way its sessions become reachable again); the target must
+        // never be one.
+        let old_path = path::normalize_existing_folder_path(old_path)?;
         let new_path = normalize_folder_path(new_path)?;
 
         if old_path.is_empty() || new_path.is_empty() {
@@ -153,7 +175,9 @@ impl FsSyncCore {
     }
 
     pub fn delete_folder(&self, folder_path: &str) -> Result<()> {
-        let folder_path = normalize_folder_path(folder_path)?;
+        // A pre-existing hidden folder stays deletable; the contains-sessions guard
+        // below still blocks it while any (visible) session lives inside.
+        let folder_path = path::normalize_existing_folder_path(folder_path)?;
         if folder_path.is_empty() {
             return Err(Error::Path("folder_delete_root_not_allowed".into()));
         }
@@ -177,7 +201,9 @@ impl FsSyncCore {
 
     /// Guards `delete_folder`: any directory holding `_meta.json` — readable-named,
     /// uuid-named, or with an unreadable meta — counts as a session and blocks the
-    /// delete; only meta-less directories are traversed as folders.
+    /// delete; only meta-less directories are traversed as folders. Hidden
+    /// directories are invisible to every layout reader, so their contents never
+    /// block an ordinary folder delete.
     fn folder_contains_sessions(&self, folder: &PathBuf) -> Result<bool> {
         let entries = std::fs::read_dir(folder)?;
 
@@ -186,14 +212,19 @@ impl FsSyncCore {
             if !path.is_dir() {
                 continue;
             }
+            if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_none_or(|name| name.starts_with('.'))
+            {
+                continue;
+            }
 
-            match classify_dir(&path) {
-                DirClass::Session(_) => return Ok(true),
-                DirClass::Folder => {
-                    if self.folder_contains_sessions(&path)? {
-                        return Ok(true);
-                    }
-                }
+            if hypr_vault_read::has_session_boundary(&path) {
+                return Ok(true);
+            }
+            if self.folder_contains_sessions(&path)? {
+                return Ok(true);
             }
         }
 
@@ -309,6 +340,16 @@ impl FsSyncCore {
     }
 
     pub fn resolve_session_dir(&self, session_id: &str) -> Result<PathBuf> {
+        // Validation stays in front of the override: a warm store catalog must not
+        // make fs-sync accept ids that its own resolution would reject.
+        if !is_uuid(session_id) {
+            return Err(Error::Path("session_id_invalid".into()));
+        }
+        if let Some(resolver) = &self.resolver
+            && let Some(dir) = resolver(session_id)?
+        {
+            return Ok(dir);
+        }
         find_session_dir(&self.sessions_dir, session_id)
     }
 }
@@ -622,6 +663,82 @@ mod tests {
     }
 
     #[test]
+    fn delete_folder_ignores_sessions_hidden_inside_dot_directories() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child("work")
+            .create_dir_all()
+            .unwrap();
+        // A sync-provider sidecar holding session copies must not block the delete:
+        // every layout reader treats dot-prefixed directories as invisible.
+        write_session_at(
+            &temp,
+            &format!("sessions/work/.stversions/{UUID_1}"),
+            UUID_1,
+        );
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        core.delete_folder("work").unwrap();
+
+        temp.child("sessions")
+            .child("work")
+            .assert(predicates::path::missing());
+    }
+
+    /// Vaults from before hidden paths were rejected can hold dot-named folders.
+    /// The escape hatch: renaming them to a visible name (or deleting them when
+    /// empty) must remain possible, while the contains-sessions guard still
+    /// blocks deleting one with sessions inside.
+    #[test]
+    fn preexisting_hidden_folders_can_be_rescued_by_rename_or_deleted() {
+        let temp = TempDir::new().unwrap();
+        write_session_at(&temp, "sessions/.archive/keep", UUID_1);
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        assert!(core.delete_folder(".archive").is_err());
+
+        core.rename_folder(".archive", "archive").unwrap();
+        temp.child("sessions")
+            .child("archive")
+            .child("keep")
+            .child("_meta.json")
+            .assert(predicates::path::exists());
+
+        temp.child("sessions")
+            .child(".empty")
+            .create_dir_all()
+            .unwrap();
+        core.delete_folder(".empty").unwrap();
+        temp.child("sessions")
+            .child(".empty")
+            .assert(predicates::path::missing());
+    }
+
+    #[test]
+    fn folder_operations_reject_hidden_paths() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions").create_dir_all().unwrap();
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        let result = core.create_folder(".trash");
+        assert!(
+            matches!(result, Err(Error::Path(message)) if message == "folder_path_hidden_not_allowed")
+        );
+        temp.child("sessions")
+            .child(".trash")
+            .assert(predicates::path::missing());
+
+        temp.child("sessions")
+            .child("work")
+            .create_dir_all()
+            .unwrap();
+        let result = core.rename_folder("work", ".hidden");
+        assert!(
+            matches!(result, Err(Error::Path(message)) if message == "folder_path_hidden_not_allowed")
+        );
+    }
+
+    #[test]
     fn create_folder_rejects_traversal() {
         let temp = TempDir::new().unwrap();
         temp.child("sessions").create_dir_all().unwrap();
@@ -754,6 +871,84 @@ mod tests {
 
         assert!(matches!(result, Err(Error::Path(message)) if message == "session_id_invalid"));
         temp.child("outside").assert(predicates::path::missing());
+    }
+
+    #[test]
+    fn resolver_hit_is_used_verbatim_for_attachments_and_moves() {
+        let temp = TempDir::new().unwrap();
+        // The physical home has a name the fallback could never derive from the id;
+        // only the injected resolver knows it.
+        write_session_at(&temp, "sessions/2026-03-20 — Planning — 550e84", UUID_1);
+        let hit = temp.path().join("sessions/2026-03-20 — Planning — 550e84");
+
+        let resolver_hit = hit.clone();
+        let calls = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let resolver_calls = calls.clone();
+        let core = FsSyncCore::with_resolver(
+            temp.path().to_path_buf(),
+            Arc::new(move |id: &str| {
+                resolver_calls.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                assert_eq!(id, UUID_1);
+                Ok(Some(resolver_hit.clone()))
+            }),
+        );
+
+        core.attachment_save(UUID_1, b"hello", "file.txt").unwrap();
+        assert!(hit.join("attachments/file.txt").is_file());
+
+        core.move_session(UUID_1, "", "work").unwrap();
+        temp.child("sessions")
+            .child("work")
+            .child("2026-03-20 — Planning — 550e84")
+            .child("attachments")
+            .child("file.txt")
+            .assert(predicates::path::exists());
+        assert!(calls.load(std::sync::atomic::Ordering::SeqCst) >= 2);
+    }
+
+    #[test]
+    fn resolver_none_preserves_nested_unclaimed_dir_adoption() {
+        // A nested uuid-named directory with a corrupt meta: the resolver misses,
+        // and the fallback must still adopt it instead of inventing a root path.
+        let temp = TempDir::new().unwrap();
+        let corrupt = temp.path().join("sessions/work").join(UUID_1);
+        std::fs::create_dir_all(&corrupt).unwrap();
+        std::fs::write(corrupt.join("_meta.json"), "{ invalid").unwrap();
+
+        let core =
+            FsSyncCore::with_resolver(temp.path().to_path_buf(), Arc::new(|_id: &str| Ok(None)));
+
+        assert_eq!(core.resolve_session_dir(UUID_1).unwrap(), corrupt);
+    }
+
+    #[test]
+    fn resolver_errors_propagate_instead_of_falling_back() {
+        let temp = TempDir::new().unwrap();
+        write_session_at(&temp, &format!("sessions/{UUID_1}"), UUID_1);
+
+        let core = FsSyncCore::with_resolver(
+            temp.path().to_path_buf(),
+            Arc::new(|_id: &str| Err(Error::Path("duplicate id".into()))),
+        );
+
+        assert!(matches!(
+            core.resolve_session_dir(UUID_1),
+            Err(Error::Path(message)) if message == "duplicate id"
+        ));
+    }
+
+    #[test]
+    fn resolver_is_never_consulted_for_an_invalid_session_id() {
+        let temp = TempDir::new().unwrap();
+        let core = FsSyncCore::with_resolver(
+            temp.path().to_path_buf(),
+            Arc::new(|_id: &str| panic!("a non-uuid id must be rejected before the resolver")),
+        );
+
+        assert!(matches!(
+            core.resolve_session_dir("../outside"),
+            Err(Error::Path(message)) if message == "session_id_invalid"
+        ));
     }
 
     #[test]

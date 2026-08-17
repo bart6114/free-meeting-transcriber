@@ -444,6 +444,40 @@ pub async fn session_find_by_tracking_id<R: tauri::Runtime>(
     Ok(store(&app)?.session_find_by_tracking_id(&tracking_id))
 }
 
+/// Reserves the session's directory for an imminent recording and returns its
+/// absolute path -- the stable value the pre-start hook receives. Paired with
+/// `session_release_recording_prepare` on start failure; a successful start's
+/// lease is cleared by the `Stopped` capture lifecycle.
+#[tauri::command]
+#[specta::specta]
+pub async fn session_prepare_recording<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<String, String> {
+    let store = store(&app)?;
+    let relative = store
+        .prepare_recording(&session_id)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(store
+        .vault_base()
+        .join(relative)
+        .to_string_lossy()
+        .into_owned())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_release_recording_prepare<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+) -> Result<(), String> {
+    store(&app)?
+        .release_recording_prepare(&session_id)
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[tauri::command]
 #[specta::specta]
 pub async fn session_store_audio<R: tauri::Runtime>(

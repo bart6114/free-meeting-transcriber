@@ -406,6 +406,28 @@ async sessionFindByTrackingId(trackingId: string) : Promise<Result<SessionMeta |
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
 }
+},
+/**
+ * Reserves the session's directory for an imminent recording and returns its
+ * absolute path -- the stable value the pre-start hook receives. Paired with
+ * `session_release_recording_prepare` on start failure; a successful start's
+ * lease is cleared by the `Stopped` capture lifecycle.
+ */
+async sessionPrepareRecording(sessionId: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_prepare_recording", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionReleaseRecordingPrepare(sessionId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_release_recording_prepare", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
 }
 }
 
@@ -413,9 +435,11 @@ async sessionFindByTrackingId(trackingId: string) : Promise<Result<SessionMeta |
 
 
 export const events = __makeEvents__<{
-indexChanged: IndexChanged
+indexChanged: IndexChanged,
+recordingMetaSettled: RecordingMetaSettled
 }>({
-indexChanged: "index-changed"
+indexChanged: "index-changed",
+recordingMetaSettled: "recording-meta-settled"
 })
 
 /** user-defined constants **/
@@ -456,7 +480,14 @@ export type IndexChanged = { entity: IndexEntity; ids: string[] }
  * Which index map changed. Serialized as the lowercase strings the frontend matches
  * on in the `index-changed` payload.
  */
-export type IndexEntity = "sessions" | "docs" | "transcripts" | "tasks" | "templates" | "people"
+export type IndexEntity = "sessions" | "docs" | "transcripts" | "tasks" | "templates" | "people" | 
+/**
+ * A session's *physical directory* changed (rename, move, delete/restore,
+ * external relocation caught by a rebuild) -- content-free, so the search
+ * projection ignores it; the frontend uses it to invalidate every cache
+ * holding an absolute session path.
+ */
+"locations"
 export type JsonValue = null | boolean | number | string | JsonValue[] | Partial<{ [key in string]: JsonValue }>
 /**
  * One person, file-canonical in the vault-root `people.json`. The id doubles as the
@@ -481,6 +512,15 @@ notes: number; transcripts: number;
  * `transcript.json`) but no `_meta.json` -- left deliberately unindexed; files untouched.
  */
 ghost_sessions: string[]; errors: string[] }
+/**
+ * Emitted after every `Stopped`-driven metadata attempt has finished -- including
+ * the missing-store and failed-write branches. It means "the end-of-recording
+ * meta stamp (and any provisional directory rename it triggered) is no longer in
+ * flight", not that it succeeded: the frontend waits for it before resolving
+ * `resource_dir` for the post-stop hook, so the hook can never receive a path the
+ * pending rename is about to move.
+ */
+export type RecordingMetaSettled = { sessionId: string; succeeded: boolean }
 /**
  * One `session_list` entry: full meta plus the derived flags list consumers need
  * (timeline grouping wants `event`/`folder` off the meta; audio retention wants

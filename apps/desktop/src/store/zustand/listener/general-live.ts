@@ -3,6 +3,7 @@ import { Effect, Exit } from "effect";
 import type { StoreApi } from "zustand";
 
 import { commands as detectCommands } from "@hypr/plugin-detect";
+import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 import { commands as hooksCommands } from "@hypr/plugin-hooks";
 import { commands as iconCommands } from "@hypr/plugin-icon";
 import { commands as settingsCommands } from "@hypr/plugin-settings";
@@ -33,10 +34,15 @@ import {
   updateLiveAmplitude,
   updateLiveProgress,
 } from "./general-shared";
+import {
+  ensureRecordingMetaSettledListener,
+  waitForRecordingMetaSettled,
+} from "./recording-meta-settled";
 import type { TranscriptActions, TranscriptState } from "./transcript";
 
 import { getSessionResourcePath } from "~/session/resource-path";
 import { fromResult } from "~/stt/fromResult";
+import { commands as sessionCommands } from "~/types/tauri.gen";
 
 type EventListeners = {
   lifecycle: (payload: CaptureLifecycleEvent) => void;
@@ -51,6 +57,9 @@ const listenToAllSessionEvents = (
 ): Effect.Effect<(() => void)[], unknown> =>
   Effect.tryPromise({
     try: async () => {
+      // Registered alongside the capture listeners so the settle listener's
+      // registration round-trip is long done before any stop could emit one.
+      ensureRecordingMetaSettledListener();
       const unlisteners = await Promise.all([
         listenerEvents.captureLifecycleEvent.listen(({ payload }) =>
           handlers.lifecycle(payload),
@@ -216,12 +225,27 @@ const createSessionEventHandlers = <T extends LiveStore>(
     }
 
     if (onStopped) {
-      onStopped(targetSessionId, {
-        durationSeconds: stoppedSeconds,
-        audioPath: payload.audio_path ?? null,
-        requestedLiveTranscription: payload.requested_live_transcription,
-        liveTranscriptionActive: payload.live_transcription_active,
-        needsBatchRepair,
+      // The Stopped payload's audio_path was resolved by listener-core BEFORE
+      // mark_recording_ended runs its deferred first-title directory rename.
+      // Wait for the settle event and re-resolve, so audio cataloging and batch
+      // repair never chase a path the rename just moved.
+      void waitForRecordingMetaSettled(targetSessionId).then(async () => {
+        let audioPath = payload.audio_path ?? null;
+        try {
+          const refreshed = await fsSyncCommands.audioPath(targetSessionId);
+          if (refreshed.status === "ok" && refreshed.data) {
+            audioPath = refreshed.data;
+          }
+        } catch {
+          // Keep the payload's path; the directory simply was not renamed.
+        }
+        onStopped(targetSessionId, {
+          durationSeconds: stoppedSeconds,
+          audioPath,
+          requestedLiveTranscription: payload.requested_live_transcription,
+          liveTranscriptionActive: payload.live_transcription_active,
+          needsBatchRepair,
+        });
       });
     }
   },
@@ -312,6 +336,14 @@ export const startLiveSession = <T extends LiveStore>(
 
   const handlers = createSessionEventHandlers(set, get, targetSessionId);
 
+  // Whether this start's own path lease was taken. Only a held lease may be
+  // released on failure -- releasing without one could unprotect a concurrent
+  // recording of the same session. The promise is tracked too: a sibling
+  // failure can abort the start while the prepare call is still in flight, and
+  // its late-arriving lease must still be released.
+  let prepared = false;
+  let preparePromise: Promise<unknown> | null = null;
+
   const program = Effect.gen(function* () {
     const unlisteners = yield* listenToAllSessionEvents(handlers);
 
@@ -320,24 +352,41 @@ export const startLiveSession = <T extends LiveStore>(
     });
 
     const [sessionPath, micUsingApps, bundleId] = yield* Effect.tryPromise({
-      try: () =>
-        Promise.all([
-          settingsCommands
-            .vaultBase()
-            .then((r) => {
-              if (r.status === "error") throw new Error(r.error);
-              return r.data;
-            })
-            .then((dataDirPath) =>
-              getSessionResourcePath(dataDirPath, targetSessionId),
-            ),
+      try: () => {
+        // Reserves the directory (a recording path lease) and returns the
+        // stable absolute path: the pre-start hook and the recorder both see
+        // a directory the first-title rename cannot move mid-start. Best
+        // effort -- a failed reservation (duplicate-claimed id, transient IO)
+        // must never block recording, so it falls back to the unleased
+        // resolution the pre-lease flow always used; the Started-lifecycle
+        // guard still protects the directory once capture is running.
+        const pathPromise = sessionCommands
+          .sessionPrepareRecording(targetSessionId)
+          .then((r) => {
+            if (r.status === "error") throw new Error(r.error);
+            prepared = true;
+            return r.data;
+          })
+          .catch(async (error) => {
+            console.warn(
+              "[record] recording preparation failed; starting without a path lease:",
+              error,
+            );
+            const base = await settingsCommands.vaultBase();
+            if (base.status === "error") throw new Error(base.error);
+            return getSessionResourcePath(base.data, targetSessionId);
+          });
+        preparePromise = pathPromise;
+        return Promise.all([
+          pathPromise,
           detectCommands
             .listMicUsingApplications()
             .then((r) =>
               r.status === "ok" ? r.data.map((app) => app.id) : null,
             ),
           getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
-        ]),
+        ]);
+      },
       catch: (error) => error,
     });
 
@@ -382,6 +431,25 @@ export const startLiveSession = <T extends LiveStore>(
     Exit.match(exit, {
       onFailure: (cause) => {
         console.error(JSON.stringify(cause));
+        // Capture never started; release this start's own lease so the
+        // deferred first-title rename is not blocked forever. Await the
+        // in-flight prepare first: a sibling failure can lose the race with
+        // it, and a lease granted after this handler ran would otherwise leak.
+        // A concurrent recording's leases are untouched (release is a no-op
+        // when this start's prepare never succeeded).
+        void (async () => {
+          await (preparePromise ?? Promise.resolve()).catch(() => {});
+          if (prepared) {
+            await sessionCommands
+              .sessionReleaseRecordingPrepare(targetSessionId)
+              .catch((error) => {
+                console.error(
+                  "Failed to release recording preparation:",
+                  error,
+                );
+              });
+          }
+        })();
         const currentLive = get().live;
         clearLiveInterval(currentLive.intervalId);
         clearLiveEventUnlisteners(
@@ -537,6 +605,13 @@ export const stopLiveSession = <T extends GeneralState>(
     });
   }
 
+  // The settle listener must be live before the stop request: `stopCapture`
+  // returns after requesting shutdown, while `mark_recording_ended`'s rename
+  // runs later off the Stopped lifecycle -- the post-stop hook must not resolve
+  // its directory in between. (Normally already started with the capture
+  // listeners; this covers stop paths that never went through a start here.)
+  ensureRecordingMetaSettledListener();
+
   const program = Effect.gen(function* () {
     yield* stopSessionEffect();
   });
@@ -567,18 +642,24 @@ export const stopLiveSession = <T extends GeneralState>(
           return;
         }
 
-        void Promise.all([
-          settingsCommands
-            .vaultBase()
-            .then((r) => {
-              if (r.status === "error") throw new Error(r.error);
-              return r.data;
-            })
-            .then((dataDirPath) =>
-              getSessionResourcePath(dataDirPath, sessionId),
-            ),
-          getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
-        ])
+        // Wait for the end-of-recording meta stamp (and its possible directory
+        // rename) to settle before resolving the hook's resource_dir, so the
+        // path handed to the hook is not moved out from under it by the app.
+        void waitForRecordingMetaSettled(sessionId)
+          .then(() =>
+            Promise.all([
+              settingsCommands
+                .vaultBase()
+                .then((r) => {
+                  if (r.status === "error") throw new Error(r.error);
+                  return r.data;
+                })
+                .then((dataDirPath) =>
+                  getSessionResourcePath(dataDirPath, sessionId),
+                ),
+              getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
+            ]),
+          )
           .then(([sessionPath, bundleId]) => {
             return hooksCommands.runEventHooks({
               afterListeningStopped: {

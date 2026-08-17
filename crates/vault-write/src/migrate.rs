@@ -27,24 +27,30 @@ impl SessionStore {
     /// suffix instead of racing for the same target. Intended to run at desktop
     /// startup before the first index rebuild and before the vault watcher starts.
     pub async fn migrate_legacy_session_directories(&self) -> Result<MigrationReport, StoreError> {
-        let vault_base = self.vault_base.clone();
-        let discovery =
-            tokio::task::spawn_blocking(move || hypr_vault_read::discover_sessions(&vault_base))
-                .await
-                .map_err(|e| StoreError::Io(format!("task join error: {e}")))??;
+        let guard = self.lock_writes().await;
+        let mut scan = self.scan_session_locations().await?;
+        Ok(self.migrate_from_scan(&guard, &mut scan).await)
+    }
 
+    /// The migration body, working off an already-paid layout snapshot (startup
+    /// normalization shares one walk between migration, reconciliation, and the
+    /// first rebuild). Successful renames update the snapshot's paths in place.
+    pub(super) async fn migrate_from_scan(
+        &self,
+        guard: &super::WriteGuard<'_>,
+        scan: &mut super::rebuild::SessionLayoutScan,
+    ) -> MigrationReport {
         let mut report = MigrationReport::default();
-        for error in &discovery.errors {
-            report.skipped.push(error.to_string());
+        for error in &scan.errors {
+            report.skipped.push(error.clone());
         }
 
         // Preflight: choose every target first. Claimed targets are tracked so two
         // same-day same-title sessions in one batch cannot pick the same name.
-        let guard = self.lock_writes().await;
         let today = chrono::Local::now().format("%Y-%m-%d").to_string();
         let mut claimed: HashSet<PathBuf> = HashSet::new();
-        let mut renames: Vec<(String, PathBuf, PathBuf)> = Vec::new();
-        for (location, meta) in &discovery.sessions {
+        let mut renames: Vec<(usize, PathBuf, PathBuf)> = Vec::new();
+        for (index, (location, meta)) in scan.sessions.iter().enumerate() {
             let Some(basename) = location.relative_dir.file_name().and_then(|n| n.to_str()) else {
                 continue;
             };
@@ -59,22 +65,15 @@ impl SessionStore {
             let (date, _) =
                 layout_name::session_date(meta.started_at.as_deref(), &meta.created_at, &today);
             let vault_base = self.vault_base.clone();
-            let target = layout_name::short_id_candidates(&meta.id)
+            let target = layout_name::session_dir_candidates(parent, &date, &meta.title, &meta.id)
                 .into_iter()
-                .map(|suffix| {
-                    parent.join(layout_name::format_session_dir_name(
-                        &date,
-                        &meta.title,
-                        &suffix,
-                    ))
-                })
                 .find(|candidate| {
                     !claimed.contains(candidate) && !vault_base.join(candidate).exists()
                 });
             match target {
                 Some(target) => {
                     claimed.insert(target.clone());
-                    renames.push((meta.id.clone(), location.relative_dir.clone(), target));
+                    renames.push((index, location.relative_dir.clone(), target));
                 }
                 None => report.skipped.push(format!(
                     "{}: no collision-free readable name",
@@ -83,19 +82,20 @@ impl SessionStore {
             }
         }
 
-        for (id, from, to) in renames {
-            match self
-                .rename_session_dir_locked(&guard, &id, &from, &to)
-                .await
-            {
-                Ok(()) => report
-                    .renamed
-                    .push((from.display().to_string(), to.display().to_string())),
+        for (index, from, to) in renames {
+            let id = scan.sessions[index].0.id.clone();
+            match self.rename_session_dir_locked(guard, &id, &from, &to).await {
+                Ok(()) => {
+                    scan.sessions[index].0.relative_dir = to.clone();
+                    report
+                        .renamed
+                        .push((from.display().to_string(), to.display().to_string()));
+                }
                 Err(error) => report.failed.push(format!("{}: {error}", from.display())),
             }
         }
 
-        Ok(report)
+        report
     }
 }
 

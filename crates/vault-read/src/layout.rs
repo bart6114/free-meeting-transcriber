@@ -46,6 +46,13 @@ pub enum SessionDiscoveryError {
 pub struct SessionDiscovery {
     pub sessions: Vec<(SessionLocation, SessionMeta)>,
     pub errors: Vec<SessionDiscoveryError>,
+    /// Vault-relative meta-less directories that directly hold a recognized session
+    /// artifact (a `*.md` file or `transcript.json`) -- recorder fallbacks and
+    /// stripped sessions. Reported once per boundary (a ghost's own subtree is its
+    /// content, so nothing beneath it is reported again), gathered during the same
+    /// traversal so callers never pay a second walk. Traversal still descends so a
+    /// healthy session nested under a ghost is discovered exactly as before.
+    pub ghost_dirs: Vec<PathBuf>,
 }
 
 /// Outcome of resolving one full id, distinguishing "no such session" (`Ok(None)`)
@@ -131,20 +138,39 @@ pub fn paths_eq_nfc(a: &Path, b: &Path) -> bool {
     }
 }
 
-enum DirKind {
+/// The one session-boundary rule, shared by every layout consumer: `_meta.json`
+/// absent → personal folder; present and parseable → session; present but
+/// unreadable/corrupt → still a session boundary, never a folder (its content
+/// must not be traversed, misread as nested sessions, or treated as deletable).
+pub enum SessionDirKind {
     Session(Box<SessionMeta>),
+    /// `_meta.json` exists but cannot be read or parsed; carries the reason.
     Corrupt(String),
     Folder,
 }
 
-fn classify_dir(abs_dir: &Path) -> DirKind {
+pub fn classify_session_dir(abs_dir: &Path) -> SessionDirKind {
     match std::fs::read(abs_dir.join("_meta.json")) {
         Ok(bytes) => match serde_json::from_slice::<SessionMeta>(&bytes) {
-            Ok(meta) => DirKind::Session(Box::new(meta)),
-            Err(e) => DirKind::Corrupt(format!("failed to deserialize meta: {e}")),
+            Ok(meta) => SessionDirKind::Session(Box::new(meta)),
+            Err(e) => SessionDirKind::Corrupt(format!("failed to deserialize meta: {e}")),
         },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => DirKind::Folder,
-        Err(e) => DirKind::Corrupt(format!("failed to read meta file: {e}")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => SessionDirKind::Folder,
+        Err(e) => SessionDirKind::Corrupt(format!("failed to read meta file: {e}")),
+    }
+}
+
+/// Cheap boundary probe for traversals that only need "may recurse" versus "must
+/// stop": stats `_meta.json` without parsing it. `NotFound` is the only answer that
+/// makes a folder; any other stat error is conservatively a boundary — the same
+/// rule as `classify_session_dir`, and deliberately not `Path::exists()`, which
+/// would hide a permission error as absence and let a traversal walk into a
+/// session directory it cannot actually judge.
+pub fn has_session_boundary(abs_dir: &Path) -> bool {
+    match std::fs::metadata(abs_dir.join("_meta.json")) {
+        Ok(_) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => true,
     }
 }
 
@@ -165,8 +191,11 @@ pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
 
     let mut found: Vec<(SessionLocation, SessionMeta)> = Vec::new();
     let mut errors = Vec::new();
-    let mut pending = vec![paths::sessions_root()];
-    while let Some(relative_dir) = pending.pop() {
+    let mut ghost_dirs: Vec<PathBuf> = Vec::new();
+    let sessions_root = paths::sessions_root();
+    // (dir, whether an ancestor was already reported as a ghost boundary).
+    let mut pending: Vec<(PathBuf, bool)> = vec![(sessions_root.clone(), false)];
+    while let Some((relative_dir, under_ghost)) = pending.pop() {
         let entries = match std::fs::read_dir(vault.join(&relative_dir)) {
             Ok(entries) => entries,
             Err(e) => {
@@ -177,34 +206,52 @@ pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
                 continue;
             }
         };
+        let mut child_folders: Vec<PathBuf> = Vec::new();
+        let mut has_session_artifact = false;
         for entry in entries {
             let Ok(entry) = entry else { continue };
             // file_type() does not follow symlinks; a symlinked directory is
             // deliberately not traversed (symlink layouts are unsupported).
-            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+            let Ok(kind) = entry.file_type() else {
                 continue;
-            }
+            };
             let Some(name) = entry.file_name().to_str().map(str::to_string) else {
                 continue;
             };
-            if name.starts_with('.') {
-                continue;
-            }
-            let child = relative_dir.join(&name);
-            match classify_dir(&entry.path()) {
-                DirKind::Session(meta) => found.push((
-                    SessionLocation {
-                        id: meta.id.clone(),
-                        relative_dir: child,
-                    },
-                    *meta,
-                )),
-                DirKind::Corrupt(reason) => {
-                    errors.push(SessionDiscoveryError::CorruptMeta { dir: child, reason })
+            if kind.is_dir() {
+                if name.starts_with('.') {
+                    continue;
                 }
-                DirKind::Folder => pending.push(child),
+                let child = relative_dir.join(&name);
+                match classify_session_dir(&entry.path()) {
+                    SessionDirKind::Session(meta) => found.push((
+                        SessionLocation {
+                            id: meta.id.clone(),
+                            relative_dir: child,
+                        },
+                        *meta,
+                    )),
+                    SessionDirKind::Corrupt(reason) => {
+                        errors.push(SessionDiscoveryError::CorruptMeta { dir: child, reason })
+                    }
+                    SessionDirKind::Folder => child_folders.push(child),
+                }
+            } else if kind.is_file() && (name.ends_with(".md") || name == "transcript.json") {
+                has_session_artifact = true;
             }
         }
+        // This directory reached the worklist, so it has no `_meta.json`; direct
+        // session artifacts make it a ghost boundary (never the sessions root
+        // itself -- stray files there have always been ignored).
+        let is_ghost = has_session_artifact && !under_ghost && relative_dir != sessions_root;
+        if is_ghost {
+            ghost_dirs.push(relative_dir.clone());
+        }
+        pending.extend(
+            child_folders
+                .into_iter()
+                .map(|child| (child, under_ghost || is_ghost)),
+        );
     }
 
     // Group by NFC-normalized id: an id claimed by more than one directory is an
@@ -234,7 +281,12 @@ pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
     }
     sessions.sort_by(|a, b| a.0.relative_dir.cmp(&b.0.relative_dir));
     errors.sort_by_key(|error| error.to_string());
-    Ok(SessionDiscovery { sessions, errors })
+    ghost_dirs.sort();
+    Ok(SessionDiscovery {
+        sessions,
+        errors,
+        ghost_dirs,
+    })
 }
 
 /// Resolve one full id to its physical location.
@@ -248,19 +300,39 @@ pub fn find_session(
     vault: &Path,
     id: &str,
 ) -> std::result::Result<Option<(SessionLocation, SessionMeta)>, SessionLookupError> {
+    find_session_and_scan(vault, id).map(|(found, _)| found)
+}
+
+/// `find_session`, additionally handing back the discovery scan when one was
+/// performed, so a caller maintaining a location cache can warm every healthy
+/// location from the walk it already paid for. `None` for the scan means the
+/// legacy `sessions/<id>` fast path answered without scanning.
+pub fn find_session_and_scan(
+    vault: &Path,
+    id: &str,
+) -> std::result::Result<
+    (
+        Option<(SessionLocation, SessionMeta)>,
+        Option<SessionDiscovery>,
+    ),
+    SessionLookupError,
+> {
     let legacy_dir = paths::sessions_root().join(id);
     let mut legacy_corrupt = None;
-    match classify_dir(&vault.join(&legacy_dir)) {
-        DirKind::Session(meta) if eq_nfc(&meta.id, id) => {
-            return Ok(Some((
-                SessionLocation {
-                    id: meta.id.clone(),
-                    relative_dir: legacy_dir,
-                },
-                *meta,
-            )));
+    match classify_session_dir(&vault.join(&legacy_dir)) {
+        SessionDirKind::Session(meta) if eq_nfc(&meta.id, id) => {
+            return Ok((
+                Some((
+                    SessionLocation {
+                        id: meta.id.clone(),
+                        relative_dir: legacy_dir,
+                    },
+                    *meta,
+                )),
+                None,
+            ));
         }
-        DirKind::Corrupt(reason) => legacy_corrupt = Some((legacy_dir, reason)),
+        SessionDirKind::Corrupt(reason) => legacy_corrupt = Some((legacy_dir, reason)),
         _ => {}
     }
 
@@ -277,14 +349,15 @@ pub fn find_session(
     }
     if let Some(found) = discovery
         .sessions
-        .into_iter()
+        .iter()
         .find(|(location, _)| eq_nfc(&location.id, id))
+        .cloned()
     {
-        return Ok(Some(found));
+        return Ok((Some(found), Some(discovery)));
     }
     match legacy_corrupt {
         Some((dir, reason)) => Err(SessionLookupError::Corrupt { dir, reason }),
-        None => Ok(None),
+        None => Ok((None, Some(discovery))),
     }
 }
 
@@ -528,6 +601,70 @@ mod tests {
         assert_eq!(discovery.sessions[0].0.id, UUID_1);
         assert!(find_session(vault.path(), UUID_2).unwrap().is_none());
         assert!(find_session(vault.path(), UUID_3).unwrap().is_none());
+    }
+
+    #[test]
+    fn boundary_probe_and_classifier_agree_on_the_session_boundary_rule() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session_at(vault.path(), "sessions/healthy", UUID_1);
+        let corrupt = vault.path().join("sessions/corrupt");
+        std::fs::create_dir_all(&corrupt).unwrap();
+        std::fs::write(corrupt.join("_meta.json"), "{ invalid").unwrap();
+        let folder = vault.path().join("sessions/folder");
+        std::fs::create_dir_all(&folder).unwrap();
+
+        let healthy = vault.path().join("sessions/healthy");
+        assert!(has_session_boundary(&healthy));
+        assert!(matches!(
+            classify_session_dir(&healthy),
+            SessionDirKind::Session(meta) if meta.id == UUID_1
+        ));
+        // A corrupt meta is a boundary in both views -- never a folder.
+        assert!(has_session_boundary(&corrupt));
+        assert!(matches!(
+            classify_session_dir(&corrupt),
+            SessionDirKind::Corrupt(_)
+        ));
+        assert!(!has_session_boundary(&folder));
+        assert!(matches!(
+            classify_session_dir(&folder),
+            SessionDirKind::Folder
+        ));
+    }
+
+    #[test]
+    fn discovery_reports_ghost_boundaries_without_hiding_nested_sessions() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session_at(vault.path(), &format!("sessions/{UUID_1}"), UUID_1);
+        // A meta-less recorder fallback holding a transcript.
+        let ghost = vault.path().join("sessions/Work/ghost");
+        std::fs::create_dir_all(&ghost).unwrap();
+        std::fs::write(ghost.join("transcript.json"), "{}").unwrap();
+        // A ghost's own subtree is its content: nothing beneath it is another
+        // ghost, but a healthy session nested there is still discovered.
+        let inner = ghost.join("enhanced");
+        std::fs::create_dir_all(&inner).unwrap();
+        std::fs::write(inner.join("summary.md"), "body").unwrap();
+        seed_session_at(vault.path(), "sessions/Work/ghost/rescued", UUID_2);
+        // Stray files directly under sessions/ never make the root a ghost.
+        std::fs::write(vault.path().join("sessions/stray.md"), b"note").unwrap();
+        // A plain empty folder is not a ghost.
+        std::fs::create_dir_all(vault.path().join("sessions/Empty")).unwrap();
+
+        let discovery = discover_sessions(vault.path()).unwrap();
+
+        assert_eq!(
+            discovery.ghost_dirs,
+            vec![PathBuf::from("sessions/Work/ghost")]
+        );
+        assert_eq!(discovery.sessions.len(), 2);
+        assert!(
+            discovery
+                .sessions
+                .iter()
+                .any(|(location, _)| location.id == UUID_2),
+            "a session nested under a ghost must still be discovered"
+        );
     }
 
     #[test]

@@ -34,6 +34,39 @@ impl SessionStore {
         self.resolve_session_dir(id).await
     }
 
+    /// Cache-only synchronous lookup for callers that must stay O(1) in session
+    /// count (the fs-sync plugin's per-artifact resolution): a validated catalog
+    /// hit or `Ok(None)`, never a discovery scan. A hit is verified against the
+    /// filesystem with at most one metadata read before it is trusted, because an
+    /// external rename can leave the catalog stale until the watcher/focus rebuild:
+    ///
+    /// - directory or `_meta.json` gone → `None` (the caller's fallback re-resolves);
+    /// - parseable meta claiming a different id → `None` (stale entry);
+    /// - parseable matching meta → the cataloged vault-relative directory;
+    /// - unreadable/corrupt meta → still the cataloged directory, matching the
+    ///   corruption tolerance of every other artifact-access path.
+    ///
+    /// Duplicate-claimed ids error exactly like the async resolver: writes and
+    /// reads must block on a duplicate, never pick a winner.
+    pub fn session_dir_cached(&self, id: &str) -> Result<Option<PathBuf>, StoreError> {
+        validate_session_id(id)?;
+        self.ensure_not_duplicated(id)?;
+        let Some(dir) = self.locations.read().unwrap().get(id).cloned() else {
+            return Ok(None);
+        };
+        match hypr_vault_read::classify_session_dir(&self.vault_base.join(&dir)) {
+            hypr_vault_read::SessionDirKind::Session(meta)
+                if hypr_vault_read::layout::eq_nfc(&meta.id, id) =>
+            {
+                Ok(Some(dir))
+            }
+            hypr_vault_read::SessionDirKind::Session(_) => Ok(None),
+            hypr_vault_read::SessionDirKind::Corrupt(_) => Ok(Some(dir)),
+            // Covers both a vanished directory and a vanished `_meta.json`.
+            hypr_vault_read::SessionDirKind::Folder => Ok(None),
+        }
+    }
+
     /// `session_dir` for write paths: the guard is a proof token that the store write
     /// lock is held, so the resolved location cannot be renamed out from under the
     /// write that follows (renames also run under the write lock).
@@ -58,34 +91,74 @@ impl SessionStore {
         Ok(())
     }
 
-    async fn resolve_session_dir(&self, id: &str) -> Result<PathBuf, StoreError> {
+    /// The one existing-location lookup shared by artifact resolution and creation:
+    /// duplicate rejection, catalog hit, full discovery on a cold miss (which warms
+    /// the catalog), and corrupt/ambiguous error mapping. `Ok(None)` means no
+    /// directory anywhere claims the id -- the two callers alone decide what that
+    /// means (legacy fallback path vs. a fresh readable name).
+    async fn lookup_existing_dir(&self, id: &str) -> Result<Option<PathBuf>, StoreError> {
         self.ensure_not_duplicated(id)?;
         if let Some(dir) = self.locations.read().unwrap().get(id) {
-            return Ok(dir.clone());
+            return Ok(Some(dir.clone()));
         }
 
+        let removals_before = self
+            .catalog_removals
+            .load(std::sync::atomic::Ordering::SeqCst);
         let vault_base = self.vault_base.clone();
         let id_owned = id.to_string();
         let found = tokio::task::spawn_blocking(move || {
-            hypr_vault_read::find_session(&vault_base, &id_owned)
+            hypr_vault_read::find_session_and_scan(&vault_base, &id_owned)
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))?;
 
         match found {
-            Ok(Some((location, _))) => {
-                self.catalog_insert(id, location.relative_dir.clone());
-                Ok(location.relative_dir)
+            Ok((found, scan)) => {
+                // A cold miss pays for a full discovery walk; warm every healthy
+                // non-duplicate location from it (fill-only -- an entry a concurrent
+                // rename just updated must not be clobbered with pre-scan data), so
+                // the next lookup for any of them is a validated cache hit. The scan
+                // ran without the write lock, so if any catalog entry was REMOVED
+                // while it ran (a concurrent delete), the whole snapshot is suspect:
+                // fill-only cannot tell a never-cached id from a just-deleted one,
+                // and re-inserting a trashed directory would let a late write
+                // recreate it. Skip the warm (and the hit insert) in that case; the
+                // resolved answer itself is still returned.
+                let no_concurrent_removal = self
+                    .catalog_removals
+                    .load(std::sync::atomic::Ordering::SeqCst)
+                    == removals_before;
+                if no_concurrent_removal && let Some(discovery) = &scan {
+                    let mut catalog = self.locations.write().unwrap();
+                    for (location, _) in &discovery.sessions {
+                        catalog
+                            .entry(location.id.clone())
+                            .or_insert_with(|| location.relative_dir.clone());
+                    }
+                }
+                Ok(found.map(|(location, _)| {
+                    if no_concurrent_removal {
+                        self.catalog_insert(id, location.relative_dir.clone());
+                    }
+                    location.relative_dir
+                }))
             }
-            Ok(None) => Ok(legacy_session_dir(id)),
             // A corrupt legacy meta doesn't unhome the directory: artifact reads keep
             // their historical tolerance there, and read_meta surfaces the parse error
             // itself.
-            Err(hypr_vault_read::SessionLookupError::Corrupt { dir, .. }) => Ok(dir),
+            Err(hypr_vault_read::SessionLookupError::Corrupt { dir, .. }) => Ok(Some(dir)),
             Err(error @ hypr_vault_read::SessionLookupError::Ambiguous { .. }) => {
                 Err(StoreError::Io(error.to_string()))
             }
             Err(hypr_vault_read::SessionLookupError::Io(reason)) => Err(StoreError::Io(reason)),
+        }
+    }
+
+    async fn resolve_session_dir(&self, id: &str) -> Result<PathBuf, StoreError> {
+        match self.lookup_existing_dir(id).await? {
+            Some(dir) => Ok(dir),
+            None => Ok(legacy_session_dir(id)),
         }
     }
 
@@ -98,28 +171,9 @@ impl SessionStore {
         _guard: &WriteGuard<'_>,
         meta: &super::SessionMeta,
     ) -> Result<PathBuf, StoreError> {
-        self.ensure_not_duplicated(&meta.id)?;
-        if let Some(dir) = self.locations.read().unwrap().get(&meta.id) {
-            return Ok(dir.clone());
-        }
-
-        let vault_base = self.vault_base.clone();
-        let id = meta.id.clone();
-        let found =
-            tokio::task::spawn_blocking(move || hypr_vault_read::find_session(&vault_base, &id))
-                .await
-                .map_err(|e| StoreError::Io(format!("task join error: {e}")))?;
-        match found {
-            Ok(Some((location, _))) => {
-                self.catalog_insert(&meta.id, location.relative_dir.clone());
-                Ok(location.relative_dir)
-            }
-            Ok(None) => self.choose_new_session_dir(meta).await,
-            Err(hypr_vault_read::SessionLookupError::Corrupt { dir, .. }) => Ok(dir),
-            Err(error @ hypr_vault_read::SessionLookupError::Ambiguous { .. }) => {
-                Err(StoreError::Io(error.to_string()))
-            }
-            Err(hypr_vault_read::SessionLookupError::Io(reason)) => Err(StoreError::Io(reason)),
+        match self.lookup_existing_dir(&meta.id).await? {
+            Some(dir) => Ok(dir),
+            None => self.choose_new_session_dir(meta).await,
         }
     }
 
@@ -133,14 +187,12 @@ impl SessionStore {
         if let Some(diagnostic) = diagnostic {
             tracing::warn!(session_id = %meta.id, %diagnostic, "naming new session directory from the current date");
         }
-        let mut candidates: Vec<PathBuf> = super::layout_name::short_id_candidates(&meta.id)
-            .into_iter()
-            .map(|suffix| {
-                hypr_vault_read::paths::sessions_root().join(
-                    super::layout_name::format_session_dir_name(&date, &meta.title, &suffix),
-                )
-            })
-            .collect();
+        let mut candidates: Vec<PathBuf> = super::layout_name::session_dir_candidates(
+            &hypr_vault_read::paths::sessions_root(),
+            &date,
+            &meta.title,
+            &meta.id,
+        );
         // A meta-less directory already named exactly for this id (the recorder's
         // ghost fallback: transcript/audio can land before the first meta write) is
         // adopted rather than orphaned beside a readable-named sibling.
@@ -241,7 +293,7 @@ impl SessionStore {
         if super::layout_name::sanitize_title(title) == super::layout_name::UNTITLED {
             return;
         }
-        if self.active_recordings.lock().unwrap().contains(id) {
+        if self.active_recordings.lock().unwrap().contains_key(id) {
             return;
         }
         let Some(basename) = current_dir.file_name().and_then(|n| n.to_str()) else {
@@ -257,15 +309,11 @@ impl SessionStore {
             return;
         };
 
-        let candidates: Vec<PathBuf> = super::layout_name::short_id_candidates(id)
-            .into_iter()
-            .map(|suffix| {
-                parent.join(super::layout_name::format_session_dir_name(
-                    date, title, &suffix,
-                ))
-            })
-            .filter(|target| !hypr_vault_read::layout::paths_eq_nfc(target, current_dir))
-            .collect();
+        let candidates: Vec<PathBuf> =
+            super::layout_name::session_dir_candidates(parent, date, title, id)
+                .into_iter()
+                .filter(|target| !hypr_vault_read::layout::paths_eq_nfc(target, current_dir))
+                .collect();
 
         let vault_base = self.vault_base.clone();
         let probe = candidates.clone();
@@ -299,16 +347,23 @@ impl SessionStore {
     /// metadata already carries a non-empty title (covers crashes mid-recording and
     /// title writes from older code paths). Idempotent and read-tolerant.
     pub async fn reconcile_provisional_names(&self) {
-        let vault_base = self.vault_base.clone();
-        let discovered = tokio::task::spawn_blocking(move || {
-            hypr_vault_read::discover_sessions(&vault_base)
-                .map(|discovery| discovery.sessions)
-                .unwrap_or_default()
-        })
-        .await
-        .unwrap_or_default();
+        let guard = self.lock_writes().await;
+        let Ok(mut scan) = self.scan_session_locations().await else {
+            return;
+        };
+        self.reconcile_provisional_from_scan(&guard, &mut scan)
+            .await;
+    }
 
-        for (location, meta) in discovered {
+    /// The reconciliation body, working off an already-paid layout snapshot (see
+    /// `normalize_startup_layout`). Successful renames update the snapshot's paths
+    /// in place via the catalog entry the rename just wrote.
+    pub(super) async fn reconcile_provisional_from_scan(
+        &self,
+        guard: &WriteGuard<'_>,
+        scan: &mut super::rebuild::SessionLayoutScan,
+    ) {
+        for (location, meta) in scan.sessions.iter_mut() {
             let is_provisional = location
                 .relative_dir
                 .file_name()
@@ -317,34 +372,130 @@ impl SessionStore {
             if !is_provisional || meta.title.trim().is_empty() {
                 continue;
             }
-            let guard = self.lock_writes().await;
             self.reconcile_provisional_name_locked(
-                &guard,
-                &meta.id,
+                guard,
+                &location.id,
                 &meta.title,
                 &location.relative_dir,
             )
             .await;
+            if let Some(dir) = self.locations.read().unwrap().get(&location.id) {
+                location.relative_dir = dir.clone();
+            }
         }
     }
 
-    /// Synchronous half of the recording-lifecycle guard: registers the session as
-    /// actively recording the moment the capture event arrives, before any async
-    /// meta stamping gets scheduled. Narrows the window in which a first-title
-    /// directory rename could race the recorder's already-captured absolute paths.
-    /// Cleared by `mark_recording_ended` (or `delete_session`).
+    /// Synchronous half of the recording-lifecycle guard: ensures the session holds
+    /// at least one path lease the moment the `Started` capture event arrives,
+    /// before any async meta stamping gets scheduled -- an idempotent defense for
+    /// capture callers that bypassed `prepare_recording`. Deliberately does NOT
+    /// increment an existing lease: the preparer already holds one for this
+    /// recording, and stacking another here would survive `Stopped`'s clear only by
+    /// accident. Cleared by `mark_recording_ended` (or `delete_session`).
     pub fn note_recording_active(&self, id: &str) {
         self.active_recordings
             .lock()
             .unwrap()
-            .insert(id.to_string());
+            .entry(id.to_string())
+            .or_insert(1);
     }
 
+    /// Reserve the session's physical directory ahead of a recording: resolves the
+    /// current directory under the write lock and takes one path lease before
+    /// releasing it, so the returned path cannot be renamed away by a first-title
+    /// reconcile between now and recorder open (the pre-start hook and the recorder
+    /// both use it). Every prepare is paired with either `release_recording_prepare`
+    /// (start failed) or the `Stopped` lifecycle clearing the session's leases.
+    pub async fn prepare_recording(&self, id: &str) -> Result<PathBuf, StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+        let dir = match self.lookup_existing_dir(id).await? {
+            Some(dir) => dir,
+            // No directory claims the id: resolve exactly the way the recorder
+            // itself will (fs-sync's discovery adopts a meta-less/corrupt directory
+            // named for the id -- a moved recorder ghost -- before falling back to
+            // the legacy creation target), so the pre-start hook and the recorder
+            // can never disagree about the session's home. Non-UUID legacy ids,
+            // which fs-sync rejects, keep the plain legacy fallback.
+            None => {
+                let vault_base = self.vault_base.clone();
+                let id_owned = id.to_string();
+                tokio::task::spawn_blocking(move || {
+                    hypr_fs_sync_core::find_session_dir(&vault_base.join("sessions"), &id_owned)
+                        .ok()
+                        .and_then(|abs| abs.strip_prefix(&vault_base).ok().map(Path::to_path_buf))
+                })
+                .await
+                .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
+                .unwrap_or_else(|| legacy_session_dir(id))
+            }
+        };
+        *self
+            .active_recordings
+            .lock()
+            .unwrap()
+            .entry(id.to_string())
+            .or_insert(0) += 1;
+        drop(guard);
+        Ok(dir)
+    }
+
+    /// Release exactly one path lease taken by `prepare_recording`. Only when the
+    /// last lease drops does the deferred provisional-title rename get retried --
+    /// releasing one of several reservations (a failed duplicate start) must never
+    /// unprotect a recording that is still active. Safe to call from paired failure
+    /// cleanup even when no lease is held.
+    pub async fn release_recording_prepare(&self, id: &str) -> Result<(), StoreError> {
+        validate_session_id(id)?;
+        let guard = self.lock_writes().await;
+        let now_unprotected = {
+            let mut leases = self.active_recordings.lock().unwrap();
+            match leases.get_mut(id) {
+                Some(count) if *count > 1 => {
+                    *count -= 1;
+                    false
+                }
+                Some(_) => {
+                    leases.remove(id);
+                    true
+                }
+                None => false,
+            }
+        };
+        if now_unprotected
+            && let Ok(Some(meta)) = self.read_meta(id).await
+            && !meta.title.trim().is_empty()
+            && let Ok(dir) = self.session_dir_locked(&guard, id).await
+        {
+            self.reconcile_provisional_name_locked(&guard, id, &meta.title, &dir)
+                .await;
+        }
+        Ok(())
+    }
+
+    /// Catalog writes announce genuine physical-location changes on the index bus
+    /// (`IndexEntity::Locations`): every frontend cache holding an absolute session
+    /// path invalidates off that one event, wherever the change originated (app
+    /// rename, migration, delete/restore, fs-sync move, external rename caught by a
+    /// rebuild). Re-inserting the same NFC-normalized path stays silent.
     pub(crate) fn catalog_insert(&self, id: &str, dir: PathBuf) {
-        self.locations.write().unwrap().insert(id.to_string(), dir);
+        let previous = self
+            .locations
+            .write()
+            .unwrap()
+            .insert(id.to_string(), dir.clone());
+        let changed =
+            previous.is_none_or(|prev| !hypr_vault_read::layout::paths_eq_nfc(&prev, &dir));
+        if changed {
+            self.notify_index_changed(super::IndexEntity::Locations, vec![id.to_string()]);
+        }
     }
 
     pub(crate) fn catalog_remove(&self, id: &str) {
-        self.locations.write().unwrap().remove(id);
+        self.catalog_removals
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if self.locations.write().unwrap().remove(id).is_some() {
+            self.notify_index_changed(super::IndexEntity::Locations, vec![id.to_string()]);
+        }
     }
 }

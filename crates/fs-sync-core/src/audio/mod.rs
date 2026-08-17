@@ -7,7 +7,6 @@ use std::time::{Duration, UNIX_EPOCH};
 use crate::error::AudioImportError;
 use crate::path::is_uuid;
 use crate::runtime::{AudioImportEvent, AudioImportRuntime};
-use crate::session::{DirClass, classify_dir};
 use chrono::{DateTime, Utc};
 use hypr_vault_read::layout::nfc;
 use sha2::{Digest, Sha256};
@@ -370,35 +369,34 @@ fn delete_orphaned_expired_in_dir(
         let Some(name) = path.file_name().and_then(|name| name.to_str()) else {
             continue;
         };
+        // Hidden directories (.trash, sync-provider sidecars) are invisible to every
+        // layout reader -- audio inside them is recoverable history, never orphaned.
+        if name.starts_with('.') {
+            continue;
+        }
 
-        match classify_dir(&path) {
-            // Any `_meta.json` -- parseable or not -- protects the directory: a
-            // session's identity being absent from the caller's known-id list only
-            // proves the list is stale or the id was deliberately unindexed
-            // (duplicate-id conflicts), never that the audio is disposable. Only
-            // meta-less recorder-fallback dirs below are true orphan candidates.
-            DirClass::Session(_) => {}
-            DirClass::Folder if is_uuid(name) => {
-                // Legacy recorder fallback: `sessions/<id>` created for a recording
-                // before any `_meta.json` exists, so the basename is the id it was
-                // created for. Readable directories always carry a meta and never
-                // reach this branch.
-                if known_session_ids.contains(name) {
-                    continue;
-                }
-                if orphan_audio_expired(&path, expires_before_ms)? {
-                    delete(&path)?;
-                    deleted.push(name.to_string());
-                }
+        // Any `_meta.json` -- parseable or not -- protects the directory: a
+        // session's identity being absent from the caller's known-id list only
+        // proves the list is stale or the id was deliberately unindexed
+        // (duplicate-id conflicts), never that the audio is disposable. Only
+        // meta-less recorder-fallback dirs below are true orphan candidates.
+        if hypr_vault_read::has_session_boundary(&path) {
+            continue;
+        }
+        if is_uuid(name) {
+            // Legacy recorder fallback: `sessions/<id>` created for a recording
+            // before any `_meta.json` exists, so the basename is the id it was
+            // created for. Readable directories always carry a meta and never
+            // reach this branch.
+            if known_session_ids.contains(name) {
+                continue;
             }
-            DirClass::Folder => {
-                delete_orphaned_expired_in_dir(
-                    &path,
-                    known_session_ids,
-                    expires_before_ms,
-                    deleted,
-                )?;
+            if orphan_audio_expired(&path, expires_before_ms)? {
+                delete(&path)?;
+                deleted.push(name.to_string());
             }
+        } else {
+            delete_orphaned_expired_in_dir(&path, known_session_ids, expires_before_ms, deleted)?;
         }
     }
 
@@ -671,6 +669,30 @@ mod tests {
         assert!(known_dir.join("audio.wav").exists());
         assert!(meta_dir.join("audio.wav").exists());
         assert!(corrupt_dir.join("audio.wav").exists());
+    }
+
+    /// Audio inside hidden directories (`.trash`, sync-provider sidecars) is
+    /// recoverable history, never orphaned -- retention must not walk into them
+    /// even when the directory inside is uuid-named and meta-less.
+    #[test]
+    fn delete_orphaned_expired_never_deletes_inside_hidden_directories() {
+        let temp = TempDir::new().unwrap();
+        let sessions_dir = temp.path();
+        let trashed = sessions_dir
+            .join(".trash")
+            .join("2026-08-01")
+            .join(ORPHAN_SESSION_ID);
+        let sidecar = sessions_dir.join(".stversions").join(ORPHAN_SESSION_ID);
+        std::fs::create_dir_all(&trashed).unwrap();
+        std::fs::create_dir_all(&sidecar).unwrap();
+        write_audio(&trashed.join("audio.wav"));
+        write_audio(&sidecar.join("audio.wav"));
+
+        let deleted = delete_orphaned_expired(sessions_dir, &[], 0, now_ms()).unwrap();
+
+        assert!(deleted.is_empty());
+        assert!(trashed.join("audio.wav").exists());
+        assert!(sidecar.join("audio.wav").exists());
     }
 
     /// A directory carrying any `_meta.json` is a session, not an orphan -- an id

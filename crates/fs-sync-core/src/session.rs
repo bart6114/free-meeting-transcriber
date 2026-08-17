@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use hypr_vault_read::{SessionLookupError, SessionMeta, find_session};
+use hypr_vault_read::{SessionDirKind, SessionLookupError, find_session};
 
 use crate::path::is_uuid;
 use crate::{Error, Result};
@@ -16,14 +16,10 @@ pub(crate) enum DirClass {
 }
 
 pub(crate) fn classify_dir(abs_dir: &Path) -> DirClass {
-    match std::fs::read(abs_dir.join("_meta.json")) {
-        Ok(bytes) => DirClass::Session(
-            serde_json::from_slice::<SessionMeta>(&bytes)
-                .ok()
-                .map(|meta| meta.id),
-        ),
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => DirClass::Folder,
-        Err(_) => DirClass::Session(None),
+    match hypr_vault_read::classify_session_dir(abs_dir) {
+        SessionDirKind::Session(meta) => DirClass::Session(Some(meta.id)),
+        SessionDirKind::Corrupt(_) => DirClass::Session(None),
+        SessionDirKind::Folder => DirClass::Folder,
     }
 }
 

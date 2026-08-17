@@ -42,6 +42,11 @@ pub enum IndexEntity {
     Tasks,
     Templates,
     People,
+    /// A session's *physical directory* changed (rename, move, delete/restore,
+    /// external relocation caught by a rebuild) -- content-free, so the search
+    /// projection ignores it; the frontend uses it to invalidate every cache
+    /// holding an absolute session path.
+    Locations,
 }
 
 /// Emitted (coalesced) to every webview as the `index-changed` event.
@@ -607,13 +612,14 @@ pub(crate) const COALESCE_WINDOW: std::time::Duration = std::time::Duration::fro
 
 /// Stable emission order so bursts serialize deterministically (and tests can assert
 /// exact sequences).
-const ENTITY_ORDER: [IndexEntity; 6] = [
+const ENTITY_ORDER: [IndexEntity; 7] = [
     IndexEntity::Sessions,
     IndexEntity::Docs,
     IndexEntity::Transcripts,
     IndexEntity::Tasks,
     IndexEntity::Templates,
     IndexEntity::People,
+    IndexEntity::Locations,
 ];
 
 /// One coalesced flush: group a drained batch by entity, dedupe ids preserving
@@ -727,6 +733,33 @@ mod tests {
         let vault = temp.path().to_path_buf();
         let store = SessionStore::new(vault);
         (store, temp)
+    }
+
+    /// `Locations` rides the same coalescing bus as every other entity: a burst of
+    /// location changes collapses to one deduped event, emitted in the stable order.
+    #[test]
+    fn coalesce_groups_and_dedupes_locations_changes() {
+        let events = coalesce(vec![
+            (IndexEntity::Locations, vec!["s1".to_string()]),
+            (IndexEntity::Sessions, vec!["s1".to_string()]),
+            (
+                IndexEntity::Locations,
+                vec!["s2".to_string(), "s1".to_string()],
+            ),
+        ]);
+        assert_eq!(
+            events,
+            vec![
+                IndexChanged {
+                    entity: IndexEntity::Sessions,
+                    ids: vec!["s1".to_string()],
+                },
+                IndexChanged {
+                    entity: IndexEntity::Locations,
+                    ids: vec!["s1".to_string(), "s2".to_string()],
+                },
+            ]
+        );
     }
 
     /// Physical directory of a session: creation now picks a human-readable name, so

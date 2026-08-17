@@ -1003,3 +1003,538 @@ async fn an_unreadable_personal_folder_does_not_prune_its_sessions() {
     );
     assert!(!report.errors.is_empty());
 }
+
+// -- cache-only resolution (`session_dir_cached`) ---------------------------------
+
+#[tokio::test]
+async fn session_dir_cached_returns_a_validated_hit_without_discovery() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let expected = store.session_dir(ID).await.unwrap();
+
+    let hit = store.session_dir_cached(ID).unwrap();
+    assert_eq!(hit, Some(expected));
+}
+
+#[tokio::test]
+async fn session_dir_cached_misses_when_the_directory_vanished() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let dir = vault.path().join(store.session_dir(ID).await.unwrap());
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    assert_eq!(store.session_dir_cached(ID).unwrap(), None);
+}
+
+#[tokio::test]
+async fn session_dir_cached_misses_when_the_cataloged_path_claims_another_id() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let dir = vault.path().join(store.session_dir(ID).await.unwrap());
+    // An external process replaced the directory's identity out from under the
+    // catalog: the stale entry must fall through, never serve the wrong session.
+    std::fs::write(
+        dir.join("_meta.json"),
+        serde_json::to_vec_pretty(&meta(LEGACY_ID, "Impostor")).unwrap(),
+    )
+    .unwrap();
+
+    assert_eq!(store.session_dir_cached(ID).unwrap(), None);
+}
+
+#[tokio::test]
+async fn session_dir_cached_tolerates_a_corrupt_meta_at_the_cataloged_path() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let relative = store.session_dir(ID).await.unwrap();
+    std::fs::write(vault.path().join(&relative).join("_meta.json"), "{ invalid").unwrap();
+
+    // The warm catalog is still the best known home; artifact access keeps its
+    // corruption tolerance.
+    assert_eq!(store.session_dir_cached(ID).unwrap(), Some(relative));
+}
+
+#[tokio::test]
+async fn session_dir_cached_errors_on_a_duplicate_claimed_id() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), &format!("sessions/{ID}"), ID, "One");
+    seed_session_at(vault.path(), "sessions/Copy", ID, "Two");
+    store.rebuild_index().await.unwrap();
+
+    assert!(store.session_dir_cached(ID).is_err());
+}
+
+#[tokio::test]
+async fn a_cold_scan_warms_the_whole_catalog_so_later_lookups_are_cache_hits() {
+    let (store, vault) = test_store().await;
+    seed_session_at(vault.path(), READABLE_DIR, ID, "Readable");
+    seed_session_at(vault.path(), "sessions/Other notes", LEGACY_ID, "Other");
+
+    // Cold store: resolving one id pays for a discovery walk...
+    assert_eq!(store.session_dir_cached(ID).unwrap(), None, "cold cache");
+    store.session_dir(ID).await.unwrap();
+
+    // ...which must warm every healthy location, not just the requested one.
+    assert_eq!(
+        store.session_dir_cached(LEGACY_ID).unwrap(),
+        Some(PathBuf::from("sessions/Other notes"))
+    );
+}
+
+/// The warmed fs-sync command path performs zero discovery walks: a counting
+/// resolver backed by the store proves every per-artifact resolution is a
+/// validated catalog hit, so `FsSyncCore`'s discovery fallback never runs.
+#[tokio::test]
+async fn warmed_fs_sync_resolution_never_falls_back_to_discovery() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let store = Arc::new(store);
+
+    let misses = Arc::new(AtomicUsize::new(0));
+    let resolver_store = store.clone();
+    let resolver_misses = misses.clone();
+    let vault_base = vault.path().to_path_buf();
+    let resolver_base = vault_base.clone();
+    let core = hypr_fs_sync_core::FsSyncCore::with_resolver(
+        vault_base.clone(),
+        Arc::new(move |id: &str| {
+            let hit = resolver_store
+                .session_dir_cached(id)
+                .map_err(|e| hypr_fs_sync_core::Error::Path(e.to_string()))?;
+            if hit.is_none() {
+                resolver_misses.fetch_add(1, Ordering::SeqCst);
+            }
+            Ok(hit.map(|relative| resolver_base.join(relative)))
+        }),
+    );
+
+    let saved = core.attachment_save(ID, b"bytes", "file.txt").unwrap();
+    assert_eq!(core.attachment_list(ID).unwrap().len(), 1);
+    assert_eq!(
+        core.attachment_read(ID, &saved.attachment_id).unwrap(),
+        b"bytes"
+    );
+    let resolved = core.resolve_session_dir(ID).unwrap();
+    assert_eq!(
+        resolved,
+        vault_base.join(store.session_dir(ID).await.unwrap())
+    );
+
+    assert_eq!(
+        misses.load(Ordering::SeqCst),
+        0,
+        "every warmed resolution must be a catalog hit -- zero discovery fallbacks"
+    );
+}
+
+// -- physical-location change events (`IndexEntity::Locations`) -------------------
+
+/// Everything the raw change stream saw, via a tap subscribed before the action.
+fn drain(rx: &mut crate::index::IndexChangeReceiver) -> Vec<(crate::IndexEntity, Vec<String>)> {
+    let mut out = Vec::new();
+    while let Ok(change) = rx.try_recv() {
+        out.push(change);
+    }
+    out
+}
+
+#[tokio::test]
+async fn a_provisional_rename_emits_a_locations_event() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let mut rx = store.subscribe_index_changes();
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Roadmap review".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+    let changes = drain(&mut rx);
+    assert!(
+        changes
+            .iter()
+            .any(|(entity, ids)| *entity == crate::IndexEntity::Locations
+                && ids == &vec![ID.to_string()]),
+        "the rename must announce the location change: {changes:?}"
+    );
+}
+
+#[tokio::test]
+async fn an_external_rename_rebuild_emits_only_a_locations_event() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    store.rebuild_index().await.unwrap();
+    let from = vault.path().join(store.session_dir(ID).await.unwrap());
+    let mut rx = store.subscribe_index_changes();
+
+    // Finder-style rename: content is untouched, only the physical home moves.
+    let to = vault.path().join("sessions/Renamed by hand");
+    std::fs::rename(&from, &to).unwrap();
+    store.rebuild_index().await.unwrap();
+
+    let changes = drain(&mut rx);
+    assert_eq!(
+        changes,
+        vec![(crate::IndexEntity::Locations, vec![ID.to_string()])],
+        "unchanged file content must produce no content-entity events"
+    );
+    assert_eq!(
+        store.session_dir_cached(ID).unwrap(),
+        Some(PathBuf::from("sessions/Renamed by hand"))
+    );
+}
+
+#[tokio::test]
+async fn an_unchanged_rebuild_emits_no_locations_events() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    store.rebuild_index().await.unwrap();
+    let mut rx = store.subscribe_index_changes();
+
+    store.rebuild_index().await.unwrap();
+
+    assert_eq!(drain(&mut rx), vec![]);
+}
+
+#[tokio::test]
+async fn delete_and_restore_both_emit_locations_events() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "Planning")).await.unwrap();
+    let mut rx = store.subscribe_index_changes();
+
+    store.delete_session(ID).await.unwrap();
+    let deleted_changes = drain(&mut rx);
+    assert!(
+        deleted_changes
+            .iter()
+            .any(|(entity, ids)| *entity == crate::IndexEntity::Locations
+                && ids.contains(&ID.to_string())),
+        "{deleted_changes:?}"
+    );
+
+    assert!(store.restore_session(ID).await.unwrap());
+    let restored_changes = drain(&mut rx);
+    assert!(
+        restored_changes
+            .iter()
+            .any(|(entity, ids)| *entity == crate::IndexEntity::Locations
+                && ids.contains(&ID.to_string())),
+        "{restored_changes:?}"
+    );
+}
+
+// -- recording path leases (`prepare_recording` / `release_recording_prepare`) ----
+
+#[tokio::test]
+async fn prepare_recording_blocks_a_first_title_rename_until_the_last_lease_drops() {
+    let (store, vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let provisional = store.session_dir(ID).await.unwrap();
+
+    let prepared = store.prepare_recording(ID).await.unwrap();
+    assert_eq!(prepared, provisional);
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Roadmap review".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        store.session_dir(ID).await.unwrap(),
+        provisional,
+        "the rename must stay deferred while a lease is held"
+    );
+    assert!(vault.path().join(&provisional).is_dir());
+
+    store.release_recording_prepare(ID).await.unwrap();
+
+    let renamed = store.session_dir(ID).await.unwrap();
+    assert_ne!(renamed, provisional, "the last release retries the rename");
+    let basename = renamed.file_name().unwrap().to_str().unwrap();
+    assert!(basename.contains("Roadmap review"), "{basename}");
+    assert!(vault.path().join(&renamed).is_dir());
+}
+
+#[tokio::test]
+async fn releasing_one_of_multiple_leases_does_not_unprotect_the_recording() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let provisional = store.session_dir(ID).await.unwrap();
+
+    // The frontend's prepare and the transcription command's own lease.
+    store.prepare_recording(ID).await.unwrap();
+    store.prepare_recording(ID).await.unwrap();
+
+    // A failed duplicate start releases only its own reservation.
+    store.release_recording_prepare(ID).await.unwrap();
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Still recording".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        store.session_dir(ID).await.unwrap(),
+        provisional,
+        "the surviving lease must keep the rename deferred"
+    );
+}
+
+#[tokio::test]
+async fn a_successful_stop_clears_every_lease_and_reconciles() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+    let provisional = store.session_dir(ID).await.unwrap();
+
+    store.prepare_recording(ID).await.unwrap();
+    store.note_recording_active(ID); // Started lifecycle: ensure >= 1, never stack
+    store.prepare_recording(ID).await.unwrap();
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("Sprint sync".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(store.session_dir(ID).await.unwrap(), provisional);
+
+    // Stopped fires after recorder finalization and clears the whole session.
+    store
+        .mark_recording_ended(ID, "2026-07-31T10:30:00.000Z")
+        .await
+        .unwrap();
+
+    let renamed = store.session_dir(ID).await.unwrap();
+    assert_ne!(renamed, provisional);
+    assert!(
+        renamed
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("Sprint sync")
+    );
+}
+
+#[tokio::test]
+async fn a_failed_start_round_trip_leaves_no_permanent_lease() {
+    let (store, _vault) = test_store().await;
+    store.write_meta(&meta(ID, "")).await.unwrap();
+
+    store.prepare_recording(ID).await.unwrap();
+    store.release_recording_prepare(ID).await.unwrap();
+    // Releasing without a lease is a safe no-op (paired failure cleanup).
+    store.release_recording_prepare(ID).await.unwrap();
+
+    store
+        .update_meta(
+            ID,
+            SessionMetaPatch {
+                title: Some("After the failure".to_string()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(
+        store
+            .session_dir(ID)
+            .await
+            .unwrap()
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .contains("After the failure"),
+        "no leftover lease may keep deferring the rename"
+    );
+}
+
+// -- startup normalization from one layout snapshot -------------------------------
+
+#[tokio::test]
+async fn normalize_startup_layout_migrates_reconciles_and_feeds_the_rebuild() {
+    let vault = tempfile::tempdir().unwrap();
+    // A legacy UUID-named directory to migrate...
+    let legacy = vault.path().join(format!("sessions/{LEGACY_ID}"));
+    std::fs::create_dir_all(&legacy).unwrap();
+    let mut legacy_meta = meta(LEGACY_ID, "Planning");
+    legacy_meta.started_at = Some("2026-03-20".to_string());
+    std::fs::write(
+        legacy.join("_meta.json"),
+        serde_json::to_vec_pretty(&legacy_meta).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(legacy.join("_memo.md"), "legacy note").unwrap();
+    // ...and a crash-leftover provisional directory whose meta already has a title.
+    let provisional_name = crate::layout_name::format_session_dir_name("2026-04-01", "", "6ba7b8");
+    seed_session_at(
+        vault.path(),
+        &format!("sessions/{provisional_name}"),
+        ID,
+        "Roadmap review",
+    );
+
+    let store = SessionStore::new(vault.path().to_path_buf());
+    let layout = store.normalize_startup_layout().await.unwrap();
+    assert_eq!(layout.migration.renamed.len(), 1, "{:?}", layout.migration);
+
+    let report = store
+        .rebuild_index_from_startup_layout(layout)
+        .await
+        .unwrap();
+    assert_eq!(report.sessions, 2);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+
+    // Both renames happened on disk and the snapshot fed rebuild the NEW paths:
+    // the catalog and the index resolve to them without another scan.
+    let migrated = store.session_dir(LEGACY_ID).await.unwrap();
+    assert_eq!(
+        migrated,
+        PathBuf::from("sessions/2026-03-20 — Planning — 550e84")
+    );
+    assert!(vault.path().join(&migrated).join("_memo.md").is_file());
+    let reconciled = store.session_dir(ID).await.unwrap();
+    assert_eq!(
+        reconciled,
+        PathBuf::from("sessions/2026-04-01 — Roadmap review — 6ba7b8")
+    );
+    assert_eq!(store.session_get(LEGACY_ID).unwrap().meta.title, "Planning");
+    assert_eq!(store.session_get(ID).unwrap().meta.title, "Roadmap review");
+}
+
+#[tokio::test]
+async fn a_failed_migration_keeps_the_source_path_in_the_snapshot() {
+    let vault = tempfile::tempdir().unwrap();
+    let legacy = vault.path().join(format!("sessions/{LEGACY_ID}"));
+    std::fs::create_dir_all(&legacy).unwrap();
+    let mut legacy_meta = meta(LEGACY_ID, "Planning");
+    legacy_meta.started_at = Some("2026-03-20".to_string());
+    std::fs::write(
+        legacy.join("_meta.json"),
+        serde_json::to_vec_pretty(&legacy_meta).unwrap(),
+    )
+    .unwrap();
+    // Occupy every readable-name candidate so migration has nowhere to go.
+    for suffix in crate::layout_name::short_id_candidates(LEGACY_ID) {
+        std::fs::create_dir_all(vault.path().join("sessions").join(
+            crate::layout_name::format_session_dir_name("2026-03-20", "Planning", &suffix),
+        ))
+        .unwrap();
+    }
+
+    let store = SessionStore::new(vault.path().to_path_buf());
+    let layout = store.normalize_startup_layout().await.unwrap();
+    assert!(layout.migration.renamed.is_empty());
+    assert!(
+        layout
+            .migration
+            .skipped
+            .iter()
+            .any(|s| s.contains("no collision-free readable name")),
+        "{:?}",
+        layout.migration
+    );
+
+    let report = store
+        .rebuild_index_from_startup_layout(layout)
+        .await
+        .unwrap();
+    assert_eq!(report.sessions, 1);
+    // The snapshot still points at the untouched source directory.
+    assert_eq!(
+        store.session_dir(LEGACY_ID).await.unwrap(),
+        PathBuf::from(format!("sessions/{LEGACY_ID}"))
+    );
+    assert_eq!(store.session_get(LEGACY_ID).unwrap().meta.title, "Planning");
+}
+
+/// Preserved discovery semantics after folding the ghost walk into discovery: a
+/// healthy session nested under a ghost boundary stays indexed, and the ghost is
+/// still reported exactly once.
+#[tokio::test]
+async fn a_session_nested_under_a_ghost_directory_is_still_indexed() {
+    let (store, vault) = test_store().await;
+    let ghost = vault.path().join("sessions/Work/ghost");
+    std::fs::create_dir_all(&ghost).unwrap();
+    std::fs::write(ghost.join("transcript.json"), "{}").unwrap();
+    seed_session_at(vault.path(), "sessions/Work/ghost/rescued", ID, "Rescued");
+
+    let report = store.rebuild_index().await.unwrap();
+
+    assert_eq!(report.ghost_sessions, vec!["Work/ghost".to_string()]);
+    assert_eq!(report.sessions, 1);
+    assert_eq!(store.session_get(ID).unwrap().meta.title, "Rescued");
+}
+
+/// Not a benchmark gate -- a manually-run measurement of the single-walk layout
+/// scan (`cargo test -p vault-write --release -- --ignored discovery_scale`).
+#[tokio::test]
+#[ignore]
+async fn discovery_scale_measurement() {
+    for count in [100usize, 1000, 5000] {
+        let vault = tempfile::tempdir().unwrap();
+        for i in 0..count {
+            let id = format!("aaaaaaaa-0000-4000-8000-{i:012}");
+            seed_session_at(
+                vault.path(),
+                &format!("sessions/2026-03-20 — Session {i} — {i:06}"),
+                &id,
+                &format!("Session {i}"),
+            );
+        }
+        let store = SessionStore::new(vault.path().to_path_buf());
+        let started = std::time::Instant::now();
+        let layout = store.normalize_startup_layout().await.unwrap();
+        let normalize_elapsed = started.elapsed();
+        let started = std::time::Instant::now();
+        store
+            .rebuild_index_from_startup_layout(layout)
+            .await
+            .unwrap();
+        let startup_rebuild = started.elapsed();
+        let started = std::time::Instant::now();
+        store.rebuild_index().await.unwrap();
+        let focus_rebuild = started.elapsed();
+        println!(
+            "{count} sessions: normalize {normalize_elapsed:?}, startup rebuild {startup_rebuild:?}, focus rebuild {focus_rebuild:?}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn prepare_recording_adopts_a_nested_unclaimed_directory_like_the_recorder() {
+    let (store, vault) = test_store().await;
+    // A moved recorder ghost: meta-less, named exactly for the id, nested in a
+    // personal folder. The recorder (fs-sync resolution) adopts it; the prepared
+    // hook path must agree instead of pointing at a fresh legacy directory.
+    let ghost = vault.path().join("sessions/Work").join(ID);
+    std::fs::create_dir_all(&ghost).unwrap();
+    std::fs::write(ghost.join("transcript.json"), "{}").unwrap();
+
+    let dir = store.prepare_recording(ID).await.unwrap();
+    assert_eq!(dir, PathBuf::from(format!("sessions/Work/{ID}")));
+    store.release_recording_prepare(ID).await.unwrap();
+}

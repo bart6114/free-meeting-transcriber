@@ -21,6 +21,23 @@ pub fn get_parent_folder_path(path: &str) -> Option<String> {
 }
 
 pub fn normalize_folder_path(path: &str) -> Result<String> {
+    let normalized = normalize_existing_folder_path(path)?;
+    // Every layout reader skips dot-prefixed directories, so a folder named into
+    // that part of the tree would be silently invisible.
+    for segment in normalized.split('/') {
+        if segment.starts_with('.') {
+            return Err(crate::Error::Path("folder_path_hidden_not_allowed".into()));
+        }
+    }
+    Ok(normalized)
+}
+
+/// `normalize_folder_path` minus the hidden-segment rejection, for operations whose
+/// argument names a folder that already exists on disk (rename source, delete
+/// target): a vault can legitimately hold dot-named folders created before hidden
+/// paths were rejected, and renaming them to a visible name -- or deleting them --
+/// must remain possible from inside the app.
+pub fn normalize_existing_folder_path(path: &str) -> Result<String> {
     let path = path.replace('\\', "/");
 
     if path.starts_with('/') {
@@ -115,7 +132,7 @@ pub fn build_session_dir(
 ) -> Result<PathBuf> {
     let folder_path = normalize_folder_path(folder_path)?;
 
-    if dir_name.is_empty() || matches!(dir_name, "." | "..") || dir_name.contains(['/', '\\']) {
+    if dir_name.is_empty() || dir_name.starts_with('.') || dir_name.contains(['/', '\\']) {
         return Err(crate::Error::Path("session_dir_name_invalid".into()));
     }
 
@@ -165,6 +182,10 @@ mod tests {
         assert!(normalize_folder_path("work//project").is_err());
         assert!(normalize_folder_path("./work").is_err());
         assert!(normalize_folder_path("../work").is_err());
+        // Every layout reader skips dot-prefixed directories, so folders must
+        // never be creatable or renamable into that invisible part of the tree.
+        assert!(normalize_folder_path(".trash").is_err());
+        assert!(normalize_folder_path("work/.hidden").is_err());
     }
 
     #[test]
@@ -187,7 +208,7 @@ mod tests {
     #[test]
     fn test_build_session_dir_rejects_invalid_dir_names() {
         let base = PathBuf::from("/tmp/sessions");
-        for dir_name in ["", ".", "..", "a/b", r"a\b"] {
+        for dir_name in ["", ".", "..", ".hidden", "a/b", r"a\b"] {
             assert!(
                 build_session_dir(&base, "", dir_name).is_err(),
                 "{dir_name}"

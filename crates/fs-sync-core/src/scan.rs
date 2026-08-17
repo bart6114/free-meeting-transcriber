@@ -5,8 +5,9 @@ use glob::Pattern;
 use rayon::prelude::*;
 
 use crate::path::to_relative_path;
-use crate::session::{DirClass, classify_dir};
 use crate::types::ScanResult;
+
+use hypr_vault_read::has_session_boundary;
 
 pub fn scan_and_read(
     scan_dir: &Path,
@@ -76,18 +77,19 @@ fn scan_directory_for_files(
         };
 
         if path.is_dir() {
-            match classify_dir(&path) {
+            // Hidden directories are invisible to every layout reader.
+            if name.starts_with('.') {
+                continue;
+            }
+            if has_session_boundary(&path) {
                 // A session directory is not a user folder: its artifacts live at
                 // the top level, and its content (`enhanced/`, `attachments/`) is
                 // never recursed into.
-                DirClass::Session(_) => scan_session_files(base_path, &path, patterns, files),
-                DirClass::Folder => {
-                    dirs.push(to_relative_path(&path, base_path));
-                    if recursive {
-                        scan_directory_for_files(
-                            base_path, &path, patterns, recursive, files, dirs,
-                        );
-                    }
+                scan_session_files(base_path, &path, patterns, files);
+            } else {
+                dirs.push(to_relative_path(&path, base_path));
+                if recursive {
+                    scan_directory_for_files(base_path, &path, patterns, recursive, files, dirs);
                 }
             }
         } else if path.is_file() && patterns.iter().any(|p| p.matches(name)) {
@@ -238,6 +240,25 @@ mod tests {
                 .contains_key(&format!("{dir_name}/enhanced/doc.txt")),
             "session content must never be recursed into"
         );
+    }
+
+    #[test]
+    fn hidden_directories_are_neither_listed_nor_scanned() {
+        let env = TestEnv::new()
+            .file("root.txt", "root")
+            .folder(".stversions")
+            .file("stale.txt", "old copy")
+            .done()
+            .folder(".tmp-copy")
+            .file("partial.txt", "partial")
+            .done()
+            .build();
+
+        let result = scan_and_read(env.path(), env.path(), &["*.txt".into()], true, None);
+
+        assert_eq!(result.files.len(), 1, "{:?}", result.files);
+        assert_eq!(result.files.get("root.txt"), Some(&"root".into()));
+        assert!(result.dirs.is_empty(), "{:?}", result.dirs);
     }
 
     #[test]

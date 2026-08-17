@@ -28,6 +28,7 @@ import { AppI18nProvider } from "./i18n/provider";
 import { FloatingMeetingWindowHost } from "./meeting-float/host";
 import { routeTree } from "./routeTree.gen";
 import { EventListeners } from "./services/event-listeners";
+import { LocationInvalidationSync } from "./services/location-invalidation";
 import { TaskManager } from "./services/task-manager";
 import { RegenerateTranscriptConfirmDialog } from "./session/components/note-input/transcript/regenerate-confirm";
 import { useRemoteSessionDeletionUndoListener } from "./session/hooks/useDeleteSession";
@@ -88,6 +89,7 @@ function AppRoot() {
     <QueryClientProvider client={queryClient}>
       <TinyTickProvider manager={manager}>
         <App />
+        <LocationInvalidationSync />
         {isMainWindow ? <TaskManager /> : null}
         {isMainWindow ? <FloatingMeetingWindowHost /> : null}
         {isMainWindow ? <EventListeners /> : null}

@@ -6,7 +6,8 @@ import { events, type IndexEntity } from "~/types/tauri.gen";
 type IndexSubscription = {
   entities: readonly IndexEntity[];
   ids?: readonly string[];
-  onChange: () => void;
+  /** Receives the event's session ids (empty = anything may have changed). */
+  onChange: (ids: readonly string[]) => void;
   // Dedupe handle: subscriptions sharing a key (many mounted copies of the same
   // query) get one onChange per event instead of one per copy. A large transcript
   // mounts hundreds of identical `useTranscript`/`usePeople` subscriptions; firing
@@ -50,7 +51,7 @@ function ensureIndexChangedListener() {
           }
           seenDedupeKeys.add(subscription.dedupeKey);
         }
-        subscription.onChange();
+        subscription.onChange(payload.ids);
       }
     })
     .catch((error) => {
@@ -66,7 +67,7 @@ function ensureIndexChangedListener() {
  */
 export function subscribeIndexChanged(
   entity: IndexEntity | readonly IndexEntity[],
-  onChange: () => void,
+  onChange: (ids: readonly string[]) => void,
   ids?: readonly string[],
   dedupeKey?: string,
 ): () => void {
