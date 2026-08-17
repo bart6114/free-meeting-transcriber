@@ -242,10 +242,10 @@
 
   /* https://github.com/gitbutlerapp/gitbutler/blob/master/apps/desktop/src/styles/styles.css */
 
-  /* 15px root shrinks the whole rem-based type/spacing scale ~6% for a
-     denser, quieter UI (text-sm 14px -> 13.1px). */
+  /* 13px root shrinks the whole rem-based type/spacing scale ~19% for a
+     denser, quieter UI (text-sm 14px -> 11.4px, note body 15px -> 12.2px). */
   html {
-    font-size: 15px;
+    font-size: 13px;
   }
 
   html,
