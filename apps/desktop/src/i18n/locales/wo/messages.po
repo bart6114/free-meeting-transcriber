@@ -753,10 +753,6 @@ msgstr ""
 msgid "Meetings"
 msgstr "Ndaje yi"
 
-#: src/session/components/outer-header/overflow/export-modal.tsx
-msgid "Memo"
-msgstr ""
-
 #: src/task/resource-view.tsx
 msgid "Merged"
 msgstr ""
@@ -870,6 +866,7 @@ msgid "Not downloaded"
 msgstr ""
 
 #: src/session/components/note-input/header.tsx
+#: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Note"
 msgstr ""
 
@@ -1215,7 +1212,7 @@ msgid "Show Free Meeting Transcriber in the Dock and app switcher."
 msgstr ""
 
 #: src/session/components/memo-image-strip.tsx
-msgid "Show image in memo"
+msgid "Show image in note"
 msgstr ""
 
 #: src/settings/ai/stt/select.tsx

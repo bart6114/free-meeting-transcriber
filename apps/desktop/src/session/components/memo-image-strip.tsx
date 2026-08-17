@@ -100,7 +100,7 @@ export function MemoImageStrip({
         <button
           key={image.key}
           type="button"
-          aria-label={t`Show image in memo`}
+          aria-label={t`Show image in note`}
           onClick={() => onImageClick?.(image.src)}
           className={cn([
             "rounded-md",

@@ -5,12 +5,15 @@ import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { json2md } from "@hypr/editor/markdown";
+import { toPortableAttachmentSrc } from "@hypr/editor/note";
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import {
   commands as exportCommands,
+  type ExportAttachment,
   type ExportMetadata,
   type TranscriptItem,
 } from "@hypr/plugin-export";
+import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 import { commands as fs2Commands } from "@hypr/plugin-fs2";
 import { commands as openerCommands } from "@hypr/plugin-opener2";
 import { cn } from "@hypr/utils";
@@ -67,7 +70,7 @@ export function ExportModal({
 }) {
   const { t } = useLingui();
   const [format, setFormat] = useState<FileFormat>("pdf");
-  const [includeMemo, setIncludeMemo] = useState(false);
+  const [includeNote, setIncludeNote] = useState(false);
   const [includeSummary, setIncludeSummary] = useState(true);
   const [includeTranscript, setIncludeTranscript] = useState(false);
 
@@ -112,7 +115,7 @@ export function ExportModal({
     return null;
   }, [transcripts]);
 
-  const getMemoMd = (): string => {
+  const getNoteMd = (): string => {
     if (!rawMd) return "";
     try {
       const parsed = JSON.parse(rawMd);
@@ -159,12 +162,12 @@ export function ExportModal({
       sections.push(`- ${t`Duration`}: ${transcriptDuration}`);
     }
 
-    if (includeMemo) {
-      const memo = getMemoMd();
-      if (memo) {
+    if (includeNote) {
+      const note = getNoteMd();
+      if (note) {
         sections.push("");
-        sections.push(`## ${t`Memo`}`);
-        sections.push(memo);
+        sections.push(`## ${t`Note`}`);
+        sections.push(note);
       }
     }
 
@@ -207,13 +210,13 @@ export function ExportModal({
       sections.push(`${t`Duration`}: ${transcriptDuration}`);
     }
 
-    if (includeMemo) {
-      const memo = getMemoMd();
-      if (memo) {
+    if (includeNote) {
+      const note = getNoteMd();
+      if (note) {
         sections.push("");
-        sections.push(t`Memo`);
+        sections.push(t`Note`);
         sections.push("-".repeat(4));
-        sections.push(markdownToText(memo));
+        sections.push(markdownToText(note));
       }
     }
 
@@ -264,12 +267,12 @@ export function ExportModal({
       sections.push(`- ${t`Duration`} :: ${transcriptDuration}`);
     }
 
-    if (includeMemo) {
-      const memo = getMemoMd();
-      if (memo) {
+    if (includeNote) {
+      const note = getNoteMd();
+      if (note) {
         sections.push("");
-        sections.push(`* ${t`Memo`}`);
-        sections.push(markdownToOrg(memo));
+        sections.push(`* ${t`Note`}`);
+        sections.push(markdownToOrg(note));
       }
     }
 
@@ -296,7 +299,7 @@ export function ExportModal({
 
   const buildPdfContent = (): {
     enhancedMd: string;
-    memoMd: string | null;
+    noteMd: string | null;
     transcript: { items: TranscriptItem[] } | null;
     metadata: ExportMetadata | null;
   } => {
@@ -308,10 +311,10 @@ export function ExportModal({
       duration: transcriptDuration,
     };
 
-    let memoMd: string | null = null;
-    if (includeMemo) {
-      const memo = getMemoMd();
-      if (memo) memoMd = memo;
+    let noteMd: string | null = null;
+    if (includeNote) {
+      const note = getNoteMd();
+      if (note) noteMd = note;
     }
 
     const parts: string[] = [];
@@ -323,13 +326,32 @@ export function ExportModal({
 
     return {
       enhancedMd: parts.join("\n\n"),
-      memoMd,
+      noteMd,
       transcript:
         includeTranscript && transcriptItems.length > 0
           ? { items: transcriptItems }
           : null,
       metadata,
     };
+  };
+
+  // Session attachments referenced as images in the exported markdown, so the
+  // PDF renderer can embed them.
+  const collectPdfAttachments = async (content: {
+    enhancedMd: string;
+    noteMd: string | null;
+  }): Promise<ExportAttachment[]> => {
+    const result = await fsSyncCommands.attachmentList(sessionId);
+    if (result.status === "error") {
+      return [];
+    }
+    const haystack = `${content.noteMd ?? ""}\n${content.enhancedMd}`;
+    return result.data
+      .map((attachment) => ({
+        src: toPortableAttachmentSrc(attachment.attachmentId),
+        path: attachment.path,
+      }))
+      .filter((attachment) => haystack.includes(`](${attachment.src}`));
   };
 
   const { mutate, isPending } = useMutation({
@@ -344,7 +366,11 @@ export function ExportModal({
 
       if (format === "pdf") {
         const exportContent = buildPdfContent();
-        const result = await exportCommands.export(path, exportContent);
+        const attachments = await collectPdfAttachments(exportContent);
+        const result = await exportCommands.export(path, {
+          ...exportContent,
+          attachments,
+        });
         if (result.status === "error") {
           throw new Error(result.error);
         }
@@ -368,6 +394,7 @@ export function ExportModal({
         void analyticsCommands.event({
           event: "session_exported",
           format,
+          include_note: includeNote,
           include_summary: includeSummary,
           include_transcript: includeTranscript,
         });
@@ -379,7 +406,7 @@ export function ExportModal({
   });
 
   const hasAnyContentSelected =
-    includeMemo || includeSummary || includeTranscript;
+    includeNote || includeSummary || includeTranscript;
   const isTranscriptPending = includeTranscript && isTranscriptLoading;
   if (!open) {
     return null;
@@ -445,7 +472,7 @@ export function ExportModal({
               <div className="flex justify-center gap-4">
                 {(
                   [
-                    ["memo", <Trans>Memo</Trans>, includeMemo, setIncludeMemo],
+                    ["note", <Trans>Note</Trans>, includeNote, setIncludeNote],
                     [
                       "summary",
                       <Trans>Summary</Trans>,

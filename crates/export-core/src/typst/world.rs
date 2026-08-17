@@ -1,9 +1,10 @@
+use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use chrono::{Datelike, Timelike};
 use typst::diag::{FileError, FileResult};
 use typst::foundations::{Bytes, Datetime};
-use typst::syntax::{FileId, Source};
+use typst::syntax::{FileId, Source, VirtualPath};
 use typst::text::{Font, FontBook};
 use typst::utils::LazyHash;
 use typst::{Library, LibraryExt, World};
@@ -38,12 +39,25 @@ fn fonts() -> &'static (Vec<Font>, LazyHash<FontBook>) {
 
 pub struct TypstWorld {
     source: Source,
+    // Embedded assets (attachment images) keyed by rooted virtual path,
+    // e.g. "/att-0.png". A detached source cannot resolve paths, so the main
+    // source gets a real virtual FileId.
+    files: HashMap<FileId, Bytes>,
 }
 
 impl TypstWorld {
-    pub fn new(content: String) -> Self {
-        let source = Source::detached(content);
-        Self { source }
+    pub fn new(content: String, files: HashMap<String, Vec<u8>>) -> Self {
+        let source = Source::new(FileId::new(None, VirtualPath::new("/main.typ")), content);
+        let files = files
+            .into_iter()
+            .map(|(vpath, bytes)| {
+                (
+                    FileId::new(None, VirtualPath::new(&vpath)),
+                    Bytes::new(bytes),
+                )
+            })
+            .collect();
+        Self { source, files }
     }
 }
 
@@ -69,7 +83,10 @@ impl World for TypstWorld {
     }
 
     fn file(&self, id: FileId) -> FileResult<Bytes> {
-        Err(FileError::NotFound(id.vpath().as_rootless_path().into()))
+        self.files
+            .get(&id)
+            .cloned()
+            .ok_or_else(|| FileError::NotFound(id.vpath().as_rootless_path().into()))
     }
 
     fn font(&self, index: usize) -> Option<Font> {

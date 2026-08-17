@@ -1,7 +1,12 @@
+use std::collections::HashMap;
+
 use super::world::TypstWorld;
 
-pub fn compile_to_pdf(content: &str) -> Result<Vec<u8>, crate::Error> {
-    let world = TypstWorld::new(content.to_string());
+pub fn compile_to_pdf(
+    content: &str,
+    files: HashMap<String, Vec<u8>>,
+) -> Result<Vec<u8>, crate::Error> {
+    let world = TypstWorld::new(content.to_string(), files);
 
     let document = typst::compile(&world)
         .output

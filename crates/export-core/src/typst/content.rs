@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::ExportInput;
 
 use super::markdown::markdown_to_typst;
@@ -128,7 +130,7 @@ fn build_cover_page(
     cover
 }
 
-pub fn build_typst_content(input: &ExportInput) -> String {
+pub fn build_typst_content(input: &ExportInput, images: &HashMap<String, String>) -> String {
     let mut content = build_preamble();
 
     if let Some(metadata) = &input.metadata {
@@ -142,18 +144,18 @@ pub fn build_typst_content(input: &ExportInput) -> String {
         content.push_str(&cover);
     }
 
-    if let Some(memo_md) = &input.memo_md {
-        let memo_content = markdown_to_typst(memo_md);
-        if !memo_content.trim().is_empty() {
-            content.push_str("= Memo\n\n");
-            content.push_str(&memo_content);
+    if let Some(note_md) = &input.note_md {
+        let note_content = markdown_to_typst(note_md, images);
+        if !note_content.trim().is_empty() {
+            content.push_str("= Note\n\n");
+            content.push_str(&note_content);
             content.push_str("\n\n");
         }
     }
 
-    let typst_content = markdown_to_typst(&input.enhanced_md);
+    let typst_content = markdown_to_typst(&input.enhanced_md, images);
     if !typst_content.trim().is_empty() {
-        if input.memo_md.as_ref().is_some_and(|m| !m.trim().is_empty()) {
+        if input.note_md.as_ref().is_some_and(|m| !m.trim().is_empty()) {
             content.push_str("\n#pagebreak()\n\n");
         }
         content.push_str("= Summary\n\n");
@@ -165,7 +167,7 @@ pub fn build_typst_content(input: &ExportInput) -> String {
     {
         if input.metadata.is_some()
             || !input.enhanced_md.trim().is_empty()
-            || input.memo_md.as_ref().is_some_and(|m| !m.trim().is_empty())
+            || input.note_md.as_ref().is_some_and(|m| !m.trim().is_empty())
         {
             content.push_str("\n#pagebreak()\n\n");
         }

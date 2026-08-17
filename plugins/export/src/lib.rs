@@ -2,7 +2,7 @@ mod commands;
 mod ext;
 pub use ext::*;
 pub use hypr_export_core::{
-    Error, ExportInput, ExportMetadata, Result, Transcript, TranscriptItem,
+    Error, ExportAttachment, ExportInput, ExportMetadata, Result, Transcript, TranscriptItem,
 };
 
 const PLUGIN_NAME: &str = "export";
@@ -63,7 +63,7 @@ mod test {
                 "test.pdf",
                 ExportInput {
                     enhanced_md: "# Test Document\n\nThis is a test.".to_string(),
-                    memo_md: None,
+                    note_md: None,
                     transcript: Some(Transcript {
                         items: vec![TranscriptItem {
                             speaker: Some("Speaker 1".to_string()),
@@ -71,6 +71,7 @@ mod test {
                         }],
                     }),
                     metadata: None,
+                    attachments: vec![],
                 },
             )
             .unwrap();
