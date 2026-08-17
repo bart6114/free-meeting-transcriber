@@ -144,6 +144,7 @@ function useIsProviderReady(
       providerId,
       baseUrl,
       apiKey,
+      checkAvailability,
     ],
     queryFn: () => checkAvailability?.(baseUrl, apiKey) ?? false,
     enabled: isConfigured && !!checkAvailability,

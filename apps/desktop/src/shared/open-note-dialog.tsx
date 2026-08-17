@@ -130,7 +130,7 @@ export function OpenNoteDialog({
   const trimmedQuery = query.trim();
 
   const { data: contentHits } = useQuery({
-    queryKey: ["open-note-dialog-search", trimmedQuery],
+    queryKey: ["open-note-dialog-search", trimmedQuery, search],
     queryFn: () =>
       search(trimmedQuery, null, {
         limit: SEARCH_LIMIT,
