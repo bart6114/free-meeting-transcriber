@@ -418,14 +418,14 @@ export function ExportModal({
       onClick={() => onOpenChange(false)}
     >
       <div
-        className="absolute top-1/2 left-1/2 w-full max-w-xs -translate-x-1/2 -translate-y-1/2 px-4"
+        className="absolute top-1/2 left-1/2 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 px-4"
         onClick={(e) => e.stopPropagation()}
       >
         <div
           className={cn([
             "border-border/80 bg-background rounded-xl border",
             "shadow-[0_25px_50px_-12px_rgba(0,0,0,0.25)]",
-            "flex flex-col gap-4 p-5 text-center",
+            "flex flex-col gap-4 p-7 text-center",
           ])}
         >
           <div className="flex flex-col gap-1">
