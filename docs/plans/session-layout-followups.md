@@ -1,6 +1,26 @@
 # Plan: finish the session-layout work
 
-Status: proposed
+Status: implemented (branch `refactor/session-layout-followups`)
+
+Implementation notes (deviations from the text below, found during verification):
+
+- The stop-side race description was inaccurate: `AfterListeningStopped` was
+  driven by `stopCapture()` resolving, not by the `Stopped` lifecycle event. The
+  `RecordingMetaSettled` design fixes the actual (earlier, wider) race, and the
+  same settlement also gates the `onStopped` audio-path consumers (batch repair,
+  audio cataloging), which the plan text had left ungated.
+- The `locations` frontend subscriber is mounted per window (not in the
+  main-window-gated listener host): standalone session windows cache paths too.
+- Discovery still descends past a ghost boundary so a healthy session nested
+  under a ghost stays indexed (the boundary is only reported once); "is not
+  descended into" applies to ghost *reporting*, preserving CLI listing
+  semantics exactly.
+- Pre-existing dot-named folders keep an escape hatch: rename-to-visible and
+  delete accept a hidden source; creating or renaming into hidden paths is
+  rejected as planned.
+- Accepted trade-off: fs-sync duplicate-id blocking is as-of-last-rebuild
+  rather than per-call, inherent to catalog-first resolution and bounded by
+  the watcher rebuild.
 
 ## Delivery rule
 
