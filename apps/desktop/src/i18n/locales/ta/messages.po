@@ -35,6 +35,10 @@ msgstr ""
 msgid "{otherClusterCount, plural, one {Also apply to the other speaker on this channel} other {Also apply to the other # speakers on this channel}}"
 msgstr ""
 
+#: src/session/components/session-tags.tsx
+msgid "+ Add tag"
+msgstr ""
+
 #: src/settings/general/app-settings.tsx
 msgid "1 day"
 msgstr ""
@@ -178,6 +182,14 @@ msgstr ""
 msgid "Base URL"
 msgstr ""
 
+#: src/sidebar/timeline/index.tsx
+msgid "By date"
+msgstr ""
+
+#: src/sidebar/timeline/index.tsx
+msgid "By tag"
+msgstr ""
+
 #: src/settings/ai/stt/select.tsx
 msgid "Can transcribe while the meeting is happening."
 msgstr ""
@@ -286,6 +298,10 @@ msgstr ""
 
 #: src/onboarding/llm-provider.tsx
 msgid "Continue"
+msgstr ""
+
+#: src/session/components/session-tags.tsx
+msgid "Could not update tags."
 msgstr ""
 
 #: src/templates/details.tsx
@@ -983,6 +999,10 @@ msgstr ""
 msgid "Remove {term}"
 msgstr ""
 
+#: src/session/components/session-tags.tsx
+msgid "Remove tag {tag}"
+msgstr ""
+
 #: src/settings/ai/shared/index.tsx
 msgid "Repair Keychain Access"
 msgstr ""
@@ -1285,6 +1305,10 @@ msgstr ""
 
 #: src/onboarding/permissions.tsx
 msgid "System audio enabled"
+msgstr ""
+
+#: src/session/components/session-tags.tsx
+msgid "Tag name"
 msgstr ""
 
 #: src/templates/details.tsx
