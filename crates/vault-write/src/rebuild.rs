@@ -30,14 +30,49 @@ impl SessionStore {
     /// unchanged files -- the search projection and the frontend both ride that bus, and
     /// a no-op rescan must not re-trigger either.
     pub async fn rebuild_index(&self) -> Result<RebuildReport, StoreError> {
-        let mut report = RebuildReport::default();
-
         // The scan and the catalog swap run under the store write lock: renames
         // (provisional reconcile, migration) also hold it, so the swap can never
         // revert the catalog to a directory a concurrent rename just moved away
         // from -- which would make the next write recreate the old path.
         let guard = self.lock_writes().await;
         let scan = self.scan_session_locations().await?;
+        self.rebuild_with_scan(guard, scan).await
+    }
+
+    /// Startup entry point: rebuild from the layout snapshot
+    /// `normalize_startup_layout` already paid for, instead of scanning again.
+    pub async fn rebuild_index_from_startup_layout(
+        &self,
+        layout: super::StartupLayout,
+    ) -> Result<RebuildReport, StoreError> {
+        let guard = self.lock_writes().await;
+        self.rebuild_with_scan(guard, layout.scan).await
+    }
+
+    /// Startup layout normalization from ONE discovery walk: legacy readable-name
+    /// migration, then provisional-title reconciliation (crash recovery), each
+    /// updating the snapshot's paths after a successful rename so the rebuild that
+    /// follows indexes the directories as they now are. Runs under the write lock;
+    /// no content is read here -- that stays in the rebuild, outside the lock.
+    pub async fn normalize_startup_layout(&self) -> Result<super::StartupLayout, StoreError> {
+        let guard = self.lock_writes().await;
+        let mut scan = self.scan_session_locations().await?;
+        let migration = self.migrate_from_scan(&guard, &mut scan).await;
+        self.reconcile_provisional_from_scan(&guard, &mut scan)
+            .await;
+        drop(guard);
+        Ok(super::StartupLayout { scan, migration })
+    }
+
+    /// The rebuild body shared by every entry point. Takes the write guard by value:
+    /// the layout swap runs under it, then it is released before the content refresh
+    /// (reading every note/transcript/doc must not block writers).
+    async fn rebuild_with_scan(
+        &self,
+        guard: super::WriteGuard<'_>,
+        scan: SessionLayoutScan,
+    ) -> Result<RebuildReport, StoreError> {
+        let mut report = RebuildReport::default();
 
         // Ids the prune below must not touch: an id claimed by multiple directories
         // is ambiguous (not gone), and an id whose known directory -- or any parent
@@ -66,8 +101,8 @@ impl SessionStore {
         let location_changes: Vec<String> = {
             let mut catalog = self.locations.write().unwrap();
             let previous = std::mem::take(&mut *catalog);
-            for (id, dir) in &scan.locations {
-                catalog.insert(id.clone(), dir.clone());
+            for (location, _) in &scan.sessions {
+                catalog.insert(location.id.clone(), location.relative_dir.clone());
             }
             for id in &protected {
                 if scan.duplicate_ids.contains(id) {
@@ -104,16 +139,20 @@ impl SessionStore {
         report.errors.extend(scan.errors.iter().cloned());
         report.ghost_sessions = scan.ghost_dirs.clone();
 
-        for (id, _) in &scan.locations {
+        for (location, _) in &scan.sessions {
             // The per-session raw error (if any) is only useful to refresh_session's single-id
             // caller; rebuild_index already has the full picture in report.errors.
-            let _ = self.refresh_one(id, &mut report).await?;
+            let _ = self.refresh_one(&location.id, &mut report).await?;
         }
 
         // Sessions that vanished from disk are removed (the discovery scan succeeded and
         // came back without them -- the only certainty a prune is allowed to act on;
         // ambiguous/corrupt ids are protected above).
-        let present: HashSet<&str> = scan.locations.iter().map(|(id, _)| id.as_str()).collect();
+        let present: HashSet<&str> = scan
+            .sessions
+            .iter()
+            .map(|(location, _)| location.id.as_str())
+            .collect();
         let stale: Vec<String> = {
             let index = self.index.read().unwrap();
             index
@@ -395,21 +434,30 @@ impl SessionStore {
 
     // -- filesystem reads (read-only; never writes to the vault) --
 
-    /// Discovery-backed layout scan: `(id, physical directory)` pairs for every healthy
-    /// session (identity from `_meta.json.id`, both legacy UUID-named and readable
-    /// directories), plus the diagnostics rebuild needs -- formatted layout errors,
-    /// the directories whose metadata is unreadable, the ids claimed by more than one
-    /// directory, and ghost directories (session-like content with no metadata).
+    /// Discovery-backed layout scan: the healthy sessions (identity from
+    /// `_meta.json.id`, both legacy UUID-named and readable directories, with their
+    /// metadata), plus the diagnostics rebuild needs -- formatted layout errors, the
+    /// directories whose metadata is unreadable, the ids claimed by more than one
+    /// directory, and ghost directories (session-like content with no metadata). One
+    /// traversal: ghosts come out of the same discovery walk.
     pub(super) async fn scan_session_locations(&self) -> Result<SessionLayoutScan, StoreError> {
         let vault_base = self.vault_base.clone();
         tokio::task::spawn_blocking(move || -> Result<SessionLayoutScan, StoreError> {
+            let started = std::time::Instant::now();
             let discovery = hypr_vault_read::discover_sessions(&vault_base)?;
 
             let mut scan = SessionLayoutScan {
-                locations: discovery
-                    .sessions
-                    .into_iter()
-                    .map(|(location, _)| (location.id, location.relative_dir))
+                ghost_dirs: discovery
+                    .ghost_dirs
+                    .iter()
+                    .map(|dir| {
+                        // Historical report shape: relative to `sessions/`, root-level
+                        // ghosts as a bare basename.
+                        dir.strip_prefix(hypr_vault_read::paths::sessions_root())
+                            .unwrap_or(dir)
+                            .to_string_lossy()
+                            .into_owned()
+                    })
                     .collect(),
                 ..Default::default()
             };
@@ -425,8 +473,16 @@ impl SessionStore {
                     }
                 }
             }
+            scan.sessions = discovery.sessions;
 
-            scan.ghost_dirs = scan_ghost_dirs(&vault_base)?;
+            tracing::debug!(
+                healthy = scan.sessions.len(),
+                broken = scan.broken_dirs.len(),
+                duplicates = scan.duplicate_ids.len(),
+                ghosts = scan.ghost_dirs.len(),
+                elapsed_ms = started.elapsed().as_millis() as u64,
+                "session layout discovery"
+            );
             Ok(scan)
         })
         .await
@@ -574,12 +630,13 @@ impl SessionStore {
     }
 }
 
-/// Result of `scan_session_locations`: the healthy `(id, vault-relative dir)` pairs
-/// plus everything rebuild must know about the parts of the layout that are not
+/// Result of `scan_session_locations`: the healthy sessions (location + parsed
+/// metadata, so startup normalization can rename without re-reading) plus
+/// everything rebuild must know about the parts of the layout that are not
 /// healthy sessions.
 #[derive(Debug, Default)]
 pub(super) struct SessionLayoutScan {
-    pub locations: Vec<(String, PathBuf)>,
+    pub sessions: Vec<(hypr_vault_read::SessionLocation, super::SessionMeta)>,
     /// Formatted layout diagnostics (duplicate ids, corrupt/unreadable metadata),
     /// carrying physical paths; surfaced through `RebuildReport.errors`.
     pub errors: Vec<String>,
@@ -591,52 +648,6 @@ pub(super) struct SessionLayoutScan {
     /// `<kind>.md` document or `transcript.json`) with no `_meta.json` at all -- left
     /// deliberately unindexed, files untouched.
     pub ghost_dirs: Vec<String>,
-}
-
-/// Walks `sessions/` the same way discovery does (skip hidden, never descend past a
-/// `_meta.json`) and reports the meta-less directories that directly hold session-like
-/// content. Root-level ghosts keep their historical bare-basename form; nested ones
-/// carry their `sessions/`-relative path.
-fn scan_ghost_dirs(vault_base: &std::path::Path) -> Result<Vec<String>, StoreError> {
-    let root = vault_base.join(paths::sessions_root());
-    let mut ghosts = Vec::new();
-    let mut pending: Vec<PathBuf> = vec![PathBuf::new()];
-    while let Some(relative) = pending.pop() {
-        let entries = match std::fs::read_dir(root.join(&relative)) {
-            Ok(entries) => entries,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
-            // Unreadable directories are already reported as layout diagnostics by the
-            // discovery pass; the ghost sweep just moves on.
-            Err(_) => continue,
-        };
-        for entry in entries {
-            let Ok(entry) = entry else { continue };
-            if !entry.file_type().is_ok_and(|kind| kind.is_dir()) {
-                continue;
-            }
-            let Some(name) = entry.file_name().to_str().map(str::to_string) else {
-                continue;
-            };
-            if name.starts_with('.') {
-                continue;
-            }
-            let child_rel = relative.join(&name);
-            let child_abs = entry.path();
-            if hypr_vault_read::has_session_boundary(&child_abs) {
-                continue; // a session (or corrupt session) directory, never a parent
-            }
-            if dir_has_session_content(&child_abs)? {
-                // A ghost's own subdirectories (enhanced/, attachments/) are its
-                // content, not further ghosts -- report the orphan once, don't
-                // descend and double-count its interior.
-                ghosts.push(child_rel.to_string_lossy().into_owned());
-                continue;
-            }
-            pending.push(child_rel);
-        }
-    }
-    ghosts.sort();
-    Ok(ghosts)
 }
 
 fn dir_has_session_content(dir: &std::path::Path) -> Result<bool, StoreError> {

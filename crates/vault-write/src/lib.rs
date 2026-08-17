@@ -68,6 +68,15 @@ pub struct SessionStore {
     known_duplicates: Arc<std::sync::RwLock<std::collections::HashSet<String>>>,
 }
 
+/// Product of `normalize_startup_layout`: one discovery snapshot -- with paths
+/// updated by the migration/reconciliation renames -- plus their diagnostics.
+/// Hand it to `rebuild_index_from_startup_layout` so the first index rebuild
+/// reuses the walk instead of scanning again.
+pub struct StartupLayout {
+    pub(crate) scan: rebuild::SessionLayoutScan,
+    pub migration: migrate::MigrationReport,
+}
+
 #[derive(Debug)]
 pub enum StoreError {
     Io(String),

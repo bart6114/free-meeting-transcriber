@@ -325,38 +325,48 @@ pub async fn main() {
                         // async worker then waits for the tantivy collection.
                         search_index::spawn(app_handle.clone(), store.clone());
 
-                        // One-way readable-name migration for legacy UUID-named session
-                        // directories, before the first rebuild and before vault_watch
-                        // starts (renames must not race the watcher or be indexed at
-                        // stale paths). Idempotent: an already-migrated vault is a
-                        // no-op, and partial completion resumes next startup.
-                        match hypr_tauri_utils::block_on(store.migrate_legacy_session_directories())
-                        {
-                            Ok(report)
-                                if !report.renamed.is_empty() || !report.failed.is_empty() =>
-                            {
-                                tracing::info!(
-                                    renamed = report.renamed.len(),
-                                    skipped = report.skipped.len(),
-                                    failed = ?report.failed,
-                                    "migrated legacy session directories to readable names"
-                                );
-                            }
-                            Ok(_) => {}
-                            Err(e) => {
-                                tracing::error!("session directory migration failed: {}", e);
-                            }
-                        }
-                        // Crash recovery for the provisional-name lifecycle: a first
-                        // title written while recording defers its directory rename to
-                        // recording stop; if the app died in between, finish it here.
-                        hypr_tauri_utils::block_on(store.reconcile_provisional_names());
+                        // One discovery walk covers all of startup normalization:
+                        // legacy readable-name migration, then provisional-name crash
+                        // recovery (a first title written while recording defers its
+                        // rename to recording stop; if the app died in between, finish
+                        // it here) -- both before the first rebuild and before
+                        // vault_watch starts (renames must not race the watcher or be
+                        // indexed at stale paths). Idempotent: an already-normalized
+                        // vault is a no-op, and partial completion resumes next
+                        // startup. The resulting snapshot then feeds the rebuild
+                        // directly, so startup never scans the layout twice.
+                        let startup_layout =
+                            match hypr_tauri_utils::block_on(store.normalize_startup_layout()) {
+                                Ok(layout) => {
+                                    let report = &layout.migration;
+                                    if !report.renamed.is_empty() || !report.failed.is_empty() {
+                                        tracing::info!(
+                                            renamed = report.renamed.len(),
+                                            skipped = report.skipped.len(),
+                                            failed = ?report.failed,
+                                            "migrated legacy session directories to readable names"
+                                        );
+                                    }
+                                    Some(layout)
+                                }
+                                Err(e) => {
+                                    tracing::error!("startup layout normalization failed: {}", e);
+                                    None
+                                }
+                            };
 
                         // Files are the source of truth, so every startup rebuilds the
                         // sessions/session_documents/transcripts index from what's on disk
                         // before the UI proceeds. `block_on`: the UI must not come up
                         // against a stale index.
-                        match hypr_tauri_utils::block_on(store.rebuild_index()) {
+                        let rebuild_result = match startup_layout {
+                            Some(layout) => hypr_tauri_utils::block_on(
+                                store.rebuild_index_from_startup_layout(layout),
+                            ),
+                            // Normalization failed: fall back to a self-scanning rebuild.
+                            None => hypr_tauri_utils::block_on(store.rebuild_index()),
+                        };
+                        match rebuild_result {
                             Ok(report) => {
                                 tracing::info!(
                                     sessions = report.sessions,

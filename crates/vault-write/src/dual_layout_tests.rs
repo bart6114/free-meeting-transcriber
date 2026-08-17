@@ -1371,3 +1371,155 @@ async fn a_failed_start_round_trip_leaves_no_permanent_lease() {
         "no leftover lease may keep deferring the rename"
     );
 }
+
+// -- startup normalization from one layout snapshot -------------------------------
+
+#[tokio::test]
+async fn normalize_startup_layout_migrates_reconciles_and_feeds_the_rebuild() {
+    let vault = tempfile::tempdir().unwrap();
+    // A legacy UUID-named directory to migrate...
+    let legacy = vault.path().join(format!("sessions/{LEGACY_ID}"));
+    std::fs::create_dir_all(&legacy).unwrap();
+    let mut legacy_meta = meta(LEGACY_ID, "Planning");
+    legacy_meta.started_at = Some("2026-03-20".to_string());
+    std::fs::write(
+        legacy.join("_meta.json"),
+        serde_json::to_vec_pretty(&legacy_meta).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(legacy.join("_memo.md"), "legacy note").unwrap();
+    // ...and a crash-leftover provisional directory whose meta already has a title.
+    let provisional_name = crate::layout_name::format_session_dir_name("2026-04-01", "", "6ba7b8");
+    seed_session_at(
+        vault.path(),
+        &format!("sessions/{provisional_name}"),
+        ID,
+        "Roadmap review",
+    );
+
+    let store = SessionStore::new(vault.path().to_path_buf());
+    let layout = store.normalize_startup_layout().await.unwrap();
+    assert_eq!(layout.migration.renamed.len(), 1, "{:?}", layout.migration);
+
+    let report = store
+        .rebuild_index_from_startup_layout(layout)
+        .await
+        .unwrap();
+    assert_eq!(report.sessions, 2);
+    assert!(report.errors.is_empty(), "{:?}", report.errors);
+
+    // Both renames happened on disk and the snapshot fed rebuild the NEW paths:
+    // the catalog and the index resolve to them without another scan.
+    let migrated = store.session_dir(LEGACY_ID).await.unwrap();
+    assert_eq!(
+        migrated,
+        PathBuf::from("sessions/2026-03-20 — Planning — 550e84")
+    );
+    assert!(vault.path().join(&migrated).join("_memo.md").is_file());
+    let reconciled = store.session_dir(ID).await.unwrap();
+    assert_eq!(
+        reconciled,
+        PathBuf::from("sessions/2026-04-01 — Roadmap review — 6ba7b8")
+    );
+    assert_eq!(store.session_get(LEGACY_ID).unwrap().meta.title, "Planning");
+    assert_eq!(store.session_get(ID).unwrap().meta.title, "Roadmap review");
+}
+
+#[tokio::test]
+async fn a_failed_migration_keeps_the_source_path_in_the_snapshot() {
+    let vault = tempfile::tempdir().unwrap();
+    let legacy = vault.path().join(format!("sessions/{LEGACY_ID}"));
+    std::fs::create_dir_all(&legacy).unwrap();
+    let mut legacy_meta = meta(LEGACY_ID, "Planning");
+    legacy_meta.started_at = Some("2026-03-20".to_string());
+    std::fs::write(
+        legacy.join("_meta.json"),
+        serde_json::to_vec_pretty(&legacy_meta).unwrap(),
+    )
+    .unwrap();
+    // Occupy every readable-name candidate so migration has nowhere to go.
+    for suffix in crate::layout_name::short_id_candidates(LEGACY_ID) {
+        std::fs::create_dir_all(vault.path().join("sessions").join(
+            crate::layout_name::format_session_dir_name("2026-03-20", "Planning", &suffix),
+        ))
+        .unwrap();
+    }
+
+    let store = SessionStore::new(vault.path().to_path_buf());
+    let layout = store.normalize_startup_layout().await.unwrap();
+    assert!(layout.migration.renamed.is_empty());
+    assert!(
+        layout
+            .migration
+            .skipped
+            .iter()
+            .any(|s| s.contains("no collision-free readable name")),
+        "{:?}",
+        layout.migration
+    );
+
+    let report = store
+        .rebuild_index_from_startup_layout(layout)
+        .await
+        .unwrap();
+    assert_eq!(report.sessions, 1);
+    // The snapshot still points at the untouched source directory.
+    assert_eq!(
+        store.session_dir(LEGACY_ID).await.unwrap(),
+        PathBuf::from(format!("sessions/{LEGACY_ID}"))
+    );
+    assert_eq!(store.session_get(LEGACY_ID).unwrap().meta.title, "Planning");
+}
+
+/// Preserved discovery semantics after folding the ghost walk into discovery: a
+/// healthy session nested under a ghost boundary stays indexed, and the ghost is
+/// still reported exactly once.
+#[tokio::test]
+async fn a_session_nested_under_a_ghost_directory_is_still_indexed() {
+    let (store, vault) = test_store().await;
+    let ghost = vault.path().join("sessions/Work/ghost");
+    std::fs::create_dir_all(&ghost).unwrap();
+    std::fs::write(ghost.join("transcript.json"), "{}").unwrap();
+    seed_session_at(vault.path(), "sessions/Work/ghost/rescued", ID, "Rescued");
+
+    let report = store.rebuild_index().await.unwrap();
+
+    assert_eq!(report.ghost_sessions, vec!["Work/ghost".to_string()]);
+    assert_eq!(report.sessions, 1);
+    assert_eq!(store.session_get(ID).unwrap().meta.title, "Rescued");
+}
+
+/// Not a benchmark gate -- a manually-run measurement of the single-walk layout
+/// scan (`cargo test -p vault-write --release -- --ignored discovery_scale`).
+#[tokio::test]
+#[ignore]
+async fn discovery_scale_measurement() {
+    for count in [100usize, 1000, 5000] {
+        let vault = tempfile::tempdir().unwrap();
+        for i in 0..count {
+            let id = format!("aaaaaaaa-0000-4000-8000-{i:012}");
+            seed_session_at(
+                vault.path(),
+                &format!("sessions/2026-03-20 — Session {i} — {i:06}"),
+                &id,
+                &format!("Session {i}"),
+            );
+        }
+        let store = SessionStore::new(vault.path().to_path_buf());
+        let started = std::time::Instant::now();
+        let layout = store.normalize_startup_layout().await.unwrap();
+        let normalize_elapsed = started.elapsed();
+        let started = std::time::Instant::now();
+        store
+            .rebuild_index_from_startup_layout(layout)
+            .await
+            .unwrap();
+        let startup_rebuild = started.elapsed();
+        let started = std::time::Instant::now();
+        store.rebuild_index().await.unwrap();
+        let focus_rebuild = started.elapsed();
+        println!(
+            "{count} sessions: normalize {normalize_elapsed:?}, startup rebuild {startup_rebuild:?}, focus rebuild {focus_rebuild:?}"
+        );
+    }
+}

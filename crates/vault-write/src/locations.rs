@@ -332,16 +332,23 @@ impl SessionStore {
     /// metadata already carries a non-empty title (covers crashes mid-recording and
     /// title writes from older code paths). Idempotent and read-tolerant.
     pub async fn reconcile_provisional_names(&self) {
-        let vault_base = self.vault_base.clone();
-        let discovered = tokio::task::spawn_blocking(move || {
-            hypr_vault_read::discover_sessions(&vault_base)
-                .map(|discovery| discovery.sessions)
-                .unwrap_or_default()
-        })
-        .await
-        .unwrap_or_default();
+        let guard = self.lock_writes().await;
+        let Ok(mut scan) = self.scan_session_locations().await else {
+            return;
+        };
+        self.reconcile_provisional_from_scan(&guard, &mut scan)
+            .await;
+    }
 
-        for (location, meta) in discovered {
+    /// The reconciliation body, working off an already-paid layout snapshot (see
+    /// `normalize_startup_layout`). Successful renames update the snapshot's paths
+    /// in place via the catalog entry the rename just wrote.
+    pub(super) async fn reconcile_provisional_from_scan(
+        &self,
+        guard: &WriteGuard<'_>,
+        scan: &mut super::rebuild::SessionLayoutScan,
+    ) {
+        for (location, meta) in scan.sessions.iter_mut() {
             let is_provisional = location
                 .relative_dir
                 .file_name()
@@ -350,14 +357,16 @@ impl SessionStore {
             if !is_provisional || meta.title.trim().is_empty() {
                 continue;
             }
-            let guard = self.lock_writes().await;
             self.reconcile_provisional_name_locked(
-                &guard,
-                &meta.id,
+                guard,
+                &location.id,
                 &meta.title,
                 &location.relative_dir,
             )
             .await;
+            if let Some(dir) = self.locations.read().unwrap().get(&location.id) {
+                location.relative_dir = dir.clone();
+            }
         }
     }
 
