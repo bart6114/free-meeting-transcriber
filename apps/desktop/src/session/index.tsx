@@ -255,11 +255,11 @@ function TabContentNoteInner({
                   <>
                     <div
                       data-session-top-audio-player
-                      className="border-border bg-card hidden h-7 w-56 shrink-0 overflow-hidden rounded-full border @[36rem]:block"
+                      className="border-border bg-card @max-[36rem]:hidden h-7 w-56 shrink-0 overflow-hidden rounded-full border"
                     >
                       <AudioPlayer.Timeline contentClassName="gap-2 py-[3px] pr-2.5 pl-[3px]" />
                     </div>
-                    <div className="shrink-0 @[36rem]:hidden">
+                    <div className="@[36rem]:hidden shrink-0">
                       <AudioPlayer.CompactPlayButton />
                     </div>
                   </>
