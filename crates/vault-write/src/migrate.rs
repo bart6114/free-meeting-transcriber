@@ -59,15 +59,8 @@ impl SessionStore {
             let (date, _) =
                 layout_name::session_date(meta.started_at.as_deref(), &meta.created_at, &today);
             let vault_base = self.vault_base.clone();
-            let target = layout_name::short_id_candidates(&meta.id)
+            let target = layout_name::session_dir_candidates(parent, &date, &meta.title, &meta.id)
                 .into_iter()
-                .map(|suffix| {
-                    parent.join(layout_name::format_session_dir_name(
-                        &date,
-                        &meta.title,
-                        &suffix,
-                    ))
-                })
                 .find(|candidate| {
                     !claimed.contains(candidate) && !vault_base.join(candidate).exists()
                 });

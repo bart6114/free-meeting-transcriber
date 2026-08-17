@@ -58,10 +58,15 @@ impl SessionStore {
         Ok(())
     }
 
-    async fn resolve_session_dir(&self, id: &str) -> Result<PathBuf, StoreError> {
+    /// The one existing-location lookup shared by artifact resolution and creation:
+    /// duplicate rejection, catalog hit, full discovery on a cold miss (which warms
+    /// the catalog), and corrupt/ambiguous error mapping. `Ok(None)` means no
+    /// directory anywhere claims the id -- the two callers alone decide what that
+    /// means (legacy fallback path vs. a fresh readable name).
+    async fn lookup_existing_dir(&self, id: &str) -> Result<Option<PathBuf>, StoreError> {
         self.ensure_not_duplicated(id)?;
         if let Some(dir) = self.locations.read().unwrap().get(id) {
-            return Ok(dir.clone());
+            return Ok(Some(dir.clone()));
         }
 
         let vault_base = self.vault_base.clone();
@@ -75,17 +80,24 @@ impl SessionStore {
         match found {
             Ok(Some((location, _))) => {
                 self.catalog_insert(id, location.relative_dir.clone());
-                Ok(location.relative_dir)
+                Ok(Some(location.relative_dir))
             }
-            Ok(None) => Ok(legacy_session_dir(id)),
+            Ok(None) => Ok(None),
             // A corrupt legacy meta doesn't unhome the directory: artifact reads keep
             // their historical tolerance there, and read_meta surfaces the parse error
             // itself.
-            Err(hypr_vault_read::SessionLookupError::Corrupt { dir, .. }) => Ok(dir),
+            Err(hypr_vault_read::SessionLookupError::Corrupt { dir, .. }) => Ok(Some(dir)),
             Err(error @ hypr_vault_read::SessionLookupError::Ambiguous { .. }) => {
                 Err(StoreError::Io(error.to_string()))
             }
             Err(hypr_vault_read::SessionLookupError::Io(reason)) => Err(StoreError::Io(reason)),
+        }
+    }
+
+    async fn resolve_session_dir(&self, id: &str) -> Result<PathBuf, StoreError> {
+        match self.lookup_existing_dir(id).await? {
+            Some(dir) => Ok(dir),
+            None => Ok(legacy_session_dir(id)),
         }
     }
 
@@ -98,28 +110,9 @@ impl SessionStore {
         _guard: &WriteGuard<'_>,
         meta: &super::SessionMeta,
     ) -> Result<PathBuf, StoreError> {
-        self.ensure_not_duplicated(&meta.id)?;
-        if let Some(dir) = self.locations.read().unwrap().get(&meta.id) {
-            return Ok(dir.clone());
-        }
-
-        let vault_base = self.vault_base.clone();
-        let id = meta.id.clone();
-        let found =
-            tokio::task::spawn_blocking(move || hypr_vault_read::find_session(&vault_base, &id))
-                .await
-                .map_err(|e| StoreError::Io(format!("task join error: {e}")))?;
-        match found {
-            Ok(Some((location, _))) => {
-                self.catalog_insert(&meta.id, location.relative_dir.clone());
-                Ok(location.relative_dir)
-            }
-            Ok(None) => self.choose_new_session_dir(meta).await,
-            Err(hypr_vault_read::SessionLookupError::Corrupt { dir, .. }) => Ok(dir),
-            Err(error @ hypr_vault_read::SessionLookupError::Ambiguous { .. }) => {
-                Err(StoreError::Io(error.to_string()))
-            }
-            Err(hypr_vault_read::SessionLookupError::Io(reason)) => Err(StoreError::Io(reason)),
+        match self.lookup_existing_dir(&meta.id).await? {
+            Some(dir) => Ok(dir),
+            None => self.choose_new_session_dir(meta).await,
         }
     }
 
@@ -133,14 +126,12 @@ impl SessionStore {
         if let Some(diagnostic) = diagnostic {
             tracing::warn!(session_id = %meta.id, %diagnostic, "naming new session directory from the current date");
         }
-        let mut candidates: Vec<PathBuf> = super::layout_name::short_id_candidates(&meta.id)
-            .into_iter()
-            .map(|suffix| {
-                hypr_vault_read::paths::sessions_root().join(
-                    super::layout_name::format_session_dir_name(&date, &meta.title, &suffix),
-                )
-            })
-            .collect();
+        let mut candidates: Vec<PathBuf> = super::layout_name::session_dir_candidates(
+            &hypr_vault_read::paths::sessions_root(),
+            &date,
+            &meta.title,
+            &meta.id,
+        );
         // A meta-less directory already named exactly for this id (the recorder's
         // ghost fallback: transcript/audio can land before the first meta write) is
         // adopted rather than orphaned beside a readable-named sibling.
@@ -257,15 +248,11 @@ impl SessionStore {
             return;
         };
 
-        let candidates: Vec<PathBuf> = super::layout_name::short_id_candidates(id)
-            .into_iter()
-            .map(|suffix| {
-                parent.join(super::layout_name::format_session_dir_name(
-                    date, title, &suffix,
-                ))
-            })
-            .filter(|target| !hypr_vault_read::layout::paths_eq_nfc(target, current_dir))
-            .collect();
+        let candidates: Vec<PathBuf> =
+            super::layout_name::session_dir_candidates(parent, date, title, id)
+                .into_iter()
+                .filter(|target| !hypr_vault_read::layout::paths_eq_nfc(target, current_dir))
+                .collect();
 
         let vault_base = self.vault_base.clone();
         let probe = candidates.clone();

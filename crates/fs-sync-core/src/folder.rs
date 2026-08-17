@@ -34,6 +34,11 @@ pub fn scan_directory_recursive(
             Some(name) => name.to_string(),
             None => continue,
         };
+        // Hidden directories (.trash, sync-provider sidecars like .stversions,
+        // crashed-copy .tmp-*) are invisible to every layout reader.
+        if name.starts_with('.') {
+            continue;
+        }
 
         let entry_path = if current_path.is_empty() {
             name.clone()
@@ -94,6 +99,9 @@ pub fn collect_session_updates(
             Some(name) => name.to_string(),
             None => continue,
         };
+        if name.starts_with('.') {
+            continue;
+        }
 
         let entry_path = if current_path.is_empty() {
             name
@@ -220,6 +228,44 @@ mod tests {
         assert!(result.session_folder_map.contains_key(UUID_1));
         assert!(!result.session_folder_map.contains_key(UUID_2));
         assert!(result.folders.is_empty());
+    }
+
+    #[test]
+    fn scan_directory_skips_hidden_directories() {
+        let env = TestEnv::new()
+            .folder("work")
+            .session(UUID_1)
+            .done_folder()
+            .done()
+            .build();
+        for hidden in [".stversions", ".trash/2026-08-01", ".tmp-copy"] {
+            let dir = env.path().join(hidden).join(UUID_2);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(
+                dir.join("_meta.json"),
+                crate::test_fixtures::session_meta_json(UUID_2),
+            )
+            .unwrap();
+        }
+
+        let mut result = ListFoldersResult {
+            folders: HashMap::new(),
+            session_folder_map: HashMap::new(),
+        };
+        scan_directory_recursive(env.path(), "", &mut result);
+
+        assert_eq!(result.session_folder_map.len(), 1);
+        assert!(result.session_folder_map.contains_key(UUID_1));
+        assert!(
+            result.folders.keys().all(|f| !f.starts_with('.')),
+            "{:?}",
+            result.folders
+        );
+
+        let mut updates = Vec::new();
+        collect_session_updates(env.path(), "", &mut updates);
+        assert_eq!(updates.len(), 1);
+        assert_eq!(updates[0].session_id, UUID_1);
     }
 
     #[test]

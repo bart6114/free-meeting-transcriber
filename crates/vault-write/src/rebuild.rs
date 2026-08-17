@@ -605,7 +605,7 @@ fn scan_ghost_dirs(vault_base: &std::path::Path) -> Result<Vec<String>, StoreErr
             }
             let child_rel = relative.join(&name);
             let child_abs = entry.path();
-            if child_abs.join("_meta.json").exists() {
+            if hypr_vault_read::has_session_boundary(&child_abs) {
                 continue; // a session (or corrupt session) directory, never a parent
             }
             if dir_has_session_content(&child_abs)? {

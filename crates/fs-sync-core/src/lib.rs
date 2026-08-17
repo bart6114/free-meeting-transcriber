@@ -22,7 +22,6 @@ pub use session::find_session_dir;
 pub use types::*;
 
 use hypr_vault_read::layout::{eq_nfc, paths_eq_nfc};
-use session::{DirClass, classify_dir};
 
 use std::path::PathBuf;
 
@@ -177,7 +176,9 @@ impl FsSyncCore {
 
     /// Guards `delete_folder`: any directory holding `_meta.json` — readable-named,
     /// uuid-named, or with an unreadable meta — counts as a session and blocks the
-    /// delete; only meta-less directories are traversed as folders.
+    /// delete; only meta-less directories are traversed as folders. Hidden
+    /// directories are invisible to every layout reader, so their contents never
+    /// block an ordinary folder delete.
     fn folder_contains_sessions(&self, folder: &PathBuf) -> Result<bool> {
         let entries = std::fs::read_dir(folder)?;
 
@@ -186,14 +187,19 @@ impl FsSyncCore {
             if !path.is_dir() {
                 continue;
             }
+            if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_none_or(|name| name.starts_with('.'))
+            {
+                continue;
+            }
 
-            match classify_dir(&path) {
-                DirClass::Session(_) => return Ok(true),
-                DirClass::Folder => {
-                    if self.folder_contains_sessions(&path)? {
-                        return Ok(true);
-                    }
-                }
+            if hypr_vault_read::has_session_boundary(&path) {
+                return Ok(true);
+            }
+            if self.folder_contains_sessions(&path)? {
+                return Ok(true);
             }
         }
 
@@ -619,6 +625,46 @@ mod tests {
 
         assert!(result.is_err());
         broken.assert(predicates::path::exists());
+    }
+
+    #[test]
+    fn delete_folder_ignores_sessions_hidden_inside_dot_directories() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child("work")
+            .create_dir_all()
+            .unwrap();
+        // A sync-provider sidecar holding session copies must not block the delete:
+        // every layout reader treats dot-prefixed directories as invisible.
+        write_session_at(&temp, &format!("sessions/work/.stversions/{UUID_1}"), UUID_1);
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        core.delete_folder("work").unwrap();
+
+        temp.child("sessions")
+            .child("work")
+            .assert(predicates::path::missing());
+    }
+
+    #[test]
+    fn folder_operations_reject_hidden_paths() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions").create_dir_all().unwrap();
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        let result = core.create_folder(".trash");
+        assert!(
+            matches!(result, Err(Error::Path(message)) if message == "folder_path_hidden_not_allowed")
+        );
+        temp.child("sessions")
+            .child(".trash")
+            .assert(predicates::path::missing());
+
+        temp.child("sessions").child("work").create_dir_all().unwrap();
+        let result = core.rename_folder("work", ".hidden");
+        assert!(
+            matches!(result, Err(Error::Path(message)) if message == "folder_path_hidden_not_allowed")
+        );
     }
 
     #[test]

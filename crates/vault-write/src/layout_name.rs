@@ -4,6 +4,8 @@
 //! themselves -- and nothing here is ever an identity API: `_meta.json.id`
 //! stays authoritative, directory names are presentation only.
 
+use std::path::{Path, PathBuf};
+
 use unicode_normalization::UnicodeNormalization;
 
 /// The separator between the date, title, and short-id segments. Titles may
@@ -61,6 +63,11 @@ pub fn sanitize_title(title: &str) -> String {
     trimmed.nfc().collect()
 }
 
+/// Deliberately permissive (32 hex chars, hyphens stripped wherever they sit)
+/// rather than `Uuid::try_parse`: legacy ids with noncanonical dash placement
+/// already have directories named from their truncated hex, and tightening the
+/// check would silently reroute them to the hashed fallback -- renaming their
+/// future candidates for no correctness benefit.
 fn is_uuid_shaped(id: &str) -> bool {
     let hex: String = id.chars().filter(|c| *c != '-').collect();
     hex.len() == 32 && hex.chars().all(|c| c.is_ascii_hexdigit())
@@ -91,18 +98,25 @@ fn id_hex(id: &str) -> String {
 /// whose target directory is free and must never merge onto an occupied one.
 pub fn short_id_candidates(id: &str) -> Vec<String> {
     let hex = id_hex(id);
-    [6, 8, 12, hex.len()]
+    let mut candidates: Vec<String> = [6, 8, 12, hex.len()]
         .into_iter()
         .filter(|len| *len <= hex.len())
         .map(|len| hex[..len].to_string())
-        .collect::<Vec<_>>()
+        .collect();
+    candidates.dedup();
+    candidates
+}
+
+/// Readable directory candidates for one session, in the order a caller must try
+/// them: `<parent>/<date — title — suffix>` with the suffix widening
+/// 6 → 8 → 12 → full hex. This owns the whole candidate-construction invariant;
+/// callers keep only their genuinely different occupancy rules (legacy ghost
+/// adoption, current-directory self-filter, migration's preflight claim set).
+pub fn session_dir_candidates(parent: &Path, date: &str, title: &str, id: &str) -> Vec<PathBuf> {
+    short_id_candidates(id)
         .into_iter()
-        .fold(Vec::new(), |mut out, candidate| {
-            if out.last() != Some(&candidate) {
-                out.push(candidate);
-            }
-            out
-        })
+        .map(|suffix| parent.join(format_session_dir_name(date, title, &suffix)))
+        .collect()
 }
 
 /// `YYYY-MM-DD — <title> — <suffix>`, with the title sanitized and truncated on a
@@ -292,6 +306,27 @@ mod tests {
             candidates,
             short_id_candidates("legacy/id with junk"),
             "the hash must be stable"
+        );
+    }
+
+    #[test]
+    fn session_dir_candidates_walk_the_suffix_ladder_under_the_parent() {
+        let candidates = session_dir_candidates(
+            Path::new("sessions/Work"),
+            "2026-03-20",
+            "Planning",
+            "550e8400-e29b-41d4-a716-446655440000",
+        );
+        assert_eq!(
+            candidates,
+            vec![
+                PathBuf::from("sessions/Work/2026-03-20 — Planning — 550e84"),
+                PathBuf::from("sessions/Work/2026-03-20 — Planning — 550e8400"),
+                PathBuf::from("sessions/Work/2026-03-20 — Planning — 550e8400e29b"),
+                PathBuf::from(
+                    "sessions/Work/2026-03-20 — Planning — 550e8400e29b41d4a716446655440000"
+                ),
+            ]
         );
     }
 

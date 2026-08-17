@@ -131,20 +131,39 @@ pub fn paths_eq_nfc(a: &Path, b: &Path) -> bool {
     }
 }
 
-enum DirKind {
+/// The one session-boundary rule, shared by every layout consumer: `_meta.json`
+/// absent → personal folder; present and parseable → session; present but
+/// unreadable/corrupt → still a session boundary, never a folder (its content
+/// must not be traversed, misread as nested sessions, or treated as deletable).
+pub enum SessionDirKind {
     Session(Box<SessionMeta>),
+    /// `_meta.json` exists but cannot be read or parsed; carries the reason.
     Corrupt(String),
     Folder,
 }
 
-fn classify_dir(abs_dir: &Path) -> DirKind {
+pub fn classify_session_dir(abs_dir: &Path) -> SessionDirKind {
     match std::fs::read(abs_dir.join("_meta.json")) {
         Ok(bytes) => match serde_json::from_slice::<SessionMeta>(&bytes) {
-            Ok(meta) => DirKind::Session(Box::new(meta)),
-            Err(e) => DirKind::Corrupt(format!("failed to deserialize meta: {e}")),
+            Ok(meta) => SessionDirKind::Session(Box::new(meta)),
+            Err(e) => SessionDirKind::Corrupt(format!("failed to deserialize meta: {e}")),
         },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => DirKind::Folder,
-        Err(e) => DirKind::Corrupt(format!("failed to read meta file: {e}")),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => SessionDirKind::Folder,
+        Err(e) => SessionDirKind::Corrupt(format!("failed to read meta file: {e}")),
+    }
+}
+
+/// Cheap boundary probe for traversals that only need "may recurse" versus "must
+/// stop": stats `_meta.json` without parsing it. `NotFound` is the only answer that
+/// makes a folder; any other stat error is conservatively a boundary — the same
+/// rule as `classify_session_dir`, and deliberately not `Path::exists()`, which
+/// would hide a permission error as absence and let a traversal walk into a
+/// session directory it cannot actually judge.
+pub fn has_session_boundary(abs_dir: &Path) -> bool {
+    match std::fs::metadata(abs_dir.join("_meta.json")) {
+        Ok(_) => true,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => false,
+        Err(_) => true,
     }
 }
 
@@ -191,18 +210,18 @@ pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
                 continue;
             }
             let child = relative_dir.join(&name);
-            match classify_dir(&entry.path()) {
-                DirKind::Session(meta) => found.push((
+            match classify_session_dir(&entry.path()) {
+                SessionDirKind::Session(meta) => found.push((
                     SessionLocation {
                         id: meta.id.clone(),
                         relative_dir: child,
                     },
                     *meta,
                 )),
-                DirKind::Corrupt(reason) => {
+                SessionDirKind::Corrupt(reason) => {
                     errors.push(SessionDiscoveryError::CorruptMeta { dir: child, reason })
                 }
-                DirKind::Folder => pending.push(child),
+                SessionDirKind::Folder => pending.push(child),
             }
         }
     }
@@ -250,8 +269,8 @@ pub fn find_session(
 ) -> std::result::Result<Option<(SessionLocation, SessionMeta)>, SessionLookupError> {
     let legacy_dir = paths::sessions_root().join(id);
     let mut legacy_corrupt = None;
-    match classify_dir(&vault.join(&legacy_dir)) {
-        DirKind::Session(meta) if eq_nfc(&meta.id, id) => {
+    match classify_session_dir(&vault.join(&legacy_dir)) {
+        SessionDirKind::Session(meta) if eq_nfc(&meta.id, id) => {
             return Ok(Some((
                 SessionLocation {
                     id: meta.id.clone(),
@@ -260,7 +279,7 @@ pub fn find_session(
                 *meta,
             )));
         }
-        DirKind::Corrupt(reason) => legacy_corrupt = Some((legacy_dir, reason)),
+        SessionDirKind::Corrupt(reason) => legacy_corrupt = Some((legacy_dir, reason)),
         _ => {}
     }
 
@@ -528,6 +547,35 @@ mod tests {
         assert_eq!(discovery.sessions[0].0.id, UUID_1);
         assert!(find_session(vault.path(), UUID_2).unwrap().is_none());
         assert!(find_session(vault.path(), UUID_3).unwrap().is_none());
+    }
+
+    #[test]
+    fn boundary_probe_and_classifier_agree_on_the_session_boundary_rule() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session_at(vault.path(), "sessions/healthy", UUID_1);
+        let corrupt = vault.path().join("sessions/corrupt");
+        std::fs::create_dir_all(&corrupt).unwrap();
+        std::fs::write(corrupt.join("_meta.json"), "{ invalid").unwrap();
+        let folder = vault.path().join("sessions/folder");
+        std::fs::create_dir_all(&folder).unwrap();
+
+        let healthy = vault.path().join("sessions/healthy");
+        assert!(has_session_boundary(&healthy));
+        assert!(matches!(
+            classify_session_dir(&healthy),
+            SessionDirKind::Session(meta) if meta.id == UUID_1
+        ));
+        // A corrupt meta is a boundary in both views -- never a folder.
+        assert!(has_session_boundary(&corrupt));
+        assert!(matches!(
+            classify_session_dir(&corrupt),
+            SessionDirKind::Corrupt(_)
+        ));
+        assert!(!has_session_boundary(&folder));
+        assert!(matches!(
+            classify_session_dir(&folder),
+            SessionDirKind::Folder
+        ));
     }
 
     #[test]
