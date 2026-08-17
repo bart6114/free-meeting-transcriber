@@ -138,10 +138,6 @@ msgid "App"
 msgstr "App"
 
 #: src/settings/general/storage/change-location.tsx
-#~ msgid "App restarts to apply. Existing files are copied, not moved."
-#~ msgstr ""
-
-#: src/settings/general/storage/change-location.tsx
 msgid "App restarts to apply. Move relocates your files; copy leaves the originals behind."
 msgstr ""
 
@@ -215,10 +211,6 @@ msgstr ""
 #: src/settings/general/storage/change-location.tsx
 msgid "Change storage location?"
 msgstr ""
-
-#: src/settings/general/storage/change-location.tsx
-#~ msgid "Changing..."
-#~ msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Choose a file format and what to include."
@@ -1365,10 +1357,6 @@ msgstr "Ampidirina foana ny fiteny fototra ho an'ny fandikana"
 #: src/settings/general/storage/change-location.tsx
 msgid "This folder already contains files, so it can only be copied into. Vault files will be mixed in with the existing ones."
 msgstr ""
-
-#: src/settings/general/storage/change-location.tsx
-#~ msgid "This folder already contains files. Copied vault files will be mixed in with them."
-#~ msgstr ""
 
 #. placeholder {0}: pending.speakerCount
 #: src/session/components/note-input/transcript/regenerate-confirm.tsx
