@@ -802,19 +802,23 @@ function TimelineNowChip({
       type="button"
       aria-label={t`Go back to now`}
       className={cn([
-        "border-border bg-card text-foreground flex h-6 items-center gap-1 rounded-full border px-2.5 text-xs font-semibold shadow-md",
+        "border-border bg-card text-foreground flex h-6 items-center gap-1 rounded-full border px-2.5 text-xs font-medium shadow-md",
         "hover:border-border hover:bg-accent hover:text-foreground transition-colors",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-hidden",
         className,
       ])}
       onClick={onClick}
     >
-      {direction === "up" ? <DirectionIcon size={12} /> : null}
+      {direction === "up" ? (
+        <DirectionIcon size={12} strokeWidth={1.75} />
+      ) : null}
       <SunIcon size={13} className="text-brand shrink-0" />
       <span>
         <Trans>Now</Trans>
       </span>
-      {direction === "down" ? <DirectionIcon size={12} /> : null}
+      {direction === "down" ? (
+        <DirectionIcon size={12} strokeWidth={1.75} />
+      ) : null}
     </button>
   );
 }
