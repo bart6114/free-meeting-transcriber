@@ -10,6 +10,7 @@ Default permissions for the plugin
 - `allow-move-vault`
 - `allow-set-vault-base`
 - `allow-is-empty-or-missing-dir`
+- `allow-classify-vault-dir`
 - `allow-obsidian-vaults`
 - `allow-path`
 - `allow-load`
@@ -25,6 +26,32 @@ Default permissions for the plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`settings:allow-classify-vault-dir`
+
+</td>
+<td>
+
+Enables the classify_vault_dir command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`settings:deny-classify-vault-dir`
+
+</td>
+<td>
+
+Denies the classify_vault_dir command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

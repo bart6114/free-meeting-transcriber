@@ -71,9 +71,7 @@ describe("RebuildIndexRow", () => {
     });
     renderRow();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /rebuild index from files/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /^rebuild index$/i }));
 
     await waitFor(() =>
       expect(mocks.sessionRebuildIndex).toHaveBeenCalledTimes(1),
@@ -89,9 +87,7 @@ describe("RebuildIndexRow", () => {
     });
     renderRow();
 
-    fireEvent.click(
-      screen.getByRole("button", { name: /rebuild index from files/i }),
-    );
+    fireEvent.click(screen.getByRole("button", { name: /^rebuild index$/i }));
 
     await waitFor(() =>
       expect(mocks.toastError).toHaveBeenCalledWith("vault base unavailable"),

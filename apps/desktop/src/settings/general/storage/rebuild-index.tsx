@@ -45,7 +45,7 @@ export function RebuildIndexRow() {
         {rebuildMutation.isPending ? (
           <Trans>Rebuilding...</Trans>
         ) : (
-          <Trans>Rebuild index from files</Trans>
+          <Trans>Rebuild index</Trans>
         )}
       </Button>
     </div>

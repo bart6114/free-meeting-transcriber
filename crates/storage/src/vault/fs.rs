@@ -1,7 +1,35 @@
 use std::path::Path;
 
-use super::path::VAULT_PATH_KEY;
+use serde::Serialize;
+
+use super::path::{CONFIG_FILENAME, VAULT_PATH_KEY};
 use crate::fs::copy_dir_recursive;
+
+/// What a picked storage folder currently holds, so the frontend can shape the
+/// change-location dialog around the user's likely intent (move into empty,
+/// switch to an existing vault, or create a subfolder inside a busy directory).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[cfg_attr(feature = "specta", derive(specta::Type))]
+#[serde(rename_all = "snake_case")]
+pub enum VaultDirKind {
+    EmptyOrMissing,
+    Vault,
+    Obsidian,
+    Other,
+}
+
+pub fn classify_vault_dir(path: &Path) -> std::io::Result<VaultDirKind> {
+    if is_empty_or_missing_dir(path)? {
+        return Ok(VaultDirKind::EmptyOrMissing);
+    }
+    if path.join("sessions").is_dir() || path.join(CONFIG_FILENAME).is_file() {
+        return Ok(VaultDirKind::Vault);
+    }
+    if path.join(".obsidian").is_dir() {
+        return Ok(VaultDirKind::Obsidian);
+    }
+    Ok(VaultDirKind::Other)
+}
 
 // `search_index` is deliberately absent: the Tantivy cache lives under the global base
 // (which coincides with the vault at the default location), so copying it would snapshot
@@ -178,6 +206,48 @@ mod tests {
 
         assert!(dst.join("events.json").exists());
         assert!(!dst.join("sessions").exists());
+    }
+
+    #[test]
+    fn classify_vault_dir_covers_all_shapes() {
+        let temp = tempdir().unwrap();
+
+        let missing = temp.path().join("missing");
+        assert_eq!(
+            classify_vault_dir(&missing).unwrap(),
+            VaultDirKind::EmptyOrMissing
+        );
+
+        let empty = temp.path().join("empty");
+        fs::create_dir_all(&empty).unwrap();
+        assert_eq!(
+            classify_vault_dir(&empty).unwrap(),
+            VaultDirKind::EmptyOrMissing
+        );
+
+        let vault = temp.path().join("vault");
+        fs::create_dir_all(vault.join("sessions")).unwrap();
+        assert_eq!(classify_vault_dir(&vault).unwrap(), VaultDirKind::Vault);
+
+        let config_only = temp.path().join("config-only");
+        fs::create_dir_all(&config_only).unwrap();
+        fs::write(config_only.join("config.json"), "{}").unwrap();
+        assert_eq!(
+            classify_vault_dir(&config_only).unwrap(),
+            VaultDirKind::Vault
+        );
+
+        let obsidian = temp.path().join("obsidian");
+        fs::create_dir_all(obsidian.join(".obsidian")).unwrap();
+        assert_eq!(
+            classify_vault_dir(&obsidian).unwrap(),
+            VaultDirKind::Obsidian
+        );
+
+        let other = temp.path().join("other");
+        fs::create_dir_all(&other).unwrap();
+        fs::write(other.join("random.txt"), "x").unwrap();
+        assert_eq!(classify_vault_dir(&other).unwrap(), VaultDirKind::Other);
     }
 
     #[test]

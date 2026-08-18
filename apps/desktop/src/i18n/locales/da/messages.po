@@ -55,6 +55,10 @@ msgstr ""
 msgid "3 days"
 msgstr ""
 
+#: src/settings/general/storage/change-location.tsx
+msgid "A duplicate; the original stays where it is."
+msgstr ""
+
 #: src/templates/template-sidebar.tsx
 msgid "A to Z"
 msgstr ""
@@ -136,10 +140,6 @@ msgstr ""
 #: src/sidebar/settings.tsx
 msgid "App"
 msgstr "App"
-
-#: src/settings/general/storage/change-location.tsx
-msgid "App restarts to apply. Move relocates your files; copy leaves the originals behind."
-msgstr ""
 
 #: src/settings/general/theme.tsx
 msgid "Appearance"
@@ -297,11 +297,11 @@ msgid "Continue"
 msgstr ""
 
 #: src/settings/general/storage/change-location.tsx
-msgid "Copy"
+msgid "Copy my vault"
 msgstr ""
 
 #: src/settings/general/storage/change-location.tsx
-msgid "Copying..."
+msgid "Copy my vault here"
 msgstr ""
 
 #: src/sidebar/timeline/item.tsx
@@ -447,6 +447,10 @@ msgstr ""
 
 #: src/settings/ai/shared/index.tsx
 msgid "Enter your API key (optional)"
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Everything relocates; the old location is cleaned up."
 msgstr ""
 
 #: src/settings/general/notification.tsx
@@ -787,20 +791,20 @@ msgstr ""
 msgid "More options"
 msgstr ""
 
-#: src/settings/general/storage/change-location.tsx
-msgid "Move"
-msgstr ""
-
 #: src/templates/sections-editor.tsx
 msgid "Move down"
 msgstr ""
 
-#: src/templates/sections-editor.tsx
-msgid "Move up"
+#: src/settings/general/storage/change-location.tsx
+msgid "Move my vault"
 msgstr ""
 
 #: src/settings/general/storage/change-location.tsx
-msgid "Moving..."
+msgid "Move my vault here"
+msgstr ""
+
+#: src/templates/sections-editor.tsx
+msgid "Move up"
 msgstr ""
 
 #: src/main/empty.tsx
@@ -993,7 +997,7 @@ msgid "Ready to go"
 msgstr ""
 
 #: src/settings/general/storage/rebuild-index.tsx
-msgid "Rebuild index from files"
+msgid "Rebuild index"
 msgstr ""
 
 #: src/settings/general/storage/rebuild-index.tsx
@@ -1256,8 +1260,16 @@ msgstr ""
 msgid "Speaker detection"
 msgstr ""
 
+#: src/settings/general/storage/change-location.tsx
+msgid "Start a new empty vault here"
+msgstr ""
+
 #: src/settings/general/app-settings.tsx
 msgid "Start Free Meeting Transcriber at login"
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Start new vault"
 msgstr ""
 
 #: src/main/empty.tsx
@@ -1311,6 +1323,18 @@ msgstr ""
 msgid "Summary"
 msgstr ""
 
+#: src/settings/general/storage/change-location.tsx
+msgid "Switch"
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Switch to this vault?"
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Switching..."
+msgstr ""
+
 #: src/templates/template-icon-picker.tsx
 msgid "Symbols"
 msgstr ""
@@ -1346,6 +1370,10 @@ msgstr ""
 msgid "Templates"
 msgstr ""
 
+#: src/settings/general/storage/change-location.tsx
+msgid "The app restarts to apply."
+msgstr ""
+
 #: src/onboarding/folder-location.tsx
 msgid "The app will restart after onboarding to apply your storage changes"
 msgstr ""
@@ -1355,7 +1383,7 @@ msgid "The main language is always included for transcription"
 msgstr "Hovedsproget er altid inkluderet til transskription"
 
 #: src/settings/general/storage/change-location.tsx
-msgid "This folder already contains files, so it can only be copied into. Vault files will be mixed in with the existing ones."
+msgid "This folder already has files in it"
 msgstr ""
 
 #. placeholder {0}: pending.speakerCount
@@ -1439,6 +1467,10 @@ msgstr ""
 msgid "Use system audio to capture other speakers"
 msgstr ""
 
+#: src/settings/general/storage/change-location.tsx
+msgid "Use this folder for your vault?"
+msgstr ""
+
 #: src/onboarding/permissions.tsx
 msgid "Use your microphone to capture your voice"
 msgstr ""
@@ -1463,8 +1495,20 @@ msgstr ""
 msgid "You can"
 msgstr ""
 
+#: src/settings/general/storage/change-location.tsx
+msgid "Your current vault stays untouched — switch back anytime."
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Your current vault stays where it is — nothing is moved or deleted. You can switch back the same way."
+msgstr ""
+
 #: src/settings/general/storage/index.tsx
 msgid "Your data lives as files in this folder. The internal database is a cache and can be rebuilt at any time."
+msgstr ""
+
+#: src/settings/general/storage/change-location.tsx
+msgid "Your vault lives directly in the folder you pick, so we'll create one inside:"
 msgstr ""
 
 #: src/templates/template-sidebar.tsx

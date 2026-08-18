@@ -13,7 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   vaultBase: vi.fn(),
   relocateVault: vi.fn(),
-  isEmptyOrMissingDir: vi.fn(),
+  setVaultBase: vi.fn(),
+  classifyVaultDir: vi.fn(),
   obsidianVaults: vi.fn(),
   selectFolder: vi.fn(),
   message: vi.fn(),
@@ -26,7 +27,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@hypr/plugin-settings", () => ({
   commands: {
     vaultBase: mocks.vaultBase,
-    isEmptyOrMissingDir: mocks.isEmptyOrMissingDir,
+    setVaultBase: mocks.setVaultBase,
+    classifyVaultDir: mocks.classifyVaultDir,
     obsidianVaults: mocks.obsidianVaults,
   },
 }));
@@ -85,6 +87,14 @@ function renderRow() {
   };
 }
 
+async function openDialogFor(path: string) {
+  mocks.selectFolder.mockResolvedValue(path);
+  renderRow();
+  await screen.findByText(/Drive\/vault/);
+  fireEvent.click(screen.getByRole("button", { name: /change/i }));
+  return await screen.findByRole("dialog");
+}
+
 describe("ChangeLocationRow", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -93,7 +103,11 @@ describe("ChangeLocationRow", () => {
       data: "/Users/x/Drive/vault",
     });
     mocks.relocateVault.mockResolvedValue({ status: "ok", data: null });
-    mocks.isEmptyOrMissingDir.mockResolvedValue({ status: "ok", data: true });
+    mocks.setVaultBase.mockResolvedValue({ status: "ok", data: null });
+    mocks.classifyVaultDir.mockResolvedValue({
+      status: "ok",
+      data: "empty_or_missing",
+    });
     mocks.obsidianVaults.mockResolvedValue({ status: "ok", data: [] });
     mocks.homeDir.mockResolvedValue("/Users/x");
     mocks.scheduleAutomaticRelaunch.mockResolvedValue("scheduled");
@@ -109,21 +123,13 @@ describe("ChangeLocationRow", () => {
     expect(screen.getByRole("button", { name: /change/i })).toBeTruthy();
   });
 
-  it("opens a confirm dialog after picking a new folder and moves the vault", async () => {
-    mocks.selectFolder.mockResolvedValue("/Users/x/Desktop/new-vault");
-    renderRow();
-    await screen.findByText(/Drive\/vault/);
+  it("moves the vault into an empty folder by default", async () => {
+    const dialog = await openDialogFor("/Users/x/Desktop/new-vault");
 
-    fireEvent.click(screen.getByRole("button", { name: /change/i }));
-
-    await waitFor(() => expect(mocks.selectFolder).toHaveBeenCalledTimes(1));
-
-    const dialog = await screen.findByRole("dialog");
-    expect(
-      within(dialog).getByText(/App restarts to apply\. Move relocates/),
-    ).toBeTruthy();
-
-    fireEvent.click(within(dialog).getByRole("button", { name: /^move$/i }));
+    await within(dialog).findByText(/Use this folder for your vault/);
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /^move my vault$/i }),
+    );
 
     await waitFor(() =>
       expect(mocks.relocateVault).toHaveBeenCalledWith(
@@ -136,14 +142,15 @@ describe("ChangeLocationRow", () => {
     );
   });
 
-  it("copies instead of moving when the copy action is chosen", async () => {
-    mocks.selectFolder.mockResolvedValue("/Users/x/Desktop/new-vault");
-    renderRow();
-    await screen.findByText(/Drive\/vault/);
+  it("copies when the copy choice is selected", async () => {
+    const dialog = await openDialogFor("/Users/x/Desktop/new-vault");
 
-    fireEvent.click(screen.getByRole("button", { name: /change/i }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /^copy$/i }));
+    fireEvent.click(
+      await within(dialog).findByRole("radio", { name: /copy my vault here/i }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /^copy my vault$/i }),
+    );
 
     await waitFor(() =>
       expect(mocks.relocateVault).toHaveBeenCalledWith(
@@ -151,43 +158,107 @@ describe("ChangeLocationRow", () => {
         true,
       ),
     );
+  });
+
+  it("starts a fresh vault via a plain switch when chosen", async () => {
+    const dialog = await openDialogFor("/Users/x/Desktop/new-vault");
+
+    fireEvent.click(
+      await within(dialog).findByRole("radio", {
+        name: /start a new empty vault here/i,
+      }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /^start new vault$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.setVaultBase).toHaveBeenCalledWith(
+        "/Users/x/Desktop/new-vault",
+      ),
+    );
+    expect(mocks.relocateVault).not.toHaveBeenCalled();
     await waitFor(() =>
       expect(mocks.scheduleAutomaticRelaunch).toHaveBeenCalledTimes(1),
     );
   });
 
-  it("only offers copy when the destination already contains files", async () => {
-    mocks.selectFolder.mockResolvedValue("/Users/x/Documents/existing");
-    mocks.isEmptyOrMissingDir.mockResolvedValue({ status: "ok", data: false });
-    renderRow();
-    await screen.findByText(/Drive\/vault/);
+  it("offers a plain switch when the folder already contains a vault", async () => {
+    mocks.classifyVaultDir.mockResolvedValue({ status: "ok", data: "vault" });
+    const dialog = await openDialogFor("/Users/x/Documents/work-vault");
 
-    fireEvent.click(screen.getByRole("button", { name: /change/i }));
-    const dialog = await screen.findByRole("dialog");
+    await within(dialog).findByText(/Switch to this vault/);
+    fireEvent.click(within(dialog).getByRole("button", { name: /^switch$/i }));
 
     await waitFor(() =>
-      expect(within(dialog).getByText(/can only be copied into/)).toBeTruthy(),
+      expect(mocks.setVaultBase).toHaveBeenCalledWith(
+        "/Users/x/Documents/work-vault",
+      ),
     );
+    expect(mocks.relocateVault).not.toHaveBeenCalled();
+  });
+
+  it("treats an Obsidian vault as a switch target", async () => {
+    mocks.classifyVaultDir.mockResolvedValue({
+      status: "ok",
+      data: "obsidian",
+    });
+    const dialog = await openDialogFor("/Users/x/Documents/ObsidianVault");
+
+    await within(dialog).findByText(/Switch to this vault/);
     expect(
-      within(dialog).queryByRole("button", { name: /^move$/i }),
-    ).toBeNull();
-    expect(
-      within(dialog).getByRole("button", { name: /^copy$/i }),
+      within(dialog).getByRole("button", { name: /^switch$/i }),
     ).toBeTruthy();
   });
 
-  it("surfaces a validate_vault_base_change failure as a toast and inline error", async () => {
-    mocks.selectFolder.mockResolvedValue("/Users/x/Drive/vault/nested");
+  it("targets a fresh subfolder when the folder has unrelated files", async () => {
+    mocks.classifyVaultDir.mockResolvedValue({ status: "ok", data: "other" });
+    const dialog = await openDialogFor("/Users/x/Google Drive/My Drive");
+
+    await within(dialog).findByText(/already has files/);
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /^move my vault$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.relocateVault).toHaveBeenCalledWith(
+        "/Users/x/Google Drive/My Drive/Free Meeting Transcriber",
+        false,
+      ),
+    );
+  });
+
+  it("starts a fresh vault in a subfolder when the folder has unrelated files", async () => {
+    mocks.classifyVaultDir.mockResolvedValue({ status: "ok", data: "other" });
+    const dialog = await openDialogFor("/Users/x/Google Drive/My Drive");
+
+    fireEvent.click(
+      await within(dialog).findByRole("radio", {
+        name: /start a new empty vault here/i,
+      }),
+    );
+    fireEvent.click(
+      within(dialog).getByRole("button", { name: /^start new vault$/i }),
+    );
+
+    await waitFor(() =>
+      expect(mocks.setVaultBase).toHaveBeenCalledWith(
+        "/Users/x/Google Drive/My Drive/Free Meeting Transcriber",
+      ),
+    );
+    expect(mocks.relocateVault).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a backend failure as a toast and inline error", async () => {
     mocks.relocateVault.mockResolvedValue({
       status: "error",
       error: "New location is a subdirectory of the current vault",
     });
-    renderRow();
-    await screen.findByText(/Drive\/vault/);
+    const dialog = await openDialogFor("/Users/x/Drive/vault/nested");
 
-    fireEvent.click(screen.getByRole("button", { name: /change/i }));
-    const dialog = await screen.findByRole("dialog");
-    fireEvent.click(within(dialog).getByRole("button", { name: /^move$/i }));
+    fireEvent.click(
+      await within(dialog).findByRole("button", { name: /^move my vault$/i }),
+    );
 
     await waitFor(() =>
       expect(
@@ -207,6 +278,10 @@ describe("ChangeLocationRow", () => {
       status: "ok",
       data: [{ path: "/Users/x/Documents/MyVault" }],
     });
+    mocks.classifyVaultDir.mockResolvedValue({
+      status: "ok",
+      data: "obsidian",
+    });
     renderRow();
     await screen.findByText(/Drive\/vault/);
 
@@ -216,6 +291,8 @@ describe("ChangeLocationRow", () => {
     fireEvent.click(quickPick);
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByText(/Documents\/MyVault/)).toBeTruthy();
+    expect(
+      await within(dialog).findByText(/Switch to this vault/),
+    ).toBeTruthy();
   });
 });

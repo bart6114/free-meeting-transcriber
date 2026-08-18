@@ -54,6 +54,13 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Settings<'a, R, M> {
         hypr_storage::vault::fs::is_empty_or_missing_dir(path.as_ref()).map_err(Into::into)
     }
 
+    pub fn classify_vault_dir(
+        &self,
+        path: Utf8PathBuf,
+    ) -> Result<hypr_storage::vault::fs::VaultDirKind, crate::Error> {
+        hypr_storage::vault::fs::classify_vault_dir(path.as_ref()).map_err(Into::into)
+    }
+
     pub async fn load(&self) -> crate::Result<serde_json::Value> {
         let snapshot = self.manager.state::<crate::state::StartupSnapshot>();
         let legacy_base = self.settings_base_path()?;

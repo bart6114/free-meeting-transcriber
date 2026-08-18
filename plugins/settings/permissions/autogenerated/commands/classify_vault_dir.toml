@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-classify-vault-dir"
+description = "Enables the classify_vault_dir command without any pre-configured scope."
+commands.allow = ["classify_vault_dir"]
+
+[[permission]]
+identifier = "deny-classify-vault-dir"
+description = "Denies the classify_vault_dir command without any pre-configured scope."
+commands.deny = ["classify_vault_dir"]

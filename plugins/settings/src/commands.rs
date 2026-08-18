@@ -83,6 +83,17 @@ pub(crate) async fn is_empty_or_missing_dir<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub(crate) async fn classify_vault_dir<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    path: String,
+) -> Result<hypr_storage::vault::fs::VaultDirKind, String> {
+    app.settings()
+        .classify_vault_dir(Utf8PathBuf::from(&path))
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub(crate) fn obsidian_vaults<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
 ) -> Result<Vec<ObsidianVault>, String> {
