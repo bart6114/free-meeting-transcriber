@@ -12,6 +12,7 @@ import { AuthProvider } from "~/auth";
 import { BillingProvider } from "~/auth/billing";
 import { DevtoolsFloatingPanelHost } from "~/devtools-panel/host";
 import { UndoDeleteToast } from "~/sidebar/toast/undo-delete-toast";
+import { useAboutDialog } from "~/store/zustand/about-dialog";
 import { isTabInputSupported, useTabs } from "~/store/zustand/tabs";
 
 export default function MainAppLayout() {
@@ -95,6 +96,8 @@ const useNavigationEvents = () => {
       .listen(({ payload }) => {
         if (payload.path === "/app/new") {
           openNewNote();
+        } else if (payload.path === "/app/about") {
+          useAboutDialog.getState().setOpen(true);
         } else if (payload.path === "/app/settings") {
           const tab = (payload.search?.tab as string) ?? "app";
           openNew({ type: "settings", state: { tab } });

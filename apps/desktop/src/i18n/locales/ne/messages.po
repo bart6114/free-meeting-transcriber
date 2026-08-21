@@ -17,9 +17,24 @@ msgstr ""
 msgid "(default)"
 msgstr ""
 
+#. placeholder {0}: formatCount(stats.enhanced_docs)
+#: src/main/about-dialog.tsx
+msgid "{0} AI summaries"
+msgstr ""
+
 #. placeholder {0}: issue.user?.login
 #: src/task/resource-view.tsx
 msgid "{0} opened on"
+msgstr ""
+
+#. placeholder {0}: formatCount(stats.tags)
+#: src/main/about-dialog.tsx
+msgid "{0} tags"
+msgstr ""
+
+#. placeholder {0}: formatCount(stats.tasks_done)
+#: src/main/about-dialog.tsx
+msgid "{0} tasks completed"
 msgstr ""
 
 #. placeholder {0}: formatLanguageList(unsupportedLanguages)
@@ -61,6 +76,10 @@ msgstr ""
 
 #: src/templates/template-sidebar.tsx
 msgid "A to Z"
+msgstr ""
+
+#: src/main/about-dialog.tsx
+msgid "About Free Meeting Transcriber"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
@@ -646,6 +665,10 @@ msgstr ""
 msgid "In {totalSeconds}s"
 msgstr ""
 
+#: src/main/about-dialog.tsx
+msgid "In meetings"
+msgstr ""
+
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Include"
 msgstr ""
@@ -890,6 +913,10 @@ msgstr ""
 msgid "Note breadcrumb"
 msgstr ""
 
+#: src/main/about-dialog.tsx
+msgid "Notes"
+msgstr ""
+
 #: src/settings/general/index.tsx
 #: src/sidebar/settings.tsx
 msgid "Notifications"
@@ -1009,6 +1036,10 @@ msgstr ""
 
 #: src/session/components/outer-header/index.tsx
 msgid "Record"
+msgstr ""
+
+#: src/main/about-dialog.tsx
+msgid "Recordings"
 msgstr ""
 
 #: src/settings/todo/provider-content.tsx
@@ -1241,6 +1272,10 @@ msgstr "सुन्दा कम्प्याक्ट फ्लोटिं�
 
 #: src/settings/general/app-settings.tsx
 msgid "Show tray icon"
+msgstr ""
+
+#: src/main/about-dialog.tsx
+msgid "since {since}"
 msgstr ""
 
 #: src/onboarding/shared.tsx
@@ -1478,6 +1513,11 @@ msgstr ""
 msgid "Variables"
 msgstr ""
 
+#. placeholder {0}: info.data.appVersion
+#: src/main/about-dialog.tsx
+msgid "Version {0}"
+msgstr ""
+
 #: src/onboarding/index.tsx
 msgid "Welcome to Free Meeting Transcriber"
 msgstr ""
@@ -1488,6 +1528,10 @@ msgstr ""
 
 #: src/onboarding/index.tsx
 msgid "Where your notes and recordings are stored"
+msgstr ""
+
+#: src/main/about-dialog.tsx
+msgid "Words transcribed"
 msgstr ""
 
 #: src/settings/todo/permission.tsx
@@ -1504,6 +1548,10 @@ msgstr ""
 
 #: src/settings/general/storage/index.tsx
 msgid "Your data lives as files in this folder. The internal database is a cache and can be rebuilt at any time."
+msgstr ""
+
+#: src/main/about-dialog.tsx
+msgid "Your vault"
 msgstr ""
 
 #: src/settings/general/storage/change-location.tsx

@@ -7,7 +7,7 @@ use hypr_fs_format::TranscriptWithData;
 use super::{
     EnhancedDoc, EnhancedDocPatch, PersonItem, RebuildReport, SessionListEntry, SessionListHeader,
     SessionMeta, SessionMetaPatch, SessionRecord, SessionStore, TagItem, TaskInput, TaskItem,
-    TemplateInput, TemplateItem, TranscriptDelta,
+    TemplateInput, TemplateItem, TranscriptDelta, VaultStats,
 };
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
@@ -385,6 +385,12 @@ pub async fn session_list_headers<R: tauri::Runtime>(
     app: AppHandle<R>,
 ) -> Result<Vec<SessionListHeader>, String> {
     Ok(store(&app)?.session_list_headers())
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn vault_stats<R: tauri::Runtime>(app: AppHandle<R>) -> Result<VaultStats, String> {
+    store(&app)?.vault_stats().await.map_err(|e| e.to_string())
 }
 
 #[tauri::command]

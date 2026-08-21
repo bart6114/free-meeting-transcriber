@@ -117,6 +117,11 @@ pub struct TranscriptSummary {
     pub transcript_ids: Vec<String>,
     /// Any transcript in the file has at least one word.
     pub has_words: bool,
+    /// Total words across the file's transcripts. Both producers already walk the
+    /// words (write-through has them in hand, rebuild lexes them for `has_words`),
+    /// so keeping the count costs nothing and lets `vault_stats` skip re-reading
+    /// every `transcript.json` from disk.
+    pub word_count: u64,
     /// Truncated sha2 of the raw file bytes. Sole purpose: an external edit that
     /// changes word content without changing the file's shape (same ids, same
     /// counts) must still flip `PartialEq` so a rescan notifies `Transcripts`.

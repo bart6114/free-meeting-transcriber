@@ -2,9 +2,6 @@ use tauri::{
     AppHandle, Result,
     menu::{MenuItem, MenuItemKind},
 };
-use tauri_plugin_clipboard_manager::ClipboardExt;
-use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-use tauri_plugin_misc::MiscPluginExt;
 
 use super::MenuItemHandler;
 
@@ -20,28 +17,15 @@ impl MenuItemHandler for AppInfo {
     }
 
     fn handle(app: &AppHandle<tauri::Wry>) {
-        let app_name = app.package_info().name.clone();
-        let app_version = app.package_info().version.to_string();
-        let app_commit = app.misc().get_git_hash();
-
-        let message = format!(
-            "- App Name: {}\n- App Version: {}\n- SHA:\n  {}",
-            app_name, app_version, app_commit
-        );
-
-        let app_clone = app.clone();
-
-        app.dialog()
-            .message(&message)
-            .title(format!("About {}", app_name))
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Copy".to_string(),
-                "Cancel".to_string(),
-            ))
-            .show(move |result| {
-                if result {
-                    let _ = app_clone.clipboard().write_text(&message);
-                }
-            });
+        use tauri_plugin_windows::{AppWindow, Navigate, WindowsPluginExt};
+        if app.windows().show(AppWindow::Main).is_ok() {
+            let _ = app.windows().emit_navigate(
+                AppWindow::Main,
+                Navigate {
+                    path: "/app/about".to_string(),
+                    search: None,
+                },
+            );
+        }
     }
 }

@@ -23,6 +23,7 @@ pub(crate) fn summarize_transcripts(
     TranscriptSummary {
         transcript_ids: transcripts.iter().map(|t| t.id.clone()).collect(),
         has_words: transcripts.iter().any(|t| !t.words.is_empty()),
+        word_count: transcripts.iter().map(|t| t.words.len() as u64).sum(),
         content_hash: content_hash(bytes),
     }
 }
@@ -36,6 +37,7 @@ pub(crate) fn summarize_transcript_bytes(bytes: &[u8]) -> Result<TranscriptSumma
     Ok(TranscriptSummary {
         transcript_ids: stats.transcripts.iter().map(|t| t.id.clone()).collect(),
         has_words: stats.transcripts.iter().any(|t| t.words.0 > 0),
+        word_count: stats.transcripts.iter().map(|t| t.words.0 as u64).sum(),
         content_hash: content_hash(bytes),
     })
 }
@@ -673,6 +675,7 @@ impl SessionStore {
                     return Ok(TranscriptSummary {
                         transcript_ids: Vec::new(),
                         has_words: false,
+                        word_count: 0,
                         content_hash: 0,
                     });
                 }

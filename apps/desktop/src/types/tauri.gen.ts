@@ -375,6 +375,14 @@ async sessionListHeaders() : Promise<Result<SessionListHeader[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
+async vaultStats() : Promise<Result<VaultStats, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("vault_stats") };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async sessionIds() : Promise<Result<string[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_ids") };
@@ -660,6 +668,20 @@ export type TranscriptDelta = { transcript_id: string; new_words: TranscriptWord
 export type TranscriptSpeakerHint = { id?: string | null; word_id: string; type: string; value?: JsonValue }
 export type TranscriptWithData = { id: string; user_id?: string; created_at?: string; session_id: string; started_at?: number; ended_at?: number | null; memo_md?: string; words?: TranscriptWord[]; speaker_hints?: TranscriptSpeakerHint[] }
 export type TranscriptWord = { id?: string | null; text: string; start_ms: number; end_ms: number; channel: number; speaker?: string | null; metadata?: Partial<{ [key in string]: JsonValue }> | null }
+export type VaultStats = { sessions: number; 
+/**
+ * Sessions with a non-empty note.
+ */
+notes: number; recordings: number; recording_bytes: number; transcript_words: number; enhanced_docs: number; tasks_total: number; tasks_done: number; tags: number; people: number; templates: number; 
+/**
+ * Summed `ended_at - started_at` across sessions that have both.
+ */
+duration_seconds: number; first_session_at: string | null; 
+/**
+ * Ascending by year.
+ */
+years: VaultYearStats[] }
+export type VaultYearStats = { year: number; sessions: number; recordings: number; transcript_words: number; enhanced_docs: number; duration_seconds: number }
 
 /** tauri-specta globals **/
 
