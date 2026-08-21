@@ -2,7 +2,21 @@ import { EditorState } from "prosemirror-state";
 import { describe, expect, it } from "vitest";
 
 import { schema } from "../note/schema";
-import { hashtagPlugin, hashtagPluginKey } from "./hashtag";
+import { findHashtags, hashtagPlugin, hashtagPluginKey } from "./hashtag";
+
+describe("findHashtags", () => {
+  it("spans dashes inside a tag", () => {
+    expect(findHashtags("#org-design rocks")).toEqual([
+      { tag: "org-design", start: 0, end: 11 },
+    ]);
+  });
+
+  it("does not swallow a trailing dash", () => {
+    expect(findHashtags("#org- design")).toEqual([
+      { tag: "org", start: 0, end: 4 },
+    ]);
+  });
+});
 
 describe("hashtagPlugin", () => {
   it("updates decorations for the changed block", () => {

@@ -4,7 +4,9 @@ import { Decoration, DecorationSet } from "prosemirror-view";
 
 import { getChangedTextblockRanges, type ChangedRange } from "./changed-ranges";
 
-const HASHTAG_REGEX = /#([\p{L}\p{N}_\p{Emoji}\p{Emoji_Component}]+)/gu;
+// Dashes join segments but never end the match, so "#org- and" only tags "org".
+const HASHTAG_REGEX =
+  /#([\p{L}\p{N}_\p{Emoji}\p{Emoji_Component}]+(?:-+[\p{L}\p{N}_\p{Emoji}\p{Emoji_Component}]+)*)/gu;
 const LEADING_PUNCTUATION_REGEX = /^[([{<"'`]+/u;
 const HTTP_PREFIXES = ["http://", "https://", "www."];
 
