@@ -441,6 +441,69 @@ describe("md2json", () => {
     expect(json.content![0].attrs?.editorWidth).toBe(80);
   });
 
+  test("lifts an image that shares a paragraph with text", () => {
+    // No blank line before the image: markdown folds it into the paragraph,
+    // but the editor schemas only allow images at block level.
+    const json = md2json("some text\n![](attachments/image%202.png)");
+
+    expect(json.content!.map((node) => node.type)).toEqual([
+      "paragraph",
+      "image",
+    ]);
+    expect(json.content![0].content).toEqual([
+      { type: "text", text: "some text" },
+    ]);
+    expect(json.content![1].attrs?.attachmentId).toBe("image 2.png");
+    expect(() => PMNode.fromJSON(noteSchema, json).check()).not.toThrow();
+  });
+
+  test("splits a paragraph around an image between text runs", () => {
+    const json = md2json("before ![](https://example.com/a.png) after");
+
+    expect(json.content!.map((node) => node.type)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+    expect(json.content![0].content).toEqual([
+      { type: "text", text: "before" },
+    ]);
+    expect(json.content![2].content).toEqual([{ type: "text", text: "after" }]);
+  });
+
+  test("lifts adjacent images without leaving whitespace-only paragraphs", () => {
+    const json = md2json(
+      "![](https://example.com/a.png)  ![](https://example.com/b.png)",
+    );
+
+    expect(json.content!.map((node) => node.type)).toEqual(["image", "image"]);
+  });
+
+  test("lifts images inside list items behind a leading paragraph", () => {
+    const json = md2json(
+      "* ![](https://example.com/avatar.png) [kevin](https://example.com)",
+    );
+
+    const listItem = json.content![0].content![0];
+    expect(listItem.type).toBe("listItem");
+    expect(listItem.content!.map((node) => node.type)).toEqual([
+      "paragraph",
+      "image",
+      "paragraph",
+    ]);
+    expect(listItem.content![0].content).toBeUndefined();
+    expect(() => PMNode.fromJSON(noteSchema, json).check()).not.toThrow();
+  });
+
+  test("round-trips a lifted inline image through markdown", () => {
+    const md = json2md(md2json("some text\n![](attachments/image%202.png)"));
+
+    expect(md2json(md).content!.map((node) => node.type)).toEqual([
+      "paragraph",
+      "image",
+    ]);
+  });
+
   test("converts image with title to JSON", () => {
     const json = md2json(
       '![alt text](https://example.com/image.png "Image Title")',

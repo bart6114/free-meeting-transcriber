@@ -953,41 +953,97 @@ function countLines(src: string): number {
 }
 
 // ---------------------------------------------------------------------------
-// JSON post-processing: lift standalone images out of paragraphs (md2json),
-// and wrap block-level images back into paragraphs (json2md).
+// JSON post-processing: lift images out of paragraphs (md2json), and wrap
+// block-level images back into paragraphs (json2md). The markdown schema
+// keeps image inline (commonmark), but the editor schemas declare it as a
+// block node — an image left inside a paragraph makes the document invalid
+// there and crashes the ProseMirror renderer, so every paragraph is split
+// around its images, at any nesting depth (list items, blockquotes, cells).
 // ---------------------------------------------------------------------------
 
-function liftBlockImages(doc: JSONContent): JSONContent {
-  if (!doc.content) return doc;
+function liftBlockImages(node: JSONContent): JSONContent {
+  if (!node.content) return node;
 
   const out: JSONContent[] = [];
-  for (const node of doc.content) {
+  for (const child of node.content) {
+    const walked = liftBlockImages(child);
     if (
-      node.type === "paragraph" &&
-      node.content &&
-      node.content.length === 1 &&
-      node.content[0].type === "image"
+      walked.type === "paragraph" &&
+      walked.content?.some((inline) => inline.type === "image")
     ) {
-      out.push(node.content[0]);
+      out.push(...splitParagraphAroundImages(walked));
     } else {
-      out.push(node);
+      out.push(walked);
     }
   }
-  return { ...doc, content: out };
+  // listItem/taskItem content is "paragraph block*": an item that now starts
+  // with an image block still needs a leading paragraph to stay schema-valid.
+  if (
+    (node.type === "listItem" || node.type === "taskItem") &&
+    out[0]?.type !== "paragraph"
+  ) {
+    out.unshift({ type: "paragraph" });
+  }
+  return { ...node, content: out };
 }
 
-function wrapBlockImages(doc: JSONContent): JSONContent {
-  if (!doc.content) return doc;
-
+function splitParagraphAroundImages(paragraph: JSONContent): JSONContent[] {
   const out: JSONContent[] = [];
-  for (const node of doc.content) {
-    if (node.type === "image") {
-      out.push({ type: "paragraph", content: [node] });
+  let run: JSONContent[] = [];
+  const flush = () => {
+    const trimmed = trimInlineRun(run);
+    if (trimmed.length > 0) out.push({ ...paragraph, content: trimmed });
+    run = [];
+  };
+  for (const inline of paragraph.content ?? []) {
+    if (inline.type === "image") {
+      flush();
+      out.push(inline);
     } else {
-      out.push(node);
+      run.push(inline);
     }
   }
-  return { ...doc, content: out };
+  flush();
+  return out;
+}
+
+// Whitespace that only separated text from a lifted image would otherwise
+// linger as stray leading/trailing space in the split-off paragraphs.
+function trimInlineRun(run: JSONContent[]): JSONContent[] {
+  const isBoundaryFiller = (inline: JSONContent) =>
+    inline.type === "hardBreak" ||
+    (inline.type === "text" && !(inline.text ?? "").trim());
+
+  let start = 0;
+  let end = run.length;
+  while (start < end && isBoundaryFiller(run[start])) start++;
+  while (end > start && isBoundaryFiller(run[end - 1])) end--;
+
+  const inner = run.slice(start, end);
+  if (inner.length === 0) return inner;
+  const first = inner[0];
+  if (first.type === "text" && first.text) {
+    inner[0] = { ...first, text: first.text.replace(/^\s+/, "") };
+  }
+  const last = inner[inner.length - 1];
+  if (last.type === "text" && last.text) {
+    inner[inner.length - 1] = { ...last, text: last.text.replace(/\s+$/, "") };
+  }
+  return inner;
+}
+
+function wrapBlockImages(node: JSONContent): JSONContent {
+  if (!node.content) return node;
+
+  const content = node.content.map(wrapBlockImages);
+  // Images inside paragraphs are already inline-legal for the markdown schema.
+  if (node.type === "paragraph") {
+    return { ...node, content };
+  }
+  const out = content.map((child) =>
+    child.type === "image" ? { type: "paragraph", content: [child] } : child,
+  );
+  return { ...node, content: out };
 }
 
 // ---------------------------------------------------------------------------
