@@ -62,10 +62,6 @@ vi.mock("@hypr/ui/components/ui/tooltip", () => ({
   TooltipTrigger: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));
 
-vi.mock("~/session/hooks/useEnhancedNotes", () => ({
-  useIsSessionEnhancing: () => false,
-}));
-
 vi.mock("~/shared/hooks/useNativeContextMenu", () => ({
   useNativeContextMenu: (
     menu: Array<{
@@ -352,6 +348,27 @@ describe("TimelineItemComponent", () => {
     expect(rowButton?.className).toContain("pr-10");
     expect(spinnerSlot?.className).toContain("absolute");
     expect(spinnerSlot?.className).toContain("right-3");
+  });
+
+  it("renders the spinner when the session is enhancing", () => {
+    mocks.storeTitle = "Enhancing Note";
+
+    render(
+      <TimelineItemComponent
+        item={makeTimelineItem("session-enhancing", {
+          title: "Enhancing Note",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
+        precision="time"
+        selected={false}
+        timezone="UTC"
+        multiSelected={false}
+        flatItemKeys={["session-session-enhancing"]}
+        isEnhancing
+      />,
+    );
+
+    expect(screen.getByTestId("spinner")).toBeTruthy();
   });
 
   it("opens the current tab after a single-click on a session row", () => {

@@ -29,4 +29,18 @@ describe("resolveConfigValue", () => {
       }),
     ).toEqual(["en", "ko"]);
   });
+
+  test("returns the same array reference for the same stored string", () => {
+    const first = resolveConfigValue("sidebar_expanded_tags", {
+      values: { sidebar_expanded_tags: '["work","personal"]' },
+      hasValues: new Set(["sidebar_expanded_tags"]),
+    });
+    const second = resolveConfigValue("sidebar_expanded_tags", {
+      values: { sidebar_expanded_tags: '["work","personal"]' },
+      hasValues: new Set(["sidebar_expanded_tags"]),
+    });
+
+    expect(first).toEqual(["work", "personal"]);
+    expect(second).toBe(first);
+  });
 });

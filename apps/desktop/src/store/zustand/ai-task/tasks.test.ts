@@ -109,6 +109,65 @@ describe("createTasksSlice", () => {
     });
   });
 
+  it("records the session id from args and preserves it across cancel, reset, and sync", async () => {
+    let state: ReturnType<typeof createTasksSlice>;
+    const set = (updater: any) => {
+      state =
+        typeof updater === "function"
+          ? updater(state)
+          : { ...state, ...updater };
+    };
+    const get = () => state;
+    state = createTasksSlice(set, get);
+
+    TASK_CONFIGS.enhance.onSuccess = vi.fn(async () => {});
+    TASK_CONFIGS.enhance.transformArgs = vi.fn(async () => ({}) as any);
+    TASK_CONFIGS.enhance.transforms = [];
+    TASK_CONFIGS.enhance.executeWorkflow = vi.fn(async function* () {
+      yield { type: "text-delta", text: "Generated summary" } as any;
+    });
+
+    const taskId = "note-1-enhance" as const;
+    await state.generate(taskId, {
+      model: {} as any,
+      taskType: "enhance",
+      args: {
+        sessionId: "session-1",
+        enhancedNoteId: "note-1",
+      },
+    });
+
+    expect(state.tasks[taskId]).toMatchObject({
+      status: "success",
+      sessionId: "session-1",
+    });
+
+    state.cancel(taskId);
+    expect(state.tasks[taskId]).toMatchObject({
+      status: "idle",
+      sessionId: "session-1",
+    });
+
+    state.reset(taskId);
+    expect(state.tasks[taskId]).toMatchObject({
+      status: "idle",
+      sessionId: "session-1",
+    });
+
+    state.syncRemoteTasks({
+      [taskId]: {
+        taskType: "enhance",
+        status: "generating",
+        streamedText: "",
+        sessionId: "session-2",
+      },
+    });
+    expect(state.tasks[taskId]).toMatchObject({
+      status: "generating",
+      sessionId: "session-2",
+    });
+  });
+
   it("does not mark a task successful when it is cancelled during onSuccess", async () => {
     let state: ReturnType<typeof createTasksSlice>;
     const set = (updater: any) => {

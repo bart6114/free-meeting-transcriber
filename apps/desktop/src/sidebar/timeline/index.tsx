@@ -4,6 +4,8 @@ import {
   ArrowUpIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
   SunIcon,
 } from "lucide-react";
 import {
@@ -47,6 +49,7 @@ import {
   type TimelineSessionsTable,
 } from "./utils";
 
+import { useEnhancingSessionIds } from "~/ai/hooks/useEnhancingSessions";
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
 import { setSettingValue } from "~/settings/queries";
 import { useConfigValue } from "~/shared/config";
@@ -70,7 +73,7 @@ export const TimelineView = memo(function TimelineView({
   const timezone = useConfigValue("timezone") || undefined;
   const groupBy: "date" | "tag" =
     useConfigValue("sidebar_group_by") === "tag" ? "tag" : "date";
-  const collapsedTags = useConfigValue("sidebar_collapsed_tags");
+  const expandedTags = useConfigValue("sidebar_expanded_tags");
   const timelineSessionsTable = useTimelineSessionsTable();
   const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
@@ -79,32 +82,42 @@ export const TimelineView = memo(function TimelineView({
     timezone,
     groupBy,
   });
-  // Collapsed tag sections keep their header (with the full count) but drop their
-  // items -- also from the flat selection keys below, so keyboard/shift selection
-  // skips hidden rows.
+  const expandedTagSet = useMemo(() => new Set(expandedTags), [expandedTags]);
+  // Tag sections default to collapsed: headers keep the full count but drop
+  // their items -- also from the flat selection keys below, so keyboard/shift
+  // selection skips hidden rows.
   const buckets = useMemo(() => {
-    if (groupBy !== "tag" || collapsedTags.length === 0) {
+    if (groupBy !== "tag") {
       return allBuckets;
     }
-    const collapsed = new Set(collapsedTags);
     return allBuckets.map((bucket) =>
-      collapsed.has(bucket.label) ? { ...bucket, items: [] } : bucket,
+      expandedTagSet.has(bucket.label) ? bucket : { ...bucket, items: [] },
     );
-  }, [allBuckets, collapsedTags, groupBy]);
+  }, [allBuckets, expandedTagSet, groupBy]);
   const bucketItemCounts = useMemo(
     () =>
       new Map(allBuckets.map((bucket) => [bucket.label, bucket.items.length])),
     [allBuckets],
   );
-  const toggleTagCollapsed = useCallback(
+  const toggleTagExpanded = useCallback(
     (label: string) => {
-      const next = collapsedTags.includes(label)
-        ? collapsedTags.filter((tag) => tag !== label)
-        : [...collapsedTags, label];
-      void setSettingValue("sidebar_collapsed_tags", JSON.stringify(next));
+      const next = expandedTags.includes(label)
+        ? expandedTags.filter((tag) => tag !== label)
+        : [...expandedTags, label];
+      void setSettingValue("sidebar_expanded_tags", JSON.stringify(next));
     },
-    [collapsedTags],
+    [expandedTags],
   );
+  const anyTagExpanded = useMemo(
+    () =>
+      groupBy === "tag" &&
+      allBuckets.some((bucket) => expandedTagSet.has(bucket.label)),
+    [allBuckets, expandedTagSet, groupBy],
+  );
+  const toggleAllTagsExpanded = useCallback(() => {
+    const next = anyTagExpanded ? [] : allBuckets.map((bucket) => bucket.label);
+    void setSettingValue("sidebar_expanded_tags", JSON.stringify(next));
+  }, [allBuckets, anyTagExpanded]);
   const hasToday = useMemo(
     () =>
       groupBy === "date" && buckets.some((bucket) => bucket.label === "Today"),
@@ -129,6 +142,11 @@ export const TimelineView = memo(function TimelineView({
     state.live.status === "active" || state.live.status === "finalizing"
       ? state.live.sessionId
       : null,
+  );
+  const enhancingSessionIds = useEnhancingSessionIds();
+  const enhancingSessionIdSet = useMemo(
+    () => new Set(enhancingSessionIds),
+    [enhancingSessionIds],
   );
   const hasActiveVisibleSession = useMemo(
     () =>
@@ -442,6 +460,24 @@ export const TimelineView = memo(function TimelineView({
               {mode === "date" ? t`By date` : t`By tag`}
             </button>
           ))}
+          {groupBy === "tag" && (
+            <button
+              type="button"
+              aria-label={anyTagExpanded ? t`Collapse all` : t`Expand all`}
+              title={anyTagExpanded ? t`Collapse all` : t`Expand all`}
+              onClick={toggleAllTagsExpanded}
+              className={cn([
+                "mr-3 ml-auto",
+                "text-muted-foreground/50 hover:text-muted-foreground transition-colors",
+              ])}
+            >
+              {anyTagExpanded ? (
+                <ChevronsDownUpIcon size={13} />
+              ) : (
+                <ChevronsUpDownIcon size={13} />
+              )}
+            </button>
+          )}
         </div>
         {buckets.map((bucket, index) => {
           const isToday = bucket.label === "Today";
@@ -479,17 +515,17 @@ export const TimelineView = memo(function TimelineView({
                 {bucket.kind === "tag" ? (
                   <button
                     type="button"
-                    aria-expanded={!collapsedTags.includes(bucket.label)}
-                    onClick={() => toggleTagCollapsed(bucket.label)}
+                    aria-expanded={expandedTagSet.has(bucket.label)}
+                    onClick={() => toggleTagExpanded(bucket.label)}
                     className={cn([
                       "text-muted-foreground/70 hover:text-foreground flex w-full items-center gap-1",
                       "pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase transition-colors",
                     ])}
                   >
-                    {collapsedTags.includes(bucket.label) ? (
-                      <ChevronRightIcon size={12} className="shrink-0" />
-                    ) : (
+                    {expandedTagSet.has(bucket.label) ? (
                       <ChevronDownIcon size={12} className="shrink-0" />
+                    ) : (
+                      <ChevronRightIcon size={12} className="shrink-0" />
                     )}
                     <span className="truncate">{bucket.label}</span>
                     <span className="tracking-normal">
@@ -513,6 +549,7 @@ export const TimelineView = memo(function TimelineView({
                   timezone={timezone}
                   selectedIds={selectedIds}
                   getFlatItemKeys={getFlatItemKeys}
+                  enhancingSessionIds={enhancingSessionIdSet}
                   upcomingItemKey={upcomingMeetingStatus?.itemKey}
                   upcomingItemLabel={upcomingMeetingStatus?.label}
                   upcomingItemProgress={upcomingMeetingStatus?.progress}
@@ -532,6 +569,10 @@ export const TimelineView = memo(function TimelineView({
                       timezone={timezone}
                       multiSelected={selectedIds.includes(itemKey)}
                       getFlatItemKeys={getFlatItemKeys}
+                      isEnhancing={
+                        item.type === "session" &&
+                        enhancingSessionIdSet.has(item.id)
+                      }
                       selectedNodeRef={
                         selected ? scrollSelectedSessionIntoView : undefined
                       }
@@ -847,6 +888,7 @@ function TodayBucket({
   timezone,
   selectedIds,
   getFlatItemKeys,
+  enhancingSessionIds,
   upcomingItemKey,
   upcomingItemLabel,
   upcomingItemProgress,
@@ -861,6 +903,7 @@ function TodayBucket({
   timezone?: string;
   selectedIds: string[];
   getFlatItemKeys: () => string[];
+  enhancingSessionIds: Set<string>;
   upcomingItemKey?: string;
   upcomingItemLabel?: string;
   upcomingItemProgress?: number;
@@ -936,6 +979,10 @@ function TodayBucket({
           timezone={timezone}
           multiSelected={selectedIds.includes(itemKey)}
           getFlatItemKeys={getFlatItemKeys}
+          isEnhancing={
+            entry.item.type === "session" &&
+            enhancingSessionIds.has(entry.item.id)
+          }
           selectedNodeRef={selected ? selectedNodeRef : undefined}
           itemNodeRef={
             itemKey === upcomingItemKey ? upcomingItemNodeRef : undefined
@@ -982,6 +1029,7 @@ function TodayBucket({
     timezone,
     selectedIds,
     getFlatItemKeys,
+    enhancingSessionIds,
     upcomingItemKey,
     upcomingItemLabel,
     upcomingItemProgress,
@@ -1065,6 +1113,9 @@ function useTimelineData({
     [groupBy, timelineSessionsTable, timezone],
   );
   const currentTimeMs = useSmartCurrentTime(windowData.timelineSessionsTable);
+  // Tag buckets are time-independent; pinning the dep keeps the minute tick
+  // from rebuilding every bucket/item identity in tag mode.
+  const bucketTimeMs = groupBy === "tag" ? 0 : currentTimeMs;
 
   return useMemo(() => {
     const buckets =
@@ -1081,5 +1132,5 @@ function useTimelineData({
       buckets,
       hasMoreFutureItems: windowData.hasMoreFutureItems,
     };
-  }, [groupBy, windowData, currentTimeMs, timezone]);
+  }, [groupBy, windowData, bucketTimeMs, timezone]);
 }

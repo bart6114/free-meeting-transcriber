@@ -218,6 +218,7 @@ function serializeEnhanceTasks(tasks: Record<string, TaskState>) {
             ? { name: task.error.name, message: task.error.message }
             : undefined,
           currentStep: task.currentStep,
+          sessionId: task.sessionId,
         } satisfies RemoteTaskState,
       ]),
   );

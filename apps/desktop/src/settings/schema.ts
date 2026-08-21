@@ -99,10 +99,12 @@ export const SETTING_DEFINITIONS = {
     path: ["general", "sidebar_group_by"],
     default: "date" as string,
   },
-  // JSON array of collapsed tag names (not expanded ones), so new tags start open.
-  sidebar_collapsed_tags: {
+  // JSON array of expanded tag names (not collapsed ones), so tags — including
+  // newly created ones — start collapsed. Supersedes sidebar_collapsed_tags;
+  // stale entries for that key may linger in old vault configs and are ignored.
+  sidebar_expanded_tags: {
     type: "string",
-    path: ["general", "sidebar_collapsed_tags"],
+    path: ["general", "sidebar_expanded_tags"],
     default: "[]" as string,
   },
   spoken_languages: {

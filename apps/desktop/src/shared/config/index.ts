@@ -13,7 +13,7 @@ type JsonParsedKeys =
   | "personalization_dictionary_terms"
   | "ignored_platforms"
   | "included_platforms"
-  | "sidebar_collapsed_tags";
+  | "sidebar_expanded_tags";
 
 type ConfigValueType<K extends SettingKey> = K extends JsonParsedKeys
   ? string[]
@@ -28,7 +28,7 @@ const JSON_PARSED_KEYS = new Set<SettingKey>([
   "personalization_dictionary_terms",
   "ignored_platforms",
   "included_platforms",
-  "sidebar_collapsed_tags",
+  "sidebar_expanded_tags",
 ]);
 
 export function useConfigValue<K extends SettingKey>(
@@ -78,16 +78,26 @@ export function resolveConfigValue<K extends SettingKey>(
   return value as ConfigValueType<K>;
 }
 
+// Cached per raw string so consumers get a stable array identity across
+// renders (memo deps would otherwise invalidate every time). Treat the
+// returned arrays as immutable.
+const parsedStringArrayCache = new Map<string, string[]>();
+
 function parseStringArray(value: unknown, fallback: string[]): string[] {
   if (Array.isArray(value)) {
     return value.filter((entry): entry is string => typeof entry === "string");
   }
   if (typeof value !== "string") return fallback;
+  const cached = parsedStringArrayCache.get(value);
+  if (cached) return cached;
   try {
     const parsed = JSON.parse(value);
-    return Array.isArray(parsed)
-      ? parsed.filter((entry): entry is string => typeof entry === "string")
-      : fallback;
+    if (!Array.isArray(parsed)) return fallback;
+    const result = parsed.filter(
+      (entry): entry is string => typeof entry === "string",
+    );
+    parsedStringArrayCache.set(value, result);
+    return result;
   } catch {
     return fallback;
   }
