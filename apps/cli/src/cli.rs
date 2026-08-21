@@ -63,6 +63,30 @@ pub enum Command {
             help = "Transcribe the audio with the configured on-device model after importing"
         )]
         transcribe: bool,
+        #[arg(
+            long,
+            value_name = "RFC3339",
+            value_parser = parse_rfc3339_utc,
+            conflicts_with = "into",
+            help = "Creation timestamp for the new meeting (RFC 3339); defaults to now"
+        )]
+        created_at: Option<String>,
+        #[arg(
+            long,
+            value_name = "RFC3339",
+            value_parser = parse_rfc3339_utc,
+            conflicts_with = "into",
+            help = "Start timestamp for the new meeting (RFC 3339)"
+        )]
+        started_at: Option<String>,
+        #[arg(
+            long,
+            value_name = "RFC3339",
+            value_parser = parse_rfc3339_utc,
+            conflicts_with = "into",
+            help = "End timestamp for the new meeting (RFC 3339)"
+        )]
+        ended_at: Option<String>,
     },
     /// Transcribe a meeting's audio with the configured on-device model
     Transcribe {
@@ -117,6 +141,34 @@ pub enum MeetingCommand {
             help = "Initial note body read from FILE, or '-' for stdin"
         )]
         note: Option<PathBuf>,
+        #[arg(
+            long,
+            value_name = "RFC3339",
+            value_parser = parse_rfc3339_utc,
+            help = "Creation timestamp for the meeting (RFC 3339), e.g. 2024-05-01T09:00:00Z; defaults to now"
+        )]
+        created_at: Option<String>,
+        #[arg(
+            long,
+            value_name = "RFC3339",
+            value_parser = parse_rfc3339_utc,
+            help = "Start timestamp for the meeting (RFC 3339)"
+        )]
+        started_at: Option<String>,
+        #[arg(
+            long,
+            value_name = "RFC3339",
+            value_parser = parse_rfc3339_utc,
+            help = "End timestamp for the meeting (RFC 3339)"
+        )]
+        ended_at: Option<String>,
+        #[arg(
+            long,
+            value_name = "NAME",
+            value_parser = parse_tag,
+            help = "Tag for the new meeting; repeatable"
+        )]
+        tag: Vec<String>,
     },
     /// Show the note or generated summaries for a meeting, or edit the note
     Note {
@@ -139,6 +191,18 @@ pub enum MeetingCommand {
     },
     /// Show the full speaker-labeled meeting transcript
     Transcript { id: String },
+    /// Store a file as a note attachment of a meeting and print its attachment id
+    Attach {
+        id: String,
+        /// File to store under the meeting's attachments directory
+        file: PathBuf,
+        #[arg(
+            long,
+            value_name = "NAME",
+            help = "Filename to store the attachment under; defaults to the file's name"
+        )]
+        name: Option<String>,
+    },
     /// Export a meeting to Markdown or JSON
     Export {
         id: String,
@@ -183,6 +247,29 @@ pub enum ExportFormat {
     #[default]
     Markdown,
     Json,
+}
+
+/// Validates timestamps at argument parsing, before any vault write, and
+/// normalizes them to millisecond UTC RFC 3339 — the desktop's
+/// `new Date().toISOString()` format that the vault stores everywhere. The
+/// session's human-readable directory name is derived from these values, so a
+/// silently-invalid one would fall back to today's date.
+fn parse_rfc3339_utc(value: &str) -> Result<String, String> {
+    chrono::DateTime::parse_from_rfc3339(value)
+        .map(|timestamp| {
+            timestamp
+                .with_timezone(&chrono::Utc)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        })
+        .map_err(|error| format!("invalid RFC 3339 timestamp: {error}"))
+}
+
+fn parse_tag(value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err("tag name cannot be empty".to_string());
+    }
+    Ok(trimmed.to_string())
 }
 
 #[cfg(test)]
@@ -293,13 +380,86 @@ mod tests {
         else {
             panic!("expected meetings command");
         };
-        let MeetingCommand::New { title, note } = command else {
+        let MeetingCommand::New { title, note, .. } = command else {
             panic!("expected new command");
         };
         assert_eq!(title, "Planning");
         assert_eq!(note.as_deref(), Some(Path::new("-")));
 
         assert!(Args::try_parse_from(["fmtr", "meetings", "new"]).is_err());
+    }
+
+    #[test]
+    fn parses_new_timestamps_normalized_to_utc_and_repeatable_tags() {
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr",
+            "meetings",
+            "new",
+            "--title",
+            "Retro",
+            "--created-at",
+            "2024-05-01T09:00:00+02:00",
+            "--started-at",
+            "2024-05-01T09:05:00Z",
+            "--ended-at",
+            "2024-05-01T10:00:00.250Z",
+            "--tag",
+            " project-x ",
+            "--tag",
+            "retro",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::New {
+            created_at,
+            started_at,
+            ended_at,
+            tag,
+            ..
+        } = command
+        else {
+            panic!("expected new command");
+        };
+        // Offsets collapse to UTC millisecond precision at parse time.
+        assert_eq!(created_at.as_deref(), Some("2024-05-01T07:00:00.000Z"));
+        assert_eq!(started_at.as_deref(), Some("2024-05-01T09:05:00.000Z"));
+        assert_eq!(ended_at.as_deref(), Some("2024-05-01T10:00:00.250Z"));
+        // Tags are trimmed but otherwise kept verbatim.
+        assert_eq!(tag, vec!["project-x".to_string(), "retro".to_string()]);
+    }
+
+    #[test]
+    fn rejects_invalid_timestamps_and_empty_tags_at_parse_time() {
+        assert!(
+            Args::try_parse_from([
+                "fmtr",
+                "meetings",
+                "new",
+                "--title",
+                "Retro",
+                "--created-at",
+                "yesterday",
+            ])
+            .is_err()
+        );
+        assert!(
+            Args::try_parse_from([
+                "fmtr",
+                "meetings",
+                "new",
+                "--title",
+                "Retro",
+                "--started-at",
+                "2024-05-01",
+            ])
+            .is_err()
+        );
+        assert!(
+            Args::try_parse_from(["fmtr", "meetings", "new", "--title", "Retro", "--tag", "  "])
+                .is_err()
+        );
     }
 
     #[test]
@@ -354,12 +514,48 @@ mod tests {
     }
 
     #[test]
+    fn parses_attach_with_and_without_name_override() {
+        let Command::Meetings { command } =
+            Args::parse_from(["fmtr", "meetings", "attach", "meeting-1", "diagram.png"]).command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::Attach { id, file, name } = command else {
+            panic!("expected attach command");
+        };
+        assert_eq!(id, "meeting-1");
+        assert_eq!(file, Path::new("diagram.png"));
+        assert_eq!(name, None);
+
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr",
+            "meetings",
+            "attach",
+            "meeting-1",
+            "/tmp/export.pdf",
+            "--name",
+            "Q1 report.pdf",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::Attach { name, .. } = command else {
+            panic!("expected attach command");
+        };
+        assert_eq!(name.as_deref(), Some("Q1 report.pdf"));
+
+        assert!(Args::try_parse_from(["fmtr", "meetings", "attach", "meeting-1"]).is_err());
+    }
+
+    #[test]
     fn parses_import_command_with_optional_title() {
         let Command::Import {
             file,
             title,
             into,
             transcribe,
+            ..
         } = Args::parse_from(["fmtr", "import", "meeting.m4a"]).command
         else {
             panic!("expected import command");
@@ -401,6 +597,39 @@ mod tests {
             ])
             .is_err()
         );
+    }
+
+    #[test]
+    fn import_timestamps_only_apply_to_new_meetings() {
+        let Command::Import { created_at, .. } = Args::parse_from([
+            "fmtr",
+            "import",
+            "meeting.m4a",
+            "--created-at",
+            "2024-05-01T09:00:00Z",
+        ])
+        .command
+        else {
+            panic!("expected import command");
+        };
+        assert_eq!(created_at.as_deref(), Some("2024-05-01T09:00:00.000Z"));
+
+        // An existing meeting keeps its own timestamps; the flags are exclusive
+        // with --into.
+        for flag in ["--created-at", "--started-at", "--ended-at"] {
+            assert!(
+                Args::try_parse_from([
+                    "fmtr",
+                    "import",
+                    "meeting.m4a",
+                    "--into",
+                    "meeting-1",
+                    flag,
+                    "2024-05-01T09:00:00Z",
+                ])
+                .is_err()
+            );
+        }
     }
 
     #[test]

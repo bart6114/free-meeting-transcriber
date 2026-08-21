@@ -16,6 +16,7 @@ pub async fn run(
     title: Option<String>,
     into: Option<String>,
     transcribe: bool,
+    timestamps: super::NewSessionOptions,
     json: bool,
 ) -> Result<u8> {
     // Validate the input before touching the vault, so a bad file creates nothing.
@@ -40,8 +41,9 @@ pub async fn run(
 
     let store = SessionStore::new(vault.to_path_buf());
     // `--into` targets an existing meeting; otherwise a new session is created,
-    // titled after the file when no `--title` is given (clap rejects
-    // `--into --title` together, so `title` is None on this branch).
+    // titled after the file when no `--title` is given (clap rejects `--into`
+    // together with `--title` or the timestamp overrides, so `title` is None
+    // and `timestamps` is empty on the `--into` branch).
     let (meta, created) = match into {
         Some(id) => {
             let meta = store
@@ -72,7 +74,8 @@ pub async fn run(
                     .map(|stem| stem.to_string_lossy().into_owned())
                     .unwrap_or_default()
             });
-            let meta = super::create_session(vault, &store, "import audio", title).await?;
+            let meta =
+                super::create_session(vault, &store, "import audio", title, timestamps).await?;
             (meta, true)
         }
     };

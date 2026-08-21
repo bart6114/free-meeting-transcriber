@@ -193,13 +193,41 @@ expression: canonicalize_json(contract)
               "value_name": "FILE"
             },
             {
+              "flags": "--created-at",
+              "help": "Creation timestamp for the meeting (RFC 3339), e.g. 2024-05-01T09:00:00Z; defaults to now",
+              "is_flag": false,
+              "required": false,
+              "value_name": "RFC3339"
+            },
+            {
+              "flags": "--started-at",
+              "help": "Start timestamp for the meeting (RFC 3339)",
+              "is_flag": false,
+              "required": false,
+              "value_name": "RFC3339"
+            },
+            {
+              "flags": "--ended-at",
+              "help": "End timestamp for the meeting (RFC 3339)",
+              "is_flag": false,
+              "required": false,
+              "value_name": "RFC3339"
+            },
+            {
+              "flags": "--tag",
+              "help": "Tag for the new meeting; repeatable",
+              "is_flag": false,
+              "required": false,
+              "value_name": "NAME"
+            },
+            {
               "flags": "-h, --help",
               "help": "Print help",
               "is_flag": false,
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings new <--title> [--note] [-h]"
+          "synopsis": "fmtr meetings new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [-h]"
         },
         {
           "about": "Show the note or generated summaries for a meeting, or edit the note",
@@ -264,6 +292,37 @@ expression: canonicalize_json(contract)
             }
           ],
           "synopsis": "fmtr meetings transcript [-h] <id>"
+        },
+        {
+          "about": "Store a file as a note attachment of a meeting and print its attachment id",
+          "arguments": [
+            {
+              "help": "File to store under the meeting's attachments directory",
+              "name": "FILE",
+              "required": true
+            },
+            {
+              "name": "ID",
+              "required": true
+            }
+          ],
+          "name": "fmtr meetings attach",
+          "options": [
+            {
+              "flags": "--name",
+              "help": "Filename to store the attachment under; defaults to the file's name",
+              "is_flag": false,
+              "required": false,
+              "value_name": "NAME"
+            },
+            {
+              "flags": "-h, --help",
+              "help": "Print help",
+              "is_flag": false,
+              "required": false
+            }
+          ],
+          "synopsis": "fmtr meetings attach [--name] [-h] <file> <id>"
         },
         {
           "about": "Export a meeting to Markdown or JSON",
@@ -342,13 +401,34 @@ expression: canonicalize_json(contract)
           "required": false
         },
         {
+          "flags": "--created-at",
+          "help": "Creation timestamp for the new meeting (RFC 3339); defaults to now",
+          "is_flag": false,
+          "required": false,
+          "value_name": "RFC3339"
+        },
+        {
+          "flags": "--started-at",
+          "help": "Start timestamp for the new meeting (RFC 3339)",
+          "is_flag": false,
+          "required": false,
+          "value_name": "RFC3339"
+        },
+        {
+          "flags": "--ended-at",
+          "help": "End timestamp for the new meeting (RFC 3339)",
+          "is_flag": false,
+          "required": false,
+          "value_name": "RFC3339"
+        },
+        {
           "flags": "-h, --help",
           "help": "Print help",
           "is_flag": false,
           "required": false
         }
       ],
-      "synopsis": "fmtr import [--title] [--into] [--transcribe] [-h] <file>"
+      "synopsis": "fmtr import [--title] [--into] [--transcribe] [--created-at] [--started-at] [--ended-at] [-h] <file>"
     },
     {
       "about": "Transcribe a meeting's audio with the configured on-device model",

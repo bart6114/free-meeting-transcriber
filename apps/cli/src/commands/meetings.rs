@@ -69,11 +69,30 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             output::emit(&rendered);
             Ok(())
         }
-        MeetingCommand::New { title, note } => {
+        MeetingCommand::New {
+            title,
+            note,
+            created_at,
+            started_at,
+            ended_at,
+            tag,
+        } => {
             // Read the body before touching the vault, so a bad --note path creates nothing.
             let body = note.as_deref().map(read_body).transpose()?;
             let store = SessionStore::new(vault.to_path_buf());
-            let meta = super::create_session(vault, &store, "create meeting", title).await?;
+            let meta = super::create_session(
+                vault,
+                &store,
+                "create meeting",
+                title,
+                super::NewSessionOptions {
+                    created_at,
+                    started_at,
+                    ended_at,
+                    tags: tag,
+                },
+            )
+            .await?;
             let session_id = meta.id.clone();
             if let Some(body) = body {
                 // The meta write above already created the session; name it in the
@@ -88,6 +107,19 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                     )
                 })?;
             }
+            // The tags already sit in the session's `_meta.json`; registering
+            // them in the vault-root `tags.json` is a separate write, so a
+            // failure here must also name the meeting it leaves behind.
+            for tag in &meta.tags {
+                store.ensure_tag(tag).await.map_err(|error| {
+                    Error::operation(
+                        "register tag",
+                        format!(
+                            "meeting {session_id} was created, but registering tag '{tag}' failed: {error}"
+                        ),
+                    )
+                })?;
+            }
 
             let rendered = if json {
                 output::json(
@@ -96,6 +128,9 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                         "id": session_id,
                         "title": meta.title,
                         "created_at": meta.created_at,
+                        "started_at": meta.started_at,
+                        "ended_at": meta.ended_at,
+                        "tags": meta.tags,
                     }),
                     None,
                 )?
@@ -164,6 +199,25 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                 output::json("meetings.transcript", &transcript, None)?
             } else {
                 transcript.text
+            };
+            output::emit(&rendered);
+            Ok(())
+        }
+        MeetingCommand::Attach { id, file, name } => {
+            let saved = attach_file(vault, &id, &file, name).await?;
+            let rendered = if json {
+                output::json(
+                    "meetings.attach",
+                    &serde_json::json!({
+                        "id": id,
+                        "attachment_id": saved.attachment_id,
+                        "path": saved.relative_path.to_string_lossy(),
+                        "src": to_portable_attachment_src(&saved.attachment_id),
+                    }),
+                    None,
+                )?
+            } else {
+                saved.attachment_id
             };
             output::emit(&rendered);
             Ok(())
@@ -252,6 +306,72 @@ async fn edit_note(
     };
     output::emit(&rendered);
     Ok(())
+}
+
+async fn attach_file(
+    vault: &Path,
+    id: &str,
+    file: &Path,
+    name: Option<String>,
+) -> Result<hypr_vault_write::SavedAttachment> {
+    // Read the bytes before touching the vault, so a bad path creates nothing.
+    if !file.is_file() {
+        return Err(Error::NotFound(format!("file {}", file.display())));
+    }
+    let bytes = std::fs::read(file).map_err(|error| {
+        Error::operation("read attachment", format!("{}: {error}", file.display()))
+    })?;
+
+    let filename = match name {
+        Some(name) => name,
+        None => file
+            .file_name()
+            .map(|name| name.to_string_lossy().into_owned())
+            .ok_or_else(|| {
+                Error::operation(
+                    "attach file",
+                    format!("cannot derive a filename from {}", file.display()),
+                )
+            })?,
+    };
+
+    let store = SessionStore::new(vault.to_path_buf());
+    store
+        .read_meta(id)
+        .await
+        .map_err(|error| Error::operation("attach file", error.to_string()))?
+        .ok_or_else(|| Error::NotFound(format!("meeting '{id}'")))?;
+
+    store
+        .save_attachment(id, &filename, bytes)
+        .await
+        .map_err(|error| Error::operation("attach file", error.to_string()))
+}
+
+/// Byte-matches the desktop editor's `toPortableAttachmentSrc`
+/// (`packages/editor/src/note/portable-attachments.ts`): JavaScript
+/// `encodeURIComponent` over the attachment id, with parens additionally
+/// encoded so the src never breaks markdown link syntax.
+fn to_portable_attachment_src(attachment_id: &str) -> String {
+    use std::fmt::Write;
+
+    let mut src = String::from("attachments/");
+    for byte in attachment_id.bytes() {
+        match byte {
+            b'A'..=b'Z'
+            | b'a'..=b'z'
+            | b'0'..=b'9'
+            | b'-'
+            | b'_'
+            | b'.'
+            | b'!'
+            | b'~'
+            | b'*'
+            | b'\'' => src.push(byte as char),
+            _ => write!(src, "%{byte:02X}").expect("writing to a String cannot fail"),
+        }
+    }
+    src
 }
 
 fn read_body(source: &Path) -> Result<String> {
@@ -374,5 +494,120 @@ mod tests {
         }]);
         assert!(rendered.contains("meeting-1"));
         assert!(rendered.contains('…'));
+    }
+
+    #[test]
+    fn portable_src_matches_the_editor_encoding() {
+        assert_eq!(
+            to_portable_attachment_src("image 73.png"),
+            "attachments/image%2073.png"
+        );
+        assert_eq!(
+            to_portable_attachment_src("weird (v2)!.png"),
+            "attachments/weird%20%28v2%29!.png"
+        );
+        assert_eq!(
+            to_portable_attachment_src("présentation.png"),
+            "attachments/pr%C3%A9sentation.png"
+        );
+    }
+
+    #[tokio::test]
+    async fn attach_stores_dedupes_and_encodes_the_src() {
+        let vault = tempfile::tempdir().unwrap();
+        let store = SessionStore::new(vault.path().to_path_buf());
+        let meta = super::super::create_session(
+            vault.path(),
+            &store,
+            "create meeting",
+            "Standup".to_string(),
+            super::super::NewSessionOptions::default(),
+        )
+        .await
+        .unwrap();
+
+        let source = tempfile::tempdir().unwrap();
+        let file = source.path().join("image 73.png");
+        std::fs::write(&file, b"png-bytes").unwrap();
+
+        let first = attach_file(vault.path(), &meta.id, &file, None)
+            .await
+            .unwrap();
+        let second = attach_file(vault.path(), &meta.id, &file, None)
+            .await
+            .unwrap();
+
+        assert_eq!(first.attachment_id, "image 73.png");
+        assert_eq!(second.attachment_id, "image 73 1.png");
+
+        let session_dir = vault
+            .path()
+            .join(store.session_dir(&meta.id).await.unwrap());
+        for saved in [&first, &second] {
+            let abs = vault.path().join(&saved.relative_path);
+            assert!(abs.is_file());
+            assert_eq!(abs.parent().unwrap(), session_dir.join("attachments"));
+        }
+        assert_eq!(
+            to_portable_attachment_src(&first.attachment_id),
+            "attachments/image%2073.png"
+        );
+        assert_eq!(
+            to_portable_attachment_src(&second.attachment_id),
+            "attachments/image%2073%201.png"
+        );
+
+        // --name overrides the stored filename.
+        let named = attach_file(
+            vault.path(),
+            &meta.id,
+            &file,
+            Some("weird (v2)!.png".to_string()),
+        )
+        .await
+        .unwrap();
+        assert_eq!(named.attachment_id, "weird (v2)!.png");
+        assert_eq!(
+            to_portable_attachment_src(&named.attachment_id),
+            "attachments/weird%20%28v2%29!.png"
+        );
+    }
+
+    #[tokio::test]
+    async fn attach_to_a_missing_meeting_or_file_creates_nothing() {
+        let vault = tempfile::tempdir().unwrap();
+        let source = tempfile::tempdir().unwrap();
+        let file = source.path().join("doc.pdf");
+        std::fs::write(&file, b"%PDF").unwrap();
+
+        let error = attach_file(vault.path(), "no-such-meeting", &file, None)
+            .await
+            .unwrap_err();
+        assert!(matches!(error, crate::Error::NotFound(_)));
+        assert!(!vault.path().join("sessions").exists());
+
+        let store = SessionStore::new(vault.path().to_path_buf());
+        let meta = super::super::create_session(
+            vault.path(),
+            &store,
+            "create meeting",
+            "Standup".to_string(),
+            super::super::NewSessionOptions::default(),
+        )
+        .await
+        .unwrap();
+        let error = attach_file(
+            vault.path(),
+            &meta.id,
+            &source.path().join("missing.pdf"),
+            None,
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, crate::Error::NotFound(_)));
+        let session_dir = vault
+            .path()
+            .join(store.session_dir(&meta.id).await.unwrap());
+        assert!(!session_dir.join("attachments").exists());
     }
 }

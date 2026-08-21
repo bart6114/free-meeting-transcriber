@@ -8,6 +8,17 @@ use std::path::Path;
 use crate::{Error, Result};
 use hypr_vault_write::{SessionMeta, SessionStore};
 
+/// Caller-provided metadata for a new session. Timestamps are already
+/// normalized to millisecond UTC RFC 3339 by the clap value parser; a missing
+/// `created_at` falls back to now, and tags land in `_meta.json` verbatim.
+#[derive(Debug, Default)]
+pub(crate) struct NewSessionOptions {
+    pub created_at: Option<String>,
+    pub started_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub tags: Vec<String>,
+}
+
 /// Create a session the same way the desktop frontend does: a `crypto.randomUUID()`-style
 /// id plus a full `_meta.json`. A collision is practically impossible, but never clobber
 /// an existing session: retry a few times, then give up rather than overwrite.
@@ -16,6 +27,7 @@ pub(crate) async fn create_session(
     store: &SessionStore,
     action: &'static str,
     title: String,
+    options: NewSessionOptions,
 ) -> Result<SessionMeta> {
     let mut session_id = None;
     for _ in 0..5 {
@@ -48,14 +60,16 @@ pub(crate) async fn create_session(
         .ok_or_else(|| Error::operation(action, "could not generate an unused meeting id"))?;
 
     // Millisecond RFC3339 UTC, matching the desktop's `new Date().toISOString()`.
-    let created_at = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let created_at = options
+        .created_at
+        .unwrap_or_else(|| chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true));
     let meta = SessionMeta {
         id: session_id,
         title,
-        started_at: None,
-        ended_at: None,
+        started_at: options.started_at,
+        ended_at: options.ended_at,
         created_at,
-        tags: Vec::new(),
+        tags: options.tags,
         event: None,
         folder: None,
         extra: Default::default(),

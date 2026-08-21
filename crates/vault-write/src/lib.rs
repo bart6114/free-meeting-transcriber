@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
+pub mod attachments;
 pub mod audio;
 pub mod content;
 #[cfg(test)]
@@ -20,6 +21,7 @@ pub mod tasks;
 pub mod templates;
 pub mod transcript;
 
+pub use attachments::SavedAttachment;
 pub use content::{SessionMeta, SessionMetaPatch};
 pub use enhanced::{EnhancedDoc, EnhancedDocPatch};
 pub use index::{IndexChanged, IndexEntity, SessionListEntry, SessionRecord};

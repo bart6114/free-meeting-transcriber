@@ -29,8 +29,20 @@ pub async fn run(args: Args) -> Result<u8> {
             title,
             into,
             transcribe,
+            created_at,
+            started_at,
+            ended_at,
         } => {
-            return commands::import::run(&vault, file, title, into, transcribe, args.json).await;
+            let timestamps = commands::NewSessionOptions {
+                created_at,
+                started_at,
+                ended_at,
+                tags: Vec::new(),
+            };
+            return commands::import::run(
+                &vault, file, title, into, transcribe, timestamps, args.json,
+            )
+            .await;
         }
         cli::Command::Transcribe { id } => {
             commands::transcribe::run(&vault, &id, args.json).await?
@@ -97,6 +109,10 @@ mod tests {
                 command: cli::MeetingCommand::New {
                     title: "Kickoff".to_string(),
                     note: Some(body_path),
+                    created_at: None,
+                    started_at: None,
+                    ended_at: None,
+                    tag: Vec::new(),
                 },
             },
         })
@@ -164,6 +180,10 @@ mod tests {
                 command: cli::MeetingCommand::New {
                     title: "Kickoff".to_string(),
                     note: Some(dir.path().join("missing.md")),
+                    created_at: None,
+                    started_at: None,
+                    ended_at: None,
+                    tag: Vec::new(),
                 },
             },
         })
@@ -210,6 +230,9 @@ mod tests {
                 title: None,
                 into: None,
                 transcribe: false,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
             },
         })
         .await
@@ -258,6 +281,9 @@ mod tests {
                 title: None,
                 into: Some("meeting-1".to_string()),
                 transcribe: false,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
             },
         })
         .await
@@ -305,6 +331,9 @@ mod tests {
                 title: None,
                 into: Some("missing".to_string()),
                 transcribe: false,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
             },
         })
         .await
@@ -333,6 +362,9 @@ mod tests {
                 title: None,
                 into: Some("meeting-1".to_string()),
                 transcribe: false,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
             },
         })
         .await
@@ -364,6 +396,9 @@ mod tests {
                 title: None,
                 into: None,
                 transcribe: false,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
             },
         })
         .await
@@ -389,6 +424,9 @@ mod tests {
                 title: None,
                 into: None,
                 transcribe: false,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
             },
         })
         .await
@@ -527,6 +565,9 @@ mod tests {
                 title: None,
                 into: None,
                 transcribe: true,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
             },
         })
         .await
