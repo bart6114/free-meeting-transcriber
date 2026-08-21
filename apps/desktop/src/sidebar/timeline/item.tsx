@@ -22,7 +22,6 @@ import {
 } from "./utils";
 
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
-import { useIsSessionEnhancing } from "~/session/hooks/useEnhancedNotes";
 import { openStandaloneNoteWindow } from "~/session/window";
 import type { MenuItemDef } from "~/shared/hooks/useNativeContextMenu";
 import { writeSessionContextDragData } from "~/shared/session-drag";
@@ -72,6 +71,7 @@ export const TimelineItemComponent = memo(
     itemNodeRef,
     isUpcoming,
     upcomingProgress,
+    isEnhancing,
   }: {
     item: TimelineItem;
     precision: TimelinePrecision;
@@ -85,6 +85,7 @@ export const TimelineItemComponent = memo(
     isUpcoming?: boolean;
     upcomingLabel?: string;
     upcomingProgress?: number;
+    isEnhancing?: boolean;
   }) => {
     const readFlatItemKeys =
       getFlatItemKeys ?? (() => flatItemKeys ?? EMPTY_TIMELINE_ITEM_KEYS);
@@ -101,6 +102,7 @@ export const TimelineItemComponent = memo(
         itemNodeRef={itemNodeRef}
         isUpcoming={isUpcoming}
         upcomingProgress={upcomingProgress}
+        isEnhancing={isEnhancing}
       />
     );
   },
@@ -301,6 +303,7 @@ const SessionItem = memo(
     itemNodeRef,
     isUpcoming,
     upcomingProgress,
+    isEnhancing = false,
   }: {
     item: TimelineItem;
     precision: TimelinePrecision;
@@ -312,6 +315,7 @@ const SessionItem = memo(
     itemNodeRef?: RefCallback<HTMLDivElement>;
     isUpcoming?: boolean;
     upcomingProgress?: number;
+    isEnhancing?: boolean;
   }) => {
     const { t } = useLingui();
     const openCurrent = useTabs((state) => state.openCurrent);
@@ -328,7 +332,6 @@ const SessionItem = memo(
         amplitude: sessionMode === "active" ? state.live.amplitude : null,
       };
     });
-    const isEnhancing = useIsSessionEnhancing(sessionId);
     const isLive = sessionMode === "active";
     const isFinalizing = sessionMode === "finalizing";
     const isBatching = sessionMode === "running_batch";

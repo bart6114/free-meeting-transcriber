@@ -1,6 +1,5 @@
 import { useEffect, useMemo } from "react";
 
-import { useAITask } from "~/ai/contexts";
 import { getEnhancerService } from "~/services/enhancer";
 import { useHasTranscript } from "~/session/components/shared";
 import {
@@ -8,7 +7,6 @@ import {
   useEnhancedNoteRecords,
 } from "~/session/queries";
 import { useConfigValue } from "~/shared/config";
-import { createTaskId } from "~/store/zustand/ai-task/task-configs";
 import type { SessionMode } from "~/store/zustand/listener/general";
 import { useListener } from "~/stt/contexts";
 
@@ -92,21 +90,4 @@ export function useEnsureDefaultSummaryFromState({
     batchError,
     enabled,
   ]);
-}
-
-export function useIsSessionEnhancing(sessionId: string): boolean {
-  const enhancedNoteIds = useEnhancedNotes(sessionId);
-
-  const taskIds = useMemo(
-    () => enhancedNoteIds.map((id) => createTaskId(id, "enhance")),
-    [enhancedNoteIds],
-  );
-
-  const isEnhancing = useAITask((state) => {
-    return taskIds.some(
-      (taskId) => state.tasks[taskId]?.status === "generating",
-    );
-  });
-
-  return isEnhancing;
 }

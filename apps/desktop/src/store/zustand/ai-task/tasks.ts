@@ -54,6 +54,7 @@ export type TaskState<T extends TaskType = TaskType> = {
   error?: Error;
   abortController: AbortController | null;
   currentStep?: TaskStepInfo<T>;
+  sessionId?: string;
 };
 
 export type RemoteTaskState<T extends TaskType = TaskType> = {
@@ -62,6 +63,7 @@ export type RemoteTaskState<T extends TaskType = TaskType> = {
   streamedText: string;
   error?: { name?: string; message: string };
   currentStep?: TaskStepInfo<T>;
+  sessionId?: string;
 };
 
 export function getTaskState<T extends TaskType>(
@@ -128,6 +130,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
           error: undefined,
           abortController: null,
           currentStep: undefined,
+          sessionId: task.sessionId,
         };
       }),
     );
@@ -145,6 +148,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
             error: undefined,
             abortController: null,
             currentStep: undefined,
+            sessionId: state.sessionId,
           };
         }),
       );
@@ -163,6 +167,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
           error: task.error ? createSyncedTaskError(task.error) : undefined,
           abortController: null,
           currentStep: task.currentStep,
+          sessionId: task.sessionId,
         };
       }),
     );
@@ -180,6 +185,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
               error: task.error ? createSyncedTaskError(task.error) : undefined,
               abortController: null,
               currentStep: task.currentStep,
+              sessionId: task.sessionId,
             },
           ]),
         );
@@ -202,6 +208,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
 
     const abortController = new AbortController();
     const taskConfig = TASK_CONFIGS[config.taskType];
+    const sessionId = (config.args as { sessionId?: string }).sessionId;
 
     try {
       set((state) =>
@@ -213,6 +220,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
             error: undefined,
             abortController,
             currentStep: undefined,
+            sessionId,
           };
         }),
       );
@@ -333,6 +341,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
             error: undefined,
             abortController: null,
             currentStep: undefined,
+            sessionId,
           };
         }),
       );
@@ -362,6 +371,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
               error: undefined,
               abortController: null,
               currentStep: undefined,
+              sessionId,
             };
           }),
         );
@@ -376,6 +386,7 @@ export const createTasksSlice = <T extends TasksState & TasksActions>(
               error,
               abortController: null,
               currentStep: undefined,
+              sessionId,
             };
           }),
         );

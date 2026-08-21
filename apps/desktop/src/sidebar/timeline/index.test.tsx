@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
     | { type: "sessions"; id: string },
   deleteSession: vi.fn(),
   configValue: undefined as string | undefined,
+  configValues: {} as Record<string, unknown>,
+  setSettingValue: vi.fn(),
   currentTimeMs: undefined as number | undefined,
   isAnchorVisible: true,
   isScrolledPastAnchor: false,
@@ -99,7 +101,29 @@ vi.mock("@lingui/react", () => ({
 }));
 
 vi.mock("~/shared/config", () => ({
-  useConfigValue: () => mocks.configValue,
+  // mocks.configValue keeps serving the timezone key for the older tests;
+  // key-aware overrides go through mocks.configValues.
+  useConfigValue: (key: string) => {
+    if (key in mocks.configValues) {
+      return mocks.configValues[key];
+    }
+    if (key === "sidebar_group_by") {
+      return "date";
+    }
+    if (key === "sidebar_expanded_tags") {
+      return [];
+    }
+    return mocks.configValue;
+  },
+}));
+
+vi.mock("~/settings/queries", () => ({
+  setSettingValue: (key: string, value: string) =>
+    Promise.resolve(mocks.setSettingValue(key, value)),
+}));
+
+vi.mock("~/ai/hooks/useEnhancingSessions", () => ({
+  useEnhancingSessionIds: () => [],
 }));
 
 vi.mock("./queries", () => ({
@@ -224,6 +248,7 @@ describe("TimelineView", () => {
     vi.clearAllMocks();
     mocks.anchorNode = null;
     mocks.configValue = undefined;
+    mocks.configValues = {};
     mocks.currentTimeMs = undefined;
     mocks.isAnchorVisible = true;
     mocks.isScrolledPastAnchor = false;
@@ -1055,6 +1080,95 @@ describe("TimelineView", () => {
 
     expect(isBefore(futureItem, indicator)).toBe(true);
     expect(isBefore(indicator, pastItem)).toBe(true);
+  });
+
+  describe("tag grouping", () => {
+    beforeEach(() => {
+      mocks.configValues = {
+        sidebar_group_by: "tag",
+        sidebar_expanded_tags: [],
+      };
+      mocks.timelineSessionsTable = {
+        "work-note": {
+          title: "Weekly sync",
+          created_at: "2024-01-15T09:00:00.000Z",
+          tags: ["work"],
+        },
+        "both-note": {
+          title: "Retro",
+          created_at: "2024-01-14T09:00:00.000Z",
+          tags: ["work", "personal"],
+        },
+        "loose-note": {
+          title: "Scratch",
+          created_at: "2024-01-13T09:00:00.000Z",
+        },
+      };
+    });
+
+    it("renders tag headers with counts but no rows while collapsed by default", () => {
+      render(<TimelineView />);
+
+      expect(screen.getByText("work")).toBeTruthy();
+      expect(screen.getByText("personal")).toBeTruthy();
+      expect(screen.getByText("Untagged")).toBeTruthy();
+      expect(screen.getByText("(2)")).toBeTruthy();
+      expect(screen.queryByTestId("timeline-item-work-note")).toBeNull();
+      expect(screen.queryByTestId("timeline-item-both-note")).toBeNull();
+      expect(screen.queryByTestId("timeline-item-loose-note")).toBeNull();
+    });
+
+    it("shows only an expanded tag's rows and persists a header toggle", () => {
+      mocks.configValues.sidebar_expanded_tags = ["personal"];
+
+      render(<TimelineView />);
+
+      expect(screen.getByTestId("timeline-item-both-note")).toBeTruthy();
+      expect(screen.queryByTestId("timeline-item-work-note")).toBeNull();
+      expect(screen.queryByTestId("timeline-item-loose-note")).toBeNull();
+
+      fireEvent.click(screen.getByText("work").closest("button")!);
+
+      expect(mocks.setSettingValue).toHaveBeenCalledWith(
+        "sidebar_expanded_tags",
+        JSON.stringify(["personal", "work"]),
+      );
+    });
+
+    it("expands the Untagged bucket like any tag", () => {
+      mocks.configValues.sidebar_expanded_tags = ["Untagged"];
+
+      render(<TimelineView />);
+
+      expect(screen.getByTestId("timeline-item-loose-note")).toBeTruthy();
+      expect(screen.queryByTestId("timeline-item-work-note")).toBeNull();
+    });
+
+    it("expands all tags from the collapse-all control and collapses them back", () => {
+      render(<TimelineView />);
+
+      fireEvent.click(screen.getByLabelText("Expand all"));
+
+      expect(mocks.setSettingValue).toHaveBeenCalledWith(
+        "sidebar_expanded_tags",
+        JSON.stringify(["personal", "work", "Untagged"]),
+      );
+
+      cleanup();
+      mocks.configValues.sidebar_expanded_tags = [
+        "personal",
+        "work",
+        "Untagged",
+      ];
+      render(<TimelineView />);
+
+      fireEvent.click(screen.getByLabelText("Collapse all"));
+
+      expect(mocks.setSettingValue).toHaveBeenLastCalledWith(
+        "sidebar_expanded_tags",
+        JSON.stringify([]),
+      );
+    });
   });
 });
 
