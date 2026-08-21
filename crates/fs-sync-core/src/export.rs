@@ -201,7 +201,7 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let vault = temp.path();
         std::fs::create_dir_all(vault.join("sessions/abc")).unwrap();
-        let path = vault.join("sessions/abc/_memo.md");
+        let path = vault.join("sessions/abc/notes.md");
         std::fs::write(
             &path,
             "---\nid: doc-1\ncustom_legacy_key: keep-me\n---\n\nOld body",
@@ -218,7 +218,7 @@ mod tests {
         let trashed = vault
             .join(".trash")
             .join(chrono::Utc::now().format("%Y-%m-%d").to_string())
-            .join("sessions/abc/_memo.md");
+            .join("sessions/abc/notes.md");
         assert!(trashed.is_file(), "old bytes should be preserved in .trash");
         let trashed_content = std::fs::read_to_string(&trashed).unwrap();
         assert!(trashed_content.contains("custom_legacy_key: keep-me"));

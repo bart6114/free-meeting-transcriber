@@ -8,6 +8,7 @@ pub mod layout;
 pub mod meta;
 pub mod paths;
 pub mod people;
+pub mod reserved;
 pub mod strip;
 pub mod tasks;
 pub mod transcript;
@@ -18,8 +19,12 @@ pub use layout::{
     classify_session_dir, discover_sessions, find_session, find_session_and_scan,
     has_session_boundary,
 };
-pub use meta::{LegacyDoc, SessionMeta};
+pub use meta::SessionMeta;
 pub use people::{Person, read_people};
+pub use reserved::{
+    SESSION_OWNED_DIRS, SESSION_OWNED_FILES, SESSION_PEAKS_FILE, SESSION_TRANSIENT_FILES,
+    is_session_owned_name,
+};
 pub use strip::strip_leading_frontmatter;
 pub use tasks::{TaskItem, TasksFile};
 

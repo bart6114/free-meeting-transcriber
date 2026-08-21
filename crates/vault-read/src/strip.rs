@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::str::FromStr;
 
-/// The store's note/document writers never write a frontmatter block -- `_memo.md` and every
-/// other `sessions/<id>/<kind>.md` file are meant to hold raw markdown only. A file can still
-/// gain a leading frontmatter block from outside those writers: an external edit, or the
+/// The store's note writer never writes a frontmatter block -- the note file (`notes.md`,
+/// or the pre-rename `_memo.md`) is meant to hold raw markdown only. A file can still
+/// gain a leading frontmatter block from outside that writer: an external edit, or the
 /// legacy `vault_export` DB-to-vault mirror, which always wrapped a `session_documents` row's
 /// body in one on export, and which could nest a wrapper on top of an already-wrapped file.
 /// Those wrapped files still exist in real vaults, so the strip stays load-bearing.

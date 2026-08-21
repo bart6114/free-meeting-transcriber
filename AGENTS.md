@@ -4,6 +4,10 @@ Tauri desktop note-taking app (`apps/desktop/`) and a CLI (`apps/cli/`).
 Uses pnpm workspaces.
 Files in the user's vault directory are the only source of truth — there is no database. The vault format lives in `crates/vault-read/`; the desktop write path and in-memory index are `apps/desktop/src-tauri/src/session_store/`. App settings are a `config.json` in the vault, not rows. Zustand is used for UI state, and TipTap powers the editor. Sessions are the core entity — all notes are backed by sessions, stored under `sessions/<id>/`.
 
+## Session directory ownership
+
+Inside `sessions/<id>/` the app owns a fixed set of names (canonical list: `crates/vault-read/src/reserved.rs`): `_meta.json`, `notes.md` (user note; legacy vaults may still have `_memo.md`, readable via fallback and migrated to trash on the next note write), `transcript.json`, `tasks.json`, the recording (`audio.mp3`/`audio.wav`/`audio.ogg`) with `audio.peaks.json` and its `audio_mic.wav`/`audio_spk.wav`/`*.tmp` transients, and the `enhanced/` (AI documents, `enhanced/<uuid>.md`) and `attachments/` (note-embedded files) directories; the `audio/` directory is legacy, read-only for retention. Every other file is a user attachment: the app must ignore it and never enumerate unknown files as content. Dot-prefixed files are never content.
+
 ## Commands
 
 - Format: `pnpm exec dprint fmt`

@@ -30,7 +30,7 @@
 //!
 //! 2. **The own-write filter is the write journal, not a TTL.**
 //!    `SessionStore`'s `write_file` (used by every `write_meta`/`write_note`/
-//!    `write_document` call) records the sha256 of exactly what it wrote to
+//!    `write_enhanced_doc` call) records the sha256 of exactly what it wrote to
 //!    exactly that relative path, with no expiry
 //!    (`session_store::journal::WriteJournal::matches_current_file`). A
 //!    `FileChanged` for a path whose current on-disk bytes still match the
@@ -436,7 +436,7 @@ mod tests {
     #[test]
     fn own_write_is_ignored_even_if_late() {
         assert!(matches!(
-            classify_event("sessions/s1/_memo.md", true, Some("s1")),
+            classify_event("sessions/s1/notes.md", true, Some("s1")),
             WatchAction::Ignore
         ));
     }
@@ -518,7 +518,7 @@ mod tests {
         let full_id = "550e8400-e29b-41d4-a716-446655440000";
         assert!(matches!(
             classify_event(
-                "sessions/2026-03-20 — Planning — 550e84/_memo.md",
+                "sessions/2026-03-20 — Planning — 550e84/notes.md",
                 false,
                 Some(full_id)
             ),
@@ -681,11 +681,11 @@ mod tests {
     #[test]
     fn tmp_write_paths_under_a_session_are_ignored() {
         assert!(matches!(
-            classify_event("sessions/s1/.tmp-1234-5678-_memo.md", false, Some("s1")),
+            classify_event("sessions/s1/.tmp-1234-5678-notes.md", false, Some("s1")),
             WatchAction::Ignore
         ));
         assert!(matches!(
-            classify_event("sessions/unknown dir/.tmp-1234-5678-_memo.md", false, None),
+            classify_event("sessions/unknown dir/.tmp-1234-5678-notes.md", false, None),
             WatchAction::Ignore
         ));
     }
@@ -767,7 +767,7 @@ mod tests {
         store.write_note("s1", "hello").await.unwrap();
 
         // Simulate the FileChanged event vault_watch would receive for its own note write.
-        let changed = HashSet::from(["sessions/s1/_memo.md".to_string()]);
+        let changed = HashSet::from(["sessions/s1/notes.md".to_string()]);
         let ids = ids_to_refresh(&store, &changed).await.session_ids;
 
         assert!(
@@ -817,7 +817,7 @@ mod tests {
             "index entry must be gone"
         );
         assert!(
-            dir.join("_memo.md").is_file(),
+            dir.join("notes.md").is_file(),
             "the watcher must never touch files -- only the index row is affected"
         );
     }
@@ -891,12 +891,12 @@ mod tests {
         let id = "7ba7b8aa-1111-2222-3333-444455556666";
         let new_dir = "sessions/2026-03-21 — Copied in — 7ba7b8";
         seed_session_dir(vault.path(), new_dir, &meta(id, "Copied in"));
-        std::fs::write(vault.path().join(new_dir).join("_memo.md"), b"note").unwrap();
+        std::fs::write(vault.path().join(new_dir).join("notes.md"), b"note").unwrap();
 
         let changed = HashSet::from([
             new_dir.to_string(),
             format!("{new_dir}/_meta.json"),
-            format!("{new_dir}/_memo.md"),
+            format!("{new_dir}/notes.md"),
         ]);
         let plan = ids_to_refresh(&store, &changed).await;
 

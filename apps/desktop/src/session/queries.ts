@@ -55,7 +55,7 @@ const EMPTY_SESSION_SUMMARIES: SessionSummaryRecord[] = [];
 
 export function useSession(sessionId: string): SessionRecord | null {
   const { data = null } = useIndexQuery({
-    // Session meta rides the "sessions" entity; the note body (`_memo.md`) rides
+    // Session meta rides the "sessions" entity; the note body (`notes.md`) rides
     // "docs". Both event kinds carry the session id.
     entity: ["sessions", "docs"],
     ids: [sessionId],
@@ -78,13 +78,13 @@ export function useSession(sessionId: string): SessionRecord | null {
  * loading state for that, same as `useSession` returning `null`.
  *
  * This is `useSession`'s `raw_md` and nothing else, deliberately: the index entry's
- * `note_markdown` *is* `sessions/<id>/_memo.md` (seeded by the rescan's own `read_note`,
+ * `note_markdown` *is* `sessions/<id>/notes.md` (seeded by the rescan's own `read_note`,
  * kept current by `session_write_note`'s write-through and by the vault watcher's
  * `refresh_session` on external edits), and it rides the `sessions` half of the
  * `index-changed` bus. A second, separately-cached `session_read_note` here used to shadow
  * it; nothing ever invalidated that cache, so a remount inside the cache window (tab switch,
  * second window, an Obsidian edit) handed the editor pre-edit content that the next
- * keystroke's `persistChange` then wrote back over `_memo.md`.
+ * keystroke's `persistChange` then wrote back over `notes.md`.
  *
  * Live updates are safe for the focused editor: NoteEditor only re-syncs its content from a
  * changed `rawMd` when it isn't focused (`shouldReplaceEditorContent` in `@hypr/editor/note`).
@@ -347,7 +347,7 @@ export async function createSession(
   // No SQL placeholder note row anymore: every reader that COALESCE'd onto the old
   // bare-id `session_documents` row (session reads, isSessionEmpty, the content
   // snapshot) now reads the file-backed index, where "no note yet" is simply an
-  // absent `_memo.md`. Rebuild pruned the file-less placeholder row on every
+  // absent `notes.md`. Rebuild pruned the file-less placeholder row on every
   // startup/focus rescan anyway, and it shadowed the real `<id>:note` row in the
   // search projection's note lookup -- nothing depends on it.
   if (initial?.raw_md) {
@@ -444,7 +444,7 @@ export async function restoreDeletedSession(
 // not something this app does.
 
 function mapSessionRecord(record: StoreSessionRecord): SessionRecord {
-  // `note_markdown` is always markdown (the file-canonical `_memo.md`); consumers
+  // `note_markdown` is always markdown (the file-canonical `notes.md`); consumers
   // still expect the stringified prosemirror doc the SQL era handed them.
   let rawMd = record.note_markdown ?? "";
   if (rawMd) {

@@ -85,9 +85,9 @@ mod tests {
         let journal = WriteJournal::new();
         let vault = tempfile::tempdir().unwrap();
         let data = b"bytes";
-        journal.record("sessions/old name/_memo.md", &sha256(data));
+        journal.record("sessions/old name/notes.md", &sha256(data));
         journal.record("sessions/old name/enhanced/d1.md", &sha256(data));
-        journal.record("sessions/old name sibling/_memo.md", &sha256(data));
+        journal.record("sessions/old name sibling/notes.md", &sha256(data));
 
         journal.remap_prefix("sessions/old name", "sessions/new name");
 
@@ -98,17 +98,17 @@ mod tests {
 
         let old_dir = vault.path().join("sessions/old name");
         std::fs::create_dir_all(&old_dir).unwrap();
-        std::fs::write(old_dir.join("_memo.md"), data).unwrap();
+        std::fs::write(old_dir.join("notes.md"), data).unwrap();
         assert!(
-            !journal.matches_current_file(vault.path(), "sessions/old name/_memo.md"),
+            !journal.matches_current_file(vault.path(), "sessions/old name/notes.md"),
             "the old path must no longer be claimed as an own write"
         );
 
         // A sibling directory that merely shares the prefix string stays untouched.
         let sibling = vault.path().join("sessions/old name sibling");
         std::fs::create_dir_all(&sibling).unwrap();
-        std::fs::write(sibling.join("_memo.md"), data).unwrap();
-        assert!(journal.matches_current_file(vault.path(), "sessions/old name sibling/_memo.md"));
+        std::fs::write(sibling.join("notes.md"), data).unwrap();
+        assert!(journal.matches_current_file(vault.path(), "sessions/old name sibling/notes.md"));
     }
 
     #[test]

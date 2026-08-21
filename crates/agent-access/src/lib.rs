@@ -296,14 +296,24 @@ fn assemble_meeting_sync(
     let session_dir = &location.relative_dir;
     let note = hypr_vault_read::meta::read_note_in(vault, session_dir)
         .map_err(vault_error("load meeting"))?
-        .map(|markdown| Document {
-            id: format!("{}:note", location.id),
-            kind: "note".to_string(),
-            template_id: String::new(),
-            title: String::new(),
-            markdown,
-            sort_order: 0,
-            updated_at: file_updated_at(vault, &hypr_vault_read::paths::note_path_in(session_dir)),
+        .map(|markdown| {
+            // Stat the file the read actually came from: `notes.md`, or the
+            // legacy `_memo.md` on not-yet-migrated sessions.
+            let note_path = hypr_vault_read::paths::note_path_in(session_dir);
+            let note_path = if vault.join(&note_path).is_file() {
+                note_path
+            } else {
+                hypr_vault_read::paths::legacy_note_path_in(session_dir)
+            };
+            Document {
+                id: format!("{}:note", location.id),
+                kind: "note".to_string(),
+                template_id: String::new(),
+                title: String::new(),
+                markdown,
+                sort_order: 0,
+                updated_at: file_updated_at(vault, &note_path),
+            }
         });
 
     let summaries = load_summaries_sync(vault, location)?;
@@ -342,31 +352,10 @@ fn assemble_meeting_sync(
     })
 }
 
-// The old session_documents read returned both legacy single-slot docs
-// (`<session dir>/<kind>.md`, indexed with id `<id>:<kind>`) and per-doc enhanced files,
-// filtered to the summary/template_output kinds and ordered by (sort_order, id).
+// AI documents live exclusively in `enhanced/<uuid>.md`, ordered by (sort_order, id).
 fn load_summaries_sync(vault: &Path, location: &SessionLocation) -> Result<Vec<Document>> {
     let session_dir = &location.relative_dir;
     let mut summaries = Vec::new();
-    for doc in hypr_vault_read::meta::list_legacy_docs_in(vault, session_dir)
-        .map_err(vault_error("load meeting"))?
-    {
-        if !hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str()) {
-            continue;
-        }
-        summaries.push(Document {
-            id: format!("{}:{}", location.id, doc.kind),
-            updated_at: file_updated_at(
-                vault,
-                &hypr_vault_read::paths::document_path_in(session_dir, &doc.kind),
-            ),
-            kind: doc.kind,
-            template_id: String::new(),
-            title: String::new(),
-            markdown: doc.markdown,
-            sort_order: 0,
-        });
-    }
     for doc in hypr_vault_read::enhanced::list_enhanced_docs_in(vault, session_dir, &location.id)
         .map_err(vault_error("load meeting"))?
     {
@@ -623,7 +612,9 @@ mod tests {
         seed_session(vault, "meeting-2", "Prior planning", Some("2026-07-06"));
 
         let dir = vault.join("sessions/meeting-1");
+        // Legacy note name: get_meeting must still read it through the fallback.
         std::fs::write(dir.join("_memo.md"), "Launch decision").unwrap();
+        // A loose `.md` is a user attachment, not a document -- must not surface.
         std::fs::write(dir.join("summary.md"), "Ship Tuesday").unwrap();
         std::fs::create_dir_all(dir.join("enhanced")).unwrap();
         std::fs::write(
@@ -715,11 +706,11 @@ mod tests {
                 .iter()
                 .map(|summary| summary.id.as_str())
                 .collect::<Vec<_>>(),
-            vec!["meeting-1:summary", "doc-1"],
-            "legacy single-slot and enhanced docs both surface, ordered by (sort_order, id)"
+            vec!["doc-1"],
+            "only enhanced docs surface; loose .md attachments are ignored"
         );
-        assert_eq!(meeting.summaries[1].title, "Customer review");
-        assert_eq!(meeting.summaries[1].template_id, "template-1");
+        assert_eq!(meeting.summaries[0].title, "Customer review");
+        assert_eq!(meeting.summaries[0].template_id, "template-1");
         let serialized = serde_json::to_value(&meeting).unwrap();
         assert!(serialized.get("workspace_id").is_none());
         assert!(serialized.get("owner_user_id").is_none());
@@ -810,7 +801,7 @@ mod tests {
             .to_string(),
         )
         .unwrap();
-        std::fs::write(dir.join("_memo.md"), "Launch decision").unwrap();
+        std::fs::write(dir.join("notes.md"), "Launch decision").unwrap();
         std::fs::write(
             dir.join("transcript.json"),
             serde_json::json!({

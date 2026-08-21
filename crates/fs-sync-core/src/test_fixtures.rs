@@ -145,7 +145,7 @@ fn write_session(temp: &TempDir, folder_path: &str, session: &Session) {
     }
 
     if let Some(memo) = &session.memo {
-        session_path.child("_memo.md").write_str(memo).unwrap();
+        session_path.child("notes.md").write_str(memo).unwrap();
     }
 }
 

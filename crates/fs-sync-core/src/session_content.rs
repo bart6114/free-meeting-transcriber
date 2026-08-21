@@ -4,7 +4,9 @@ use crate::frontmatter::ParsedDocument;
 use crate::types::{SessionContentData, SessionMetaData, SessionNoteData, TranscriptJson};
 
 const SESSION_META_FILE: &str = "_meta.json";
-const SESSION_MEMO_FILE: &str = "_memo.md";
+const SESSION_NOTES_FILE: &str = "notes.md";
+// Pre-rename vaults store the user note as `_memo.md`; still readable, `notes.md` wins.
+const SESSION_LEGACY_MEMO_FILE: &str = "_memo.md";
 const SESSION_TRANSCRIPT_FILE: &str = "transcript.json";
 
 pub fn load_session_content(session_id: &str, session_dir: &std::path::Path) -> SessionContentData {
@@ -21,6 +23,10 @@ pub fn load_session_content(session_id: &str, session_dir: &std::path::Path) -> 
         Ok(entries) => entries,
         Err(_) => return content,
     };
+
+    // read_dir order is arbitrary, so track where the memo came from: `notes.md`
+    // must win over a leftover legacy `_memo.md` regardless of iteration order.
+    let mut memo_from_notes_file = false;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -82,12 +88,19 @@ pub fn load_session_content(session_id: &str, session_dir: &std::path::Path) -> 
             continue;
         }
 
-        if name == SESSION_MEMO_FILE {
+        if name == SESSION_NOTES_FILE || name == SESSION_LEGACY_MEMO_FILE {
+            let from_notes = name == SESSION_NOTES_FILE;
+            if memo_from_notes_file && !from_notes {
+                continue;
+            }
+            memo_from_notes_file = from_notes;
             content.raw_memo_tiptap_json = Some(tiptap_json);
             let trimmed = parsed.content.trim();
-            if !trimmed.is_empty() {
-                content.raw_memo_markdown = Some(trimmed.to_string());
-            }
+            content.raw_memo_markdown = if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed.to_string())
+            };
             continue;
         }
 
@@ -130,6 +143,38 @@ mod tests {
     use assert_fs::TempDir;
     use assert_fs::fixture::PathChild;
     use assert_fs::prelude::*;
+
+    #[test]
+    fn load_session_content_prefers_notes_md_over_legacy_memo() {
+        let temp = TempDir::new().unwrap();
+        let session_dir = temp.child("session-1");
+        session_dir.create_dir_all().unwrap();
+        session_dir
+            .child(SESSION_NOTES_FILE)
+            .write_str("---\nsession_id: session-1\n---\n\nnew note")
+            .unwrap();
+        session_dir
+            .child(SESSION_LEGACY_MEMO_FILE)
+            .write_str("---\nsession_id: session-1\n---\n\nold memo")
+            .unwrap();
+
+        let content = load_session_content("session-1", session_dir.path());
+        assert_eq!(content.raw_memo_markdown.as_deref(), Some("new note"));
+    }
+
+    #[test]
+    fn load_session_content_falls_back_to_legacy_memo_file() {
+        let temp = TempDir::new().unwrap();
+        let session_dir = temp.child("session-1");
+        session_dir.create_dir_all().unwrap();
+        session_dir
+            .child(SESSION_LEGACY_MEMO_FILE)
+            .write_str("---\nsession_id: session-1\n---\n\nold memo")
+            .unwrap();
+
+        let content = load_session_content("session-1", session_dir.path());
+        assert_eq!(content.raw_memo_markdown.as_deref(), Some("old memo"));
+    }
 
     #[test]
     fn load_session_content_preserves_full_transcript_shape() {

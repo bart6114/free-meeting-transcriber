@@ -1,7 +1,7 @@
 //! In-memory vault index + `index-changed` event bus (Phase E1).
 //!
 //! The index is a typed, RwLock'd mirror of the vault files -- sessions
-//! (`_meta.json` + `_memo.md`), documents (legacy `<kind>.md` + `enhanced/<uuid>.md`),
+//! (`_meta.json` + `notes.md`), documents (`enhanced/<uuid>.md`),
 //! transcripts (`transcript.json`), tasks (`tasks.json`) and templates
 //! (`templates/<id>.json`) -- built at startup by `rebuild_index` and kept current by:
 //!
@@ -62,7 +62,7 @@ pub struct IndexChanged {
 
 /// `meta` + note markdown for one session; the unit of the `sessions` map. The note
 /// rides here (not in `docs`) because every consumer of the note also wants the meta
-/// (`useSession`'s join), and `_memo.md` shares the session's identity, not a doc id.
+/// (`useSession`'s join), and `notes.md` shares the session's identity, not a doc id.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionEntry {
     pub meta: SessionMeta,
@@ -71,8 +71,9 @@ pub struct SessionEntry {
 
 /// What `session_get` returns: the file-canonical equivalent of the old
 /// `SESSION_SELECT_SQL` (sessions row + COALESCE'd note document join). The note is
-/// always `_memo.md`'s content -- the SQL fallback's legacy bare-id row is a
-/// permanently-empty placeholder, so preferring the file loses nothing.
+/// always the note file's content (`notes.md`, or the pre-rename `_memo.md`) -- the
+/// SQL fallback's legacy bare-id row was a permanently-empty placeholder, so
+/// preferring the file loses nothing.
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 pub struct SessionRecord {
     pub meta: SessionMeta,
@@ -100,9 +101,7 @@ pub(super) const VAULT_TASKS_KEY: &str = "";
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct VaultIndex {
     pub sessions: HashMap<String, SessionEntry>,
-    /// Session id -> every document: legacy single-slot `<kind>.md` files (normalized
-    /// to `EnhancedDoc` with the SQL row id shape `<session>:<kind>`, empty metadata)
-    /// plus `enhanced/<uuid>.md` docs.
+    /// Session id -> that session's `enhanced/<uuid>.md` docs.
     pub docs: HashMap<String, Vec<EnhancedDoc>>,
     pub transcripts: HashMap<String, Vec<TranscriptWithData>>,
     /// Session id (or `VAULT_TASKS_KEY`) -> that file's tasks.
@@ -119,7 +118,7 @@ pub type IndexChangeReceiver = tokio::sync::mpsc::UnboundedReceiver<(IndexEntity
 
 impl SessionStore {
     /// Old `useSession`/`useSessionSummary` semantics: the session's meta plus
-    /// `_memo.md` markdown (the COALESCE(store_note, legacy_note) join collapses to
+    /// note markdown (the COALESCE(store_note, legacy_note) join collapses to
     /// the file -- see `SessionRecord`'s doc). `None` for unknown/ghost sessions.
     pub fn session_get(&self, session_id: &str) -> Option<SessionRecord> {
         let index = self.index.read().unwrap();
@@ -177,36 +176,26 @@ impl SessionStore {
     }
 
     /// Old `useEnhancedNoteRecords` semantics: docs with kind `summary` /
-    /// `template_output` (which includes legacy single-slot `summary.md` files, same
-    /// as the SQL `kind IN (...)` matched their rows), ordered `(sort_order, id)`.
-    /// The tombstone filter is inherent: deleted docs have no file, hence no entry.
+    /// `template_output`, ordered `(sort_order, id)`. The tombstone filter is
+    /// inherent: deleted docs have no file, hence no entry. No kind filter is needed:
+    /// every doc enters the index through `parse_enhanced_file` (which coerces
+    /// unknown kinds to `summary`) or the validated persist path.
     pub fn session_enhanced_docs(&self, session_id: &str) -> Vec<EnhancedDoc> {
         let index = self.index.read().unwrap();
-        let mut docs: Vec<EnhancedDoc> = index
-            .docs
-            .get(session_id)
-            .map(|docs| {
-                docs.iter()
-                    .filter(|doc| hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str()))
-                    .cloned()
-                    .collect()
-            })
-            .unwrap_or_default();
+        let mut docs: Vec<EnhancedDoc> = index.docs.get(session_id).cloned().unwrap_or_default();
         docs.sort_by(|a, b| a.sort_order.cmp(&b.sort_order).then(a.id.cmp(&b.id)));
         docs
     }
 
     /// Old `useEnhancedNote` semantics: one doc looked up by doc id alone (the
-    /// frontend doesn't know the session at that call site), same kind filter.
+    /// frontend doesn't know the session at that call site).
     pub fn enhanced_doc_get(&self, doc_id: &str) -> Option<EnhancedDoc> {
         let index = self.index.read().unwrap();
         index
             .docs
             .values()
             .flatten()
-            .find(|doc| {
-                doc.id == doc_id && hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str())
-            })
+            .find(|doc| doc.id == doc_id)
             .cloned()
     }
 
@@ -271,15 +260,7 @@ impl SessionStore {
             .get(session_id)
             .map(Vec::len)
             .unwrap_or_default();
-        let enhanced_count = index
-            .docs
-            .get(session_id)
-            .map(|docs| {
-                docs.iter()
-                    .filter(|doc| hypr_vault_read::ENHANCED_KINDS.contains(&doc.kind.as_str()))
-                    .count()
-            })
-            .unwrap_or_default();
+        let enhanced_count = index.docs.get(session_id).map(Vec::len).unwrap_or_default();
 
         transcript_count == 0 && enhanced_count == 0 && entry.meta.tags.is_empty()
     }
@@ -607,21 +588,6 @@ impl SessionStore {
     }
 }
 
-/// A legacy `<kind>.md` document normalized into the shared doc shape, keeping the
-/// SQL row's id convention (`<session>:<kind>`) so doc ids stay stable across the
-/// index cutover.
-pub(super) fn legacy_doc(session_id: &str, kind: &str, markdown: String) -> EnhancedDoc {
-    EnhancedDoc {
-        id: format!("{session_id}:{kind}"),
-        session_id: session_id.to_string(),
-        kind: kind.to_string(),
-        title: String::new(),
-        template_id: String::new(),
-        sort_order: 0,
-        markdown,
-    }
-}
-
 /// Replace `map[key]` with `value` (empty -> absent), returning whether anything
 /// observable changed.
 pub(super) fn apply_map_value<V: PartialEq>(
@@ -847,8 +813,10 @@ mod tests {
             serde_json::to_vec_pretty(&meta("s1", "Planning")).unwrap(),
         )
         .unwrap();
-        std::fs::write(dir.join("_memo.md"), "# notes").unwrap();
-        std::fs::write(dir.join("summary.md"), "legacy summary body").unwrap();
+        std::fs::write(dir.join("notes.md"), "# notes").unwrap();
+        // A loose markdown file directly in the session dir is a user attachment,
+        // not a document -- rebuild must leave it out of the index.
+        std::fs::write(dir.join("summary.md"), "user attachment body").unwrap();
         std::fs::write(
             dir.join("enhanced/doc-1.md"),
             hypr_vault_read::render_enhanced_file(&enhanced_doc("s1", "doc-1", 2)).unwrap(),
@@ -904,10 +872,9 @@ mod tests {
         let docs = store.session_enhanced_docs("s1");
         assert_eq!(
             docs.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(),
-            vec!["s1:summary", "doc-1"],
-            "legacy summary.md (sort_order 0) sorts before the enhanced doc (sort_order 2)"
+            vec!["doc-1"],
+            "only enhanced/ docs are indexed; the loose summary.md attachment is ignored"
         );
-        assert_eq!(docs[0].markdown, "legacy summary body");
 
         assert!(store.session_has_transcript("s1"));
         assert_eq!(store.session_transcripts("s1")[0].words[0].text, "hello");
@@ -963,10 +930,6 @@ mod tests {
             .await
             .unwrap();
         store
-            .write_document("s1", "summary", "legacy")
-            .await
-            .unwrap();
-        store
             .write_transcript("s1", transcript("t1", 5.0, vec![word("w0", "hi")]))
             .await
             .unwrap();
@@ -989,7 +952,7 @@ mod tests {
         let record = store.session_get("s1").unwrap();
         assert_eq!(record.meta.title, "Live");
         assert_eq!(record.note_markdown.as_deref(), Some("# memo"));
-        assert_eq!(store.session_enhanced_docs("s1").len(), 2);
+        assert_eq!(store.session_enhanced_docs("s1").len(), 1);
         assert!(store.session_has_transcript("s1"));
         assert_eq!(store.session_transcripts("s1").len(), 1);
         {
@@ -1129,7 +1092,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn enhanced_docs_are_kind_filtered_and_ordered_by_sort_order_then_id() {
+    async fn enhanced_docs_are_ordered_by_sort_order_then_id() {
         let (store, _vault) = test_store().await;
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store
@@ -1148,12 +1111,6 @@ mod tests {
             })
             .await
             .unwrap();
-        // a legacy doc with a non-enhanced kind must be excluded, like the SQL kind filter
-        store
-            .write_document("s1", "minutes", "not enhanced")
-            .await
-            .unwrap();
-
         let docs = store.session_enhanced_docs("s1");
         assert_eq!(
             docs.iter().map(|d| d.id.as_str()).collect::<Vec<_>>(),
@@ -1161,7 +1118,6 @@ mod tests {
         );
 
         assert_eq!(store.enhanced_doc_get("doc-a").unwrap().session_id, "s1");
-        assert!(store.enhanced_doc_get("s1:minutes").is_none());
     }
 
     #[tokio::test]
@@ -1332,7 +1288,7 @@ mod tests {
             serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),
         )
         .unwrap();
-        std::fs::write(dir.join("_memo.md"), "external note").unwrap();
+        std::fs::write(dir.join("notes.md"), "external note").unwrap();
 
         store.refresh_session("s1").await.unwrap();
 
@@ -1357,7 +1313,7 @@ mod tests {
 
         assert!(store.session_get("s1").is_none());
         assert!(
-            dir.join("_memo.md").is_file(),
+            dir.join("notes.md").is_file(),
             "index refresh must never touch files"
         );
     }

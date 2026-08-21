@@ -620,7 +620,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::session_update_meta::<tauri::Wry>,
             session_store::commands::session_write_note::<tauri::Wry>,
             session_store::commands::session_read_note::<tauri::Wry>,
-            session_store::commands::session_write_document::<tauri::Wry>,
             session_store::commands::session_write_enhanced_doc::<tauri::Wry>,
             session_store::commands::session_update_enhanced_doc::<tauri::Wry>,
             session_store::commands::session_delete_enhanced_doc::<tauri::Wry>,

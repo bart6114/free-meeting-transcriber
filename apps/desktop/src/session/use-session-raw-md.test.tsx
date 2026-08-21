@@ -95,7 +95,7 @@ describe("useSessionRawMd", () => {
   // under `["session-note-file", id]` with `staleTime: Infinity`. Nothing ever invalidated
   // that key, and it was *preferred* over the index value the bus does refresh -- so an
   // edit made in Obsidian (or in a second window) never reached the editor, and the next
-  // keystroke's `persistChange` wrote the frozen content back over `_memo.md`.
+  // keystroke's `persistChange` wrote the frozen content back over `notes.md`.
   it("picks up an external edit when the index bus fires", async () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -109,7 +109,7 @@ describe("useSessionRawMd", () => {
       expect(result.current).toBe(JSON.stringify(md2json(ORIGINAL))),
     );
 
-    // Obsidian writes `_memo.md`; the vault watcher refreshes the index and emits.
+    // Obsidian writes `notes.md`; the vault watcher refreshes the index and emits.
     mocks.sessionGet.mockResolvedValue({
       status: "ok",
       data: sessionRecord(EDITED),

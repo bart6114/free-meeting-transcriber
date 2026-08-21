@@ -706,17 +706,17 @@ mod tests {
         let dir = Path::new("sessions").join("2026-03-20 — Caf\u{e9} sync — 6ba7b8");
         let nfd_file = Path::new("sessions")
             .join("2026-03-20 — Cafe\u{301} sync — 6ba7b8")
-            .join("_memo.md");
+            .join("notes.md");
         assert!(path_starts_with_nfc(&dir, &dir));
         assert!(path_starts_with_nfc(&nfd_file, &dir));
         assert!(!path_starts_with_nfc(&dir, &nfd_file));
         assert!(!path_starts_with_nfc(
-            Path::new("sessions/other/_memo.md"),
+            Path::new("sessions/other/notes.md"),
             &dir
         ));
         // A sibling whose name merely extends the prefix's last component must not match.
         assert!(!path_starts_with_nfc(
-            Path::new("sessions/abc-extended/_memo.md"),
+            Path::new("sessions/abc-extended/notes.md"),
             Path::new("sessions/abc"),
         ));
     }

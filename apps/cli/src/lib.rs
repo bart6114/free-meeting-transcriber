@@ -89,7 +89,7 @@ mod tests {
         )
         .unwrap();
         if let Some(note) = note {
-            std::fs::write(session_dir.join("_memo.md"), note).unwrap();
+            std::fs::write(session_dir.join("notes.md"), note).unwrap();
         }
     }
 
@@ -144,7 +144,7 @@ mod tests {
             "unexpected created_at format: {created_at}"
         );
         assert_eq!(
-            std::fs::read_to_string(sessions[0].path().join("_memo.md")).unwrap(),
+            std::fs::read_to_string(sessions[0].path().join("notes.md")).unwrap(),
             "Decide the launch date.\n"
         );
 
@@ -309,7 +309,7 @@ mod tests {
                 .unwrap();
         assert_eq!(meta["title"], "Planning");
         assert_eq!(
-            std::fs::read_to_string(session_dir.join("_memo.md")).unwrap(),
+            std::fs::read_to_string(session_dir.join("notes.md")).unwrap(),
             "Agenda: launch date."
         );
     }
@@ -615,7 +615,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            std::fs::read_to_string(vault.join("sessions/meeting-1/_memo.md")).unwrap(),
+            std::fs::read_to_string(vault.join("sessions/meeting-1/notes.md")).unwrap(),
             "Replaced body"
         );
 
@@ -635,7 +635,7 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(
-            std::fs::read_to_string(vault.join("sessions/meeting-1/_memo.md")).unwrap(),
+            std::fs::read_to_string(vault.join("sessions/meeting-1/notes.md")).unwrap(),
             "Replaced body\nAppended line"
         );
     }
@@ -689,6 +689,7 @@ mod tests {
             .to_string(),
         )
         .unwrap();
+        // Legacy note name on purpose: export must still read `_memo.md` vaults.
         std::fs::write(session_dir.join("_memo.md"), "Decide the launch date.").unwrap();
 
         run(Args {

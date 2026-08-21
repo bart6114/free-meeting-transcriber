@@ -453,7 +453,7 @@ mod tests {
 
         let blocked = tokio::time::timeout(
             std::time::Duration::from_millis(50),
-            store.write_file(PathBuf::from("sessions/s1/_memo.md"), b"late".to_vec()),
+            store.write_file(PathBuf::from("sessions/s1/notes.md"), b"late".to_vec()),
         )
         .await;
         assert!(
@@ -463,7 +463,7 @@ mod tests {
 
         drop(freeze);
         store
-            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"late".to_vec())
+            .write_file(PathBuf::from("sessions/s1/notes.md"), b"late".to_vec())
             .await
             .unwrap();
     }
@@ -473,11 +473,11 @@ mod tests {
         let (store, temp) = test_store().await;
         let vault = temp.path();
         store
-            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"hello".to_vec())
+            .write_file(PathBuf::from("sessions/s1/notes.md"), b"hello".to_vec())
             .await
             .unwrap();
         assert_eq!(
-            std::fs::read(vault.join("sessions/s1/_memo.md")).unwrap(),
+            std::fs::read(vault.join("sessions/s1/notes.md")).unwrap(),
             b"hello"
         );
         // no tmp leftovers
@@ -494,19 +494,19 @@ mod tests {
         let (store, temp) = test_store().await;
         let vault = temp.path();
         store
-            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"hello".to_vec())
+            .write_file(PathBuf::from("sessions/s1/notes.md"), b"hello".to_vec())
             .await
             .unwrap();
         assert!(
             store
                 .journal
-                .matches_current_file(vault, "sessions/s1/_memo.md")
+                .matches_current_file(vault, "sessions/s1/notes.md")
         );
-        std::fs::write(vault.join("sessions/s1/_memo.md"), b"edited outside").unwrap();
+        std::fs::write(vault.join("sessions/s1/notes.md"), b"edited outside").unwrap();
         assert!(
             !store
                 .journal
-                .matches_current_file(vault, "sessions/s1/_memo.md")
+                .matches_current_file(vault, "sessions/s1/notes.md")
         );
     }
 
@@ -525,7 +525,7 @@ mod tests {
         let vault = temp.path();
         store
             .write_file(
-                PathBuf::from("sessions/s1/_memo.md"),
+                PathBuf::from("sessions/s1/notes.md"),
                 b"written by the app".to_vec(),
             )
             .await
@@ -533,24 +533,24 @@ mod tests {
 
         // Another program (Obsidian, a sync client) rewrites the note behind our back.
         std::fs::write(
-            vault.join("sessions/s1/_memo.md"),
+            vault.join("sessions/s1/notes.md"),
             b"typed in Obsidian, never seen by the app",
         )
         .unwrap();
 
         store
             .write_file(
-                PathBuf::from("sessions/s1/_memo.md"),
+                PathBuf::from("sessions/s1/notes.md"),
                 b"app overwrite".to_vec(),
             )
             .await
             .unwrap();
 
         assert_eq!(
-            std::fs::read(vault.join("sessions/s1/_memo.md")).unwrap(),
+            std::fs::read(vault.join("sessions/s1/notes.md")).unwrap(),
             b"app overwrite"
         );
-        let trashed = trash_root(vault).join("sessions/s1/_memo.md");
+        let trashed = trash_root(vault).join("sessions/s1/notes.md");
         assert_eq!(
             std::fs::read(&trashed).unwrap(),
             b"typed in Obsidian, never seen by the app",
@@ -565,15 +565,15 @@ mod tests {
         let (store, temp) = test_store().await;
         let vault = temp.path();
         std::fs::create_dir_all(vault.join("sessions/s1")).unwrap();
-        std::fs::write(vault.join("sessions/s1/_memo.md"), b"from a previous run").unwrap();
+        std::fs::write(vault.join("sessions/s1/notes.md"), b"from a previous run").unwrap();
 
         store
-            .write_file(PathBuf::from("sessions/s1/_memo.md"), b"this run".to_vec())
+            .write_file(PathBuf::from("sessions/s1/notes.md"), b"this run".to_vec())
             .await
             .unwrap();
 
         assert_eq!(
-            std::fs::read(trash_root(vault).join("sessions/s1/_memo.md")).unwrap(),
+            std::fs::read(trash_root(vault).join("sessions/s1/notes.md")).unwrap(),
             b"from a previous run"
         );
     }
@@ -589,7 +589,7 @@ mod tests {
         for i in 0..25 {
             store
                 .write_file(
-                    PathBuf::from("sessions/s1/_memo.md"),
+                    PathBuf::from("sessions/s1/notes.md"),
                     format!("keystroke {i}").into_bytes(),
                 )
                 .await
@@ -615,7 +615,7 @@ mod tests {
             "normal repeated writes must never produce a trash file"
         );
         assert_eq!(
-            std::fs::read(vault.join("sessions/s1/_memo.md")).unwrap(),
+            std::fs::read(vault.join("sessions/s1/notes.md")).unwrap(),
             b"keystroke 24"
         );
     }
@@ -627,11 +627,11 @@ mod tests {
         let (store, temp) = test_store().await;
         let vault = temp.path();
         std::fs::create_dir_all(vault.join("sessions/s1")).unwrap();
-        std::fs::write(vault.join("sessions/s1/_memo.md"), b"same bytes").unwrap();
+        std::fs::write(vault.join("sessions/s1/notes.md"), b"same bytes").unwrap();
 
         store
             .write_file(
-                PathBuf::from("sessions/s1/_memo.md"),
+                PathBuf::from("sessions/s1/notes.md"),
                 b"same bytes".to_vec(),
             )
             .await
@@ -640,15 +640,18 @@ mod tests {
         assert!(!vault.join(".trash").exists());
     }
 
-    /// A path segment interpolated from frontend input (here the document `kind`) must not
-    /// be able to walk out of the vault.
+    /// A path segment interpolated from frontend input must not be able to walk out of
+    /// the vault -- enforced at the primitive so every writer inherits it.
     #[tokio::test]
     async fn write_file_rejects_a_relative_path_that_escapes_the_vault() {
         let (store, temp) = test_store().await;
         let outside = temp.path().parent().unwrap().join("escaped.md");
 
         let result = store
-            .write_document("s1", "../../../escaped", "pwned")
+            .write_file(
+                PathBuf::from("sessions/s1/../../../escaped.md"),
+                b"pwned".to_vec(),
+            )
             .await;
 
         assert!(result.is_err());
@@ -684,12 +687,12 @@ mod tests {
         let store2 = store.clone();
         let task1 = async {
             store1
-                .write_file(PathBuf::from("sessions/s1/_memo.md"), b"content1".to_vec())
+                .write_file(PathBuf::from("sessions/s1/notes.md"), b"content1".to_vec())
                 .await
         };
         let task2 = async {
             store2
-                .write_file(PathBuf::from("sessions/s1/_memo.md"), b"content2".to_vec())
+                .write_file(PathBuf::from("sessions/s1/notes.md"), b"content2".to_vec())
                 .await
         };
 
@@ -700,7 +703,7 @@ mod tests {
         assert!(
             store
                 .journal
-                .matches_current_file(vault, "sessions/s1/_memo.md"),
+                .matches_current_file(vault, "sessions/s1/notes.md"),
             "journal hash must match whichever content won the race"
         );
     }

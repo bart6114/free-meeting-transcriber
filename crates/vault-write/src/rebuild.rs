@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use super::index::{IndexEntity, SessionEntry, VAULT_TASKS_KEY, apply_map_value, legacy_doc};
+use super::index::{IndexEntity, SessionEntry, VAULT_TASKS_KEY, apply_map_value};
 use super::{SessionStore, StoreError, paths};
 
 /// Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect entries *derived
@@ -11,7 +11,7 @@ use super::{SessionStore, StoreError, paths};
 #[derive(Debug, Default, Clone, PartialEq, serde::Serialize, specta::Type)]
 pub struct RebuildReport {
     pub sessions: usize,
-    /// Documents read this pass -- every `<kind>.md` file including the note (`_memo.md`)
+    /// Documents read this pass -- the note (`notes.md`, or the pre-rename `_memo.md`)
     /// and every `enhanced/<doc_id>.md` doc, not just the note.
     pub notes: usize,
     pub transcripts: usize,
@@ -275,14 +275,14 @@ impl SessionStore {
                 record_error(
                     &mut report.errors,
                     &mut first_error,
-                    &format!("{id}: _memo.md"),
+                    &format!("{id}: notes.md"),
                     e,
                 );
                 None
             }
         };
 
-        // Documents: both directory listings must succeed before the docs vec is replaced
+        // Documents: the enhanced/ listing must succeed before the docs vec is replaced
         // wholesale -- a failed listing can't tell "gone" from "unlistable", and replacing
         // from a partial scan would make corruption look like deletion. Individual files
         // that fail to parse keep their previous entry by id, same invariant.
@@ -300,33 +300,6 @@ impl SessionStore {
         };
         let mut document_scans_succeeded = true;
         let mut collected_docs = Vec::new();
-        match self.scan_document_files(id).await {
-            Ok(doc_files) => {
-                for (kind, content) in doc_files {
-                    match content {
-                        Ok(body) => {
-                            collected_docs.push(legacy_doc(id, &kind, body));
-                            report.notes += 1;
-                        }
-                        Err(e) => {
-                            record_error(
-                                &mut report.errors,
-                                &mut first_error,
-                                &format!("{id}: {kind}.md"),
-                                e,
-                            );
-                            if let Some(old) = previous_docs.get(&format!("{id}:{kind}")) {
-                                collected_docs.push(old.clone());
-                            }
-                        }
-                    }
-                }
-            }
-            Err(e) => {
-                document_scans_succeeded = false;
-                record_error(&mut report.errors, &mut first_error, id, e);
-            }
-        }
         match self.scan_enhanced_doc_files(id).await {
             Ok(enhanced_files) => {
                 for (doc_id, parsed) in enhanced_files {
@@ -490,78 +463,18 @@ impl SessionStore {
         .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
     }
 
-    /// Lists every `<kind>.md` file in the session directory except `_memo.md`. Per-file read
-    /// failures are carried in the inner `Result` (unparseable -> caller logs, leaves the
-    /// entry alone); an `Err` here means the directory itself couldn't be listed, which the
-    /// caller must not treat as "zero files" (that would look like every document vanished).
-    pub(super) async fn scan_document_files(
-        &self,
-        id: &str,
-    ) -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
-        let dir = self.vault_base.join(self.session_dir(id).await?);
-        tokio::task::spawn_blocking(
-            move || -> Result<Vec<(String, Result<String, StoreError>)>, StoreError> {
-                let mut out = Vec::new();
-                let entries = match std::fs::read_dir(&dir) {
-                    Ok(entries) => entries,
-                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
-                    Err(e) => {
-                        return Err(StoreError::Io(format!(
-                            "failed to read session directory: {e}"
-                        )));
-                    }
-                };
-                for entry in entries {
-                    let entry = entry
-                        .map_err(|e| StoreError::Io(format!("failed to read dir entry: {e}")))?;
-                    let path = entry.path();
-                    if !path.is_file() {
-                        continue;
-                    }
-                    if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                        continue;
-                    }
-                    let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-                        continue;
-                    };
-                    if stem == "_memo" {
-                        continue;
-                    }
-                    // Hidden files are never session documents: this covers stale
-                    // `.tmp-<pid>-<nonce>-<name>` leftovers from a crashed atomic write
-                    // (`hypr_fs_sync_core::export::tmp_sibling_path`), which would
-                    // otherwise be indexed under a garbage kind.
-                    if stem.starts_with('.') {
-                        continue;
-                    }
-                    // The retired sync machinery's files-win reconcile wrote conflict
-                    // backups as `<stem>.conflict-<timestamp>.md` siblings
-                    // (`unique_conflict_backup_path` in the deleted
-                    // `plugins/db/src/import/legacy_vault.rs`). The producer is gone,
-                    // but pre-existing vaults can still contain them -- they are frozen
-                    // evidence, not live documents, so never index them.
-                    if stem.contains(".conflict-") {
-                        continue;
-                    }
-                    let content = std::fs::read_to_string(&path)
-                        .map(super::strip_leading_frontmatter)
-                        .map_err(|e| StoreError::Io(format!("failed to read {stem}.md: {e}")));
-                    out.push((stem.to_string(), content));
-                }
-                Ok(out)
-            },
-        )
-        .await
-        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?
-    }
-
     /// Lists every `<doc_id>.md` under `sessions/<id>/enhanced/` and parses each file's
-    /// frontmatter+body into an `EnhancedDoc`. Same error contract as
-    /// `scan_document_files`: per-file failures ride the inner `Result` (caller logs and
-    /// keeps the entry -- the doc id is still reported so pruning never mistakes
-    /// "unparseable" for "gone"); an outer `Err` means the directory listing itself
-    /// failed and the caller must not prune. A missing `enhanced/` dir is simply "no
-    /// docs" -- most sessions never get one.
+    /// frontmatter+body into an `EnhancedDoc`. Per-file failures ride the inner `Result`
+    /// (caller logs and keeps the entry -- the doc id is still reported so pruning never
+    /// mistakes "unparseable" for "gone"); an outer `Err` means the directory listing
+    /// itself failed and the caller must not prune (that would look like every document
+    /// vanished). A missing `enhanced/` dir is simply "no docs" -- most sessions never
+    /// get one.
+    ///
+    /// Nothing scans the session directory itself for documents anymore: the legacy
+    /// single-slot `<kind>.md` layout is retired, and any other file directly in the
+    /// session dir is a user attachment the app must ignore (see
+    /// `hypr_vault_read::reserved`).
     pub(super) async fn scan_enhanced_doc_files(
         &self,
         id: &str,
@@ -595,9 +508,11 @@ impl SessionStore {
                     let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
                         continue;
                     };
-                    // Same hygiene rules as scan_document_files: hidden files (crashed
-                    // atomic-write `.tmp-*` leftovers) and retired conflict backups are
-                    // never live documents.
+                    // Hygiene: hidden files (stale `.tmp-<pid>-<nonce>-<name>` leftovers
+                    // from a crashed atomic write, see
+                    // `hypr_fs_sync_core::export::tmp_sibling_path`) and conflict backups
+                    // from the retired sync machinery (`<stem>.conflict-<timestamp>.md`)
+                    // are never live documents -- frozen evidence, not content.
                     if stem.starts_with('.') {
                         continue;
                     }
@@ -819,7 +734,9 @@ mod tests {
     /// automatic rebuild pass. Without `strip_leading_frontmatter` in the read path, each of
     /// these calls would index the *previous* pass's own wrapper verbatim, growing the indexed
     /// body by one nested frontmatter block every time -- exactly what the automatic
-    /// startup/focus rescans would otherwise do to it on every boot.
+    /// startup/focus rescans would otherwise do to it on every boot. The fixture deliberately
+    /// uses the pre-rename `_memo.md` name, doubling as rebuild coverage for the legacy-note
+    /// read fallback.
     #[tokio::test]
     async fn rebuild_of_an_already_wrapped_note_file_does_not_grow_the_indexed_body() {
         let (store, vault) = test_store().await;
@@ -924,7 +841,7 @@ mod tests {
         std::fs::remove_file(dir.join("_meta.json")).unwrap();
         store.refresh_session("s1").await.unwrap();
         assert!(store.session_get("s1").is_none());
-        assert!(dir.join("_memo.md").is_file()); // vault untouched
+        assert!(dir.join("notes.md").is_file()); // vault untouched
     }
 
     #[tokio::test]
@@ -959,7 +876,7 @@ mod tests {
         store.write_meta(&meta("s1", "One")).await.unwrap();
         store.write_note("s1", "notes").await.unwrap();
         store
-            .write_document("s1", "summary", "doc body")
+            .write_enhanced_doc(&enhanced_doc("s1", "doc-1"))
             .await
             .unwrap();
         store

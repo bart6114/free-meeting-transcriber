@@ -26,12 +26,10 @@ fn seed_full_session(vault: &Path, relative_dir: &str, id: &str, title: &str) {
         .to_string(),
     )
     .unwrap();
-    std::fs::write(dir.join("_memo.md"), format!("note for {title}")).unwrap();
-    std::fs::write(
-        dir.join("summary.md"),
-        format!("legacy summary for {title}"),
-    )
-    .unwrap();
+    std::fs::write(dir.join("notes.md"), format!("note for {title}")).unwrap();
+    // A loose markdown file directly in the session dir is a user attachment now --
+    // no reader may surface it as content.
+    std::fs::write(dir.join("summary.md"), format!("attachment for {title}")).unwrap();
     std::fs::write(
         dir.join("enhanced/doc-1.md"),
         format!("---\nkind: summary\ntitle: Recap\nsort_order: 1\n---\n\nenhanced for {title}"),
@@ -103,13 +101,6 @@ fn all_readers_resolve_both_layouts_identically_by_full_id() {
             format!("note for {title}")
         );
 
-        let legacy_docs = meta::list_legacy_docs(vault.path(), id).unwrap();
-        assert_eq!(legacy_docs.len(), 1);
-        assert_eq!(
-            legacy_docs[0].markdown,
-            format!("legacy summary for {title}")
-        );
-
         let docs = enhanced::list_enhanced_docs(vault.path(), id).unwrap();
         assert_eq!(docs.len(), 1);
         assert_eq!(docs[0].session_id, id);
@@ -133,4 +124,35 @@ fn all_readers_resolve_both_layouts_identically_by_full_id() {
             .unwrap()
             .is_none()
     );
+}
+
+#[test]
+fn note_fallback_reads_pre_rename_memo_file_in_both_layouts() {
+    let vault = tempfile::tempdir().unwrap();
+    for (relative_dir, id, title) in [
+        (format!("sessions/{LEGACY_ID}"), LEGACY_ID, "Legacy"),
+        (READABLE_DIR.to_string(), READABLE_ID, "Readable"),
+    ] {
+        let dir = vault.path().join(&relative_dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::json!({
+                "id": id,
+                "title": title,
+                "started_at": null,
+                "ended_at": null,
+                "created_at": "2026-03-20T08:00:00Z",
+                "tags": [],
+            })
+            .to_string(),
+        )
+        .unwrap();
+        std::fs::write(dir.join("_memo.md"), format!("legacy note for {title}")).unwrap();
+
+        assert_eq!(
+            meta::read_note(vault.path(), id).unwrap().unwrap(),
+            format!("legacy note for {title}")
+        );
+    }
 }

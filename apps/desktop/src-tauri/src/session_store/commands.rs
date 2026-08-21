@@ -74,20 +74,6 @@ pub async fn session_read_note<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn session_write_document<R: tauri::Runtime>(
-    app: AppHandle<R>,
-    session_id: String,
-    kind: String,
-    markdown: String,
-) -> Result<(), String> {
-    store(&app)?
-        .write_document(&session_id, &kind, &markdown)
-        .await
-        .map_err(|e| e.to_string())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn session_write_enhanced_doc<R: tauri::Runtime>(
     app: AppHandle<R>,
     doc: EnhancedDoc,

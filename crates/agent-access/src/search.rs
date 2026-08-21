@@ -653,6 +653,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         seed_session(vault.path(), "m1", "Budget planning", "2026-07-13");
         let dir = vault.path().join("sessions/m1");
+        // Legacy note name on purpose: search must still read `_memo.md` vaults.
         std::fs::write(dir.join("_memo.md"), "We reviewed the budget baseline.").unwrap();
         std::fs::create_dir_all(dir.join("enhanced")).unwrap();
         std::fs::write(
@@ -709,7 +710,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         seed_session(vault.path(), "m1", "Sync", "2026-07-13");
         std::fs::write(
-            vault.path().join("sessions/m1/_memo.md"),
+            vault.path().join("sessions/m1/notes.md"),
             "Budget grows while the forecast shrinks.",
         )
         .unwrap();
@@ -727,7 +728,7 @@ mod tests {
         let vault = tempfile::tempdir().unwrap();
         seed_session(vault.path(), "m1", "Sync", "2026-07-13");
         let note = format!("{} target reached", "É".repeat(150));
-        std::fs::write(vault.path().join("sessions/m1/_memo.md"), &note).unwrap();
+        std::fs::write(vault.path().join("sessions/m1/notes.md"), &note).unwrap();
 
         let page = search(vault.path(), query("TARGET")).await;
         assert_eq!(page.hits.len(), 1);
@@ -1062,7 +1063,7 @@ mod tests {
         ] {
             seed_session(vault.path(), id, "Sync", date);
             std::fs::write(
-                vault.path().join(format!("sessions/{id}/_memo.md")),
+                vault.path().join(format!("sessions/{id}/notes.md")),
                 "shared keyword",
             )
             .unwrap();

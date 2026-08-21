@@ -143,14 +143,6 @@ async sessionReadNote(sessionId: string) : Promise<Result<string | null, string>
     else return { status: "error", error: e  as any };
 }
 },
-async sessionWriteDocument(sessionId: string, kind: string, markdown: string) : Promise<Result<null, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("session_write_document", { sessionId, kind, markdown }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async sessionWriteEnhancedDoc(doc: EnhancedDoc) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_write_enhanced_doc", { doc }) };
@@ -553,7 +545,7 @@ export type PersonItem = { id: string; name?: string }
  */
 export type RebuildReport = { sessions: number; 
 /**
- * Documents read this pass -- every `<kind>.md` file including the note (`_memo.md`)
+ * Documents read this pass -- the note (`notes.md`, or the pre-rename `_memo.md`)
  * and every `enhanced/<doc_id>.md` doc, not just the note.
  */
 notes: number; transcripts: number; 
@@ -592,8 +584,9 @@ export type SessionMetaPatch = { title?: string | null; started_at?: string | nu
 /**
  * What `session_get` returns: the file-canonical equivalent of the old
  * `SESSION_SELECT_SQL` (sessions row + COALESCE'd note document join). The note is
- * always `_memo.md`'s content -- the SQL fallback's legacy bare-id row is a
- * permanently-empty placeholder, so preferring the file loses nothing.
+ * always the note file's content (`notes.md`, or the pre-rename `_memo.md`) -- the
+ * SQL fallback's legacy bare-id row was a permanently-empty placeholder, so
+ * preferring the file loses nothing.
  */
 export type SessionRecord = { meta: SessionMeta; note_markdown: string | null }
 /**

@@ -838,6 +838,8 @@ mod tests {
             serde_json::to_vec_pretty(&meta("s1", "Edited outside")).unwrap(),
         )
         .unwrap();
+        // Legacy note name on purpose: an old sync client may still deliver
+        // `_memo.md`, and the refresh path must read it through the fallback.
         std::fs::write(dir.join("_memo.md"), "external memo content").unwrap();
         h.store.refresh_session("s1").await.unwrap();
 
@@ -860,7 +862,15 @@ mod tests {
         h.store.write_meta(&m).await.unwrap();
         h.store.write_note("s1", "# raw note body").await.unwrap();
         h.store
-            .write_document("s1", "summary", "legacy summary body")
+            .write_enhanced_doc(&crate::session_store::EnhancedDoc {
+                id: "doc-0".to_string(),
+                session_id: "s1".to_string(),
+                kind: "summary".to_string(),
+                title: "Summary".to_string(),
+                template_id: String::new(),
+                sort_order: 1,
+                markdown: "first summary body".to_string(),
+            })
             .await
             .unwrap();
         h.store
@@ -892,7 +902,7 @@ mod tests {
             "blank title falls back like the SQL build"
         );
         assert_eq!(
-            doc.content, "# raw note body legacy summary body enhanced doc body spoken words",
+            doc.content, "# raw note body first summary body enhanced doc body spoken words",
             "note, then enhanced docs by (sort_order, id), then transcript words"
         );
         assert_eq!(doc.created_at, 1_783_990_923_000, "event started_at wins");

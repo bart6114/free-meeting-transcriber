@@ -110,10 +110,6 @@ async fn writes_by_full_id_land_in_the_readable_directory_not_a_new_uuid_one() {
         .unwrap();
     store.write_note(ID, "note body").await.unwrap();
     store
-        .write_document(ID, "summary", "summary body")
-        .await
-        .unwrap();
-    store
         .write_enhanced_doc(&crate::EnhancedDoc {
             id: "doc-1".to_string(),
             session_id: ID.to_string(),
@@ -149,10 +145,9 @@ async fn writes_by_full_id_land_in_the_readable_directory_not_a_new_uuid_one() {
         serde_json::from_slice(&std::fs::read(dir.join("_meta.json")).unwrap()).unwrap();
     assert_eq!(read_back.title, "Renamed");
     assert_eq!(
-        std::fs::read_to_string(dir.join("_memo.md")).unwrap(),
+        std::fs::read_to_string(dir.join("notes.md")).unwrap(),
         "note body"
     );
-    assert!(dir.join("summary.md").is_file());
     assert!(dir.join("enhanced/doc-1.md").is_file());
     assert!(dir.join("transcript.json").is_file());
     assert!(dir.join("tasks.json").is_file());
@@ -250,13 +245,13 @@ async fn delete_and_restore_preserve_the_readable_name_and_nested_folder() {
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let trashed = vault.path().join(".trash").join(&date).join(READABLE_DIR);
     assert!(
-        trashed.join("_memo.md").is_file(),
+        trashed.join("notes.md").is_file(),
         "trash must preserve the readable nested path, not a UUID reconstruction"
     );
 
     assert!(store.restore_session(ID).await.unwrap());
     assert_eq!(
-        std::fs::read_to_string(vault.path().join(READABLE_DIR).join("_memo.md")).unwrap(),
+        std::fs::read_to_string(vault.path().join(READABLE_DIR).join("notes.md")).unwrap(),
         "keep me"
     );
     assert_eq!(store.session_get(ID).unwrap().meta.title, "Readable");
@@ -279,7 +274,7 @@ async fn two_same_day_delete_restore_cycles_round_trip() {
     assert!(store.restore_session(ID).await.unwrap());
 
     assert_eq!(
-        std::fs::read_to_string(vault.path().join(READABLE_DIR).join("_memo.md")).unwrap(),
+        std::fs::read_to_string(vault.path().join(READABLE_DIR).join("notes.md")).unwrap(),
         "second",
         "each cycle must restore the exact directory trashed by the latest delete"
     );
@@ -434,7 +429,7 @@ async fn external_rename_followed_by_rebuild_preserves_the_entry_and_redirects_w
 
     store.write_note(ID, "after rename").await.unwrap();
     assert_eq!(
-        std::fs::read_to_string(vault.path().join(renamed_dir).join("_memo.md")).unwrap(),
+        std::fs::read_to_string(vault.path().join(renamed_dir).join("notes.md")).unwrap(),
         "after rename"
     );
     assert!(
@@ -536,7 +531,7 @@ async fn session_id_for_relative_path_resolves_nested_and_nfd_paths() {
     );
     assert_eq!(
         store.session_id_for_relative_path(
-            &Path::new("sessions/Work/2026-03-20 — Product planning — 6ba7b8").join("_memo.md")
+            &Path::new("sessions/Work/2026-03-20 — Product planning — 6ba7b8").join("notes.md")
         ),
         Some(ID.to_string())
     );
@@ -581,7 +576,7 @@ async fn creating_a_titled_session_yields_a_readable_directory_and_a_full_uuid_i
     );
 
     store.write_note(ID, "note").await.unwrap();
-    assert!(vault.path().join(&dir).join("_memo.md").is_file());
+    assert!(vault.path().join(&dir).join("notes.md").is_file());
 }
 
 #[tokio::test]
@@ -742,7 +737,7 @@ async fn first_title_renames_a_provisional_directory_once_and_only_once() {
         "2026-03-20 — Roadmap review — 6ba7b8"
     );
     assert_eq!(
-        std::fs::read_to_string(vault.path().join(&dir).join("_memo.md")).unwrap(),
+        std::fs::read_to_string(vault.path().join(&dir).join("notes.md")).unwrap(),
         "early note",
         "contents move with the rename"
     );
@@ -964,7 +959,7 @@ async fn a_rebuild_recorded_duplicate_blocks_lazy_resolution_of_the_legacy_claim
     assert!(
         !vault
             .path()
-            .join(format!("sessions/{ID}/_memo.md"))
+            .join(format!("sessions/{ID}/notes.md"))
             .exists(),
         "no bytes may be written into either claimant"
     );
@@ -1557,7 +1552,7 @@ async fn explicit_rename_moves_an_established_directory_to_the_current_title() {
         "the date prefix and parent folder are preserved; only the title segment changes"
     );
     assert_eq!(
-        std::fs::read_to_string(vault.path().join(&dir).join("_memo.md")).unwrap(),
+        std::fs::read_to_string(vault.path().join(&dir).join("notes.md")).unwrap(),
         "kept content"
     );
     assert!(!vault.path().join(READABLE_DIR).exists());

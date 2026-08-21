@@ -13,11 +13,13 @@ pub fn meta_path_in(session_dir: &Path) -> PathBuf {
 }
 
 pub fn note_path_in(session_dir: &Path) -> PathBuf {
-    session_dir.join("_memo.md")
+    session_dir.join("notes.md")
 }
 
-pub fn document_path_in(session_dir: &Path, kind: &str) -> PathBuf {
-    session_dir.join(format!("{}.md", kind))
+/// Pre-rename note file name (`_memo.md`). Readers fall back to it when `notes.md`
+/// is absent; the store migrates it away on the next note write.
+pub fn legacy_note_path_in(session_dir: &Path) -> PathBuf {
+    session_dir.join("_memo.md")
 }
 
 pub fn enhanced_dir_in(session_dir: &Path) -> PathBuf {
@@ -59,13 +61,6 @@ pub fn meta_path(id: &str) -> PathBuf {
 )]
 pub fn note_path(id: &str) -> PathBuf {
     note_path_in(&sessions_root().join(id))
-}
-
-#[deprecated(
-    note = "directory basenames are not guaranteed to equal session ids; resolve the physical directory via `layout` and use `document_path_in`"
-)]
-pub fn document_path(id: &str, kind: &str) -> PathBuf {
-    document_path_in(&sessions_root().join(id), kind)
 }
 
 #[deprecated(
@@ -137,11 +132,7 @@ mod tests {
         assert_eq!(sessions_root(), PathBuf::from("sessions"));
         assert_eq!(session_dir("s1"), PathBuf::from("sessions/s1"));
         assert_eq!(meta_path("s1"), PathBuf::from("sessions/s1/_meta.json"));
-        assert_eq!(note_path("s1"), PathBuf::from("sessions/s1/_memo.md"));
-        assert_eq!(
-            document_path("s1", "notes"),
-            PathBuf::from("sessions/s1/notes.md")
-        );
+        assert_eq!(note_path("s1"), PathBuf::from("sessions/s1/notes.md"));
         assert_eq!(enhanced_dir("s1"), PathBuf::from("sessions/s1/enhanced"));
         assert_eq!(
             enhanced_doc_path("s1", "doc-1"),
@@ -171,8 +162,8 @@ mod tests {
     fn in_helpers_join_fixed_artifact_names_onto_the_session_dir() {
         let dir = Path::new("sessions/Work/2026-03-20 — Planning — 550e84");
         assert_eq!(meta_path_in(dir), dir.join("_meta.json"));
-        assert_eq!(note_path_in(dir), dir.join("_memo.md"));
-        assert_eq!(document_path_in(dir, "summary"), dir.join("summary.md"));
+        assert_eq!(note_path_in(dir), dir.join("notes.md"));
+        assert_eq!(legacy_note_path_in(dir), dir.join("_memo.md"));
         assert_eq!(enhanced_dir_in(dir), dir.join("enhanced"));
         assert_eq!(
             enhanced_doc_path_in(dir, "doc-1"),

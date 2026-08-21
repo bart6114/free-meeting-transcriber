@@ -203,6 +203,32 @@ impl SessionStore {
         let dir = self.session_dir_locked(&guard, id).await?;
         self.write_file_locked(&guard, paths::note_path_in(&dir), note_bytes)
             .await?;
+
+        // Migrate-on-first-edit: once `notes.md` lands, a leftover pre-rename `_memo.md`
+        // would only ever be the stale copy (readers prefer `notes.md`), and an external
+        // editor could still pick the wrong file -- so move it to trash (hand-recoverable,
+        // never synced), same as any other superseded file. Sessions never edited keep
+        // their `_memo.md` and stay readable through the fallback.
+        // Best-effort: `notes.md` already landed and wins on every read path, so a failed
+        // trash move must not fail the write (the index update below would be skipped and,
+        // with the write journaled, no rescan would ever repair it) -- retry next write.
+        let legacy_abs = self.vault_base.join(paths::legacy_note_path_in(&dir));
+        if legacy_abs.is_file() {
+            let vault_base = self.vault_base.clone();
+            let moved = tokio::task::spawn_blocking(move || {
+                hypr_fs_sync_core::export::move_to_trash(&vault_base, &legacy_abs)
+            })
+            .await;
+            match moved {
+                Ok(Ok(_)) => {}
+                Ok(Err(error)) => {
+                    tracing::warn!(session_id = %id, %error, "failed to move legacy note to trash; keeping it for the next write");
+                }
+                Err(error) => {
+                    tracing::warn!(session_id = %id, %error, "failed to move legacy note to trash; keeping it for the next write");
+                }
+            }
+        }
         drop(guard);
 
         // Store what `read_note` would return, not the raw bytes: a body that starts with an
@@ -223,39 +249,27 @@ impl SessionStore {
         let vault_base = self.vault_base.clone();
 
         let result = tokio::task::spawn_blocking(move || -> Result<Option<String>, StoreError> {
-            let path = vault_base.join(paths::note_path_in(&dir));
-
-            // Same attempt-then-match rationale as read_meta above.
-            match std::fs::read_to_string(&path) {
-                Ok(content) => Ok(Some(super::strip_leading_frontmatter(content))),
-                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-                Err(e) => Err(StoreError::Io(format!("failed to read note file: {}", e))),
+            // `notes.md` first, then the pre-rename `_memo.md` -- `notes.md` always wins
+            // when both exist (the store only writes `notes.md`; see write_note).
+            for path in [
+                vault_base.join(paths::note_path_in(&dir)),
+                vault_base.join(paths::legacy_note_path_in(&dir)),
+            ] {
+                // Same attempt-then-match rationale as read_meta above.
+                match std::fs::read_to_string(&path) {
+                    Ok(content) => return Ok(Some(super::strip_leading_frontmatter(content))),
+                    Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                    Err(e) => {
+                        return Err(StoreError::Io(format!("failed to read note file: {}", e)));
+                    }
+                }
             }
+            Ok(None)
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))??;
 
         Ok(result)
-    }
-
-    pub async fn write_document(
-        &self,
-        id: &str,
-        kind: &str,
-        markdown: &str,
-    ) -> Result<(), StoreError> {
-        validate_session_id(id)?;
-        let doc_bytes = markdown.as_bytes().to_vec();
-        let guard = self.lock_writes().await;
-        let dir = self.session_dir_locked(&guard, id).await?;
-        self.write_file_locked(&guard, paths::document_path_in(&dir, kind), doc_bytes)
-            .await?;
-        drop(guard);
-
-        self.index_upsert_doc(&super::index::legacy_doc(id, kind, markdown.to_string()));
-        self.notify_index_changed(super::IndexEntity::Docs, vec![id.to_string()]);
-
-        Ok(())
     }
 
     /// Moves the session's whole physical directory to trash (undo-able via
@@ -569,7 +583,7 @@ mod tests {
         assert!(
             session_path(&store, &vault, "s1")
                 .await
-                .join("_memo.md")
+                .join("notes.md")
                 .is_file()
         );
         assert_eq!(
@@ -604,16 +618,81 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_document_writes_file_and_index() {
+    async fn read_note_falls_back_to_legacy_memo_and_prefers_notes_md() {
         let (store, vault) = test_store().await;
-        store
-            .write_document("s1", "summary", "## Summary\n\nKey points: A, B, C")
-            .await
-            .unwrap();
-        assert!(vault.path().join("sessions/s1/summary.md").is_file());
-        let doc = store.enhanced_doc_get("s1:summary").unwrap();
-        assert_eq!(doc.markdown, "## Summary\n\nKey points: A, B, C");
-        assert_eq!(doc.kind, "summary");
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        let dir = session_path(&store, &vault, "s1").await;
+
+        std::fs::write(dir.join("_memo.md"), "legacy note").unwrap();
+        assert_eq!(store.read_note("s1").await.unwrap().unwrap(), "legacy note");
+
+        std::fs::write(dir.join("notes.md"), "current note").unwrap();
+        assert_eq!(
+            store.read_note("s1").await.unwrap().unwrap(),
+            "current note",
+            "notes.md must win when both files exist"
+        );
+    }
+
+    #[tokio::test]
+    async fn write_note_migrates_legacy_memo_file_to_trash() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        let dir = session_path(&store, &vault, "s1").await;
+        std::fs::write(dir.join("_memo.md"), "pre-rename note").unwrap();
+
+        store.write_note("s1", "edited note").await.unwrap();
+
+        assert!(dir.join("notes.md").is_file());
+        assert!(
+            !dir.join("_memo.md").exists(),
+            "the pre-rename file must not linger where an external editor could pick it"
+        );
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        let rel = store.session_dir("s1").await.unwrap();
+        assert_eq!(
+            std::fs::read_to_string(
+                vault
+                    .path()
+                    .join(".trash")
+                    .join(&date)
+                    .join(&rel)
+                    .join("_memo.md")
+            )
+            .unwrap(),
+            "pre-rename note",
+            "the legacy note must be hand-recoverable from .trash"
+        );
+        assert_eq!(store.read_note("s1").await.unwrap().unwrap(), "edited note");
+    }
+
+    /// A failed legacy-note trash move must not fail the note write: `notes.md` already
+    /// landed (journaled, so no rescan would repair a skipped index update) and wins on
+    /// every read path, so the migration just retries on a later write.
+    #[tokio::test]
+    async fn write_note_succeeds_even_when_legacy_memo_cannot_be_trashed() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        let dir = session_path(&store, &vault, "s1").await;
+        std::fs::write(dir.join("_memo.md"), "pre-rename note").unwrap();
+        // A regular file at `.trash` makes the dated-trash-dir creation fail.
+        std::fs::write(vault.path().join(".trash"), b"not a directory").unwrap();
+
+        store.write_note("s1", "edited note").await.unwrap();
+
+        assert_eq!(
+            std::fs::read_to_string(dir.join("notes.md")).unwrap(),
+            "edited note"
+        );
+        assert!(
+            dir.join("_memo.md").is_file(),
+            "migration is deferred, not silently dropped"
+        );
+        assert_eq!(
+            store.session_get("s1").unwrap().note_markdown.as_deref(),
+            Some("edited note"),
+            "the index must reflect the successful write"
+        );
     }
 
     #[tokio::test]
@@ -622,7 +701,15 @@ mod tests {
         store.write_meta(&meta("s1", "Test Session")).await.unwrap();
         store.write_note("s1", "Some notes").await.unwrap();
         store
-            .write_document("s1", "summary", "Summary content")
+            .write_enhanced_doc(&hypr_vault_read::EnhancedDoc {
+                id: "doc-1".to_string(),
+                session_id: "s1".to_string(),
+                kind: "summary".to_string(),
+                title: "Summary".to_string(),
+                template_id: String::new(),
+                sort_order: 0,
+                markdown: "Summary content".to_string(),
+            })
             .await
             .unwrap();
 
@@ -780,7 +867,7 @@ mod tests {
         let restored = store.restore_session("s1").await.unwrap();
         assert!(restored, "undo-delete must still work");
         assert_eq!(
-            std::fs::read_to_string(dir.join("_memo.md")).unwrap(),
+            std::fs::read_to_string(dir.join("notes.md")).unwrap(),
             "notes worth restoring"
         );
     }
@@ -943,7 +1030,7 @@ mod tests {
         let dir = vault.path().join("sessions/s1");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
-            dir.join("_memo.md"),
+            dir.join("notes.md"),
             "---\nid: s1:note\nposition: 0\nsession_id: s1\n---\n\nreal content",
         )
         .unwrap();
@@ -964,7 +1051,7 @@ mod tests {
         let dir = vault.path().join("sessions/s1");
         std::fs::create_dir_all(&dir).unwrap();
         let content = "---\n\nActual note that opens with a horizontal rule.";
-        std::fs::write(dir.join("_memo.md"), content).unwrap();
+        std::fs::write(dir.join("notes.md"), content).unwrap();
 
         assert_eq!(store.read_note("s1").await.unwrap().unwrap(), content);
     }
@@ -995,7 +1082,7 @@ mod tests {
         assert!(restored);
 
         assert!(dir.join("_meta.json").is_file());
-        assert!(dir.join("_memo.md").is_file());
+        assert!(dir.join("notes.md").is_file());
 
         let record = store.session_get("s1").unwrap();
         assert_eq!(record.meta.title, "Jury feedback");
@@ -1048,7 +1135,7 @@ mod tests {
         let restored = store.restore_session("s1").await.unwrap();
         assert!(restored);
 
-        let note = std::fs::read_to_string(vault.path().join(&rel).join("_memo.md")).unwrap();
+        let note = std::fs::read_to_string(vault.path().join(&rel).join("notes.md")).unwrap();
         assert_eq!(
             note, "second content",
             "restore must bring back the most recently deleted duplicate, not the oldest"

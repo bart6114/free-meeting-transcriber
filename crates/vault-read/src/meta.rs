@@ -26,14 +26,6 @@ pub struct SessionMeta {
     pub extra: std::collections::BTreeMap<String, serde_json::Value>,
 }
 
-/// A legacy single-slot document file `sessions/<id>/<kind>.md` (e.g. `summary.md`),
-/// predating the per-doc `enhanced/<uuid>.md` layout. `kind` is the file stem.
-#[derive(Clone, Debug, PartialEq)]
-pub struct LegacyDoc {
-    pub kind: String,
-    pub markdown: String,
-}
-
 /// Read one session's `_meta.json`, resolving the id to its physical directory via
 /// layout discovery (identity is `_meta.json.id`, never the directory basename).
 /// `Ok(None)` only when no directory claims the id -- a corrupt or ambiguous claim
@@ -78,59 +70,27 @@ pub fn list_session_metas(vault: &Path) -> Result<Vec<SessionMeta>> {
         .collect())
 }
 
-/// Read the user's note (`_memo.md`), stripping any legacy exporter frontmatter wrapper.
+/// Read the user's note (`notes.md`, falling back to the pre-rename `_memo.md`),
+/// stripping any legacy exporter frontmatter wrapper.
 pub fn read_note(vault: &Path, id: &str) -> Result<Option<String>> {
     read_note_in(vault, &layout::artifact_dir(vault, id)?)
 }
 
-/// `read_note` for an already-resolved session directory (vault-relative).
+/// `read_note` for an already-resolved session directory (vault-relative). `notes.md`
+/// wins when both files exist -- the store only ever writes `notes.md` and trashes the
+/// legacy file on the next note write, so a lingering `_memo.md` is always the stale copy.
 pub fn read_note_in(vault: &Path, session_dir: &Path) -> Result<Option<String>> {
-    let path = vault.join(paths::note_path_in(session_dir));
-    match std::fs::read_to_string(&path) {
-        Ok(content) => Ok(Some(strip_leading_frontmatter(content))),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(Error::Io(format!("failed to read note file: {e}"))),
-    }
-}
-
-/// Legacy single-slot `<kind>.md` docs directly inside the session dir. Underscore-prefixed
-/// files (`_memo.md`) are the note/meta namespace, not documents. Unreadable files are
-/// skipped.
-pub fn list_legacy_docs(vault: &Path, id: &str) -> Result<Vec<LegacyDoc>> {
-    list_legacy_docs_in(vault, &layout::artifact_dir(vault, id)?)
-}
-
-/// `list_legacy_docs` for an already-resolved session directory (vault-relative).
-pub fn list_legacy_docs_in(vault: &Path, session_dir: &Path) -> Result<Vec<LegacyDoc>> {
-    let dir = vault.join(session_dir);
-    let entries = match std::fs::read_dir(&dir) {
-        Ok(entries) => entries,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-        Err(e) => return Err(Error::Io(format!("failed to read session dir: {e}"))),
-    };
-
-    let mut docs = Vec::new();
-    for entry in entries {
-        let entry = entry.map_err(|e| Error::Io(format!("failed to read dir entry: {e}")))?;
-        let path = entry.path();
-        if !path.is_file() || path.extension().and_then(|e| e.to_str()) != Some("md") {
-            continue;
+    for path in [
+        vault.join(paths::note_path_in(session_dir)),
+        vault.join(paths::legacy_note_path_in(session_dir)),
+    ] {
+        match std::fs::read_to_string(&path) {
+            Ok(content) => return Ok(Some(strip_leading_frontmatter(content))),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+            Err(e) => return Err(Error::Io(format!("failed to read note file: {e}"))),
         }
-        let Some(stem) = path.file_stem().and_then(|s| s.to_str()) else {
-            continue;
-        };
-        if stem.starts_with('_') {
-            continue;
-        }
-        let Ok(content) = std::fs::read_to_string(&path) else {
-            continue;
-        };
-        docs.push(LegacyDoc {
-            kind: stem.to_string(),
-            markdown: strip_leading_frontmatter(content),
-        });
     }
-    Ok(docs)
+    Ok(None)
 }
 
 #[cfg(test)]
@@ -220,7 +180,7 @@ mod tests {
         let dir = temp.path().join("sessions/s1");
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
-            dir.join("_memo.md"),
+            dir.join("notes.md"),
             "---\nid: s1:note\nposition: 0\n---\n\nreal content",
         )
         .unwrap();
@@ -231,17 +191,26 @@ mod tests {
     }
 
     #[test]
-    fn list_legacy_docs_returns_non_underscore_markdown_files() {
+    fn read_note_falls_back_to_legacy_memo_file() {
         let temp = tempfile::tempdir().unwrap();
         let dir = temp.path().join("sessions/s1");
-        std::fs::create_dir_all(dir.join("enhanced")).unwrap();
-        std::fs::write(dir.join("_memo.md"), "note").unwrap();
-        std::fs::write(dir.join("summary.md"), "## Summary\n\nBody").unwrap();
-        std::fs::write(dir.join("transcript.json"), "{}").unwrap();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("_memo.md"), "legacy note").unwrap();
 
-        let docs = list_legacy_docs(temp.path(), "s1").unwrap();
-        assert_eq!(docs.len(), 1);
-        assert_eq!(docs[0].kind, "summary");
-        assert_eq!(docs[0].markdown, "## Summary\n\nBody");
+        assert_eq!(
+            read_note(temp.path(), "s1").unwrap().unwrap(),
+            "legacy note"
+        );
+    }
+
+    #[test]
+    fn read_note_prefers_notes_md_when_both_files_exist() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("sessions/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("notes.md"), "current").unwrap();
+        std::fs::write(dir.join("_memo.md"), "stale").unwrap();
+
+        assert_eq!(read_note(temp.path(), "s1").unwrap().unwrap(), "current");
     }
 }

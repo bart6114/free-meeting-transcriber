@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { json2md, md2json } from "@hypr/editor/markdown";
 
-// Guards the file-canonical note path end to end: `raw.tsx`'s load converts a `_memo.md` file's
+// Guards the file-canonical note path end to end: `raw.tsx`'s load converts a `notes.md` file's
 // markdown into editor JSON via `md2json` (see `useSessionRawMd`), and its save converts the
 // edited JSON back to markdown via `json2md` (see `persistChange`) before calling
 // `sessionWriteNote`. A fixture covering headings, bold, lists, and a code fence together (the
@@ -31,7 +31,7 @@ Some trailing text.`;
 // Pinned normalization: `json2md`'s list serializer (prosemirror-markdown's default
 // `renderList`) always blank-line-separates list items on the way out, even when the source
 // used single-line-separated ("tight") items -- there is no tight/loose distinction in this
-// schema. A hand-written or externally-synced `_memo.md` with tight lists is NOT byte-stable
+// schema. A hand-written or externally-synced `notes.md` with tight lists is NOT byte-stable
 // through one editor load/save cycle; it converges to this loose form and stays there.
 const MEMO_FIXTURE_AFTER_SAVE = `# Meeting Notes
 
@@ -56,7 +56,7 @@ console.log(x);
 
 Some trailing text.`;
 
-describe("_memo.md round trip (load -> editor JSON -> save)", () => {
+describe("notes.md round trip (load -> editor JSON -> save)", () => {
   it("loose-ifies tight lists on the first save (documented normalization, not data loss)", () => {
     const editorContent = md2json(MEMO_FIXTURE);
     const savedMarkdown = json2md(editorContent);
