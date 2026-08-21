@@ -73,13 +73,6 @@ pub struct Participant {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
-pub struct EventDetails {
-    pub what: String,
-    pub timezone: Option<String>,
-    pub location: Option<String>,
-}
-
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
 #[serde(rename_all = "camelCase")]
 pub struct NotificationFooter {
     pub text: String,
@@ -155,7 +148,6 @@ pub struct Notification {
     pub source: Option<NotificationSource>,
     pub start_time: Option<i64>,
     pub participants: Option<Vec<Participant>>,
-    pub event_details: Option<EventDetails>,
     pub action_label: Option<String>,
     pub action_variant: Option<NotificationActionVariant>,
     pub options: Option<Vec<String>>,
@@ -215,7 +207,6 @@ pub struct NotificationBuilder {
     source: Option<NotificationSource>,
     start_time: Option<i64>,
     participants: Option<Vec<Participant>>,
-    event_details: Option<EventDetails>,
     action_label: Option<String>,
     action_variant: Option<NotificationActionVariant>,
     options: Option<Vec<String>>,
@@ -259,11 +250,6 @@ impl NotificationBuilder {
         self
     }
 
-    pub fn event_details(mut self, event_details: EventDetails) -> Self {
-        self.event_details = Some(event_details);
-        self
-    }
-
     pub fn action_label(mut self, action_label: impl Into<String>) -> Self {
         self.action_label = Some(action_label.into());
         self
@@ -303,7 +289,6 @@ impl NotificationBuilder {
             source,
             start_time: self.start_time,
             participants: self.participants,
-            event_details: self.event_details,
             action_label: self.action_label,
             action_variant: self.action_variant,
             options: self.options,

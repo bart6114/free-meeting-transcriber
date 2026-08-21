@@ -62,7 +62,6 @@ fn build_cover_page(
     title: &str,
     created_at: &str,
     participants: &[String],
-    event_title: Option<&str>,
     duration: Option<&str>,
 ) -> String {
     let mut cover = String::new();
@@ -95,15 +94,6 @@ fn build_cover_page(
     }
 
     cover.push_str("    #v(2em)\n");
-
-    if let Some(event) = event_title {
-        let escaped_event = escape_typst_string(event);
-        cover.push_str(&format!(
-            "    #block(fill: light-bg, inset: 12pt, radius: 6pt, width: 80%)[\n      #text(size: 11pt, fill: muted-color)[Meeting:] #text(size: 11pt)[{}]\n    ]\n",
-            escaped_event
-        ));
-        cover.push_str("    #v(1em)\n");
-    }
 
     if !participants.is_empty() {
         cover.push_str("    #block(fill: light-bg, inset: 12pt, radius: 6pt, width: 80%)[\n");
@@ -138,7 +128,6 @@ pub fn build_typst_content(input: &ExportInput, images: &HashMap<String, String>
             &metadata.title,
             &metadata.created_at,
             &metadata.participants,
-            metadata.event_title.as_deref(),
             metadata.duration.as_deref(),
         );
         content.push_str(&cover);

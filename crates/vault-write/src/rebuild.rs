@@ -690,7 +690,7 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
-            event: None,
+            tracking_id: None,
             folder: None,
             extra: Default::default(),
         }
@@ -908,11 +908,16 @@ mod tests {
         );
     }
 
+    /// A legacy calendar-event envelope on disk (written by a pre-removal build) must
+    /// survive a cold rebuild untouched, riding the `extra` catch-all.
     #[tokio::test]
-    async fn rebuild_restores_event_and_folder_from_files() {
+    async fn rebuild_restores_legacy_event_and_folder_from_files() {
         let (store, vault) = test_store().await;
         let mut m = meta("s1", "One");
-        m.event = Some(serde_json::json!({"tracking_id": "evt-1", "meeting_link": ""}));
+        m.extra.insert(
+            "event".to_string(),
+            serde_json::json!({"tracking_id": "evt-1", "meeting_link": ""}),
+        );
         m.folder = Some("work".to_string());
         store.write_meta(&m).await.unwrap();
 
@@ -920,18 +925,21 @@ mod tests {
         cold.rebuild_index().await.unwrap();
 
         let restored = cold.session_get("s1").unwrap().meta;
-        assert_eq!(restored.event, m.event);
+        assert_eq!(restored.extra.get("event"), m.extra.get("event"));
         assert_eq!(restored.folder.as_deref(), Some("work"));
     }
 
-    /// The no-op property must hold for the widened meta fields too: a meta whose `event`
-    /// is populated re-derives to an identical entry on every rebuild pass, so an
-    /// unchanged file must still stay silent on the bus.
+    /// The no-op property must hold for the widened meta fields too: a meta carrying a
+    /// legacy `event` envelope in `extra` re-derives to an identical entry on every
+    /// rebuild pass, so an unchanged file must still stay silent on the bus.
     #[tokio::test]
-    async fn rebuild_of_unchanged_event_and_folder_does_not_notify() {
+    async fn rebuild_of_unchanged_legacy_event_and_folder_does_not_notify() {
         let (store, _vault) = test_store().await;
         let mut m = meta("s1", "One");
-        m.event = Some(serde_json::json!({"tracking_id": "evt-1", "meeting_link": "x"}));
+        m.extra.insert(
+            "event".to_string(),
+            serde_json::json!({"tracking_id": "evt-1", "meeting_link": "x"}),
+        );
         m.folder = Some("work".to_string());
         store.write_meta(&m).await.unwrap();
         store.rebuild_index().await.unwrap();

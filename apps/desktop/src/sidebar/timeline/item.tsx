@@ -23,7 +23,6 @@ import {
 
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
 import { useIsSessionEnhancing } from "~/session/hooks/useEnhancedNotes";
-import { getSessionEvent } from "~/session/utils";
 import { openStandaloneNoteWindow } from "~/session/window";
 import type { MenuItemDef } from "~/shared/hooks/useNativeContextMenu";
 import { writeSessionContextDragData } from "~/shared/session-drag";
@@ -336,16 +335,9 @@ const SessionItem = memo(
     const showSpinner =
       !selected && !isLive && (isFinalizing || isEnhancing || isBatching);
 
-    const sessionEvent = getSessionEvent(item.data);
-
     const displayTime = useMemo(
-      () =>
-        formatDisplayTime(
-          sessionEvent?.started_at ?? item.data.created_at,
-          precision,
-          timezone,
-        ),
-      [sessionEvent?.started_at, item.data.created_at, precision, timezone],
+      () => formatDisplayTime(item.data.created_at, precision, timezone),
+      [item.data.created_at, precision, timezone],
     );
     const muted = isTimelineItemInFuture(item);
 

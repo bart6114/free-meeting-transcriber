@@ -19,80 +19,6 @@ export const humanSchema = z.object({
   pin_order: z.preprocess((val) => val ?? undefined, z.number().optional()),
 });
 
-export const sessionEventSchema = z.object({
-  tracking_id: z.string(),
-  calendar_id: z.string(),
-  title: z.string(),
-  started_at: z.string(),
-  ended_at: z.string(),
-  is_all_day: z.boolean(),
-  has_recurrence_rules: z.boolean(),
-  location: z.string().optional(),
-  meeting_link: z.string().optional(),
-  description: z.string().optional(),
-  recurrence_series_id: z.string().optional(),
-});
-
-export const ignoredEventEntrySchema = z.object({
-  tracking_id: z.string(),
-  last_seen: z.string(),
-});
-
-export const ignoredRecurringSeriesEntrySchema = z.object({
-  id: z.string(),
-  last_seen: z.string(),
-});
-
-export const eventParticipantSchema = z.object({
-  name: z.string().optional(),
-  email: z.string().optional(),
-  is_organizer: z.boolean().optional(),
-  is_current_user: z.boolean().optional(),
-});
-
-export const calendarProviderSchema = z.enum(["apple", "google", "outlook"]);
-export type CalendarProvider = z.infer<typeof calendarProviderSchema>;
-
-export const eventSchema = z.object({
-  user_id: z.string(),
-  created_at: z.string(),
-  tracking_id_event: z.string(),
-  calendar_id: z.string(),
-  title: z.string(),
-  started_at: z.string(),
-  ended_at: z.string(),
-  location: z.preprocess((val) => val ?? undefined, z.string().optional()),
-  meeting_link: z.preprocess((val) => val ?? undefined, z.string().optional()),
-  description: z.preprocess((val) => val ?? undefined, z.string().optional()),
-  note: z.preprocess((val) => val ?? undefined, z.string().optional()),
-  recurrence_series_id: z.preprocess(
-    (val) => val ?? undefined,
-    z.string().optional(),
-  ),
-  has_recurrence_rules: z.preprocess(
-    (val) => val ?? undefined,
-    z.boolean().optional(),
-  ),
-  is_all_day: z.preprocess((val) => val ?? undefined, z.boolean().optional()),
-  provider: calendarProviderSchema,
-  participants_json: z.preprocess(
-    (val) => val ?? undefined,
-    z.string().optional(),
-  ),
-});
-
-export const calendarSchema = z.object({
-  user_id: z.string(),
-  created_at: z.string(),
-  tracking_id_calendar: z.string(),
-  name: z.string(),
-  enabled: z.preprocess((val) => val ?? false, z.boolean()),
-  provider: calendarProviderSchema,
-  source: z.preprocess((val) => val ?? undefined, z.string().optional()),
-  color: z.preprocess((val) => val ?? undefined, z.string().optional()),
-  connection_id: z.preprocess((val) => val ?? undefined, z.string().optional()),
-});
-
 export const organizationSchema = z.object({
   user_id: z.string(),
   created_at: z.preprocess((val) => val ?? undefined, z.string().optional()),
@@ -105,7 +31,6 @@ export const sessionSchema = z.object({
   user_id: z.string(),
   created_at: z.string(),
   folder_id: z.preprocess((val) => val ?? undefined, z.string().optional()),
-  event_json: z.preprocess((val) => val ?? undefined, z.string().optional()),
   title: z.string(),
   raw_md: z.string(),
 });
@@ -286,7 +211,6 @@ export const generalSchema = z.object({
   telemetry_consent: z.boolean().default(true),
   save_recordings: z.boolean().default(true),
   audio_retention: z.string().default("forever"),
-  notification_event: z.boolean().default(true),
   notification_detect: z.boolean().default(true),
   respect_dnd: z.boolean().default(false),
   quit_intercept: z.boolean().default(false),
@@ -295,10 +219,6 @@ export const generalSchema = z.object({
   personalization_dictionary_terms: jsonObject(z.array(z.string()).default([])),
   ignored_platforms: jsonObject(z.array(z.string()).default([])),
   included_platforms: jsonObject(z.array(z.string()).default([])),
-  ignored_events: jsonObject(z.array(ignoredEventEntrySchema).default([])),
-  ignored_recurring_series: jsonObject(
-    z.array(ignoredRecurringSeriesEntrySchema).default([]),
-  ),
   current_llm_provider: z.string().optional(),
   current_llm_model: z.string().optional(),
   current_stt_provider: z.string().optional(),
@@ -328,15 +248,6 @@ export type ProviderSpeakerIndexHint = z.infer<
 >;
 
 export type Human = z.infer<typeof humanSchema>;
-export type SessionEvent = z.infer<typeof sessionEventSchema>;
-export type IgnoredEvent = z.infer<typeof ignoredEventEntrySchema>;
-export type IgnoredRecurringSeries = z.infer<
-  typeof ignoredRecurringSeriesEntrySchema
->;
-export type EventParticipant = z.infer<typeof eventParticipantSchema>;
-export type Event = z.infer<typeof eventSchema>;
-export type Calendar = z.infer<typeof calendarSchema>;
-export type CalendarStorage = ToStorageType<typeof calendarSchema>;
 export type Organization = z.infer<typeof organizationSchema>;
 export type Session = z.infer<typeof sessionSchema>;
 export type Transcript = z.infer<typeof transcriptSchema>;
@@ -369,7 +280,6 @@ export type TaskStorage = ToStorageType<typeof taskSchema>;
 export type HumanStorage = ToStorageType<typeof humanSchema>;
 export type OrganizationStorage = ToStorageType<typeof organizationSchema>;
 export type DailyNoteStorage = ToStorageType<typeof dailyNoteSchema>;
-export type EventStorage = ToStorageType<typeof eventSchema>;
 export type MappingSessionParticipantStorage = ToStorageType<
   typeof mappingSessionParticipantSchema
 >;

@@ -77,8 +77,6 @@ pub struct SessionMetaData {
     pub user_id: String,
     pub created_at: Option<String>,
     pub title: Option<String>,
-    pub event: Option<serde_json::Value>,
-    pub event_id: Option<String>,
     pub participants: Vec<SessionMetaParticipant>,
     pub tags: Vec<String>,
 }
@@ -90,8 +88,6 @@ struct SessionMetaDataSerde {
     user_id: String,
     created_at: Option<String>,
     title: Option<String>,
-    event: Option<serde_json::Value>,
-    event_id: Option<String>,
     participants: Option<Vec<SessionMetaParticipant>>,
     tags: Option<Vec<String>>,
 }
@@ -108,8 +104,6 @@ impl<'de> Deserialize<'de> for SessionMetaData {
             user_id: value.user_id,
             created_at: value.created_at,
             title: value.title,
-            event: value.event,
-            event_id: value.event_id,
             participants: value.participants.unwrap_or_default(),
             tags: value.tags.unwrap_or_default(),
         })

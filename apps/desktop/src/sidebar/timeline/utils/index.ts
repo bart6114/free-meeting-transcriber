@@ -7,8 +7,6 @@ import {
   TZDate,
 } from "@hypr/utils";
 
-import { getSessionEvent } from "~/session/utils";
-
 function toTZ(date: Date, timezone?: string): Date {
   return timezone ? new TZDate(date, timezone) : date;
 }
@@ -16,7 +14,6 @@ function toTZ(date: Date, timezone?: string): Date {
 export type TimelineSessionRow = {
   title?: string | null;
   created_at?: string | null;
-  event_json?: string | null;
   folder_id?: string | null;
   tags?: string[] | null;
 };
@@ -30,7 +27,22 @@ export type TimelineItem = {
   type: "session";
   id: string;
   data: TimelineSessionRow;
+  /** Parsed from `created_at` once at construction -- bucket sorting and the
+   * current-time indicator must never re-parse dates per comparison. */
+  timestampMs: number | null;
 };
+
+export function makeTimelineItem(
+  sessionId: string,
+  row: TimelineSessionRow,
+): TimelineItem {
+  return {
+    type: "session",
+    id: sessionId,
+    data: row,
+    timestampMs: safeParseDate(row.created_at)?.getTime() ?? null,
+  };
+}
 
 export type TimelinePrecision = "time" | "date";
 
@@ -48,7 +60,6 @@ export type TimelineWindowData = {
 };
 
 export type TimelineIndicatorPlacement =
-  | { type: "inside"; index: number; progress: number }
   | { type: "before"; index: number }
   | { type: "after" };
 
@@ -175,48 +186,10 @@ export function calculateIndicatorIndex(
   return index;
 }
 
-export function getItemTimeRange(item: TimelineItem): {
-  start: Date | null;
-  end: Date | null;
-} {
-  const sessionEvent = getSessionEvent(item.data);
-  return {
-    start: safeParseDate(sessionEvent?.started_at ?? item.data.created_at),
-    end: safeParseDate(sessionEvent?.ended_at),
-  };
-}
-
 export function calculateTodayIndicatorPlacement(
   entries: Array<{ item: TimelineItem; timestamp: Date | null }>,
   current: Date,
 ): TimelineIndicatorPlacement {
-  const currentMs = current.getTime();
-
-  const insideIndex = entries.findIndex(({ item }) => {
-    const { start, end } = getItemTimeRange(item);
-    if (!start || !end) {
-      return false;
-    }
-
-    const startMs = start.getTime();
-    const endMs = end.getTime();
-
-    return startMs <= currentMs && currentMs <= endMs && endMs > startMs;
-  });
-
-  if (insideIndex !== -1) {
-    const { start, end } = getItemTimeRange(entries[insideIndex].item);
-    const startMs = start!.getTime();
-    const endMs = end!.getTime();
-    const progress = (currentMs - startMs) / (endMs - startMs);
-
-    return {
-      type: "inside",
-      index: insideIndex,
-      progress: Math.min(Math.max(progress, 0), 1),
-    };
-  }
-
   const indicatorIndex = calculateIndicatorIndex(entries, current);
   if (indicatorIndex === entries.length) {
     return { type: "after" };
@@ -226,16 +199,11 @@ export function calculateTodayIndicatorPlacement(
 }
 
 export function getItemTimestamp(item: TimelineItem): Date | null {
-  return getItemTimeRange(item).start;
+  return item.timestampMs === null ? null : new Date(item.timestampMs);
 }
 
 export function isTimelineItemInFuture(item: TimelineItem): boolean {
-  const timestamp = getItemTimestamp(item);
-  if (!timestamp) {
-    return false;
-  }
-
-  return timestamp.getTime() > Date.now();
+  return (item.timestampMs ?? 0) > Date.now();
 }
 
 export function hasFutureTimelineItems(
@@ -243,18 +211,7 @@ export function hasFutureTimelineItems(
   nowMs: number,
 ): boolean {
   return buckets.some((bucket) =>
-    bucket.items.some((item) => {
-      const { start, end } = getItemTimeRange(item);
-      if (!start) {
-        return false;
-      }
-
-      if (start.getTime() > nowMs) {
-        return true;
-      }
-
-      return Boolean(end && end.getTime() > nowMs);
-    }),
+    bucket.items.some((item) => (item.timestampMs ?? 0) > nowMs),
   );
 }
 
@@ -292,10 +249,7 @@ export function filterTimelineTablesUpToTomorrow({
     timelineSessionsTable: timelineSessionsTable
       ? Object.fromEntries(
           Object.entries(timelineSessionsTable).filter(([, row]) =>
-            isAtOrBeforeTomorrow(
-              safeParseDate(getSessionEvent(row)?.started_at ?? row.created_at),
-              timezone,
-            ),
+            isAtOrBeforeTomorrow(safeParseDate(row.created_at), timezone),
           ),
         )
       : timelineSessionsTable,
@@ -316,9 +270,7 @@ export function deriveTimelineWindowData({
 
   if (timelineSessionsTable && filteredSessionsTable) {
     for (const [sessionId, row] of Object.entries(timelineSessionsTable)) {
-      const date = safeParseDate(
-        getSessionEvent(row)?.started_at ?? row.created_at,
-      );
+      const date = safeParseDate(row.created_at);
 
       if (isAfterTomorrow(date, timezone)) {
         hasMoreFutureItems = true;
@@ -347,17 +299,14 @@ export function hasTimelineItemsAfterTomorrow({
   return Boolean(
     timelineSessionsTable &&
     Object.values(timelineSessionsTable).some((row) =>
-      isAfterTomorrow(
-        safeParseDate(getSessionEvent(row)?.started_at ?? row.created_at),
-        timezone,
-      ),
+      isAfterTomorrow(safeParseDate(row.created_at), timezone),
     ),
   );
 }
 
 function compareItemsNewestFirst(a: TimelineItem, b: TimelineItem): number {
-  const timeAValue = getItemTimestamp(a)?.getTime() ?? 0;
-  const timeBValue = getItemTimestamp(b)?.getTime() ?? 0;
+  const timeAValue = a.timestampMs ?? 0;
+  const timeBValue = b.timestampMs ?? 0;
   if (timeBValue == timeAValue) {
     return (a.data.title ?? "Untitled") > (b.data.title ?? "Untitled")
       ? 1
@@ -382,7 +331,7 @@ export function buildTagTimelineBuckets({
   const untagged: TimelineItem[] = [];
 
   for (const [sessionId, row] of Object.entries(timelineSessionsTable ?? {})) {
-    const item: TimelineItem = { type: "session", id: sessionId, data: row };
+    const item = makeTimelineItem(sessionId, row);
     const tags = row.tags ?? [];
     if (tags.length === 0) {
       untagged.push(item);
@@ -427,20 +376,11 @@ export function buildTimelineBuckets({
 
   if (timelineSessionsTable) {
     Object.entries(timelineSessionsTable).forEach(([sessionId, row]) => {
-      const sessionEvent = getSessionEvent(row);
-      const startTime = safeParseDate(
-        sessionEvent?.started_at ?? row.created_at,
-      );
-
-      if (!startTime) {
+      const item = makeTimelineItem(sessionId, row);
+      if (item.timestampMs === null) {
         return;
       }
-
-      items.push({
-        type: "session",
-        id: sessionId,
-        data: row,
-      });
+      items.push(item);
     });
   }
 

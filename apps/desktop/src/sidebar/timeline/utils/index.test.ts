@@ -10,6 +10,7 @@ import {
   hasFutureTimelineItems,
   hasTimelineItemsAfterTomorrow,
   isTimelineItemInFuture,
+  makeTimelineItem,
   type TimelineBucket,
   type TimelineSessionsTable,
 } from ".";
@@ -93,51 +94,31 @@ describe("timeline utils", () => {
     expect(buckets.map((bucket) => bucket.label)).toEqual(["standup"]);
   });
 
-  test("calculateTodayIndicatorPlacement places indicator inside an active timed session", () => {
+  test("calculateTodayIndicatorPlacement places indicator before the first past item", () => {
     const placement = calculateTodayIndicatorPlacement(
       [
         {
-          item: {
-            type: "session",
-            id: "session-1",
-            data: {
-              title: "test",
-              created_at: "2024-01-15T11:30:00.000Z",
-              event_json: JSON.stringify({
-                started_at: "2024-01-15T11:30:00.000Z",
-                ended_at: "2024-01-15T12:30:00.000Z",
-              }),
-            },
-          },
+          item: makeTimelineItem("session-1", {
+            title: "test",
+            created_at: "2024-01-15T11:30:00.000Z",
+          }),
           timestamp: new Date("2024-01-15T11:30:00.000Z"),
         },
       ],
       new Date("2024-01-15T12:00:00.000Z"),
     );
 
-    expect(placement).toMatchObject({
-      type: "inside",
-      index: 0,
-      progress: 0.5,
-    });
+    expect(placement).toEqual({ type: "before", index: 0 });
   });
 
-  test("calculateTodayIndicatorPlacement falls back to seam placement for future-only items", () => {
+  test("calculateTodayIndicatorPlacement falls to the end for future-only items", () => {
     const placement = calculateTodayIndicatorPlacement(
       [
         {
-          item: {
-            type: "session",
-            id: "session-1",
-            data: {
-              title: "Future Session",
-              created_at: "2024-01-10T12:00:00.000Z",
-              event_json: JSON.stringify({
-                started_at: "2024-01-15T13:00:00.000Z",
-                ended_at: "2024-01-15T14:00:00.000Z",
-              }),
-            },
-          },
+          item: makeTimelineItem("session-1", {
+            title: "Future Session",
+            created_at: "2024-01-15T13:00:00.000Z",
+          }),
           timestamp: new Date("2024-01-15T13:00:00.000Z"),
         },
       ],
@@ -158,28 +139,21 @@ describe("timeline utils", () => {
 
   test("isTimelineItemInFuture only returns true for future-starting items", () => {
     expect(
-      isTimelineItemInFuture({
-        type: "session",
-        id: "future-session",
-        data: {
+      isTimelineItemInFuture(
+        makeTimelineItem("future-session", {
           title: "Future Session",
-          created_at: "2024-01-10T12:00:00.000Z",
-          event_json: JSON.stringify({
-            started_at: "2024-01-16T11:00:00.000Z",
-          }),
-        },
-      }),
+          created_at: "2024-01-16T11:00:00.000Z",
+        }),
+      ),
     ).toBe(true);
 
     expect(
-      isTimelineItemInFuture({
-        type: "session",
-        id: "past-session",
-        data: {
+      isTimelineItemInFuture(
+        makeTimelineItem("past-session", {
           title: "Past Session",
           created_at: "2024-01-14T12:00:00.000Z",
-        },
-      }),
+        }),
+      ),
     ).toBe(false);
   });
 
@@ -188,26 +162,7 @@ describe("timeline utils", () => {
       hasFutureTimelineItems(
         bucketsWith({
           title: "Future Session",
-          created_at: "2024-01-14T12:00:00.000Z",
-          event_json: JSON.stringify({
-            started_at: "2024-01-16T11:00:00.000Z",
-          }),
-        }),
-        SYSTEM_TIME.getTime(),
-      ),
-    ).toBe(true);
-  });
-
-  test("hasFutureTimelineItems counts an in-progress event as future-facing", () => {
-    expect(
-      hasFutureTimelineItems(
-        bucketsWith({
-          title: "Running Meeting",
-          created_at: "2024-01-15T11:30:00.000Z",
-          event_json: JSON.stringify({
-            started_at: "2024-01-15T11:30:00.000Z",
-            ended_at: "2024-01-15T12:30:00.000Z",
-          }),
+          created_at: "2024-01-16T11:00:00.000Z",
         }),
         SYSTEM_TIME.getTime(),
       ),
@@ -244,17 +199,11 @@ describe("timeline utils", () => {
       timelineSessionsTable: {
         tomorrow: {
           title: "Tomorrow Session",
-          created_at: "2024-01-14T12:00:00.000Z",
-          event_json: JSON.stringify({
-            started_at: "2024-01-16T11:00:00.000Z",
-          }),
+          created_at: "2024-01-16T11:00:00.000Z",
         },
         later: {
           title: "Later Session",
-          created_at: "2024-01-14T12:00:00.000Z",
-          event_json: JSON.stringify({
-            started_at: "2024-01-17T11:00:00.000Z",
-          }),
+          created_at: "2024-01-17T11:00:00.000Z",
         },
       },
     });
@@ -270,10 +219,7 @@ describe("timeline utils", () => {
         timelineSessionsTable: {
           later: {
             title: "Later Session",
-            created_at: "2024-01-14T12:00:00.000Z",
-            event_json: JSON.stringify({
-              started_at: "2024-01-17T11:00:00.000Z",
-            }),
+            created_at: "2024-01-17T11:00:00.000Z",
           },
         },
       }),
@@ -284,10 +230,7 @@ describe("timeline utils", () => {
         timelineSessionsTable: {
           tomorrow: {
             title: "Tomorrow Session",
-            created_at: "2024-01-14T12:00:00.000Z",
-            event_json: JSON.stringify({
-              started_at: "2024-01-16T11:00:00.000Z",
-            }),
+            created_at: "2024-01-16T11:00:00.000Z",
           },
         },
       }),
@@ -299,17 +242,11 @@ describe("timeline utils", () => {
       timelineSessionsTable: {
         tomorrow: {
           title: "Tomorrow Session",
-          created_at: "2024-01-14T12:00:00.000Z",
-          event_json: JSON.stringify({
-            started_at: "2024-01-16T11:00:00.000Z",
-          }),
+          created_at: "2024-01-16T11:00:00.000Z",
         },
         later: {
           title: "Later Session",
-          created_at: "2024-01-14T12:00:00.000Z",
-          event_json: JSON.stringify({
-            started_at: "2024-01-17T11:00:00.000Z",
-          }),
+          created_at: "2024-01-17T11:00:00.000Z",
         },
       },
     });
@@ -324,8 +261,7 @@ describe("timeline utils", () => {
     const timelineSessionsTable: TimelineSessionsTable = {
       "session-future": {
         title: "Future Session",
-        created_at: "2024-01-10T12:00:00.000Z",
-        event_json: JSON.stringify({ started_at: "2024-01-16T09:00:00.000Z" }),
+        created_at: "2024-01-16T09:00:00.000Z",
       },
       "session-past": {
         title: "Past Session",
@@ -370,18 +306,15 @@ describe("timeline utils", () => {
     const timelineSessionsTable: TimelineSessionsTable = {
       "session-2weeks": {
         title: "In 2 weeks",
-        event_json: JSON.stringify({ started_at: "2024-01-29T09:00:00.000Z" }), // 14 days -> "in 2 weeks"
-        created_at: "2024-01-10T12:00:00.000Z",
+        created_at: "2024-01-29T09:00:00.000Z", // 14 days -> "in 2 weeks"
       },
       "session-4weeks": {
         title: "In 4 weeks",
-        event_json: JSON.stringify({ started_at: "2024-02-11T09:00:00.000Z" }), // 27 days -> "in 4 weeks"
-        created_at: "2024-01-10T12:00:00.000Z",
+        created_at: "2024-02-11T09:00:00.000Z", // 27 days -> "in 4 weeks"
       },
       "session-nextmonth": {
         title: "Next month",
-        event_json: JSON.stringify({ started_at: "2024-02-13T09:00:00.000Z" }), // 29 days -> "next month"
-        created_at: "2024-01-10T12:00:00.000Z",
+        created_at: "2024-02-13T09:00:00.000Z", // 29 days -> "next month"
       },
     };
 
@@ -401,13 +334,12 @@ describe("timeline utils", () => {
 function bucketsWith(data: {
   title: string;
   created_at: string;
-  event_json?: string;
 }): TimelineBucket[] {
   return [
     {
       label: "Today",
       precision: "time",
-      items: [{ type: "session", id: "session-1", data }],
+      items: [makeTimelineItem("session-1", data)],
     },
   ];
 }

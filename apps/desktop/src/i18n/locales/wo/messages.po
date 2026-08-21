@@ -896,7 +896,6 @@ msgid "Notifications"
 msgstr "Yégle yi"
 
 #: src/sidebar/timeline/index.tsx
-#: src/sidebar/timeline/upcoming-meeting.ts
 msgid "Now"
 msgstr ""
 

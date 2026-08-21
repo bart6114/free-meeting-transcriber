@@ -275,8 +275,8 @@ impl SessionStore {
     }
 
     /// Old `isSessionEmpty` semantics, translated to file truth: unknown session is
-    /// empty; a non-empty title with no event marks it non-empty (event-created
-    /// sessions get auto titles, so title alone doesn't count when an event exists);
+    /// empty; a non-empty title marks it non-empty (the calendar-integration-era
+    /// "auto-titled event session" exception died with the event envelope);
     /// note content counts after trimming (the editor's `&nbsp;` placeholder doesn't);
     /// otherwise empty iff no transcripts, no summary/template_output docs and no tags
     /// (`_meta.json` tags stand in for the SQL `session_tags` table).
@@ -286,7 +286,7 @@ impl SessionStore {
             return true;
         };
 
-        if !entry.meta.title.trim().is_empty() && entry.meta.event.is_none() {
+        if !entry.meta.title.trim().is_empty() {
             return false;
         }
         if let Some(note) = &entry.note_markdown {
@@ -306,18 +306,23 @@ impl SessionStore {
         transcript_count == 0 && enhanced_count == 0 && entry.meta.tags.is_empty()
     }
 
-    /// Old welcome-note lookup semantics: the first session (by `created_at`, id)
-    /// whose event envelope carries this `tracking_id`.
+    /// Welcome-note lookup: the first session (by `created_at`, id) carrying this
+    /// `tracking_id` -- either as the top-level meta field, or (legacy fallback, one
+    /// release's worth of vaults) inside the retired calendar-event envelope that now
+    /// round-trips through `extra`.
     pub fn session_find_by_tracking_id(&self, tracking_id: &str) -> Option<SessionMeta> {
         let index = self.index.read().unwrap();
         let mut matches: Vec<&SessionEntry> = index
             .sessions
             .values()
             .filter(|entry| {
+                if entry.meta.tracking_id.as_deref() == Some(tracking_id) {
+                    return true;
+                }
                 entry
                     .meta
-                    .event
-                    .as_ref()
+                    .extra
+                    .get("event")
                     .and_then(|event| event.get("tracking_id"))
                     .and_then(|value| value.as_str())
                     == Some(tracking_id)
@@ -752,7 +757,7 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
-            event: None,
+            tracking_id: None,
             folder: None,
             extra: Default::default(),
         }
@@ -1294,13 +1299,12 @@ mod tests {
             .unwrap();
         assert!(!store.session_is_empty("s1"));
 
-        // ...but a title alongside an event does not (event-created sessions get
-        // auto titles), matching `row.title.trim() && !row.event_json`.
+        // Clear the title again so the tags check below stands on its own.
         store
             .update_meta(
                 "s1",
                 super::super::SessionMetaPatch {
-                    event: Some(serde_json::json!({"tracking_id": "evt"})),
+                    title: Some(String::new()),
                     ..Default::default()
                 },
             )
@@ -1327,12 +1331,17 @@ mod tests {
         let (store, _vault) = test_store().await;
         let mut newer = meta("s-new", "Newer");
         newer.created_at = "2026-07-02T00:00:00Z".to_string();
-        newer.event = Some(serde_json::json!({"tracking_id": "evt-1"}));
+        newer.tracking_id = Some("evt-1".to_string());
         let mut older = meta("s-old", "Older");
         older.created_at = "2026-07-01T00:00:00Z".to_string();
-        older.event = Some(serde_json::json!({"tracking_id": "evt-1"}));
+        older.tracking_id = Some("evt-1".to_string());
+        // Legacy shape: pre-removal builds carried the marker inside the calendar
+        // event envelope, which now round-trips through `extra`.
         let mut other = meta("s-other", "Other");
-        other.event = Some(serde_json::json!({"tracking_id": "evt-2"}));
+        other.extra.insert(
+            "event".to_string(),
+            serde_json::json!({"tracking_id": "evt-2"}),
+        );
         for m in [&newer, &older, &other] {
             store.write_meta(m).await.unwrap();
         }
@@ -1340,6 +1349,11 @@ mod tests {
         assert_eq!(
             store.session_find_by_tracking_id("evt-1").unwrap().id,
             "s-old"
+        );
+        assert_eq!(
+            store.session_find_by_tracking_id("evt-2").unwrap().id,
+            "s-other",
+            "the legacy event-envelope marker must still be found"
         );
         assert_eq!(store.session_find_by_tracking_id("missing"), None);
     }

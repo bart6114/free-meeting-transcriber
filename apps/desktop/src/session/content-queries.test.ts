@@ -58,7 +58,6 @@ describe("session content snapshots", () => {
           title: "Planning",
           created_at: "2026-07-10T09:00:00.000Z",
           tags: [],
-          event: { title: "Weekly planning" },
         },
         note_markdown: "Raw note",
       },
@@ -115,7 +114,6 @@ describe("session content snapshots", () => {
       sessionId: "session-1",
       title: "Planning",
       createdAt: "2026-07-10T09:00:00.000Z",
-      event: { title: "Weekly planning" },
       rawNoteId: "session-1:note",
       rawContentFormat: "md",
       rawMarkdown: "Raw note",
@@ -160,7 +158,6 @@ describe("session content snapshots", () => {
           title: "",
           created_at: "2026-07-10T09:00:00.000Z",
           tags: [],
-          event: null,
         },
         note_markdown: null,
       },
@@ -171,7 +168,6 @@ describe("session content snapshots", () => {
       rawNoteId: null,
       rawContent: "",
       rawMarkdown: "",
-      event: null,
     });
   });
 

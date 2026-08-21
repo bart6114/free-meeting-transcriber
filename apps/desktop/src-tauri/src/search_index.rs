@@ -317,21 +317,13 @@ async fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
     );
     content_parts.extend(transcripts.iter().map(flatten_transcript_words));
 
-    // The exact string the SQL mirror's `sessions.event_json` column carried.
-    let event_json = record
-        .meta
-        .event
-        .as_ref()
-        .map(|event| event.to_string())
-        .unwrap_or_default();
-
     IndexAction::Upsert(SearchDocument {
         id: id.to_string(),
         doc_type: "session".to_string(),
         language: None,
         title: fallback_title(&record.meta.title, "Untitled"),
         content: merge_content(content_parts.iter().map(String::as_str)),
-        created_at: session_search_timestamp(&event_json, &record.meta.created_at),
+        created_at: to_epoch_ms(&Value::String(record.meta.created_at.clone())),
         facets: Vec::new(),
     })
 }
@@ -454,19 +446,6 @@ fn flatten_transcript_words(transcript: &hypr_fs_format::TranscriptWithData) -> 
     merge_content(transcript.words.iter().map(|word| word.text.as_str()))
 }
 
-fn session_search_timestamp(event_json: &str, created_at: &str) -> i64 {
-    if let Ok(event) = serde_json::from_str::<Value>(event_json)
-        && let Some(started_at) = event.get("started_at")
-    {
-        let timestamp = to_epoch_ms(started_at);
-        if timestamp > 0 {
-            return timestamp;
-        }
-    }
-
-    to_epoch_ms(&Value::String(created_at.to_string()))
-}
-
 fn to_epoch_ms(value: &Value) -> i64 {
     match value {
         Value::Number(value) => value.as_f64().unwrap_or(0.0) as i64,
@@ -551,19 +530,12 @@ mod tests {
     }
 
     #[test]
-    fn session_timestamp_prefers_event_start_and_falls_back_to_created_at() {
+    fn session_timestamp_derives_from_created_at() {
         assert_eq!(
-            session_search_timestamp(
-                r#"{"started_at":"2026-07-14T01:02:03Z"}"#,
-                "2025-01-01T00:00:00Z",
-            ),
-            1_783_990_923_000
-        );
-        assert_eq!(
-            session_search_timestamp("{}", "2025-01-01T00:00:00Z"),
+            to_epoch_ms(&Value::String("2025-01-01T00:00:00Z".to_string())),
             1_735_689_600_000
         );
-        assert_eq!(session_search_timestamp(r#"{"started_at":1234}"#, ""), 1234);
+        assert_eq!(to_epoch_ms(&Value::String(String::new())), 0);
     }
 
     // -- end-to-end projection over a real Tantivy index --------------------------
@@ -576,7 +548,7 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
-            event: None,
+            tracking_id: None,
             folder: None,
             extra: Default::default(),
         }
@@ -862,8 +834,7 @@ mod tests {
     #[tokio::test]
     async fn build_session_document_matches_the_sql_projection_shape() {
         let h = harness().await;
-        let mut m = meta("s1", "  ");
-        m.event = Some(serde_json::json!({"started_at": "2026-07-14T01:02:03Z"}));
+        let m = meta("s1", "  ");
         h.store.write_meta(&m).await.unwrap();
         h.store.write_note("s1", "# raw note body").await.unwrap();
         h.store
@@ -910,7 +881,10 @@ mod tests {
             doc.content, "# raw note body first summary body enhanced doc body spoken words",
             "note, then enhanced docs by (sort_order, id), then transcript words"
         );
-        assert_eq!(doc.created_at, 1_783_990_923_000, "event started_at wins");
+        assert_eq!(
+            doc.created_at, 1_784_851_200_000,
+            "timestamp comes from created_at"
+        );
 
         assert!(matches!(
             build_session_document(&h.store, "missing").await,

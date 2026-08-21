@@ -209,24 +209,13 @@ import { TimelineView } from ".";
 function sessionRow({
   title,
   started_at,
-  ended_at,
 }: {
   title: string;
   started_at: string;
-  ended_at: string;
 }) {
   return {
     title,
     created_at: started_at,
-    event_json: JSON.stringify({
-      tracking_id: "",
-      calendar_id: "",
-      title,
-      started_at,
-      ended_at,
-      is_all_day: false,
-      has_recurrence_rules: false,
-    }),
   };
 }
 
@@ -592,7 +581,6 @@ describe("TimelineView", () => {
       standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T12:00:51.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
       }),
     };
 
@@ -672,7 +660,6 @@ describe("TimelineView", () => {
       standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T12:00:51.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
       }),
     };
 
@@ -719,7 +706,6 @@ describe("TimelineView", () => {
       standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T12:01:01.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
       }),
     };
 
@@ -731,7 +717,7 @@ describe("TimelineView", () => {
     ).toBe("In 1m 1s");
   });
 
-  it("keeps the meeting chip visible until the scheduled end time", () => {
+  it("hides the meeting chip once the meeting starts", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
     mocks.currentTimeMs = Date.now();
@@ -740,7 +726,6 @@ describe("TimelineView", () => {
       later: sessionRow({
         title: "Roadmap review",
         started_at: "2024-01-15T12:06:00.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
       }),
     };
 
@@ -761,16 +746,6 @@ describe("TimelineView", () => {
     ).toBe("In 5m 0s");
 
     vi.setSystemTime(new Date("2024-01-15T12:06:01.000Z"));
-    mocks.currentTimeMs = Date.now();
-    fireEvent.focus(window);
-    rerender(<TimelineView topChromeInset />);
-
-    expect(
-      container.querySelector("[data-sidebar-upcoming-meeting-status]")
-        ?.textContent,
-    ).toBe("Localized now");
-
-    vi.setSystemTime(new Date("2024-01-15T12:30:01.000Z"));
     mocks.currentTimeMs = Date.now();
     fireEvent.focus(window);
     rerender(<TimelineView topChromeInset />);
@@ -832,10 +807,7 @@ describe("TimelineView", () => {
     mocks.timelineSessionsTable = {
       tomorrow: {
         title: "Sprint retro & planning",
-        created_at: "2024-01-15T00:00:00.000Z",
-        event_json: JSON.stringify({
-          started_at: "2024-01-17T08:30:00.000Z",
-        }),
+        created_at: "2024-01-17T08:30:00.000Z",
       },
       yesterday: {
         title: "Design sync",
@@ -924,10 +896,6 @@ describe("TimelineView", () => {
       "session-live": {
         title: "kate <> john (char)",
         created_at: "2024-01-15T11:00:00.000Z",
-        event_json: JSON.stringify({
-          started_at: "2024-01-15T11:00:00.000Z",
-          ended_at: "2024-01-15T12:00:00.000Z",
-        }),
       },
     };
 
@@ -954,10 +922,6 @@ describe("TimelineView", () => {
       "session-finalizing": {
         title: "kate <> john (char)",
         created_at: "2024-01-15T11:00:00.000Z",
-        event_json: JSON.stringify({
-          started_at: "2024-01-15T11:00:00.000Z",
-          ended_at: "2024-01-15T12:00:00.000Z",
-        }),
       },
     };
 
@@ -1091,24 +1055,6 @@ describe("TimelineView", () => {
 
     expect(isBefore(futureItem, indicator)).toBe(true);
     expect(isBefore(indicator, pastItem)).toBe(true);
-  });
-
-  it("keeps the now indicator visible during an in-progress meeting", () => {
-    vi.useFakeTimers();
-    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
-    mocks.currentTimeMs = Date.now();
-    mocks.smartCurrentTimeMs = Date.now();
-    mocks.timelineSessionsTable = {
-      running: sessionRow({
-        title: "Team standup",
-        started_at: "2024-01-15T11:00:00.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
-      }),
-    };
-
-    render(<TimelineView />);
-
-    expect(screen.getByTestId("current-time-indicator")).toBeTruthy();
   });
 });
 

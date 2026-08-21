@@ -50,11 +50,6 @@ function mapTimelineSessionEntries(
       {
         title: meta.title,
         created_at: meta.created_at,
-        // Downstream expects the stringified `event_json` the sessions row held.
-        event_json:
-          meta.event === null || meta.event === undefined
-            ? ""
-            : JSON.stringify(meta.event),
         folder_id: meta.folder ?? "",
         tags: meta.tags,
       },

@@ -20,7 +20,6 @@ pub struct ExportMetadata {
     pub title: String,
     pub created_at: String,
     pub participants: Vec<String>,
-    pub event_title: Option<String>,
     pub duration: Option<String>,
 }
 

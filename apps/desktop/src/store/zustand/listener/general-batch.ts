@@ -62,7 +62,6 @@ export async function showBatchCompletedNotification(
       source: { type: "session", session_id: sessionId },
       start_time: null,
       participants: null,
-      event_details: null,
       action_label: "Open",
       action_variant: null,
       options: null,

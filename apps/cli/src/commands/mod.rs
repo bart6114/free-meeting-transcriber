@@ -70,7 +70,7 @@ pub(crate) async fn create_session(
         ended_at: options.ended_at,
         created_at,
         tags: options.tags,
-        event: None,
+        tracking_id: None,
         folder: None,
         extra: Default::default(),
     };

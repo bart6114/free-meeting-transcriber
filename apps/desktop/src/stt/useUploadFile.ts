@@ -103,10 +103,6 @@ export function useUploadFile(sessionId: string) {
   const applyEstimatedAudioNoteDate = useCallback(
     async (filePath: string) => {
       try {
-        if (session?.event_json.trim()) {
-          return;
-        }
-
         const result = await fsSyncCommands.audioSourceMetadata(filePath);
         if (result.status === "error") {
           return;
@@ -124,16 +120,12 @@ export function useUploadFile(sessionId: string) {
         console.error("[upload] audio metadata inspection failed:", error);
       }
     },
-    [session?.event_json, updateSession],
+    [updateSession],
   );
 
   const applyDroppedAudioNoteDate = useCallback(
     async (file: File) => {
       try {
-        if (session?.event_json.trim()) {
-          return;
-        }
-
         if (!Number.isFinite(file.lastModified) || file.lastModified <= 0) {
           return;
         }
@@ -145,7 +137,7 @@ export function useUploadFile(sessionId: string) {
         console.error("[upload] dropped audio date inspection failed:", error);
       }
     },
-    [session?.event_json, updateSession],
+    [updateSession],
   );
 
   const importWithProgress = useCallback(

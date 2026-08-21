@@ -26,7 +26,6 @@ export function useKeywords(sessionId: string) {
       buildKeywords({
         rawMd: session?.raw_md,
         title: session?.title,
-        eventJson: session?.event_json,
         dictionaryTerms,
       }),
     [dictionaryTerms, session],
@@ -49,10 +48,6 @@ export async function getSessionKeywords({
   return buildKeywords({
     rawMd: session?.note_markdown ?? undefined,
     title: session?.meta.title,
-    eventJson:
-      session?.meta.event === null || session?.meta.event === undefined
-        ? undefined
-        : JSON.stringify(session.meta.event),
     dictionaryTerms,
   });
 }
@@ -60,18 +55,15 @@ export async function getSessionKeywords({
 export function buildKeywords({
   rawMd,
   title,
-  eventJson,
   dictionaryTerms,
 }: {
   rawMd: unknown;
   title: unknown;
-  eventJson: unknown;
   dictionaryTerms: string[];
 }) {
   const sourceText = buildKeywordSourceText({
     rawMd,
     title,
-    eventJson,
   });
   const { keywords, keyphrases } =
     sourceText.length > 0
@@ -88,17 +80,11 @@ export function buildKeywords({
 export function buildKeywordSourceText({
   rawMd,
   title,
-  eventJson,
 }: {
   rawMd: unknown;
   title: unknown;
-  eventJson: unknown;
 }): string {
-  return [
-    stringValue(rawMd),
-    stringValue(title),
-    ...eventKeywordFields(eventJson),
-  ]
+  return [stringValue(rawMd), stringValue(title)]
     .filter((value) => value.length > 0)
     .join("\n");
 }
@@ -180,24 +166,6 @@ const extractKeyphraseMatches = (phrase: Keyphrase): string[] =>
 
 const stringValue = (value: unknown): string =>
   typeof value === "string" ? value.trim() : "";
-
-const eventKeywordFields = (eventJson: unknown): string[] => {
-  if (typeof eventJson !== "string" || !eventJson) {
-    return [];
-  }
-
-  try {
-    const event = JSON.parse(eventJson);
-    return [event?.title, event?.description, event?.location].flatMap(
-      (value) => {
-        const text = stringValue(value);
-        return text ? [text] : [];
-      },
-    );
-  } catch {
-    return [];
-  }
-};
 
 const removeCodeBlocks = (text: string): string =>
   text.replace(/```[\s\S]*?```/g, "").replace(/`[^`]+`/g, "");
