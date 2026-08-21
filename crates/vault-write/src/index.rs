@@ -28,7 +28,9 @@ use std::collections::{HashMap, HashSet};
 
 use serde::{Deserialize, Serialize};
 
-use super::{EnhancedDoc, PersonItem, SessionMeta, SessionStore, TagItem, TaskItem, TemplateItem};
+use super::{
+    EnhancedDoc, PersonItem, SessionMeta, SessionStore, StoreError, TagItem, TaskItem, TemplateItem,
+};
 use hypr_fs_format::TranscriptWithData;
 
 /// Which index map changed. Serialized as the lowercase strings the frontend matches
@@ -93,6 +95,22 @@ pub struct SessionListEntry {
 /// folder names are non-empty path segments).
 pub(super) const VAULT_TASKS_KEY: &str = "";
 
+/// What the index keeps per `transcript.json` instead of the words themselves --
+/// transcript words are read from disk on demand (`session_transcripts`), so a large
+/// vault's word corpus never stays resident.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TranscriptSummary {
+    /// Transcript ids in file order -- powers `transcript_get`'s id -> session
+    /// resolution, `session_is_empty`'s count, and `RebuildReport.transcripts`.
+    pub transcript_ids: Vec<String>,
+    /// Any transcript in the file has at least one word.
+    pub has_words: bool,
+    /// Truncated sha2 of the raw file bytes. Sole purpose: an external edit that
+    /// changes word content without changing the file's shape (same ids, same
+    /// counts) must still flip `PartialEq` so a rescan notifies `Transcripts`.
+    pub content_hash: u64,
+}
+
 /// The in-memory mirror of the vault. Maps are kept independent rather than nested
 /// under one session struct, so a ghost session's transcripts can exist without a meta
 /// exactly like the write path allows
@@ -103,7 +121,7 @@ pub struct VaultIndex {
     pub sessions: HashMap<String, SessionEntry>,
     /// Session id -> that session's `enhanced/<uuid>.md` docs.
     pub docs: HashMap<String, Vec<EnhancedDoc>>,
-    pub transcripts: HashMap<String, Vec<TranscriptWithData>>,
+    pub transcripts: HashMap<String, TranscriptSummary>,
     /// Session id (or `VAULT_TASKS_KEY`) -> that file's tasks.
     pub tasks: HashMap<String, Vec<TaskItem>>,
     pub templates: HashMap<String, TemplateItem>,
@@ -202,13 +220,18 @@ impl SessionStore {
     /// Old `useSessionTranscripts` semantics: full transcripts ordered
     /// `(started_at, id)`. Everything in `transcript.json` is live -- see
     /// `session_has_transcript`'s note on the file's lack of a tombstone.
-    pub fn session_transcripts(&self, session_id: &str) -> Vec<TranscriptWithData> {
-        let index = self.index.read().unwrap();
-        let mut transcripts = index
-            .transcripts
-            .get(session_id)
-            .cloned()
-            .unwrap_or_default();
+    ///
+    /// Words are read from disk on demand (the index only keeps a
+    /// `TranscriptSummary`). During a recording this is refetched roughly once per
+    /// debounced flush -- the `Transcripts` event that triggers the refetch is only
+    /// emitted *after* the file write lands (`write_transcript_json_locked`), so
+    /// the read never observes less than the index copy used to hold, and the file
+    /// is page-cache-warm.
+    pub async fn session_transcripts(
+        &self,
+        session_id: &str,
+    ) -> Result<Vec<TranscriptWithData>, StoreError> {
+        let mut transcripts = self.read_transcript_json(session_id).await?.transcripts;
         // `(started_at, created_at, id)` -- the SQL this replaced ordered by all three, and the
         // tiebreaker is load-bearing: soft-deleted transcripts are written without a
         // `started_at`, so they all collapse to 0 and would otherwise order by random UUID.
@@ -219,18 +242,36 @@ impl SessionStore {
                 .then_with(|| a.created_at.cmp(&b.created_at))
                 .then_with(|| a.id.cmp(&b.id))
         });
-        transcripts
+        Ok(transcripts)
     }
 
     /// Old `useTranscript` / `mutateTranscript`-read semantics: one transcript by id.
-    pub fn transcript_get(&self, transcript_id: &str) -> Option<TranscriptWithData> {
+    /// The owning session comes from the summaries; the words come from its file.
+    pub async fn transcript_get(
+        &self,
+        transcript_id: &str,
+    ) -> Result<Option<TranscriptWithData>, StoreError> {
+        let Some(session_id) = self.transcript_session_id(transcript_id) else {
+            return Ok(None);
+        };
+        Ok(self
+            .read_transcript_json(&session_id)
+            .await?
+            .transcripts
+            .into_iter()
+            .find(|t| t.id == transcript_id))
+    }
+
+    /// Which session's `transcript.json` holds this transcript id, per the summaries.
+    /// Ownership never moves between sessions, so callers that only need the session
+    /// (speaker assignment) can stay sync and disk-free.
+    pub(crate) fn transcript_session_id(&self, transcript_id: &str) -> Option<String> {
         let index = self.index.read().unwrap();
         index
             .transcripts
-            .values()
-            .flatten()
-            .find(|t| t.id == transcript_id)
-            .cloned()
+            .iter()
+            .find(|(_, summary)| summary.transcript_ids.iter().any(|id| id == transcript_id))
+            .map(|(session_id, _)| session_id.clone())
     }
 
     /// Old `isSessionEmpty` semantics, translated to file truth: unknown session is
@@ -258,7 +299,7 @@ impl SessionStore {
         let transcript_count = index
             .transcripts
             .get(session_id)
-            .map(Vec::len)
+            .map(|summary| summary.transcript_ids.len())
             .unwrap_or_default();
         let enhanced_count = index.docs.get(session_id).map(Vec::len).unwrap_or_default();
 
@@ -294,7 +335,7 @@ fn has_transcript_words(index: &VaultIndex, session_id: &str) -> bool {
     index
         .transcripts
         .get(session_id)
-        .is_some_and(|transcripts| transcripts.iter().any(|t| !t.words.is_empty()))
+        .is_some_and(|summary| summary.has_words)
 }
 
 // -- write-through mutations ------------------------------------------------------
@@ -384,18 +425,16 @@ impl SessionStore {
         }
     }
 
-    pub(super) fn index_set_transcripts(
+    pub(super) fn index_set_transcript_summary(
         &self,
         session_id: &str,
-        transcripts: Vec<TranscriptWithData>,
+        summary: TranscriptSummary,
     ) {
         let mut index = self.index.write().unwrap();
-        if transcripts.is_empty() {
+        if summary.transcript_ids.is_empty() {
             index.transcripts.remove(session_id);
         } else {
-            index
-                .transcripts
-                .insert(session_id.to_string(), transcripts);
+            index.transcripts.insert(session_id.to_string(), summary);
         }
     }
 
@@ -607,6 +646,30 @@ pub(super) fn apply_map_value<V: PartialEq>(
             return false;
         }
         map.insert(key.to_string(), value);
+        true
+    }
+}
+
+/// `apply_map_value`'s sibling for the summaries map -- same empty-means-absent
+/// normalization and `PartialEq` diff contract (`transcript_ids.is_empty()` is the
+/// empty state).
+pub(super) fn apply_transcript_summary(
+    map: &mut HashMap<String, TranscriptSummary>,
+    key: &str,
+    summary: TranscriptSummary,
+) -> bool {
+    let old = map.get(key);
+    if summary.transcript_ids.is_empty() {
+        if old.is_none() {
+            return false;
+        }
+        map.remove(key);
+        true
+    } else {
+        if old == Some(&summary) {
+            return false;
+        }
+        map.insert(key.to_string(), summary);
         true
     }
 }
@@ -877,8 +940,11 @@ mod tests {
         );
 
         assert!(store.session_has_transcript("s1"));
-        assert_eq!(store.session_transcripts("s1")[0].words[0].text, "hello");
-        assert_eq!(store.transcript_get("t1").unwrap().id, "t1");
+        assert_eq!(
+            store.session_transcripts("s1").await.unwrap()[0].words[0].text,
+            "hello"
+        );
+        assert_eq!(store.transcript_get("t1").await.unwrap().unwrap().id, "t1");
 
         let index = store.index.read().unwrap();
         assert_eq!(index.tasks.get("s1").unwrap()[0].text, "Ship it");
@@ -954,7 +1020,7 @@ mod tests {
         assert_eq!(record.note_markdown.as_deref(), Some("# memo"));
         assert_eq!(store.session_enhanced_docs("s1").len(), 1);
         assert!(store.session_has_transcript("s1"));
-        assert_eq!(store.session_transcripts("s1").len(), 1);
+        assert_eq!(store.session_transcripts("s1").await.unwrap().len(), 1);
         {
             let index = store.index.read().unwrap();
             assert_eq!(index.tasks.get("s1").unwrap().len(), 1);
@@ -984,7 +1050,7 @@ mod tests {
         store.delete_session("s1").await.unwrap();
 
         assert!(store.session_get("s1").is_none());
-        assert!(store.session_transcripts("s1").is_empty());
+        assert!(store.session_transcripts("s1").await.unwrap().is_empty());
         let entities = changed_entities(&store);
         assert!(entities.contains(&IndexEntity::Sessions));
         assert!(entities.contains(&IndexEntity::Transcripts));
@@ -1149,6 +1215,8 @@ mod tests {
 
         let ids: Vec<String> = store
             .session_transcripts("s1")
+            .await
+            .unwrap()
             .into_iter()
             .map(|t| t.id)
             .collect();
@@ -1180,6 +1248,8 @@ mod tests {
 
         let ids: Vec<String> = store
             .session_transcripts("s1")
+            .await
+            .unwrap()
             .into_iter()
             .map(|t| t.id)
             .collect();

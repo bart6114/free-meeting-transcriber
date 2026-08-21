@@ -740,7 +740,7 @@ mod tests {
 
         assert!(store.session_get("s1").is_none());
         assert!(store.session_enhanced_docs("s1").is_empty());
-        assert!(store.session_transcripts("s1").is_empty());
+        assert!(store.session_transcripts("s1").await.unwrap().is_empty());
 
         // The whole folder moved to .trash/<date>/<its vault-relative path>.
         let date = chrono::Utc::now().format("%Y-%m-%d").to_string();

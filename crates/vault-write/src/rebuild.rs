@@ -1,7 +1,9 @@
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
-use super::index::{IndexEntity, SessionEntry, VAULT_TASKS_KEY, apply_map_value};
+use super::index::{
+    IndexEntity, SessionEntry, VAULT_TASKS_KEY, apply_map_value, apply_transcript_summary,
+};
 use super::{SessionStore, StoreError, paths};
 
 /// Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect entries *derived
@@ -329,12 +331,12 @@ impl SessionStore {
         }
         let docs = document_scans_succeeded.then_some(collected_docs);
 
-        let transcripts = match self.read_transcript_json(id).await {
-            Ok(file) => {
-                report.transcripts += file.transcripts.len();
-                // A missing transcript.json parses to an empty list via read_transcript_json,
-                // so this also correctly removes the entry when the file itself is gone.
-                Some(file.transcripts)
+        let transcripts = match self.read_transcript_summary(id).await {
+            Ok(summary) => {
+                report.transcripts += summary.transcript_ids.len();
+                // A missing transcript.json reads as an empty summary, so this also
+                // correctly removes the entry when the file itself is gone.
+                Some(summary)
             }
             Err(e) => {
                 record_error(
@@ -390,8 +392,8 @@ impl SessionStore {
                     changes.push((IndexEntity::Docs, id.to_string()));
                 }
             }
-            if let Some(new_transcripts) = transcripts {
-                if apply_map_value(&mut index.transcripts, id, new_transcripts) {
+            if let Some(new_summary) = transcripts {
+                if apply_transcript_summary(&mut index.transcripts, id, new_summary) {
                     changes.push((IndexEntity::Transcripts, id.to_string()));
                 }
             }
@@ -728,6 +730,43 @@ mod tests {
         );
     }
 
+    /// The content-hash guarantee on `TranscriptSummary`: an external edit that changes
+    /// word *content* without changing the file's shape (same transcript ids, same word
+    /// counts) must still notify `Transcripts` -- the summary would otherwise compare
+    /// equal and the search projection + frontend would silently serve stale words.
+    #[tokio::test]
+    async fn rebuild_notifies_transcripts_on_same_shape_word_edit() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "One")).await.unwrap();
+        store
+            .write_transcript("s1", transcript("t1", "hello"))
+            .await
+            .unwrap();
+        store.rebuild_index().await.unwrap();
+        drain_changes(&store);
+
+        let path = session_path(&store, &vault, "s1")
+            .await
+            .join("transcript.json");
+        let raw = std::fs::read_to_string(&path).unwrap();
+        // Same byte length, same shape -- only the word text differs.
+        std::fs::write(&path, raw.replace("hello", "howdy")).unwrap();
+
+        store.rebuild_index().await.unwrap();
+
+        let changes = drain_changes(&store);
+        assert!(
+            changes.iter().any(|(entity, ids)| {
+                *entity == crate::IndexEntity::Transcripts && ids.contains(&"s1".to_string())
+            }),
+            "a same-shape word edit must still notify Transcripts: {changes:?}"
+        );
+        assert_eq!(
+            store.session_transcripts("s1").await.unwrap()[0].words[0].text,
+            "howdy"
+        );
+    }
+
     /// Reproduces the failure mode a real boot smoke turned up: a `_memo.md` that already
     /// carries a frontmatter wrapper (as an external edit or the retired legacy exporter
     /// would leave behind) must not have that wrapper compound with each
@@ -793,7 +832,7 @@ mod tests {
         assert_eq!(record.meta.title, "One");
         assert_eq!(record.note_markdown.as_deref(), Some("notes"));
         assert_eq!(
-            cold.transcript_get("t1").unwrap().words[0].text,
+            cold.transcript_get("t1").await.unwrap().unwrap().words[0].text,
             "restored-word"
         );
     }
@@ -890,7 +929,7 @@ mod tests {
 
         assert!(store.session_get("s1").is_none());
         assert!(store.session_enhanced_docs("s1").is_empty());
-        assert!(store.session_transcripts("s1").is_empty());
+        assert!(store.session_transcripts("s1").await.unwrap().is_empty());
     }
 
     /// REGRESSION: `Path::exists()` swallows read failures as "false", which used to make

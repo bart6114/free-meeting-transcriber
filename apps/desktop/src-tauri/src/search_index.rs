@@ -262,7 +262,7 @@ async fn drain_queue<R: tauri::Runtime>(
         let mut documents = Vec::new();
         let mut removals = Vec::new();
         for (id, _generation) in &batch {
-            match build_session_document(store, id) {
+            match build_session_document(store, id).await {
                 IndexAction::Upsert(document) => documents.push(document),
                 IndexAction::Remove(id) => removals.push(id),
             }
@@ -290,16 +290,21 @@ async fn drain_queue<R: tauri::Runtime>(
     }
 }
 
-fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
+async fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
     let Some(record) = store.session_get(id) else {
         return IndexAction::Remove(id.to_string());
     };
 
     // Same assembly order as the SQL projection: note body, then summary/
     // template_output docs by (sort_order, id), then transcripts by
-    // (started_at, created_at, id).
+    // (started_at, created_at, id). A transcript file that fails to read/parse
+    // must not starve the rest of the batch: index note/docs only and let the
+    // dirty queue re-mark this session on its next change.
     let enhanced_docs = store.session_enhanced_docs(id);
-    let transcripts = store.session_transcripts(id);
+    let transcripts = store.session_transcripts(id).await.unwrap_or_else(|error| {
+        tracing::warn!(%id, %error, "search projection: transcript read failed; indexing without transcript content");
+        Vec::new()
+    });
 
     let mut content_parts = Vec::with_capacity(1 + enhanced_docs.len() + transcripts.len());
     if let Some(note) = &record.note_markdown {
@@ -893,7 +898,7 @@ mod tests {
             .await
             .unwrap();
 
-        let IndexAction::Upsert(doc) = build_session_document(&h.store, "s1") else {
+        let IndexAction::Upsert(doc) = build_session_document(&h.store, "s1").await else {
             panic!("expected an upsert for an existing session");
         };
         assert_eq!(doc.id, "s1");
@@ -908,8 +913,37 @@ mod tests {
         assert_eq!(doc.created_at, 1_783_990_923_000, "event started_at wins");
 
         assert!(matches!(
-            build_session_document(&h.store, "missing"),
+            build_session_document(&h.store, "missing").await,
             IndexAction::Remove(_)
         ));
+    }
+
+    /// A corrupt transcript.json must not starve the projection: the session is still
+    /// upserted from its note/docs (the dirty queue re-marks it on the next transcript
+    /// change), rather than failing the whole batch.
+    #[tokio::test]
+    async fn malformed_transcript_still_upserts_note_and_doc_content() {
+        let h = harness().await;
+        h.store
+            .write_meta(&meta("s1", "Broken tape"))
+            .await
+            .unwrap();
+        h.store.write_note("s1", "note survives").await.unwrap();
+        h.store
+            .write_transcript("s1", transcript("t1", 5.0, vec![word("w0", "spoken")]))
+            .await
+            .unwrap();
+
+        let dir = h
+            .vault
+            .path()
+            .join(h.store.session_dir("s1").await.unwrap());
+        std::fs::write(dir.join("transcript.json"), b"{ not json").unwrap();
+
+        let IndexAction::Upsert(doc) = build_session_document(&h.store, "s1").await else {
+            panic!("expected an upsert despite the malformed transcript");
+        };
+        assert_eq!(doc.title, "Broken tape");
+        assert_eq!(doc.content, "note survives");
     }
 }

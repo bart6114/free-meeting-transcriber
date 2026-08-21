@@ -427,7 +427,10 @@ pub async fn session_transcripts<R: tauri::Runtime>(
     app: AppHandle<R>,
     session_id: String,
 ) -> Result<Vec<TranscriptWithData>, String> {
-    Ok(store(&app)?.session_transcripts(&session_id))
+    store(&app)?
+        .session_transcripts(&session_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -436,7 +439,10 @@ pub async fn transcript_get<R: tauri::Runtime>(
     app: AppHandle<R>,
     transcript_id: String,
 ) -> Result<Option<TranscriptWithData>, String> {
-    Ok(store(&app)?.transcript_get(&transcript_id))
+    store(&app)?
+        .transcript_get(&transcript_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
