@@ -40,7 +40,7 @@ expression: canonicalize_json(contract)
   ],
   "subcommands": [
     {
-      "about": "Check the local CLI and vault access without changing data",
+      "about": "Check the local CLI and vault access, restoring the vault's AGENTS.md if stale",
       "name": "fmtr doctor",
       "options": [
         {

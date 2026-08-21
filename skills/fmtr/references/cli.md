@@ -10,7 +10,7 @@ fmtr --json meetings note MEETING_ID --kind note
 fmtr --json meetings note MEETING_ID --kind summary
 ```
 
-`doctor` exits with status 1 when its response contains `ready: false`.
+`doctor` exits with status 1 when its response contains `ready: false`. Inside a vault it also restores the root `AGENTS.md` agent guide when missing or stale (reported as `agents_md`).
 
 Search across titles, notes, summaries, and transcript words (query and/or `--speaker` required; transcript hits return a `start_ms` matching the transcript's timestamps):
 

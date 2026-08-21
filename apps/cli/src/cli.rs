@@ -38,7 +38,7 @@ pub struct Args {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Check the local CLI and vault access without changing data
+    /// Check the local CLI and vault access, restoring the vault's AGENTS.md if stale
     Doctor,
     /// Browse, create, edit, and export meetings
     Meetings {
@@ -669,9 +669,15 @@ mod tests {
         let mut paths = Vec::new();
         collect_leaf_commands(&command, "", &mut paths);
 
+        let vault_agents = include_str!("../../../docs/src/content/docs/agents/vault.md");
+
         for path in paths {
             assert!(docs.contains(&path), "CLI docs are missing `{path}`");
             assert!(skill.contains(&path), "fmtr skill is missing `{path}`");
+            assert!(
+                vault_agents.contains(&path),
+                "vault AGENTS.md page is missing `{path}`"
+            );
         }
         assert_options_are_documented(&command, docs);
     }

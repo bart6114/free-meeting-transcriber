@@ -62,6 +62,7 @@ export default defineConfig({
           items: [
             "installation",
             "agents/overview",
+            "agents/vault",
             "agents/cli",
             "agents/mcp",
             "agents/skills",

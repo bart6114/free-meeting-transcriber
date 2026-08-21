@@ -1,4 +1,3 @@
-mod agents;
 mod appearance;
 mod commands;
 mod embedded_cli;
@@ -303,7 +302,8 @@ pub async fn main() {
             {
                 use tauri_plugin_settings::SettingsPluginExt;
                 if let Ok(base) = app_handle.settings().vault_base()
-                    && let Err(e) = agents::write_agents_file(base.as_std_path())
+                    && let Err(e) =
+                        hypr_vault_write::agents_doc::ensure_agents_doc(base.as_std_path())
                 {
                     tracing::error!("failed to write AGENTS.md: {}", e);
                 }
