@@ -125,7 +125,7 @@ export function OpenNoteDialog({
   );
   const { search } = useSearchEngine();
 
-  const sessions = useSessionSummaries();
+  const sessions = useSessionSummaries(open);
 
   const trimmedQuery = query.trim();
 

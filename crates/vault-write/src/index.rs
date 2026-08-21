@@ -91,6 +91,18 @@ pub struct SessionListEntry {
     pub has_transcript_words: bool,
 }
 
+/// The slim `session_list_headers` row -- exactly what the always-mounted list
+/// subscribers (timeline, summaries, tags, float, audio retention) consume.
+#[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
+pub struct SessionListHeader {
+    pub id: String,
+    pub title: String,
+    pub created_at: String,
+    pub folder: Option<String>,
+    pub tags: Vec<String>,
+    pub has_transcript_words: bool,
+}
+
 /// Key for the vault-root `tasks.json` in the tasks map (sessions can never claim it:
 /// folder names are non-empty path segments).
 pub(super) const VAULT_TASKS_KEY: &str = "";
@@ -163,6 +175,30 @@ impl SessionStore {
         entries.sort_by(|a, b| {
             (a.meta.created_at.as_str(), a.meta.id.as_str())
                 .cmp(&(b.meta.created_at.as_str(), b.meta.id.as_str()))
+        });
+        entries
+    }
+
+    /// `session_list` minus everything the list consumers never read: at 1,000+
+    /// sessions the full metas (with `extra`) are refetched by several subscribers
+    /// on every `sessions` event, so the hot path ships only these fields.
+    /// Same `(created_at, id)` ascending order as `session_list`.
+    pub fn session_list_headers(&self) -> Vec<SessionListHeader> {
+        let index = self.index.read().unwrap();
+        let mut entries: Vec<SessionListHeader> = index
+            .sessions
+            .values()
+            .map(|entry| SessionListHeader {
+                id: entry.meta.id.clone(),
+                title: entry.meta.title.clone(),
+                created_at: entry.meta.created_at.clone(),
+                folder: entry.meta.folder.clone(),
+                tags: entry.meta.tags.clone(),
+                has_transcript_words: has_transcript_words(&index, &entry.meta.id),
+            })
+            .collect();
+        entries.sort_by(|a, b| {
+            (a.created_at.as_str(), a.id.as_str()).cmp(&(b.created_at.as_str(), b.id.as_str()))
         });
         entries
     }

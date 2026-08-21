@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   cleanupDeletedSessionAudio: vi.fn(),
   deleteLocalSessionAudio: vi.fn(),
-  sessionList: vi.fn(),
+  sessionListHeaders: vi.fn(),
   sessionHasTranscript: vi.fn(),
   getSessionMode: vi.fn(),
   live: { loading: false, sessionId: null as string | null },
@@ -16,7 +16,7 @@ vi.mock("~/session/attachments", () => ({
 
 vi.mock("~/types/tauri.gen", () => ({
   commands: {
-    sessionList: mocks.sessionList,
+    sessionListHeaders: mocks.sessionListHeaders,
     sessionHasTranscript: mocks.sessionHasTranscript,
   },
 }));
@@ -40,10 +40,11 @@ import {
 function mockCleanupRows(
   sessions: Array<{ id: string; created_at: string; has_words: number }>,
 ) {
-  mocks.sessionList.mockResolvedValue({
+  mocks.sessionListHeaders.mockResolvedValue({
     status: "ok",
     data: sessions.map((session) => ({
-      meta: { id: session.id, created_at: session.created_at },
+      id: session.id,
+      created_at: session.created_at,
       has_transcript_words: session.has_words === 1,
     })),
   });
@@ -185,7 +186,7 @@ describe("audio retention", () => {
   // cleanupLogicallyDeletedAudio in audio-retention.ts.
   test("does not query or delete anything when retention is forever", async () => {
     await expect(cleanupExpiredAudio("forever")).resolves.toEqual([]);
-    expect(mocks.sessionList).not.toHaveBeenCalled();
+    expect(mocks.sessionListHeaders).not.toHaveBeenCalled();
     expect(mocks.deleteLocalSessionAudio).not.toHaveBeenCalled();
   });
 

@@ -111,27 +111,28 @@ export function useSessionSummary(
   return sessionId ? data : null;
 }
 
-export function useSessionSummaries(): SessionSummaryRecord[] {
+export function useSessionSummaries(enabled = true): SessionSummaryRecord[] {
   const { data = EMPTY_SESSION_SUMMARIES } = useIndexQuery({
     entity: "sessions",
     queryKey: ["session-summaries"],
+    enabled,
     queryFn: async () => {
-      const result = await commands.sessionList();
+      const result = await commands.sessionListHeaders();
       if (result.status === "error") {
         throw new Error(result.error);
       }
-      // session_list is (created_at, id) ASC; this list has always been
+      // session_list_headers is (created_at, id) ASC; this list has always been
       // newest-first with id as the ascending tiebreaker.
       return [...result.data]
         .sort(
           (left, right) =>
-            right.meta.created_at.localeCompare(left.meta.created_at) ||
-            left.meta.id.localeCompare(right.meta.id),
+            right.created_at.localeCompare(left.created_at) ||
+            left.id.localeCompare(right.id),
         )
-        .map(({ meta }) => ({
-          id: meta.id,
-          title: meta.title,
-          created_at: meta.created_at,
+        .map((entry) => ({
+          id: entry.id,
+          title: entry.title,
+          created_at: entry.created_at,
         }));
     },
   });

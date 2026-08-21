@@ -648,6 +648,7 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::session_delete_audio::<tauri::Wry>,
             session_store::commands::session_get::<tauri::Wry>,
             session_store::commands::session_list::<tauri::Wry>,
+            session_store::commands::session_list_headers::<tauri::Wry>,
             session_store::commands::session_ids::<tauri::Wry>,
             session_store::commands::session_is_empty::<tauri::Wry>,
             session_store::commands::session_has_transcript::<tauri::Wry>,

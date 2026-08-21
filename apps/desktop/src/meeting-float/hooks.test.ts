@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  sessionList: vi.fn(),
+  sessionListHeaders: vi.fn(),
   subscribeIndexChanged: vi.fn(),
 }));
 
 vi.mock("~/types/tauri.gen", () => ({
   commands: {
-    sessionList: mocks.sessionList,
+    sessionListHeaders: mocks.sessionListHeaders,
   },
 }));
 
@@ -25,7 +25,8 @@ import { DEFAULT_USER_ID } from "~/shared/utils";
 
 const entries = [
   {
-    meta: { id: "session-1", title: "Planning" },
+    id: "session-1",
+    title: "Planning",
     has_transcript_words: false,
   },
 ] as const;
@@ -33,7 +34,7 @@ const entries = [
 describe("meeting float index data", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.sessionList.mockResolvedValue({ status: "ok", data: entries });
+    mocks.sessionListHeaders.mockResolvedValue({ status: "ok", data: entries });
     mocks.subscribeIndexChanged.mockReturnValue(() => {});
   });
 
@@ -75,11 +76,12 @@ describe("meeting float index data", () => {
       }),
     );
 
-    mocks.sessionList.mockResolvedValue({
+    mocks.sessionListHeaders.mockResolvedValue({
       status: "ok",
       data: [
         {
-          meta: { id: "session-2", title: "Retro" },
+          id: "session-2",
+          title: "Retro",
           has_transcript_words: false,
         },
       ],
@@ -100,7 +102,7 @@ describe("meeting float index data", () => {
   });
 
   it("reports load failures through onError", async () => {
-    mocks.sessionList.mockResolvedValue({
+    mocks.sessionListHeaders.mockResolvedValue({
       status: "error",
       error: "index unavailable",
     });

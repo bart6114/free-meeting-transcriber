@@ -24,7 +24,7 @@ pub mod transcript;
 pub use attachments::SavedAttachment;
 pub use content::{SessionMeta, SessionMetaPatch};
 pub use enhanced::{EnhancedDoc, EnhancedDocPatch};
-pub use index::{IndexChanged, IndexEntity, SessionListEntry, SessionRecord};
+pub use index::{IndexChanged, IndexEntity, SessionListEntry, SessionListHeader, SessionRecord};
 pub use people::PersonItem;
 pub use rebuild::RebuildReport;
 pub use tags::TagItem;
