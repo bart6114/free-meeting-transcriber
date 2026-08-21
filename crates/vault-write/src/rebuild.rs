@@ -4,7 +4,13 @@ use std::path::PathBuf;
 use super::index::{
     IndexEntity, SessionEntry, VAULT_TASKS_KEY, apply_map_value, apply_transcript_summary,
 };
-use super::{SessionStore, StoreError, paths};
+use super::{SessionMeta, SessionStore, StoreError, paths};
+
+/// Bounded fan-out for the rebuild content refresh. Every read inside `refresh_one`
+/// is `spawn_blocking`, so even the single-threaded startup runtime gets real
+/// parallel I/O; 8 matches the search projection's batch size and stays far below
+/// blocking-pool/file-handle concerns.
+const REBUILD_CONCURRENCY: usize = 8;
 
 /// Summary of a `rebuild_index`/`refresh_session` pass. Counts reflect entries *derived
 /// from files* this pass, not the resulting index size. `errors` never aborts the scan --
@@ -141,10 +147,61 @@ impl SessionStore {
         report.errors.extend(scan.errors.iter().cloned());
         report.ghost_sessions = scan.ghost_dirs.clone();
 
-        for (location, _) in &scan.sessions {
-            // The per-session raw error (if any) is only useful to refresh_session's single-id
-            // caller; rebuild_index already has the full picture in report.errors.
-            let _ = self.refresh_one(&location.id, &mut report).await?;
+        // Per-session refresh with bounded concurrency. Each task gets the meta the
+        // discovery walk already parsed (skipping a re-read of `_meta.json`) and its
+        // own sub-report; sub-reports are merged in scan order so `RebuildReport`
+        // stays deterministic regardless of completion order. A session deleted
+        // between scan and refresh is indexed from its scan-time meta until the next
+        // rescan -- the same brief-staleness window the serial loop had, just wider.
+        let mut slots: Vec<Option<(RebuildReport, Result<Option<StoreError>, StoreError>)>> =
+            (0..scan.sessions.len()).map(|_| None).collect();
+        let mut join_failure: Option<StoreError> = None;
+        {
+            let mut join_set = tokio::task::JoinSet::new();
+            let mut next = 0usize;
+            while next < scan.sessions.len() || !join_set.is_empty() {
+                while next < scan.sessions.len() && join_set.len() < REBUILD_CONCURRENCY {
+                    let (location, meta) = &scan.sessions[next];
+                    let store = self.clone();
+                    let id = location.id.clone();
+                    let meta = meta.clone();
+                    let pos = next;
+                    join_set.spawn(async move {
+                        let mut sub = RebuildReport::default();
+                        let outcome = store.refresh_one(&id, Some(meta), &mut sub).await;
+                        (pos, sub, outcome)
+                    });
+                    next += 1;
+                }
+                match join_set.join_next().await {
+                    Some(Ok((pos, sub, outcome))) => slots[pos] = Some((sub, outcome)),
+                    Some(Err(e)) => {
+                        if join_failure.is_none() {
+                            join_failure = Some(StoreError::Io(format!("task join error: {e}")));
+                        }
+                    }
+                    None => {}
+                }
+            }
+        }
+        // Outer per-session errors (task-join failures inside refresh_one) no longer
+        // abort the loop mid-way: every session still refreshes and the prune below
+        // still runs (strictly more convergent -- refresh is idempotent), and the
+        // first such error is returned at the end.
+        let mut first_outer: Option<StoreError> = join_failure;
+        for slot in slots {
+            let Some((sub, outcome)) = slot else { continue };
+            report.sessions += sub.sessions;
+            report.notes += sub.notes;
+            report.transcripts += sub.transcripts;
+            report.ghost_sessions.extend(sub.ghost_sessions);
+            report.errors.extend(sub.errors);
+            if let Err(e) = outcome {
+                report.errors.push(format!("session refresh aborted: {e}"));
+                if first_outer.is_none() {
+                    first_outer = Some(e);
+                }
+            }
         }
 
         // Sessions that vanished from disk are removed (the discovery scan succeeded and
@@ -191,6 +248,9 @@ impl SessionStore {
         self.index_refresh_people().await;
         self.index_refresh_tags().await;
 
+        if let Some(error) = first_outer {
+            return Err(error);
+        }
         Ok(report)
     }
 
@@ -203,7 +263,7 @@ impl SessionStore {
     /// double-applying anything.
     pub async fn refresh_session(&self, session_id: &str) -> Result<(), StoreError> {
         let mut report = RebuildReport::default();
-        let first_error = self.refresh_one(session_id, &mut report).await?;
+        let first_error = self.refresh_one(session_id, None, &mut report).await?;
 
         if let Some(first_error) = first_error {
             // Propagate the original variant (Io/Serialize) rather than relabeling every
@@ -224,14 +284,25 @@ impl SessionStore {
     /// also logged into `report.errors` as a formatted string) so `refresh_session` can hand
     /// its caller the real error variant. The outer `Result` is reserved for failures that
     /// must abort this session's refresh entirely (task-join failures).
+    /// `known_meta`: a meta the caller already parsed (the discovery walk's) -- trusted
+    /// as-is, skipping the `_meta.json` re-read *and* the missing-meta removal path.
+    /// The scan-time snapshot is safe to trust: layout normalization only renames
+    /// directories (never rewrites meta content), and a meta write racing in between
+    /// is the same brief-staleness window the re-read had, resolved by the next
+    /// rescan. Pass `None` (refresh_session) to derive everything from the files.
     async fn refresh_one(
         &self,
         id: &str,
+        known_meta: Option<SessionMeta>,
         report: &mut RebuildReport,
     ) -> Result<Option<StoreError>, StoreError> {
         let mut first_error: Option<StoreError> = None;
 
-        let meta = match self.read_meta(id).await {
+        let read_meta = match known_meta {
+            Some(meta) => Ok(Some(meta)),
+            None => self.read_meta(id).await,
+        };
+        let meta = match read_meta {
             Ok(None) => {
                 // The directory (or at least its identity) is gone: drop the catalog
                 // entry too, so a later write re-resolves instead of recreating the
