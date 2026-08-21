@@ -5,7 +5,6 @@ import { useTimelineSessionsTable } from "./queries";
 import {
   buildTimelineBuckets,
   deriveTimelineWindowData,
-  getItemTimeRange,
   type TimelineBucket,
 } from "./utils";
 
@@ -24,7 +23,6 @@ export type SidebarUpcomingMeetingStatus = {
 
 export function useSidebarUpcomingMeetingStatus(): SidebarUpcomingMeetingStatus | null {
   const timezone = useConfigValue("timezone") || undefined;
-  const { t } = useLingui();
   const formatLabel = useUpcomingMeetingLabelFormatter();
   const timelineSessionsTable = useTimelineSessionsTable();
   const currentDay = useCurrentDay(timezone);
@@ -41,17 +39,16 @@ export function useSidebarUpcomingMeetingStatus(): SidebarUpcomingMeetingStatus 
     });
   }, [currentDay, timelineSessionsTable, timezone]);
 
-  return useUpcomingMeetingStatus(buckets, formatLabel, t`Now`);
+  return useUpcomingMeetingStatus(buckets, formatLabel);
 }
 
 export function useUpcomingMeetingStatus(
   buckets: TimelineBucket[],
   formatLabel: (diffMs: number) => string,
-  activeLabel: string,
 ): SidebarUpcomingMeetingStatus | null {
   const store = useMemo(
-    () => createUpcomingMeetingStatusStore(buckets, formatLabel, activeLabel),
-    [activeLabel, buckets, formatLabel],
+    () => createUpcomingMeetingStatusStore(buckets, formatLabel),
+    [buckets, formatLabel],
   );
 
   return useSyncExternalStore(
@@ -64,7 +61,6 @@ export function useUpcomingMeetingStatus(
 function createUpcomingMeetingStatusStore(
   buckets: TimelineBucket[],
   formatLabel: (diffMs: number) => string,
-  activeLabel: string,
 ) {
   const getCurrentStatus = () =>
     getUpcomingMeetingStatus(
@@ -72,7 +68,6 @@ function createUpcomingMeetingStatusStore(
       Math.floor(Date.now() / UPCOMING_MEETING_STATUS_TICK_MS) *
         UPCOMING_MEETING_STATUS_TICK_MS,
       formatLabel,
-      activeLabel,
     );
   let status = getCurrentStatus();
   const listeners = new Set<() => void>();
@@ -118,39 +113,16 @@ export function getUpcomingMeetingStatus(
   buckets: TimelineBucket[],
   currentTimeMs: number,
   formatLabel: (diffMs: number) => string = formatUpcomingMeetingLabelEnglish,
-  activeLabel = "Now",
 ): SidebarUpcomingMeetingStatus | null {
-  let active: { itemKey: string; title: string; endsAtMs: number } | null =
-    null;
   let nearest: { itemKey: string; title: string; diffMs: number } | null = null;
 
   for (const bucket of buckets) {
     for (const item of bucket.items) {
-      const { start, end } = getItemTimeRange(item);
-      if (!start) {
+      if (item.timestampMs === null) {
         continue;
       }
 
-      const startsAtMs = start.getTime();
-      const endsAtMs = end?.getTime();
-      if (
-        typeof endsAtMs === "number" &&
-        endsAtMs > startsAtMs &&
-        startsAtMs <= currentTimeMs &&
-        currentTimeMs <= endsAtMs
-      ) {
-        if (!active || endsAtMs < active.endsAtMs) {
-          active = {
-            itemKey: `${item.type}-${item.id}`,
-            title: item.data.title || "Untitled",
-            endsAtMs,
-          };
-        }
-
-        continue;
-      }
-
-      const diffMs = startsAtMs - currentTimeMs;
+      const diffMs = item.timestampMs - currentTimeMs;
       if (diffMs <= 0 || diffMs > UPCOMING_MEETING_VISIBLE_WINDOW_MS) {
         continue;
       }
@@ -163,15 +135,6 @@ export function getUpcomingMeetingStatus(
         };
       }
     }
-  }
-
-  if (active) {
-    return {
-      itemKey: active.itemKey,
-      label: activeLabel,
-      progress: 1,
-      title: active.title,
-    };
   }
 
   if (!nearest) {

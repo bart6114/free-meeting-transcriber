@@ -6,7 +6,7 @@ import type {
   TimelineSessionsTable,
 } from "~/sidebar/timeline/utils";
 import { useUndoDelete } from "~/store/zustand/undo-delete";
-import { commands, type SessionListEntry } from "~/types/tauri.gen";
+import { commands, type SessionListHeader } from "~/types/tauri.gen";
 
 const EMPTY_SESSIONS: Record<string, TimelineSessionRow> = {};
 
@@ -15,7 +15,7 @@ export function useTimelineSessionsTable(): TimelineSessionsTable {
     entity: "sessions",
     queryKey: ["timeline-sessions"],
     queryFn: async () => {
-      const result = await commands.sessionList();
+      const result = await commands.sessionListHeaders();
       if (result.status === "error") {
         throw new Error(result.error);
       }
@@ -40,23 +40,18 @@ export function useTimelineSessionsTable(): TimelineSessionsTable {
   }, [timelineSessionsTable, pendingDeletions]);
 }
 
-// session_list is already (created_at, id) ASC -- the order the timeline expects.
+// session_list_headers is already (created_at, id) ASC -- the order the timeline expects.
 function mapTimelineSessionEntries(
-  entries: SessionListEntry[],
+  entries: SessionListHeader[],
 ): Record<string, TimelineSessionRow> {
   return Object.fromEntries(
-    entries.map(({ meta }) => [
-      meta.id,
+    entries.map((entry) => [
+      entry.id,
       {
-        title: meta.title,
-        created_at: meta.created_at,
-        // Downstream expects the stringified `event_json` the sessions row held.
-        event_json:
-          meta.event === null || meta.event === undefined
-            ? ""
-            : JSON.stringify(meta.event),
-        folder_id: meta.folder ?? "",
-        tags: meta.tags,
+        title: entry.title,
+        created_at: entry.created_at,
+        folder_id: entry.folder ?? "",
+        tags: entry.tags,
       },
     ]),
   );

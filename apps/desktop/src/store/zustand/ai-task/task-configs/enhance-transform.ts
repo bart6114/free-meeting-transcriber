@@ -4,7 +4,6 @@ import type {
   Session,
   Transcript,
 } from "@hypr/plugin-template";
-import { sessionEventSchema } from "@hypr/store";
 
 import type { TaskArgsMap, TaskArgsMapTransformed, TaskConfig } from ".";
 import { collectEnhanceImageContext } from "./enhance-images";
@@ -175,19 +174,6 @@ function getSessionContext(snapshot: SessionContentSnapshot) {
 }
 
 function getSessionData(snapshot: SessionContentSnapshot): Session {
-  const parsed = sessionEventSchema.safeParse(snapshot.event);
-  if (parsed.success) {
-    const eventTitle = parsed.data.title;
-    return {
-      title: eventTitle || snapshot.title || null,
-      startedAt: parsed.data.started_at ?? null,
-      endedAt: parsed.data.ended_at ?? null,
-      event: {
-        name: eventTitle || snapshot.title || "",
-      },
-    };
-  }
-
   return {
     title: snapshot.title || null,
     startedAt: null,

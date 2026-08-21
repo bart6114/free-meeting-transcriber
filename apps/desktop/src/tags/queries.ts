@@ -43,13 +43,13 @@ export function useInUseTags(): string[] {
     entity: "sessions",
     queryKey: ["in-use-tags"],
     queryFn: async () => {
-      const result = await commands.sessionList();
+      const result = await commands.sessionListHeaders();
       if (result.status === "error") {
         throw new Error(result.error);
       }
       const names = new Set<string>();
       for (const entry of result.data) {
-        for (const tag of entry.meta.tags) {
+        for (const tag of entry.tags) {
           names.add(tag);
         }
       }

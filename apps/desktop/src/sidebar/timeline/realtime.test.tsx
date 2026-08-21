@@ -9,26 +9,6 @@ describe("CurrentTimeIndicator", () => {
     vi.useRealTimers();
   });
 
-  test("renders inside-item progress from bottom to top", () => {
-    vi.useFakeTimers();
-
-    vi.setSystemTime(new Date(2024, 0, 15, 12, 0, 0));
-
-    const { container, rerender } = render(
-      <CurrentTimeIndicator variant="inside" progress={0} />,
-    );
-
-    expect((container.firstChild as HTMLDivElement | null)?.style.top).toBe(
-      "100%",
-    );
-
-    rerender(<CurrentTimeIndicator variant="inside" progress={1} />);
-
-    expect((container.firstChild as HTMLDivElement | null)?.style.top).toBe(
-      "0%",
-    );
-  });
-
   test("uses recording current-time colors", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date(2024, 0, 15, 12, 0, 0));

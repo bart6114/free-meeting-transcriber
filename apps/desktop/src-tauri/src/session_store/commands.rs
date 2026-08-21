@@ -5,9 +5,9 @@ use tauri::{AppHandle, Manager};
 use hypr_fs_format::TranscriptWithData;
 
 use super::{
-    EnhancedDoc, EnhancedDocPatch, PersonItem, RebuildReport, SessionListEntry, SessionMeta,
-    SessionMetaPatch, SessionRecord, SessionStore, TagItem, TaskInput, TaskItem, TemplateInput,
-    TemplateItem, TranscriptDelta,
+    EnhancedDoc, EnhancedDocPatch, PersonItem, RebuildReport, SessionListEntry, SessionListHeader,
+    SessionMeta, SessionMetaPatch, SessionRecord, SessionStore, TagItem, TaskInput, TaskItem,
+    TemplateInput, TemplateItem, TranscriptDelta,
 };
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
@@ -381,6 +381,14 @@ pub async fn session_list<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn session_list_headers<R: tauri::Runtime>(
+    app: AppHandle<R>,
+) -> Result<Vec<SessionListHeader>, String> {
+    Ok(store(&app)?.session_list_headers())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn session_ids<R: tauri::Runtime>(app: AppHandle<R>) -> Result<Vec<String>, String> {
     Ok(store(&app)?.session_ids())
 }
@@ -427,7 +435,10 @@ pub async fn session_transcripts<R: tauri::Runtime>(
     app: AppHandle<R>,
     session_id: String,
 ) -> Result<Vec<TranscriptWithData>, String> {
-    Ok(store(&app)?.session_transcripts(&session_id))
+    store(&app)?
+        .session_transcripts(&session_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -436,7 +447,10 @@ pub async fn transcript_get<R: tauri::Runtime>(
     app: AppHandle<R>,
     transcript_id: String,
 ) -> Result<Option<TranscriptWithData>, String> {
-    Ok(store(&app)?.transcript_get(&transcript_id))
+    store(&app)?
+        .transcript_get(&transcript_id)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]

@@ -311,7 +311,6 @@ async function announceImportCompleted(
         : null,
       start_time: null,
       participants: null,
-      event_details: null,
       action_label: lastImportedSessionId ? "Open note" : "Open",
       action_variant: null,
       options: null,

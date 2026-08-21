@@ -4,7 +4,6 @@ import { TZDate, format, safeParseDate } from "@hypr/utils";
 
 import type { TimelineSessionsTable } from "./utils";
 
-import { getSessionEvent } from "~/session/utils";
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
 
 const MINUTE_MS = 60_000;
@@ -12,13 +11,9 @@ const CURRENT_TIME_TICK_OFFSET_MS = 100;
 
 export const CurrentTimeIndicator = forwardRef<
   HTMLDivElement,
-  { timezone?: string; variant?: "seam" | "inside"; progress?: number }
->(function CurrentTimeIndicator(
-  { timezone, variant = "seam", progress = 0.5 },
-  ref,
-) {
+  { timezone?: string }
+>(function CurrentTimeIndicator({ timezone }, ref) {
   const currentTimeMs = useCurrentTimeMs();
-  const insideOffset = `${(1 - progress) * 100}%`;
   const label = useMemo(() => {
     const now = timezone
       ? new TZDate(new Date(currentTimeMs), timezone)
@@ -27,16 +22,7 @@ export const CurrentTimeIndicator = forwardRef<
   }, [currentTimeMs, timezone]);
 
   return (
-    <div
-      ref={ref}
-      aria-hidden
-      className={
-        variant === "inside"
-          ? "group absolute inset-x-0 z-30 h-px"
-          : "group relative z-30 h-px"
-      }
-      style={variant === "inside" ? { top: insideOffset } : undefined}
-    >
+    <div ref={ref} aria-hidden className="group relative z-30 h-px">
       <div className="absolute inset-x-0 top-0 -translate-y-1/2">
         <div
           data-sidebar-current-time-line
@@ -130,9 +116,7 @@ export function useSmartCurrentTime(sessionsTable: TimelineSessionsTable) {
 
       if (sessionsTable) {
         Object.values(sessionsTable).forEach((session) => {
-          const time = safeParseDate(
-            getSessionEvent(session)?.started_at ?? session.created_at,
-          );
+          const time = safeParseDate(session.created_at);
           if (time && time.getTime() > currentTime) {
             importantTimes.push(time.getTime());
           }

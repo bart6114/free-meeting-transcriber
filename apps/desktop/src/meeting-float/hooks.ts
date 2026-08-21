@@ -1,7 +1,7 @@
 import { subscribeIndexChanged } from "~/shared/index-query";
 import { DEFAULT_USER_ID } from "~/shared/utils";
 import type { RenderLabelContext } from "~/stt/live-segment";
-import { commands, type SessionListEntry } from "~/types/tauri.gen";
+import { commands, type SessionListHeader } from "~/types/tauri.gen";
 
 export type MeetingFloatData = {
   sessions: Record<
@@ -14,7 +14,7 @@ export type MeetingFloatData = {
 };
 
 export async function loadMeetingFloatData(): Promise<MeetingFloatData> {
-  const result = await commands.sessionList();
+  const result = await commands.sessionListHeaders();
   if (result.status === "error") {
     throw new Error(result.error);
   }
@@ -55,12 +55,14 @@ export function createMeetingFloatLabelContext(
   };
 }
 
-function mapMeetingFloatEntries(entries: SessionListEntry[]): MeetingFloatData {
+function mapMeetingFloatEntries(
+  entries: SessionListHeader[],
+): MeetingFloatData {
   const sessions: MeetingFloatData["sessions"] = {};
 
   for (const entry of entries) {
-    sessions[entry.meta.id] = {
-      title: entry.meta.title,
+    sessions[entry.id] = {
+      title: entry.title,
       // The owner concept died with the workspaces removal (D10).
       ownerUserId: DEFAULT_USER_ID,
     };

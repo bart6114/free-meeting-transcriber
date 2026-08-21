@@ -19,7 +19,7 @@ fn meta(id: &str, title: &str) -> SessionMeta {
         ended_at: None,
         created_at: "2026-07-24T00:00:00Z".to_string(),
         tags: vec![],
-        event: None,
+        tracking_id: None,
         folder: None,
         extra: Default::default(),
     }

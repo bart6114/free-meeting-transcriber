@@ -5,6 +5,7 @@ import {
 import {
   ExternalLinkIcon,
   FileIcon,
+  FolderIcon,
   FileSpreadsheetIcon,
   FileTextIcon,
   ImageIcon,
@@ -137,10 +138,22 @@ export const FileAttachmentView = forwardRef<
     }
   };
 
+  const isLocalFile = typeof path === "string" && !path.startsWith("https://");
+
+  const handleReveal = () => {
+    if (isLocalFile) {
+      openerCommands.revealItemInDir(path);
+    }
+  };
+
   const isImage = typeof mimeType === "string" && mimeType.startsWith("image/");
 
   return (
-    <div ref={ref} {...htmlAttrs}>
+    <div
+      ref={ref}
+      {...htmlAttrs}
+      className="select-none [&_*::selection]:bg-transparent [&::selection]:bg-transparent"
+    >
       <div
         contentEditable={false}
         suppressContentEditableWarning
@@ -184,6 +197,20 @@ export const FileAttachmentView = forwardRef<
               title="Open file"
             >
               <ExternalLinkIcon size={14} className="text-muted-foreground" />
+            </button>
+          )}
+          {isLocalFile && (
+            <button
+              type="button"
+              onMouseDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                handleReveal();
+              }}
+              className="hover:bg-accent rounded p-1"
+              title="Show in Finder"
+            >
+              <FolderIcon size={14} className="text-muted-foreground" />
             </button>
           )}
           {attachmentEditingEnabled ? (

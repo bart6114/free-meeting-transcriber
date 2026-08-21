@@ -156,6 +156,7 @@ vi.mock("./types/tauri.gen", () => ({
     // Vault index read commands (Phase E): empty-index defaults.
     sessionGet: vi.fn().mockResolvedValue({ status: "ok", data: null }),
     sessionList: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
+    sessionListHeaders: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
     sessionIds: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
     sessionIsEmpty: vi.fn().mockResolvedValue({ status: "ok", data: true }),
     sessionHasTranscript: vi

@@ -262,7 +262,7 @@ async fn drain_queue<R: tauri::Runtime>(
         let mut documents = Vec::new();
         let mut removals = Vec::new();
         for (id, _generation) in &batch {
-            match build_session_document(store, id) {
+            match build_session_document(store, id).await {
                 IndexAction::Upsert(document) => documents.push(document),
                 IndexAction::Remove(id) => removals.push(id),
             }
@@ -290,16 +290,21 @@ async fn drain_queue<R: tauri::Runtime>(
     }
 }
 
-fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
+async fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
     let Some(record) = store.session_get(id) else {
         return IndexAction::Remove(id.to_string());
     };
 
     // Same assembly order as the SQL projection: note body, then summary/
     // template_output docs by (sort_order, id), then transcripts by
-    // (started_at, created_at, id).
+    // (started_at, created_at, id). A transcript file that fails to read/parse
+    // must not starve the rest of the batch: index note/docs only and let the
+    // dirty queue re-mark this session on its next change.
     let enhanced_docs = store.session_enhanced_docs(id);
-    let transcripts = store.session_transcripts(id);
+    let transcripts = store.session_transcripts(id).await.unwrap_or_else(|error| {
+        tracing::warn!(%id, %error, "search projection: transcript read failed; indexing without transcript content");
+        Vec::new()
+    });
 
     let mut content_parts = Vec::with_capacity(1 + enhanced_docs.len() + transcripts.len());
     if let Some(note) = &record.note_markdown {
@@ -312,21 +317,13 @@ fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
     );
     content_parts.extend(transcripts.iter().map(flatten_transcript_words));
 
-    // The exact string the SQL mirror's `sessions.event_json` column carried.
-    let event_json = record
-        .meta
-        .event
-        .as_ref()
-        .map(|event| event.to_string())
-        .unwrap_or_default();
-
     IndexAction::Upsert(SearchDocument {
         id: id.to_string(),
         doc_type: "session".to_string(),
         language: None,
         title: fallback_title(&record.meta.title, "Untitled"),
         content: merge_content(content_parts.iter().map(String::as_str)),
-        created_at: session_search_timestamp(&event_json, &record.meta.created_at),
+        created_at: to_epoch_ms(&Value::String(record.meta.created_at.clone())),
         facets: Vec::new(),
     })
 }
@@ -449,19 +446,6 @@ fn flatten_transcript_words(transcript: &hypr_fs_format::TranscriptWithData) -> 
     merge_content(transcript.words.iter().map(|word| word.text.as_str()))
 }
 
-fn session_search_timestamp(event_json: &str, created_at: &str) -> i64 {
-    if let Ok(event) = serde_json::from_str::<Value>(event_json)
-        && let Some(started_at) = event.get("started_at")
-    {
-        let timestamp = to_epoch_ms(started_at);
-        if timestamp > 0 {
-            return timestamp;
-        }
-    }
-
-    to_epoch_ms(&Value::String(created_at.to_string()))
-}
-
 fn to_epoch_ms(value: &Value) -> i64 {
     match value {
         Value::Number(value) => value.as_f64().unwrap_or(0.0) as i64,
@@ -546,19 +530,12 @@ mod tests {
     }
 
     #[test]
-    fn session_timestamp_prefers_event_start_and_falls_back_to_created_at() {
+    fn session_timestamp_derives_from_created_at() {
         assert_eq!(
-            session_search_timestamp(
-                r#"{"started_at":"2026-07-14T01:02:03Z"}"#,
-                "2025-01-01T00:00:00Z",
-            ),
-            1_783_990_923_000
-        );
-        assert_eq!(
-            session_search_timestamp("{}", "2025-01-01T00:00:00Z"),
+            to_epoch_ms(&Value::String("2025-01-01T00:00:00Z".to_string())),
             1_735_689_600_000
         );
-        assert_eq!(session_search_timestamp(r#"{"started_at":1234}"#, ""), 1234);
+        assert_eq!(to_epoch_ms(&Value::String(String::new())), 0);
     }
 
     // -- end-to-end projection over a real Tantivy index --------------------------
@@ -571,7 +548,7 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
-            event: None,
+            tracking_id: None,
             folder: None,
             extra: Default::default(),
         }
@@ -857,8 +834,7 @@ mod tests {
     #[tokio::test]
     async fn build_session_document_matches_the_sql_projection_shape() {
         let h = harness().await;
-        let mut m = meta("s1", "  ");
-        m.event = Some(serde_json::json!({"started_at": "2026-07-14T01:02:03Z"}));
+        let m = meta("s1", "  ");
         h.store.write_meta(&m).await.unwrap();
         h.store.write_note("s1", "# raw note body").await.unwrap();
         h.store
@@ -893,7 +869,7 @@ mod tests {
             .await
             .unwrap();
 
-        let IndexAction::Upsert(doc) = build_session_document(&h.store, "s1") else {
+        let IndexAction::Upsert(doc) = build_session_document(&h.store, "s1").await else {
             panic!("expected an upsert for an existing session");
         };
         assert_eq!(doc.id, "s1");
@@ -905,11 +881,43 @@ mod tests {
             doc.content, "# raw note body first summary body enhanced doc body spoken words",
             "note, then enhanced docs by (sort_order, id), then transcript words"
         );
-        assert_eq!(doc.created_at, 1_783_990_923_000, "event started_at wins");
+        assert_eq!(
+            doc.created_at, 1_784_851_200_000,
+            "timestamp comes from created_at"
+        );
 
         assert!(matches!(
-            build_session_document(&h.store, "missing"),
+            build_session_document(&h.store, "missing").await,
             IndexAction::Remove(_)
         ));
+    }
+
+    /// A corrupt transcript.json must not starve the projection: the session is still
+    /// upserted from its note/docs (the dirty queue re-marks it on the next transcript
+    /// change), rather than failing the whole batch.
+    #[tokio::test]
+    async fn malformed_transcript_still_upserts_note_and_doc_content() {
+        let h = harness().await;
+        h.store
+            .write_meta(&meta("s1", "Broken tape"))
+            .await
+            .unwrap();
+        h.store.write_note("s1", "note survives").await.unwrap();
+        h.store
+            .write_transcript("s1", transcript("t1", 5.0, vec![word("w0", "spoken")]))
+            .await
+            .unwrap();
+
+        let dir = h
+            .vault
+            .path()
+            .join(h.store.session_dir("s1").await.unwrap());
+        std::fs::write(dir.join("transcript.json"), b"{ not json").unwrap();
+
+        let IndexAction::Upsert(doc) = build_session_document(&h.store, "s1").await else {
+            panic!("expected an upsert despite the malformed transcript");
+        };
+        assert_eq!(doc.title, "Broken tape");
+        assert_eq!(doc.content, "note survives");
     }
 }

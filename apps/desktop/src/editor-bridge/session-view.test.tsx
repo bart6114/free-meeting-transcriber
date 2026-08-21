@@ -25,10 +25,6 @@ vi.mock("@handlewithcare/react-prosemirror", () => ({
 vi.mock("~/session/queries", () => ({
   useSession: () => ({
     created_at: "2026-04-06T00:00:00.000Z",
-    event_json: JSON.stringify({
-      started_at: "2026-04-06T02:30:00.000Z",
-      ended_at: "2026-04-06T01:00:00.000Z",
-    }),
   }),
 }));
 
@@ -166,12 +162,8 @@ describe("SessionNodeView", () => {
     });
   });
 
-  it("renders the event start time instead of the session creation time", () => {
-    const expectedEventTime = format(
-      new Date("2026-04-06T02:30:00.000Z"),
-      "h:mm a",
-    );
-    const unexpectedCreatedTime = format(
+  it("renders the session creation time", () => {
+    const expectedCreatedTime = format(
       new Date("2026-04-06T00:00:00.000Z"),
       "h:mm a",
     );
@@ -191,7 +183,8 @@ describe("SessionNodeView", () => {
       </SessionNodeView>,
     );
 
-    expect(screen.queryAllByText(expectedEventTime).length).toBeGreaterThan(0);
-    expect(screen.queryAllByText(unexpectedCreatedTime)).toHaveLength(0);
+    expect(screen.queryAllByText(expectedCreatedTime).length).toBeGreaterThan(
+      0,
+    );
   });
 });

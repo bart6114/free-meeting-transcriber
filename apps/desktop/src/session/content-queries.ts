@@ -7,7 +7,6 @@ export type SessionContentSnapshot = {
   ownerUserId: string;
   title: string;
   createdAt: string;
-  event: unknown;
   rawNoteId: string | null;
   rawContent: string;
   rawContentFormat: string;
@@ -95,7 +94,6 @@ export async function loadSessionContentSnapshot(
     ownerUserId: DEFAULT_USER_ID,
     title: session.meta.title,
     createdAt: session.meta.created_at,
-    event: session.meta.event ?? null,
     rawNoteId: session.note_markdown == null ? null : `${sessionId}:note`,
     rawContent: rawMarkdown,
     rawContentFormat: "md",

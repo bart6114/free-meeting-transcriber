@@ -501,7 +501,6 @@ const useHandleDetectEvents = (store: ListenerStore) => {
                 },
                 start_time: null,
                 participants: null,
-                event_details: null,
                 action_label: "Start recording",
                 action_variant: null,
                 options: null,

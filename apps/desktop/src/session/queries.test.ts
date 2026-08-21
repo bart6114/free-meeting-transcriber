@@ -105,15 +105,13 @@ describe("session store operations", () => {
     });
   });
 
-  it("maps folder/event changes onto the store patch shape", async () => {
+  it("maps folder changes onto the store patch shape", async () => {
     await updateSession("session-1", {
       folder_id: "work",
-      event_json: '{"tracking_id":"evt-1"}',
     });
 
     expect(mocks.sessionUpdateMeta).toHaveBeenCalledWith("session-1", {
       folder: "work",
-      event: { tracking_id: "evt-1" },
     });
   });
 
@@ -135,7 +133,7 @@ describe("session store operations", () => {
 
   it("creates a session via the store, then seeds initial content as markdown", async () => {
     await createSession("Welcome", "user-1", {
-      event_json: '{"tracking_id":"welcome"}',
+      tracking_id: "welcome",
       raw_md: JSON.stringify({
         type: "doc",
         content: [
@@ -144,12 +142,11 @@ describe("session store operations", () => {
       }),
     });
 
-    // The event rides the store write itself, parsed into the meta envelope -- never a
-    // separate `UPDATE sessions SET event_json` statement.
+    // The marker rides the store write itself, on the meta directly.
     expect(mocks.sessionWriteMeta).toHaveBeenCalledWith(
       expect.objectContaining({
         title: "Welcome",
-        event: { tracking_id: "welcome" },
+        tracking_id: "welcome",
       }),
     );
 

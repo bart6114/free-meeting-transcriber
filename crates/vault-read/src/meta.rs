@@ -12,10 +12,12 @@ pub struct SessionMeta {
     pub ended_at: Option<String>,
     pub created_at: String,
     pub tags: Vec<String>,
-    /// Opaque calendar-event envelope (the sessions row's `event_json`). The store never
-    /// inspects its interior -- it round-trips whatever JSON the frontend hands it.
+    /// Marker for app-created special sessions (today only the onboarding welcome
+    /// note) so they can be found again across restarts. Pre-removal builds carried
+    /// this inside the retired calendar-event envelope, which now round-trips
+    /// through `extra` -- see `session_find_by_tracking_id`'s legacy fallback.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event: Option<serde_json::Value>,
+    pub tracking_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
     /// Forward-compat catch-all: fields written by newer app versions must survive a

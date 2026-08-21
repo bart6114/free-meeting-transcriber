@@ -22,7 +22,6 @@ import { formatDate, formatDuration } from "./export-utils";
 
 import { useTranscriptExportSegments } from "~/session/components/note-input/transcript/export-data";
 import { useEnhancedNote, useSession } from "~/session/queries";
-import { getSessionEvent } from "~/session/utils";
 import type { EditorView } from "~/store/zustand/tabs/schema";
 import { useSessionTranscripts } from "~/stt/queries";
 
@@ -77,8 +76,6 @@ export function ExportModal({
   const session = useSession(sessionId);
   const sessionTitle = session?.title;
   const sessionCreatedAt = session?.created_at;
-  const event = session ? getSessionEvent(session) : null;
-  const eventTitle = event?.title;
   const rawMd = session?.raw_md;
 
   const enhancedNoteId = currentView.type === "enhanced" ? currentView.id : "";
@@ -307,7 +304,6 @@ export function ExportModal({
       title: sessionTitle || t`Untitled`,
       createdAt: sessionCreatedAt ? formatDate(sessionCreatedAt) : "",
       participants: participantNames,
-      eventTitle: eventTitle || null,
       duration: transcriptDuration,
     };
 

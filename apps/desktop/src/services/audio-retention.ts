@@ -95,13 +95,13 @@ export async function cleanupExpiredAudio(
   }
 
   const deletes: Promise<void>[] = [];
-  const result = await commands.sessionList();
+  const result = await commands.sessionListHeaders();
   if (result.status === "error") {
     throw new Error(result.error);
   }
 
   for (const entry of result.data) {
-    const sessionId = entry.meta.id;
+    const sessionId = entry.id;
     if (!isSessionAudioIdle(sessionId)) {
       continue;
     }
@@ -110,7 +110,7 @@ export async function cleanupExpiredAudio(
       continue;
     }
 
-    if (!sessionAudioExpired(entry.meta.created_at, policy, nowMs)) {
+    if (!sessionAudioExpired(entry.created_at, policy, nowMs)) {
       continue;
     }
 

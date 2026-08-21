@@ -1,5 +1,4 @@
 import { md2json } from "@hypr/editor/markdown";
-import type { SessionEvent } from "@hypr/store";
 
 import { WELCOME_NOTE_TRACKING_ID } from "~/onboarding/welcome-note.constants";
 import { createSession } from "~/session/queries";
@@ -52,52 +51,11 @@ async function findOrCreateWelcomeSession(): Promise<string> {
     throw new Error(result.error);
   }
   if (result.data) {
-    await clearStaleMeetingLink(result.data.id, result.data.event);
     return result.data.id;
   }
 
-  const now = new Date().toISOString();
-  const event: SessionEvent = {
-    tracking_id: WELCOME_NOTE_TRACKING_ID,
-    calendar_id: "",
-    title: "Welcome to Free Meeting Transcriber",
-    started_at: now,
-    ended_at: "",
-    is_all_day: false,
-    has_recurrence_rules: false,
-    meeting_link: "",
-    description: "A quick introduction to Free Meeting Transcriber.",
-  };
-
   return createSession("Welcome to Free Meeting Transcriber", DEFAULT_USER_ID, {
-    event_json: JSON.stringify(event),
+    tracking_id: WELCOME_NOTE_TRACKING_ID,
     raw_md: JSON.stringify(md2json(WELCOME_NOTE)),
   });
-}
-
-/**
- * Best-effort: a welcome note is still usable with a stale meeting link, so a failed clear
- * (e.g. a pre-store session with no `_meta.json` yet) logs instead of failing onboarding.
- */
-async function clearStaleMeetingLink(
-  sessionId: string,
-  rawEvent: unknown,
-): Promise<void> {
-  try {
-    const event = rawEvent as Partial<SessionEvent> | null | undefined;
-    if (!event || typeof event !== "object" || !event.meeting_link) {
-      return;
-    }
-    const result = await commands.sessionUpdateMeta(sessionId, {
-      event: { ...event, meeting_link: "" },
-    });
-    if (result.status === "error") {
-      console.error(
-        "[welcome-note] failed to clear stale meeting link",
-        result.error,
-      );
-    }
-  } catch (error) {
-    console.error("[welcome-note] failed to clear stale meeting link", error);
-  }
 }

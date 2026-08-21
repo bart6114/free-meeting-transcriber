@@ -16,7 +16,6 @@ import {
 import { cn, safeParseDate } from "@hypr/utils";
 
 import { useSession } from "~/session/queries";
-import { getSessionEvent } from "~/session/utils";
 import { toTz, useTimezone } from "~/shared/hooks/useNow";
 import { useTabs } from "~/store/zustand/tabs";
 import { useListener } from "~/stt/contexts";
@@ -35,23 +34,13 @@ export const SessionNodeView = forwardRef<
   const isRecording =
     liveSessionId === sessionId &&
     (liveStatus === "active" || liveStatus === "finalizing");
-  const event = useMemo(() => getSessionEvent(session ?? {}), [session]);
   const displayTime = useMemo(() => {
-    if (event?.is_all_day) {
-      return null;
-    }
-
-    const rawDate = event?.started_at ?? session?.created_at;
-    const parsed = rawDate ? safeParseDate(rawDate) : null;
+    const parsed = session?.created_at
+      ? safeParseDate(session.created_at)
+      : null;
 
     return parsed ? format(toTz(parsed, tz), "h:mm a") : null;
-  }, [event?.is_all_day, event?.started_at, session?.created_at, tz]);
-
-  const isMeetingOver = useMemo(() => {
-    if (!event?.ended_at) return false;
-    const endedAt = safeParseDate(event.ended_at);
-    return endedAt ? endedAt.getTime() <= Date.now() : false;
-  }, [event]);
+  }, [session?.created_at, tz]);
 
   const linkedItemOpenBehavior = useLinkedItemOpenBehavior();
   const openCurrent = useTabs((state) => state.openCurrent);
@@ -81,7 +70,7 @@ export const SessionNodeView = forwardRef<
     [openSession],
   );
 
-  const derivedChecked = !isRecording && isMeetingOver;
+  const derivedChecked = false;
   const explicitStatus = getOptionalTaskStatus(
     node.attrs.status,
     node.attrs.checked,

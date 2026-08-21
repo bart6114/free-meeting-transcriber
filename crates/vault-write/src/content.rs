@@ -23,7 +23,7 @@ pub struct SessionMetaPatch {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tags: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub event: Option<serde_json::Value>,
+    pub tracking_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
 }
@@ -86,7 +86,7 @@ impl SessionStore {
             ended_at,
             created_at,
             tags,
-            event,
+            tracking_id,
             folder,
         } = patch;
 
@@ -105,8 +105,8 @@ impl SessionStore {
         if let Some(tags) = tags {
             meta.tags = tags;
         }
-        if let Some(event) = event {
-            meta.event = Some(event);
+        if let Some(tracking_id) = tracking_id {
+            meta.tracking_id = Some(tracking_id);
         }
         if let Some(folder) = folder {
             meta.folder = Some(folder);
@@ -432,7 +432,7 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
-            event: None,
+            tracking_id: None,
             folder: None,
             extra: Default::default(),
         }
@@ -476,13 +476,15 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn write_meta_round_trips_event_folder_and_tags_through_file_and_index() {
+    async fn write_meta_round_trips_tracking_folder_and_tags_through_file_and_index() {
         let (store, vault) = test_store().await;
         let mut m = meta("s1", "Sprint sync");
-        m.event = Some(serde_json::json!({
-            "tracking_id": "evt-1",
-            "meeting_link": "https://example.com/x",
-        }));
+        m.tracking_id = Some("evt-1".to_string());
+        // A legacy calendar-event envelope rides the `extra` catch-all.
+        m.extra.insert(
+            "event".to_string(),
+            serde_json::json!({"meeting_link": "https://example.com/x"}),
+        );
         m.folder = Some("work/standups".to_string());
         m.tags = vec!["planning".to_string(), "q3".to_string()];
         store.write_meta(&m).await.unwrap();
@@ -490,7 +492,8 @@ mod tests {
         assert_eq!(store.read_meta("s1").await.unwrap().unwrap(), m);
 
         let indexed = store.session_get("s1").unwrap().meta;
-        assert_eq!(indexed.event, m.event);
+        assert_eq!(indexed.tracking_id, m.tracking_id);
+        assert_eq!(indexed.extra.get("event"), m.extra.get("event"));
         assert_eq!(indexed.folder.as_deref(), Some("work/standups"));
 
         let raw =
@@ -499,10 +502,10 @@ mod tests {
         assert!(raw.contains("planning"));
     }
 
-    /// Old `_meta.json` files (written before `event`/`folder` existed) must keep
+    /// Old `_meta.json` files (written before `tracking_id`/`folder` existed) must keep
     /// deserializing -- the new fields default to absent, not an error.
     #[tokio::test]
-    async fn read_meta_accepts_pre_event_folder_files() {
+    async fn read_meta_accepts_pre_tracking_folder_files() {
         let (store, vault) = test_store().await;
         let dir = vault.path().join("sessions/s1");
         std::fs::create_dir_all(&dir).unwrap();
@@ -513,12 +516,12 @@ mod tests {
         .unwrap();
 
         let m = store.read_meta("s1").await.unwrap().unwrap();
-        assert_eq!(m.event, None);
+        assert_eq!(m.tracking_id, None);
         assert_eq!(m.folder, None);
 
         store.write_meta(&m).await.unwrap();
         let indexed = store.session_get("s1").unwrap().meta;
-        assert_eq!(indexed.event, None);
+        assert_eq!(indexed.tracking_id, None);
         assert_eq!(indexed.folder, None);
     }
 
@@ -526,7 +529,7 @@ mod tests {
     async fn update_meta_patches_only_the_given_fields() {
         let (store, _vault) = test_store().await;
         let mut m = meta("s1", "Original");
-        m.event = Some(serde_json::json!({"tracking_id": "evt-1"}));
+        m.tracking_id = Some("evt-1".to_string());
         store.write_meta(&m).await.unwrap();
 
         store
@@ -544,7 +547,10 @@ mod tests {
         let after = store.read_meta("s1").await.unwrap().unwrap();
         assert_eq!(after.title, "Renamed");
         assert_eq!(after.tags, vec!["kept".to_string()]);
-        assert_eq!(after.event, m.event, "unpatched fields must survive");
+        assert_eq!(
+            after.tracking_id, m.tracking_id,
+            "unpatched fields must survive"
+        );
         assert_eq!(after.created_at, m.created_at);
 
         assert_eq!(
@@ -740,7 +746,7 @@ mod tests {
 
         assert!(store.session_get("s1").is_none());
         assert!(store.session_enhanced_docs("s1").is_empty());
-        assert!(store.session_transcripts("s1").is_empty());
+        assert!(store.session_transcripts("s1").await.unwrap().is_empty());
 
         // The whole folder moved to .trash/<date>/<its vault-relative path>.
         let date = chrono::Utc::now().format("%Y-%m-%d").to_string();

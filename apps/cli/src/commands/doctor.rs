@@ -17,6 +17,7 @@ struct VaultReport {
     exists: bool,
     is_directory: bool,
     sessions: Option<usize>,
+    agents_md: Option<String>,
     error: Option<String>,
 }
 
@@ -39,6 +40,7 @@ fn inspect(args: &Args) -> Result<DoctorReport> {
         exists,
         is_directory: false,
         sessions: None,
+        agents_md: None,
         error: None,
     };
 
@@ -51,6 +53,19 @@ fn inspect(args: &Args) -> Result<DoctorReport> {
         match hypr_vault_read::meta::list_session_metas(&path) {
             Ok(metas) => report.sessions = Some(metas.len()),
             Err(error) => report.error = Some(format!("vault scan failed: {error}")),
+        }
+        // Only repair AGENTS.md inside a directory that already is a vault
+        // (mirrors `classify_vault_dir`) — doctor pointed at an arbitrary
+        // folder must not seed files into it, or `move_vault`'s
+        // empty-destination check would start rejecting it.
+        if path.join("sessions").is_dir() || path.join("config.json").is_file() {
+            report.agents_md = Some(
+                match hypr_vault_write::agents_doc::ensure_agents_doc(&path) {
+                    Ok(true) => "written".to_string(),
+                    Ok(false) => "up-to-date".to_string(),
+                    Err(error) => format!("repair failed: {error}"),
+                },
+            );
         }
     }
 
@@ -72,6 +87,9 @@ fn render(report: &DoctorReport) -> String {
     ];
     if let Some(sessions) = report.vault.sessions {
         lines.push(format!("Sessions: {sessions}"));
+    }
+    if let Some(agents_md) = &report.vault.agents_md {
+        lines.push(format!("AGENTS.md: {agents_md}"));
     }
     if let Some(error) = &report.vault.error {
         lines.push(format!("Issue: {error}"));
@@ -148,5 +166,27 @@ mod tests {
         assert!(report.vault.is_directory);
         assert_eq!(report.vault.sessions, Some(1));
         assert!(report.vault.error.is_none());
+    }
+
+    #[test]
+    fn does_not_seed_agents_md_into_a_non_vault_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let report = inspect(&args(dir.path().to_path_buf())).unwrap();
+
+        assert!(report.vault.agents_md.is_none());
+        assert!(!dir.path().join("AGENTS.md").exists());
+    }
+
+    #[test]
+    fn repairs_agents_md_in_a_vault() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("sessions")).unwrap();
+
+        let report = inspect(&args(dir.path().to_path_buf())).unwrap();
+        assert_eq!(report.vault.agents_md.as_deref(), Some("written"));
+        assert!(dir.path().join("AGENTS.md").exists());
+
+        let report = inspect(&args(dir.path().to_path_buf())).unwrap();
+        assert_eq!(report.vault.agents_md.as_deref(), Some("up-to-date"));
     }
 }

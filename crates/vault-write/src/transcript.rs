@@ -1,6 +1,44 @@
-use hypr_fs_format::{TranscriptJson, TranscriptSpeakerHint, TranscriptWithData, TranscriptWord};
+use hypr_fs_format::{
+    TranscriptJson, TranscriptJsonStats, TranscriptSpeakerHint, TranscriptWithData, TranscriptWord,
+};
 
+use super::index::TranscriptSummary;
 use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
+
+/// Truncated sha2 of the file bytes -- the summary's change discriminator. Both
+/// producers (the write-through path and rebuild) hash the same bytes that land on
+/// disk, so a restart never sees a spurious diff.
+fn content_hash(bytes: &[u8]) -> u64 {
+    use sha2::Digest;
+    let digest = sha2::Sha256::digest(bytes);
+    u64::from_le_bytes(digest[..8].try_into().unwrap())
+}
+
+/// Summary from an already-materialized transcript list (write-through path: the
+/// serialized bytes and the parsed list are both in hand).
+pub(crate) fn summarize_transcripts(
+    bytes: &[u8],
+    transcripts: &[TranscriptWithData],
+) -> TranscriptSummary {
+    TranscriptSummary {
+        transcript_ids: transcripts.iter().map(|t| t.id.clone()).collect(),
+        has_words: transcripts.iter().any(|t| !t.words.is_empty()),
+        content_hash: content_hash(bytes),
+    }
+}
+
+/// Summary straight from raw file bytes (rebuild path) -- lexes the whole file but
+/// allocates nothing per word.
+pub(crate) fn summarize_transcript_bytes(bytes: &[u8]) -> Result<TranscriptSummary, StoreError> {
+    let stats: TranscriptJsonStats = serde_json::from_slice(bytes).map_err(|e| {
+        StoreError::Serialize(format!("failed to deserialize transcript.json: {e}"))
+    })?;
+    Ok(TranscriptSummary {
+        transcript_ids: stats.transcripts.iter().map(|t| t.id.clone()).collect(),
+        has_words: stats.transcripts.iter().any(|t| t.words.0 > 0),
+        content_hash: content_hash(bytes),
+    })
+}
 
 #[derive(serde::Deserialize, specta::Type, Clone)]
 pub struct TranscriptDelta {
@@ -342,16 +380,13 @@ impl SessionStore {
     ) -> Result<(), StoreError> {
         // The index only resolves transcript -> session here; ownership never moves, so
         // this lookup is safe outside the guard. Words and hints are re-read from the
-        // file below, under the guard -- persisting an index snapshot taken out here
-        // could clobber a write that lands between the read and the lock.
-        let session_id = self
-            .transcript_get(transcript_id)
-            .map(|t| t.session_id)
-            .ok_or_else(|| {
-                StoreError::Io(format!(
-                    "cannot assign speaker: transcript {transcript_id} does not exist"
-                ))
-            })?;
+        // file below, under the guard -- persisting a snapshot taken out here could
+        // clobber a write that lands between the read and the lock.
+        let session_id = self.transcript_session_id(transcript_id).ok_or_else(|| {
+            StoreError::Io(format!(
+                "cannot assign speaker: transcript {transcript_id} does not exist"
+            ))
+        })?;
 
         let guard = self.lock_writes().await;
 
@@ -562,13 +597,15 @@ impl SessionStore {
         // flush (StoreError::Serialize), never get silently dropped or collapse to `[]`.
         let bytes =
             serde_json::to_vec_pretty(&file).map_err(|e| StoreError::Serialize(e.to_string()))?;
+        // Summarize the exact bytes being written -- a later rebuild hashing the file
+        // on disk agrees, so a restart never produces a spurious Transcripts diff.
+        let summary = summarize_transcripts(&bytes, &file.transcripts);
 
         let session_dir = self.session_dir_locked(guard, session_id).await?;
         self.write_file_locked(guard, paths::transcript_path_in(&session_dir), bytes)
             .await?;
 
-        // The file was just re-derived whole, so the index gets the same full list.
-        self.index_set_transcripts(session_id, file.transcripts.clone());
+        self.index_set_transcript_summary(session_id, summary);
         self.notify_index_changed(
             super::IndexEntity::Transcripts,
             vec![session_id.to_string()],
@@ -611,6 +648,42 @@ impl SessionStore {
             serde_json::from_slice(&bytes).map_err(|e| {
                 StoreError::Serialize(format!("failed to deserialize transcript.json: {}", e))
             })
+        })
+        .await
+        .map_err(|e| StoreError::Io(format!("task join error: {}", e)))?
+    }
+
+    /// Rebuild's word-free counterpart of `read_transcript_json`: same missing-file
+    /// (-> empty summary, which removes the index entry) and malformed-file (-> Err,
+    /// keep the old entry) contract, but only counts and hashes -- no per-word
+    /// allocation, nothing retained.
+    pub(crate) async fn read_transcript_summary(
+        &self,
+        session_id: &str,
+    ) -> Result<TranscriptSummary, StoreError> {
+        validate_session_id(session_id)?;
+        let vault_base = self.vault_base.clone();
+        let relative = paths::transcript_path_in(&self.session_dir(session_id).await?);
+
+        tokio::task::spawn_blocking(move || -> Result<TranscriptSummary, StoreError> {
+            let path = vault_base.join(&relative);
+            let bytes = match std::fs::read(&path) {
+                Ok(bytes) => bytes,
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    return Ok(TranscriptSummary {
+                        transcript_ids: Vec::new(),
+                        has_words: false,
+                        content_hash: 0,
+                    });
+                }
+                Err(e) => {
+                    return Err(StoreError::Io(format!(
+                        "failed to read transcript file: {}",
+                        e
+                    )));
+                }
+            };
+            summarize_transcript_bytes(&bytes)
         })
         .await
         .map_err(|e| StoreError::Io(format!("task join error: {}", e)))?
@@ -697,7 +770,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 2);
-        let indexed = store.session_transcripts("s1");
+        let indexed = store.session_transcripts("s1").await.unwrap();
         assert_eq!(indexed.len(), 1);
         assert_eq!(indexed[0].words[0].text, "hello");
     }
@@ -837,6 +910,8 @@ mod tests {
 
         let texts: Vec<String> = store
             .transcript_get("t1")
+            .await
+            .unwrap()
             .unwrap()
             .words
             .into_iter()
@@ -993,7 +1068,7 @@ mod tests {
 
         assert!(vault.path().join("sessions/s1/transcript.json").is_file());
         assert_eq!(
-            store.transcript_get("batch").unwrap().words[0].text,
+            store.transcript_get("batch").await.unwrap().unwrap().words[0].text,
             "uploaded"
         );
     }
@@ -1096,7 +1171,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(json["transcripts"][0]["words"].as_array().unwrap().len(), 1);
-        assert_eq!(store.transcript_get("t1").unwrap().words[0].text, "hello");
+        assert_eq!(
+            store.transcript_get("t1").await.unwrap().unwrap().words[0].text,
+            "hello"
+        );
     }
 
     /// Direct test for `append_transcript`'s `needs_flush_before_switch` branch: a delta for
@@ -1143,7 +1221,7 @@ mod tests {
             .collect();
         assert_eq!(t1_texts, vec!["old-words"]);
         assert_eq!(
-            store.transcript_get("t1").unwrap().words[0].text,
+            store.transcript_get("t1").await.unwrap().unwrap().words[0].text,
             "old-words"
         );
 
@@ -1215,12 +1293,14 @@ mod tests {
         // Index queries agree with the file.
         let indexed: Vec<String> = store
             .session_transcripts("s1")
+            .await
+            .unwrap()
             .into_iter()
             .map(|t| t.id)
             .collect();
         assert_eq!(indexed, vec!["t-new"]);
-        assert!(store.transcript_get("t-old-1").is_none());
-        assert!(store.transcript_get("t-old-2").is_none());
+        assert!(store.transcript_get("t-old-1").await.unwrap().is_none());
+        assert!(store.transcript_get("t-old-2").await.unwrap().is_none());
     }
 
     #[tokio::test]
@@ -1286,7 +1366,7 @@ mod tests {
 
         assert!(vault.path().join("sessions/s1/transcript.json").is_file());
         assert!(!vault.path().join(".trash").exists());
-        assert_eq!(store.session_transcripts("s1").len(), 1);
+        assert_eq!(store.session_transcripts("s1").await.unwrap().len(), 1);
     }
 
     #[tokio::test]
@@ -1374,9 +1454,11 @@ mod tests {
         }
     }
 
-    fn hint_summaries(store: &SessionStore, transcript_id: &str) -> Vec<(String, String)> {
+    async fn hint_summaries(store: &SessionStore, transcript_id: &str) -> Vec<(String, String)> {
         store
             .transcript_get(transcript_id)
+            .await
+            .unwrap()
             .unwrap()
             .speaker_hints
             .into_iter()
@@ -1407,7 +1489,7 @@ mod tests {
             .await
             .unwrap();
 
-        let stored = store.transcript_get("t1").unwrap();
+        let stored = store.transcript_get("t1").await.unwrap().unwrap();
         assert_eq!(stored.words.len(), 1);
         assert_eq!(stored.words[0].metadata, Some(metadata));
         assert_eq!(stored.speaker_hints, vec![label_hint("w0", "Alice")]);
@@ -1458,7 +1540,7 @@ mod tests {
             .unwrap();
 
         // The buffered tail word landed together with the rename.
-        let stored = store.transcript_get("t1").unwrap();
+        let stored = store.transcript_get("t1").await.unwrap().unwrap();
         assert_eq!(stored.words.len(), 3);
         assert_eq!(stored.words[2].text, "tail");
         assert_eq!(stored.speaker_hints, vec![label_hint("w0", "Alice")]);
@@ -1495,7 +1577,7 @@ mod tests {
         // The channel-wide "Alice" assignment (its anchor has no provider speaker
         // index) conflicts with anything on channel 1, so it is dropped.
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "new-word:provider_speaker_index".to_string(),
@@ -1507,7 +1589,7 @@ mod tests {
                 ),
             ]
         );
-        let stored = store.transcript_get("t1").unwrap();
+        let stored = store.transcript_get("t1").await.unwrap().unwrap();
         assert_eq!(
             stored.speaker_hints[1].value,
             serde_json::Value::String("Bob".to_string())
@@ -1531,7 +1613,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "direct-word:speaker_label".to_string(),
@@ -1571,7 +1653,7 @@ mod tests {
         // Alice (speaker index 1) survives; Bob (same channel, same speaker
         // index 2) is superseded by Carol.
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "speaker-1-word:provider_speaker_index".to_string(),
@@ -1624,7 +1706,7 @@ mod tests {
         // Alice's scope resolved to speaker index 1, so index 2's assignment
         // does not evict her.
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "w-a:provider_speaker_index".to_string(),
@@ -1662,7 +1744,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "idx1-word:provider_speaker_index".to_string(),
@@ -1682,7 +1764,7 @@ mod tests {
                 ),
             ]
         );
-        let stored = store.transcript_get("t1").unwrap();
+        let stored = store.transcript_get("t1").await.unwrap().unwrap();
         assert_eq!(
             stored.speaker_hints[1].value,
             serde_json::Value::String("Alice".to_string())
@@ -1718,7 +1800,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "gap-word:speaker_label".to_string(),
@@ -1767,7 +1849,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "idx1-word:provider_speaker_index".to_string(),
@@ -1791,7 +1873,7 @@ mod tests {
                 ),
             ]
         );
-        let stored = store.transcript_get("t1").unwrap();
+        let stored = store.transcript_get("t1").await.unwrap().unwrap();
         assert_eq!(
             stored.speaker_hints[4].value,
             serde_json::Value::String("NewFallback".to_string())
@@ -1824,7 +1906,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(
-            hint_summaries(&store, "t1"),
+            hint_summaries(&store, "t1").await,
             vec![
                 (
                     "idx2-word:provider_speaker_index".to_string(),
@@ -1840,7 +1922,7 @@ mod tests {
                 ),
             ]
         );
-        let stored = store.transcript_get("t1").unwrap();
+        let stored = store.transcript_get("t1").await.unwrap().unwrap();
         assert_eq!(
             stored.speaker_hints[2].value,
             serde_json::Value::String("Carol".to_string())
@@ -1891,7 +1973,7 @@ mod tests {
         // the property under test.
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
         loop {
-            if store.transcript_get("t1").is_some() {
+            if store.transcript_get("t1").await.unwrap().is_some() {
                 break;
             }
             assert!(

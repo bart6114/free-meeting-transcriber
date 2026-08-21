@@ -131,6 +131,7 @@ vi.mock("~/stt/contexts", () => ({
 }));
 
 import { TimelineItemComponent } from "./item";
+import { makeTimelineItem } from "./utils";
 
 describe("TimelineItemComponent", () => {
   beforeEach(() => {
@@ -154,14 +155,10 @@ describe("TimelineItemComponent", () => {
 
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-live",
-          data: {
-            title: "Live Note",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-live", {
+          title: "Live Note",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected
         timezone="UTC"
@@ -192,14 +189,10 @@ describe("TimelineItemComponent", () => {
 
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-live",
-          data: {
-            title: "Live Note",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-live", {
+          title: "Live Note",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected
         selectedNodeRef={selectedNodeRef}
@@ -227,14 +220,10 @@ describe("TimelineItemComponent", () => {
     mocks.storeTitle = "Team standup";
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-standup",
-          data: {
-            title: "Team standup",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-standup", {
+          title: "Team standup",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"
@@ -270,14 +259,10 @@ describe("TimelineItemComponent", () => {
     mocks.storeTitle = "Team standup";
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-standup",
-          data: {
-            title: "Team standup",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-standup", {
+          title: "Team standup",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"
@@ -299,14 +284,10 @@ describe("TimelineItemComponent", () => {
     mocks.storeTitle = "Team standup";
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-standup",
-          data: {
-            title: "Team standup",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-standup", {
+          title: "Team standup",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"
@@ -327,14 +308,10 @@ describe("TimelineItemComponent", () => {
 
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-standup",
-          data: {
-            title: "Team standup",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-standup", {
+          title: "Team standup",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"
@@ -357,14 +334,10 @@ describe("TimelineItemComponent", () => {
 
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-finalizing",
-          data: {
-            title: "Finalizing Note",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-finalizing", {
+          title: "Finalizing Note",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"
@@ -384,14 +357,10 @@ describe("TimelineItemComponent", () => {
   it("opens the current tab after a single-click on a session row", () => {
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-note",
-          data: {
-            title: "Window Note",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-note", {
+          title: "Window Note",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"
@@ -415,14 +384,10 @@ describe("TimelineItemComponent", () => {
   it("opens a standalone note window when a session row is double-clicked", () => {
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-note-window",
-          data: {
-            title: "Window Note",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-note-window", {
+          title: "Window Note",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"
@@ -454,14 +419,10 @@ describe("TimelineItemComponent", () => {
   it("offers a standalone window action for session rows", () => {
     render(
       <TimelineItemComponent
-        item={{
-          type: "session",
-          id: "session-note-window",
-          data: {
-            title: "Window Note",
-            created_at: "2024-01-15T10:30:00.000Z",
-          },
-        }}
+        item={makeTimelineItem("session-note-window", {
+          title: "Window Note",
+          created_at: "2024-01-15T10:30:00.000Z",
+        })}
         precision="time"
         selected={false}
         timezone="UTC"

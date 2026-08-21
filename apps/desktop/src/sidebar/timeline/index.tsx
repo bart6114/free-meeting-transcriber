@@ -115,7 +115,6 @@ export const TimelineView = memo(function TimelineView({
   const upcomingMeetingStatus = useUpcomingMeetingStatus(
     groupBy === "date" ? buckets : EMPTY_BUCKETS,
     formatUpcomingMeetingLabel,
-    t`Now`,
   );
   const [isUpcomingMeetingVisible, setIsUpcomingMeetingVisible] =
     useState(false);
@@ -824,28 +823,16 @@ function TimelineNowChip({
 }
 
 function CurrentTimeAnchor({
-  progress = 0.5,
   registerIndicator,
-  variant = "seam",
 }: {
-  progress?: number;
   registerIndicator: (node: HTMLDivElement | null) => void;
-  variant?: "seam" | "inside";
 }) {
   return (
     <div
       ref={registerIndicator}
       aria-hidden
       data-sidebar-current-time-anchor
-      className={cn([
-        "pointer-events-none opacity-0",
-        variant === "inside"
-          ? "absolute inset-x-0 z-20 h-px"
-          : "relative z-20 h-px",
-      ])}
-      style={
-        variant === "inside" ? { top: `${(1 - progress) * 100}%` } : undefined
-      }
+      className={cn(["pointer-events-none opacity-0", "relative z-20 h-px"])}
     />
   );
 }
@@ -962,33 +949,6 @@ function TodayBucket({
           }
         />
       );
-
-      if (
-        indicatorPlacement.type === "inside" &&
-        index === indicatorPlacement.index
-      ) {
-        nodes.push(
-          <div key={`${itemKey}-wrapper`} className="relative">
-            {suppressCurrentTimeIndicator ? (
-              <CurrentTimeAnchor
-                registerIndicator={registerIndicator}
-                variant="inside"
-                progress={indicatorPlacement.progress}
-              />
-            ) : (
-              <CurrentTimeIndicator
-                ref={registerIndicator}
-                key="current-time-indicator-inside"
-                timezone={timezone}
-                variant="inside"
-                progress={indicatorPlacement.progress}
-              />
-            )}
-            {itemNode}
-          </div>,
-        );
-        return;
-      }
 
       nodes.push(itemNode);
     });

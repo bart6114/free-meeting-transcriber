@@ -40,8 +40,7 @@ notificationEvent: "plugin:notification:notification-event"
 /** user-defined types **/
 
 export type Duration = { secs: number; nanos: number }
-export type EventDetails = { what: string; timezone: string | null; location: string | null }
-export type Notification = { key: string | null; title: string; message: string; timeout: Duration | null; source: NotificationSource | null; start_time: number | null; participants: Participant[] | null; event_details: EventDetails | null; action_label: string | null; action_variant: NotificationActionVariant | null; options: string[] | null; footer: NotificationFooter | null; icon: NotificationIcon | null }
+export type Notification = { key: string | null; title: string; message: string; timeout: Duration | null; source: NotificationSource | null; start_time: number | null; participants: Participant[] | null; action_label: string | null; action_variant: NotificationActionVariant | null; options: string[] | null; footer: NotificationFooter | null; icon: NotificationIcon | null }
 export type NotificationActionVariant = "default" | "destructive"
 export type NotificationEvent = { type: "notification_confirm"; key: string; source: NotificationSource | null } | { type: "notification_accept"; key: string; source: NotificationSource | null } | { type: "notification_dismiss"; key: string; source: NotificationSource | null } | { type: "notification_timeout"; key: string; source: NotificationSource | null } | { type: "notification_option_selected"; key: string; source: NotificationSource | null; selected_index: number } | { type: "notification_footer_action"; key: string; source: NotificationSource | null }
 export type NotificationFooter = { text: string; actionLabel: string; icon: NotificationIcon | null }

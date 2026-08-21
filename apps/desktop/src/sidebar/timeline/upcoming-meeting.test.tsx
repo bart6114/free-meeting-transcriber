@@ -67,24 +67,13 @@ import { useSidebarUpcomingMeetingStatus } from "./upcoming-meeting";
 function sessionRow({
   title,
   started_at,
-  ended_at,
 }: {
   title: string;
   started_at: string;
-  ended_at: string;
 }) {
   return {
     title,
     created_at: started_at,
-    event_json: JSON.stringify({
-      tracking_id: "",
-      calendar_id: "",
-      title,
-      started_at,
-      ended_at,
-      is_all_day: false,
-      has_recurrence_rules: false,
-    }),
   };
 }
 
@@ -100,30 +89,27 @@ describe("useSidebarUpcomingMeetingStatus", () => {
     vi.useRealTimers();
   });
 
-  it("keeps the meeting status active until the scheduled end time", () => {
+  it("clears the meeting status once the meeting starts", () => {
     mocks.timelineSessionsTable = {
       standup: sessionRow({
         title: "Team standup",
-        started_at: "2024-01-15T11:55:00.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
+        started_at: "2024-01-15T12:04:00.000Z",
       }),
     };
 
-    const active = renderHook(() => useSidebarUpcomingMeetingStatus());
+    const upcoming = renderHook(() => useSidebarUpcomingMeetingStatus());
 
-    expect(active.result.current).toMatchObject({
+    expect(upcoming.result.current).toMatchObject({
       itemKey: "session-standup",
-      label: "Now",
-      progress: 1,
       title: "Team standup",
     });
 
-    vi.setSystemTime(new Date("2024-01-15T12:30:01.000Z"));
+    vi.setSystemTime(new Date("2024-01-15T12:04:01.000Z"));
     act(() => {
       vi.advanceTimersByTime(1_000);
     });
 
-    expect(active.result.current).toBeNull();
+    expect(upcoming.result.current).toBeNull();
   });
 
   it("does not rerender every second while the active status is unchanged", () => {
@@ -131,7 +117,6 @@ describe("useSidebarUpcomingMeetingStatus", () => {
       standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T11:55:00.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
       }),
     };
     let renderCount = 0;
@@ -154,7 +139,6 @@ describe("useSidebarUpcomingMeetingStatus", () => {
       standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T11:55:00.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
       }),
     };
 
@@ -171,7 +155,6 @@ describe("useSidebarUpcomingMeetingStatus", () => {
       standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-15T11:55:00.000Z",
-        ended_at: "2024-01-15T12:30:00.000Z",
       }),
     };
 
@@ -189,7 +172,6 @@ describe("useSidebarUpcomingMeetingStatus", () => {
       standup: sessionRow({
         title: "Team standup",
         started_at: "2024-01-17T00:01:00.000Z",
-        ended_at: "2024-01-17T00:30:00.000Z",
       }),
     };
 

@@ -130,26 +130,13 @@ Next steps: testing and validation of the algorithms
 });
 
 describe("buildKeywordSourceText", () => {
-  it("includes session note, title, and event metadata", () => {
+  it("includes session note and title", () => {
     expect(
       buildKeywordSourceText({
         rawMd: "Discuss product launch",
         title: "Erebor sync",
-        eventJson: JSON.stringify({
-          title: "OpenWorld review",
-          description: "Airborne Brothers follow-up",
-          location: "Zoom",
-        }),
       }),
-    ).toBe(
-      [
-        "Discuss product launch",
-        "Erebor sync",
-        "OpenWorld review",
-        "Airborne Brothers follow-up",
-        "Zoom",
-      ].join("\n"),
-    );
+    ).toBe(["Discuss product launch", "Erebor sync"].join("\n"));
   });
 });
 
@@ -161,11 +148,6 @@ describe("getSessionKeywords", () => {
         meta: {
           id: "session-1",
           title: "Erebor sync",
-          event: {
-            title: "OpenWorld review",
-            description: "Airborne Brothers follow-up",
-            location: "Zoom",
-          },
         },
         note_markdown: "Discuss #Launch and production systems",
       },
@@ -186,7 +168,6 @@ describe("buildKeywords", () => {
     const result = buildKeywords({
       rawMd: "",
       title: "",
-      eventJson: "",
       dictionaryTerms: Array.from(
         { length: 60 },
         (_, index) => `Term ${index}`,

@@ -20,7 +20,6 @@ export type SessionRecord = {
   user_id: string;
   created_at: string;
   folder_id: string;
-  event_json: string;
   title: string;
   raw_md: string;
   tags: string[];
@@ -29,10 +28,7 @@ export type SessionRecord = {
 // Note content ("raw_md") is intentionally excluded: it's written exclusively via
 // `sessionWriteNote` now (see raw.tsx's persistChange), never through this SQL path.
 export type SessionChanges = Partial<
-  Pick<
-    SessionRecord,
-    "created_at" | "event_json" | "folder_id" | "title" | "tags"
-  >
+  Pick<SessionRecord, "created_at" | "folder_id" | "title" | "tags">
 >;
 
 export type SessionSummaryRecord = {
@@ -115,27 +111,28 @@ export function useSessionSummary(
   return sessionId ? data : null;
 }
 
-export function useSessionSummaries(): SessionSummaryRecord[] {
+export function useSessionSummaries(enabled = true): SessionSummaryRecord[] {
   const { data = EMPTY_SESSION_SUMMARIES } = useIndexQuery({
     entity: "sessions",
     queryKey: ["session-summaries"],
+    enabled,
     queryFn: async () => {
-      const result = await commands.sessionList();
+      const result = await commands.sessionListHeaders();
       if (result.status === "error") {
         throw new Error(result.error);
       }
-      // session_list is (created_at, id) ASC; this list has always been
+      // session_list_headers is (created_at, id) ASC; this list has always been
       // newest-first with id as the ascending tiebreaker.
       return [...result.data]
         .sort(
           (left, right) =>
-            right.meta.created_at.localeCompare(left.meta.created_at) ||
-            left.meta.id.localeCompare(right.meta.id),
+            right.created_at.localeCompare(left.created_at) ||
+            left.id.localeCompare(right.id),
         )
-        .map(({ meta }) => ({
-          id: meta.id,
-          title: meta.title,
-          created_at: meta.created_at,
+        .map((entry) => ({
+          id: entry.id,
+          title: entry.title,
+          created_at: entry.created_at,
         }));
     },
   });
@@ -302,7 +299,6 @@ export function updateSession(
     if (changes.title !== undefined) patch.title = changes.title;
     if (changes.created_at !== undefined) patch.created_at = changes.created_at;
     if (changes.folder_id !== undefined) patch.folder = changes.folder_id;
-    if (changes.event_json) patch.event = JSON.parse(changes.event_json);
     if (changes.tags !== undefined) patch.tags = changes.tags;
 
     if (Object.keys(patch).length === 0) return;
@@ -317,11 +313,10 @@ export function updateSession(
 export async function createSession(
   title = "",
   _userId = DEFAULT_USER_ID,
-  // Not `Pick<SessionChanges, ...>`: `raw_md` was removed from `SessionChanges` (note content
-  // is store-only now, see the comment on that type), but a session can still be *created*
-  // with initial content (e.g. the onboarding welcome note) -- that seeds the file-canonical
-  // store directly below, never `SessionChanges`/`updateSession`'s SQL path.
-  initial?: { event_json?: string; raw_md?: string },
+  // A session can be *created* with initial content or a tracking marker (the
+  // onboarding welcome note) -- that seeds the file-canonical store directly
+  // below, never `SessionChanges`/`updateSession`'s path.
+  initial?: { tracking_id?: string; raw_md?: string },
 ): Promise<string> {
   const sessionId = id();
   const now = new Date().toISOString();
@@ -333,9 +328,7 @@ export async function createSession(
     ended_at: null,
     created_at: now,
     tags: [],
-    // The event rides the store write itself (never a separate SQL UPDATE): `_meta.json` is
-    // canonical, and the store's dual-write seeds the sessions row's event_json.
-    event: initial?.event_json ? JSON.parse(initial.event_json) : null,
+    tracking_id: initial?.tracking_id ?? null,
     folder: null,
   });
   if (metaWrite.status === "error") {
@@ -405,7 +398,7 @@ export async function softDeleteSession(
   };
 }
 
-// The emptiness semantics (title-without-event, note content after trimming, transcript/
+// The emptiness semantics (title, note content after trimming, transcript/
 // enhanced-doc/tag counts) live on the Rust side now -- see `SessionStore::session_is_empty`.
 export async function isSessionEmpty(sessionId: string): Promise<boolean> {
   const result = await commands.sessionIsEmpty(sessionId);
@@ -461,23 +454,10 @@ function mapSessionRecord(record: StoreSessionRecord): SessionRecord {
     user_id: DEFAULT_USER_ID,
     created_at: record.meta.created_at,
     folder_id: record.meta.folder ?? "",
-    event_json: stringifyEventJson(record.meta.event),
     title: record.meta.title,
     raw_md: rawMd,
     tags: record.meta.tags,
   };
-}
-
-// The old `event_json` column defaulted to '' -- consumers JSON.parse it behind guards.
-function stringifyEventJson(event: unknown): string {
-  if (event === null || event === undefined) {
-    return "";
-  }
-  try {
-    return JSON.stringify(event);
-  } catch {
-    return "";
-  }
 }
 
 function mapEnhancedDoc(doc: EnhancedDoc): EnhancedNoteRecord {
