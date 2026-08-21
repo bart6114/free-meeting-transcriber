@@ -1,5 +1,6 @@
 import { memo } from "react";
 
+import { AboutDialog } from "./about-dialog";
 import { AudioImportDialog } from "./audio-import-dialog";
 import { ClassicMainBody } from "./body";
 import { resolveMainSurfaceChrome } from "./main-surface-chrome";
@@ -40,6 +41,7 @@ export function ClassicMainShellFrame() {
     >
       <ClassicMainBodyHost />
       <ToastNotifications />
+      <AboutDialog />
       <AudioImportDialog />
       <AudioImportWorker />
     </MainShellScaffold>

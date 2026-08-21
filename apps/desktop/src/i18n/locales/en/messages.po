@@ -17,10 +17,25 @@ msgstr ""
 msgid "(default)"
 msgstr "(default)"
 
+#. placeholder {0}: formatCount(stats.enhanced_docs)
+#: src/main/about-dialog.tsx
+msgid "{0} AI summaries"
+msgstr "{0} AI summaries"
+
 #. placeholder {0}: issue.user?.login
 #: src/task/resource-view.tsx
 msgid "{0} opened on"
 msgstr "{0} opened on"
+
+#. placeholder {0}: formatCount(stats.tags)
+#: src/main/about-dialog.tsx
+msgid "{0} tags"
+msgstr "{0} tags"
+
+#. placeholder {0}: formatCount(stats.tasks_done)
+#: src/main/about-dialog.tsx
+msgid "{0} tasks completed"
+msgstr "{0} tasks completed"
 
 #. placeholder {0}: formatLanguageList(unsupportedLanguages)
 #: src/settings/ai/stt/select.tsx
@@ -62,6 +77,10 @@ msgstr "A duplicate; the original stays where it is."
 #: src/templates/template-sidebar.tsx
 msgid "A to Z"
 msgstr "A to Z"
+
+#: src/main/about-dialog.tsx
+msgid "About Free Meeting Transcriber"
+msgstr "About Free Meeting Transcriber"
 
 #: src/onboarding/permissions.tsx
 #: src/settings/general/permissions.tsx
@@ -646,6 +665,10 @@ msgstr "In {minutes}m {seconds}s"
 msgid "In {totalSeconds}s"
 msgstr "In {totalSeconds}s"
 
+#: src/main/about-dialog.tsx
+msgid "In meetings"
+msgstr "In meetings"
+
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Include"
 msgstr "Include"
@@ -890,6 +913,10 @@ msgstr "Note"
 msgid "Note breadcrumb"
 msgstr "Note breadcrumb"
 
+#: src/main/about-dialog.tsx
+msgid "Notes"
+msgstr "Notes"
+
 #: src/settings/general/index.tsx
 #: src/sidebar/settings.tsx
 msgid "Notifications"
@@ -1010,6 +1037,10 @@ msgstr "Recent"
 #: src/session/components/outer-header/index.tsx
 msgid "Record"
 msgstr "Record"
+
+#: src/main/about-dialog.tsx
+msgid "Recordings"
+msgstr "Recordings"
 
 #: src/settings/todo/provider-content.tsx
 msgid "Reminders"
@@ -1242,6 +1273,10 @@ msgstr "Show the compact floating control while listening."
 #: src/settings/general/app-settings.tsx
 msgid "Show tray icon"
 msgstr "Show tray icon"
+
+#: src/main/about-dialog.tsx
+msgid "since {since}"
+msgstr "since {since}"
 
 #: src/onboarding/shared.tsx
 msgid "Skip"
@@ -1478,6 +1513,11 @@ msgstr "Use your microphone to capture your voice"
 msgid "Variables"
 msgstr "Variables"
 
+#. placeholder {0}: info.data.appVersion
+#: src/main/about-dialog.tsx
+msgid "Version {0}"
+msgstr "Version {0}"
+
 #: src/onboarding/index.tsx
 msgid "Welcome to Free Meeting Transcriber"
 msgstr "Welcome to Free Meeting Transcriber"
@@ -1489,6 +1529,10 @@ msgstr "What's new in {version}?"
 #: src/onboarding/index.tsx
 msgid "Where your notes and recordings are stored"
 msgstr "Where your notes and recordings are stored"
+
+#: src/main/about-dialog.tsx
+msgid "Words transcribed"
+msgstr "Words transcribed"
 
 #: src/settings/todo/permission.tsx
 msgid "You can"
@@ -1505,6 +1549,10 @@ msgstr "Your current vault stays where it is — nothing is moved or deleted. Yo
 #: src/settings/general/storage/index.tsx
 msgid "Your data lives as files in this folder. The internal database is a cache and can be rebuilt at any time."
 msgstr "Your data lives as files in this folder. The internal database is a cache and can be rebuilt at any time."
+
+#: src/main/about-dialog.tsx
+msgid "Your vault"
+msgstr "Your vault"
 
 #: src/settings/general/storage/change-location.tsx
 msgid "Your vault lives directly in the folder you pick, so we'll create one inside:"
