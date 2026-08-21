@@ -283,6 +283,10 @@ msgstr "Close changelog"
 msgid "Closed"
 msgstr "Closed"
 
+#: src/sidebar/timeline/index.tsx
+msgid "Collapse all"
+msgstr "Collapse all"
+
 #: src/task/resource-view.tsx
 msgid "comment"
 msgstr "comment"
@@ -475,6 +479,10 @@ msgstr "Everything relocates; the old location is cleaned up."
 #: src/settings/general/notification.tsx
 msgid "Exclude apps from detection"
 msgstr "Exclude apps from detection"
+
+#: src/sidebar/timeline/index.tsx
+msgid "Expand all"
+msgstr "Expand all"
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
 #: src/session/components/outer-header/overflow/index.tsx

@@ -283,6 +283,10 @@ msgstr ""
 msgid "Closed"
 msgstr ""
 
+#: src/sidebar/timeline/index.tsx
+msgid "Collapse all"
+msgstr ""
+
 #: src/task/resource-view.tsx
 msgid "comment"
 msgstr ""
@@ -474,6 +478,10 @@ msgstr ""
 
 #: src/settings/general/notification.tsx
 msgid "Exclude apps from detection"
+msgstr ""
+
+#: src/sidebar/timeline/index.tsx
+msgid "Expand all"
 msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
