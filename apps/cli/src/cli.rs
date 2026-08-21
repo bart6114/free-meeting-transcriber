@@ -95,11 +95,22 @@ pub enum Command {
     },
     /// Run the read-only Free Meeting Transcriber MCP server over stdio
     Mcp,
+    /// Browse the vault's tag registry
+    Tags {
+        #[command(subcommand)]
+        command: TagsCommand,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TagsCommand {
+    /// List every tag registered in the vault
+    List,
 }
 
 #[derive(Debug, Subcommand)]
 pub enum MeetingCommand {
-    /// List meetings, optionally filtered by text
+    /// List meetings, optionally filtered by text or tags
     List {
         #[arg(short, long)]
         query: Option<String>,
@@ -107,6 +118,16 @@ pub enum MeetingCommand {
         limit: u32,
         #[arg(long, default_value_t = 0, help = "Number of results to skip")]
         offset: u32,
+        #[arg(
+            long,
+            value_name = "NAME",
+            value_parser = parse_tag,
+            conflicts_with = "untagged",
+            help = "Only meetings carrying this tag; repeatable, all must match"
+        )]
+        tag: Vec<String>,
+        #[arg(long, help = "Only meetings without any tags")]
+        untagged: bool,
     },
     /// Search across meeting titles, notes, summaries, and transcripts
     #[command(group = clap::ArgGroup::new("criteria").required(true).multiple(true).args(["query", "speaker"]))]
@@ -191,6 +212,13 @@ pub enum MeetingCommand {
     },
     /// Show the full speaker-labeled meeting transcript
     Transcript { id: String },
+    /// Add or remove tags on a meeting
+    Tag {
+        #[command(subcommand)]
+        command: TagCommand,
+    },
+    /// Print the absolute path of a meeting's session directory
+    Path { id: String },
     /// Store a file as a note attachment of a meeting and print its attachment id
     Attach {
         id: String,
@@ -212,6 +240,22 @@ pub enum MeetingCommand {
         output: Option<PathBuf>,
         #[arg(long, requires = "output", help = "Replace an existing output file")]
         force: bool,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum TagCommand {
+    /// Add tags to a meeting, registering new ones in the vault's tag registry
+    Add {
+        id: String,
+        #[arg(required = true, value_name = "TAG", value_parser = parse_tag)]
+        tags: Vec<String>,
+    },
+    /// Remove tags from a meeting; the tag registry keeps the names
+    Remove {
+        id: String,
+        #[arg(required = true, value_name = "TAG", value_parser = parse_tag)]
+        tags: Vec<String>,
     },
 }
 
@@ -294,6 +338,102 @@ mod tests {
         };
         assert_eq!(query.as_deref(), Some("planning"));
         assert_eq!(limit, 10);
+    }
+
+    #[test]
+    fn parses_meeting_list_tag_filters_and_their_conflict() {
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr",
+            "meetings",
+            "list",
+            "--tag",
+            " Hiring ",
+            "--tag",
+            "project-x",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::List { tag, untagged, .. } = command else {
+            panic!("expected list command");
+        };
+        assert_eq!(tag, vec!["Hiring".to_string(), "project-x".to_string()]);
+        assert!(!untagged);
+
+        let Command::Meetings { command } =
+            Args::parse_from(["fmtr", "meetings", "list", "--untagged"]).command
+        else {
+            panic!("expected meetings command");
+        };
+        assert!(matches!(
+            command,
+            MeetingCommand::List { untagged: true, .. }
+        ));
+
+        assert!(
+            Args::try_parse_from(["fmtr", "meetings", "list", "--tag", "a", "--untagged"]).is_err()
+        );
+    }
+
+    #[test]
+    fn parses_tag_edit_path_and_tags_list_commands() {
+        let Command::Meetings { command } = Args::parse_from([
+            "fmtr",
+            "meetings",
+            "tag",
+            "add",
+            "meeting-1",
+            "#Hiring",
+            "project-x",
+        ])
+        .command
+        else {
+            panic!("expected meetings command");
+        };
+        let MeetingCommand::Tag {
+            command: TagCommand::Add { id, tags },
+        } = command
+        else {
+            panic!("expected tag add command");
+        };
+        assert_eq!(id, "meeting-1");
+        assert_eq!(tags, vec!["#Hiring".to_string(), "project-x".to_string()]);
+
+        let Command::Meetings { command } =
+            Args::parse_from(["fmtr", "meetings", "tag", "remove", "meeting-1", "hiring"]).command
+        else {
+            panic!("expected meetings command");
+        };
+        assert!(matches!(
+            command,
+            MeetingCommand::Tag {
+                command: TagCommand::Remove { .. }
+            }
+        ));
+
+        // At least one tag is required, and blank tags are rejected at parse time.
+        assert!(Args::try_parse_from(["fmtr", "meetings", "tag", "add", "meeting-1"]).is_err());
+        assert!(
+            Args::try_parse_from(["fmtr", "meetings", "tag", "remove", "meeting-1", "  "]).is_err()
+        );
+
+        let Command::Meetings { command } =
+            Args::parse_from(["fmtr", "meetings", "path", "meeting-1"]).command
+        else {
+            panic!("expected meetings command");
+        };
+        assert!(matches!(
+            command,
+            MeetingCommand::Path { id } if id == "meeting-1"
+        ));
+
+        assert!(matches!(
+            Args::parse_from(["fmtr", "tags", "list"]).command,
+            Command::Tags {
+                command: TagsCommand::List
+            }
+        ));
     }
 
     #[test]

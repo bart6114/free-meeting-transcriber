@@ -65,7 +65,7 @@ expression: canonicalize_json(contract)
       ],
       "subcommands": [
         {
-          "about": "List meetings, optionally filtered by text",
+          "about": "List meetings, optionally filtered by text or tags",
           "name": "fmtr meetings list",
           "options": [
             {
@@ -91,13 +91,26 @@ expression: canonicalize_json(contract)
               "value_name": "OFFSET"
             },
             {
+              "flags": "--tag",
+              "help": "Only meetings carrying this tag; repeatable, all must match",
+              "is_flag": false,
+              "required": false,
+              "value_name": "NAME"
+            },
+            {
+              "flags": "--untagged",
+              "help": "Only meetings without any tags",
+              "is_flag": true,
+              "required": false
+            },
+            {
               "flags": "-h, --help",
               "help": "Print help",
               "is_flag": false,
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings list [-q] [--limit] [--offset] [-h]"
+          "synopsis": "fmtr meetings list [-q] [--limit] [--offset] [--tag] [--untagged] [-h]"
         },
         {
           "about": "Search across meeting titles, notes, summaries, and transcripts",
@@ -294,6 +307,86 @@ expression: canonicalize_json(contract)
           "synopsis": "fmtr meetings transcript [-h] <id>"
         },
         {
+          "about": "Add or remove tags on a meeting",
+          "name": "fmtr meetings tag",
+          "options": [
+            {
+              "flags": "-h, --help",
+              "help": "Print help",
+              "is_flag": false,
+              "required": false
+            }
+          ],
+          "subcommands": [
+            {
+              "about": "Add tags to a meeting, registering new ones in the vault's tag registry",
+              "arguments": [
+                {
+                  "name": "ID",
+                  "required": true
+                },
+                {
+                  "name": "TAG",
+                  "required": true
+                }
+              ],
+              "name": "fmtr meetings tag add",
+              "options": [
+                {
+                  "flags": "-h, --help",
+                  "help": "Print help",
+                  "is_flag": false,
+                  "required": false
+                }
+              ],
+              "synopsis": "fmtr meetings tag add [-h] <id> <tags>"
+            },
+            {
+              "about": "Remove tags from a meeting; the tag registry keeps the names",
+              "arguments": [
+                {
+                  "name": "ID",
+                  "required": true
+                },
+                {
+                  "name": "TAG",
+                  "required": true
+                }
+              ],
+              "name": "fmtr meetings tag remove",
+              "options": [
+                {
+                  "flags": "-h, --help",
+                  "help": "Print help",
+                  "is_flag": false,
+                  "required": false
+                }
+              ],
+              "synopsis": "fmtr meetings tag remove [-h] <id> <tags>"
+            }
+          ],
+          "synopsis": "fmtr meetings tag [-h] <command>"
+        },
+        {
+          "about": "Print the absolute path of a meeting's session directory",
+          "arguments": [
+            {
+              "name": "ID",
+              "required": true
+            }
+          ],
+          "name": "fmtr meetings path",
+          "options": [
+            {
+              "flags": "-h, --help",
+              "help": "Print help",
+              "is_flag": false,
+              "required": false
+            }
+          ],
+          "synopsis": "fmtr meetings path [-h] <id>"
+        },
+        {
           "about": "Store a file as a note attachment of a meeting and print its attachment id",
           "arguments": [
             {
@@ -462,6 +555,34 @@ expression: canonicalize_json(contract)
         }
       ],
       "synopsis": "fmtr mcp [-h]"
+    },
+    {
+      "about": "Browse the vault's tag registry",
+      "name": "fmtr tags",
+      "options": [
+        {
+          "flags": "-h, --help",
+          "help": "Print help",
+          "is_flag": false,
+          "required": false
+        }
+      ],
+      "subcommands": [
+        {
+          "about": "List every tag registered in the vault",
+          "name": "fmtr tags list",
+          "options": [
+            {
+              "flags": "-h, --help",
+              "help": "Print help",
+              "is_flag": false,
+              "required": false
+            }
+          ],
+          "synopsis": "fmtr tags list [-h]"
+        }
+      ],
+      "synopsis": "fmtr tags [-h] <command>"
     }
   ],
   "synopsis": "fmtr [--base] [--vault-path] [--json] [-h] [-V] <command>"

@@ -48,6 +48,7 @@ pub async fn run(args: Args) -> Result<u8> {
             commands::transcribe::run(&vault, &id, args.json).await?
         }
         cli::Command::Mcp => mcp::serve(vault).await?,
+        cli::Command::Tags { command } => commands::tags::run(&vault, command, args.json).await?,
     }
 
     Ok(0)
@@ -90,6 +91,60 @@ mod tests {
         .unwrap();
         if let Some(note) = note {
             std::fs::write(session_dir.join("notes.md"), note).unwrap();
+        }
+    }
+
+    fn write_session_with_tags(vault: &std::path::Path, id: &str, tags: &[&str]) {
+        let session_dir = vault.join("sessions").join(id);
+        std::fs::create_dir_all(&session_dir).unwrap();
+        std::fs::write(
+            session_dir.join("_meta.json"),
+            serde_json::json!({
+                "id": id,
+                "title": "Planning",
+                "started_at": null,
+                "ended_at": null,
+                "created_at": "2026-07-13T00:00:00Z",
+                "tags": tags,
+            })
+            .to_string(),
+        )
+        .unwrap();
+    }
+
+    fn read_meta_tags(vault: &std::path::Path, id: &str) -> Vec<String> {
+        let meta: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(vault.join("sessions").join(id).join("_meta.json")).unwrap(),
+        )
+        .unwrap();
+        meta["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tag| tag.as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn read_registry_ids(vault: &std::path::Path) -> Vec<String> {
+        let raw = match std::fs::read_to_string(vault.join("tags.json")) {
+            Ok(raw) => raw,
+            Err(_) => return Vec::new(),
+        };
+        let file: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        file["tags"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|tag| tag["id"].as_str().unwrap().to_string())
+            .collect()
+    }
+
+    fn meetings_args(vault: &std::path::Path, command: cli::MeetingCommand) -> Args {
+        Args {
+            base: None,
+            vault_path: Some(vault.to_path_buf()),
+            json: false,
+            command: cli::Command::Meetings { command },
         }
     }
 
@@ -667,6 +722,199 @@ mod tests {
         assert_eq!(error.code(), "not_found");
         assert_eq!(error.exit_code(), 2);
         assert!(!vault.join("sessions/missing").exists());
+    }
+
+    #[tokio::test]
+    async fn tag_add_normalizes_meta_tags_and_registers_them() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session_with_tags(&vault, "meeting-1", &["Existing"]);
+
+        run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Tag {
+                command: cli::TagCommand::Add {
+                    id: "meeting-1".to_string(),
+                    tags: vec!["#Hiring".to_string(), "Project-X".to_string()],
+                },
+            },
+        ))
+        .await
+        .unwrap();
+
+        // The whole tag list is rewritten normalized and sorted, including the
+        // pre-existing raw entry.
+        assert_eq!(
+            read_meta_tags(&vault, "meeting-1"),
+            vec!["existing", "hiring", "project-x"]
+        );
+        // Only the newly added tags are registered; the pre-existing one is not.
+        let mut registry = read_registry_ids(&vault);
+        registry.sort();
+        assert_eq!(registry, vec!["hiring", "project-x"]);
+    }
+
+    #[tokio::test]
+    async fn tag_add_is_idempotent_and_remove_never_touches_the_registry() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session_with_tags(&vault, "meeting-1", &["hiring"]);
+
+        // Adding an already-present tag is a no-op: no registry write happens.
+        run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Tag {
+                command: cli::TagCommand::Add {
+                    id: "meeting-1".to_string(),
+                    tags: vec!["HIRING".to_string()],
+                },
+            },
+        ))
+        .await
+        .unwrap();
+        assert_eq!(read_meta_tags(&vault, "meeting-1"), vec!["hiring"]);
+        assert!(!vault.join("tags.json").exists());
+
+        // Removing an absent tag exits 0 and changes nothing.
+        run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Tag {
+                command: cli::TagCommand::Remove {
+                    id: "meeting-1".to_string(),
+                    tags: vec!["ghost".to_string()],
+                },
+            },
+        ))
+        .await
+        .unwrap();
+        assert_eq!(read_meta_tags(&vault, "meeting-1"), vec!["hiring"]);
+
+        // A real removal updates _meta.json but leaves the append-only registry
+        // alone.
+        run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Tag {
+                command: cli::TagCommand::Remove {
+                    id: "meeting-1".to_string(),
+                    tags: vec!["#Hiring".to_string()],
+                },
+            },
+        ))
+        .await
+        .unwrap();
+        assert!(read_meta_tags(&vault, "meeting-1").is_empty());
+        assert!(!vault.join("tags.json").exists());
+    }
+
+    #[tokio::test]
+    async fn tag_edit_fails_cleanly_when_the_meeting_does_not_exist() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir_all(vault.join("sessions")).unwrap();
+
+        let error = run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Tag {
+                command: cli::TagCommand::Add {
+                    id: "missing".to_string(),
+                    tags: vec!["hiring".to_string()],
+                },
+            },
+        ))
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "not_found");
+        assert_eq!(error.exit_code(), 2);
+        assert!(!vault.join("tags.json").exists());
+    }
+
+    #[tokio::test]
+    async fn tag_edit_rejects_tags_that_normalize_to_nothing() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session_with_tags(&vault, "meeting-1", &[]);
+
+        let error = run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Tag {
+                command: cli::TagCommand::Add {
+                    id: "meeting-1".to_string(),
+                    tags: vec!["#".to_string()],
+                },
+            },
+        ))
+        .await
+        .unwrap_err();
+
+        assert_eq!(error.code(), "operation_failed");
+        assert!(error.to_string().contains("tag name cannot be empty"));
+        assert!(read_meta_tags(&vault, "meeting-1").is_empty());
+    }
+
+    #[tokio::test]
+    async fn path_command_resolves_the_session_directory() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        write_session(&vault, "meeting-1", None);
+
+        // The command prints the path; the resolver it uses must agree with the
+        // on-disk layout.
+        run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Path {
+                id: "meeting-1".to_string(),
+            },
+        ))
+        .await
+        .unwrap();
+
+        let error = run(meetings_args(
+            &vault,
+            cli::MeetingCommand::Path {
+                id: "missing".to_string(),
+            },
+        ))
+        .await
+        .unwrap_err();
+        assert_eq!(error.code(), "not_found");
+        assert_eq!(error.exit_code(), 2);
+    }
+
+    #[tokio::test]
+    async fn tags_list_reflects_tags_registered_at_meeting_creation() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir_all(&vault).unwrap();
+
+        run(meetings_args(
+            &vault,
+            cli::MeetingCommand::New {
+                title: "Kickoff".to_string(),
+                note: None,
+                created_at: None,
+                started_at: None,
+                ended_at: None,
+                tag: vec!["#Hiring".to_string(), "project-x".to_string()],
+            },
+        ))
+        .await
+        .unwrap();
+
+        let mut registry = read_registry_ids(&vault);
+        registry.sort();
+        assert_eq!(registry, vec!["hiring", "project-x"]);
+
+        run(Args {
+            base: None,
+            vault_path: Some(vault),
+            json: true,
+            command: cli::Command::Tags {
+                command: cli::TagsCommand::List,
+            },
+        })
+        .await
+        .unwrap();
     }
 
     #[tokio::test]

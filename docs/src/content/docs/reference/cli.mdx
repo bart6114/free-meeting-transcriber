@@ -21,14 +21,25 @@ fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 
 | Command | Options | Result |
 | --- | --- | --- |
-| `meetings list` | `--query TEXT`, `--limit 1..200`, `--offset NUMBER` | Meetings ordered by the application query layer. Defaults to 20 results. |
+| `meetings list` | `--query TEXT`, `--limit 1..200`, `--offset NUMBER`, `--tag NAME`, `--untagged` | Meetings ordered by the application query layer. Defaults to 20 results. `--tag` filters to meetings carrying that tag (case-insensitive); repeatable, and all given tags must match. `--untagged` keeps only meetings without tags and cannot be combined with `--tag`. Each meeting's JSON includes its normalized `tags`. |
 | `meetings search [QUERY]` | `--speaker TEXT`, `--kind title\|note\|summary\|transcript`, `--limit 1..50`, `--offset NUMBER` | Full-text hits across titles, notes, summaries, and transcript words, newest meetings first. Requires a query and/or `--speaker`; `--speaker` limits hits to meetings where that person spoke. `--kind` is repeatable and defaults to all. |
 | `meetings get ID` | None | Metadata, canonical note, summaries, and action items. |
 | `meetings new` | `--title TEXT` (required), `--note FILE`, `--created-at RFC3339`, `--started-at RFC3339`, `--ended-at RFC3339`, `--tag NAME` | Creates a meeting note in the vault and prints its id. `--note` seeds the note body from `FILE`, or from stdin when `FILE` is `-`. `--created-at` backdates the meeting on the timeline and in its folder name — useful when importing historical notes; `--started-at` and `--ended-at` set the meeting's start and end. All three take an RFC 3339 timestamp such as `2024-05-01T09:00:00Z` (offsets are normalized to UTC); invalid values are rejected before anything is written. `--tag` is repeatable and both tags the meeting and registers new tags in the vault's tag list. |
 | `meetings note ID` | `--kind note\|summary\|all`, `--set FILE`, `--append FILE` | The selected note documents. Defaults to `note`. With `--set` or `--append` (mutually exclusive, and incompatible with `--kind`), replaces or extends the note body from `FILE` or stdin (`-`); fails when the meeting does not exist. |
 | `meetings transcript ID` | None | The full transcript as `[HH:MM:SS] Speaker: ...` lines, one per speaker turn. |
+| `meetings tag add ID TAG...` | None | Adds one or more tags to the meeting and registers new ones in the vault's tag registry. Tags are normalized (trimmed, `#` stripped, lowercased) and stored deduplicated and sorted; adding a tag the meeting already has is a no-op. Prints the meeting's resulting tag list. |
+| `meetings tag remove ID TAG...` | None | Removes one or more tags from the meeting. Removing an absent tag is a no-op, and removed tags stay in the vault's tag registry. Prints the meeting's resulting tag list. |
+| `meetings path ID` | None | Prints the absolute path of the meeting's session directory. |
 | `meetings attach ID FILE` | `--name NAME` | Stores `FILE` as a note attachment of the meeting and prints the resulting attachment id. `--name` overrides the stored filename (defaults to the file's name). Notes reference attachments as `![alt](attachments/<id>)` with the id URL-encoded; the printed attachment id is authoritative — it may differ from the input name when an existing attachment of the same name forces a deduplicated one. |
 | `meetings export ID` | `--format markdown\|json`, `--output FILE`, `--force` | A complete meeting export, including transcripts. Defaults to Markdown on stdout. Existing files require `--force`, which is only valid together with `--output`. |
+
+## Tags command
+
+```bash
+fmtr tags list
+```
+
+Lists every tag registered in the vault's `tags.json`, one name per line (`--json` returns each tag's `id` and `name`). The registry is append-only: tags stay listed after the last meeting carrying them loses the tag.
 
 ## Import command
 

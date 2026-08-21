@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::cli::{DocumentKind, ExportFormat, MeetingCommand};
+use crate::cli::{DocumentKind, ExportFormat, MeetingCommand, TagCommand};
 use crate::{Error, Result, output};
 use hypr_agent_access::{
     Document, GetMeetingInput, GetMeetingTranscriptInput, ListMeetingsInput, MeetingListItem,
@@ -15,6 +15,8 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             query,
             limit,
             offset,
+            tag,
+            untagged,
         } => {
             let page = list_meetings(
                 vault,
@@ -22,6 +24,8 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                     query,
                     limit: Some(limit),
                     offset: Some(offset),
+                    tags: (!tag.is_empty()).then_some(tag),
+                    untagged: untagged.then_some(true),
                 },
             )
             .await?;
@@ -203,6 +207,27 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             output::emit(&rendered);
             Ok(())
         }
+        MeetingCommand::Tag { command } => match command {
+            TagCommand::Add { id, tags } => edit_tags(vault, &id, tags, true, json).await,
+            TagCommand::Remove { id, tags } => edit_tags(vault, &id, tags, false, json).await,
+        },
+        MeetingCommand::Path { id } => {
+            let path = session_path(vault, &id).await?;
+            let rendered = if json {
+                output::json(
+                    "meetings.path",
+                    &serde_json::json!({
+                        "id": id,
+                        "path": path.to_string_lossy(),
+                    }),
+                    None,
+                )?
+            } else {
+                path.to_string_lossy().into_owned()
+            };
+            output::emit(&rendered);
+            Ok(())
+        }
         MeetingCommand::Attach { id, file, name } => {
             let saved = attach_file(vault, &id, &file, name).await?;
             let rendered = if json {
@@ -306,6 +331,135 @@ async fn edit_note(
     };
     output::emit(&rendered);
     Ok(())
+}
+
+/// Add or remove tags on a meeting's `_meta.json`. Stored tags come back
+/// normalized (trimmed, `#`-stripped, lowercased), deduped, and sorted —
+/// the same shape the desktop writes. Adding a present tag or removing an
+/// absent one is a no-op; `remove` never touches the append-only `tags.json`
+/// registry, while `add` registers each newly added tag there.
+async fn edit_tags(vault: &Path, id: &str, tags: Vec<String>, add: bool, json: bool) -> Result<()> {
+    let requested = tags
+        .iter()
+        .map(|tag| {
+            hypr_vault_read::normalize_tag_name(tag)
+                .ok_or_else(|| Error::operation("edit tags", "tag name cannot be empty"))
+        })
+        .collect::<Result<Vec<_>>>()?;
+
+    let store = SessionStore::new(vault.to_path_buf());
+    let meta = store
+        .read_meta(id)
+        .await
+        .map_err(|error| Error::operation("edit tags", error.to_string()))?
+        .ok_or_else(|| Error::NotFound(format!("meeting '{id}'")))?;
+
+    let current = {
+        let mut current = meta
+            .tags
+            .iter()
+            .filter_map(|tag| hypr_vault_read::normalize_tag_name(tag))
+            .collect::<Vec<_>>();
+        current.sort();
+        current.dedup();
+        current
+    };
+
+    let (changed, finalized) = if add {
+        let mut changed = requested
+            .iter()
+            .filter(|tag| !current.contains(tag))
+            .cloned()
+            .collect::<Vec<_>>();
+        changed.sort();
+        changed.dedup();
+        let mut finalized = current.clone();
+        finalized.extend(changed.iter().cloned());
+        finalized.sort();
+        (changed, finalized)
+    } else {
+        let mut changed = requested
+            .iter()
+            .filter(|tag| current.contains(tag))
+            .cloned()
+            .collect::<Vec<_>>();
+        changed.sort();
+        changed.dedup();
+        let finalized = current
+            .iter()
+            .filter(|tag| !requested.contains(tag))
+            .cloned()
+            .collect::<Vec<_>>();
+        (changed, finalized)
+    };
+
+    if !changed.is_empty() {
+        store
+            .update_meta(
+                id,
+                hypr_vault_write::SessionMetaPatch {
+                    tags: Some(finalized.clone()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .map_err(|error| Error::operation("edit tags", error.to_string()))?;
+        if add {
+            // The tags already sit in the session's `_meta.json`; registering
+            // them in the vault-root `tags.json` is a separate write, so a
+            // failure here must name the meeting the edit leaves behind.
+            for tag in &changed {
+                store.ensure_tag(tag).await.map_err(|error| {
+                    Error::operation(
+                        "register tag",
+                        format!(
+                            "tags for meeting {id} were updated, but registering tag '{tag}' failed: {error}"
+                        ),
+                    )
+                })?;
+            }
+        }
+    }
+
+    let rendered = if json {
+        let (command, changed_key) = if add {
+            ("meetings.tag.add", "added")
+        } else {
+            ("meetings.tag.remove", "removed")
+        };
+        output::json(
+            command,
+            &serde_json::json!({
+                "id": id,
+                changed_key: changed,
+                "tags": finalized,
+            }),
+            None,
+        )?
+    } else if finalized.is_empty() {
+        format!("Tags for meeting {id}: (none)")
+    } else {
+        format!("Tags for meeting {id}: {}", finalized.join(", "))
+    };
+    output::emit(&rendered);
+    Ok(())
+}
+
+/// Resolve a meeting id to its session directory's absolute path. Identity is
+/// `_meta.json.id`, never the directory basename.
+async fn session_path(vault: &Path, id: &str) -> Result<std::path::PathBuf> {
+    let scan_vault = vault.to_path_buf();
+    let scan_id = id.to_string();
+    let location =
+        tokio::task::spawn_blocking(move || hypr_vault_read::find_session(&scan_vault, &scan_id))
+            .await
+            .map_err(|error| Error::operation("resolve meeting path", error.to_string()))?
+            .map_err(|error| Error::operation("resolve meeting path", error.to_string()))?
+            .ok_or_else(|| Error::NotFound(format!("meeting '{id}'")))?
+            .0;
+
+    std::path::absolute(vault.join(&location.relative_dir))
+        .map_err(|error| Error::operation("resolve meeting path", error.to_string()))
 }
 
 async fn attach_file(
@@ -491,6 +645,7 @@ mod tests {
             updated_at: "2026-07-13T09:00:00Z".to_string(),
             started_at: String::new(),
             ended_at: String::new(),
+            tags: Vec::new(),
         }]);
         assert!(rendered.contains("meeting-1"));
         assert!(rendered.contains('…'));

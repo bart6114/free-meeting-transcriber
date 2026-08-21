@@ -74,11 +74,15 @@ output.
 | `meetings new` | Create a meeting note and print its id. |
 | `meetings note` | Show a meeting's note, or edit it with `--set` / `--append`. |
 | `meetings transcript` | The full speaker-labeled transcript. |
+| `meetings tag add` | Add tags to a meeting, registering new ones in the vault. |
+| `meetings tag remove` | Remove tags from a meeting. |
+| `meetings path` | Print the absolute path of a meeting's session directory. |
 | `meetings attach` | Store a file as a note attachment and print its id. |
 | `meetings export` | Export a meeting to Markdown or JSON. |
 | `import` | Import an audio file as a new (or into an existing) meeting. |
 | `transcribe` | Transcribe a meeting's audio with the configured on-device model. |
 | `mcp` | Run the read-only MCP server over stdio. |
+| `tags list` | List every tag registered in the vault. |
 
 Per-command flags are documented at
 https://freemeetingtranscriber.com/reference/cli/.

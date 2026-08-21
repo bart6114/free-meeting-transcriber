@@ -10,6 +10,7 @@ pub mod paths;
 pub mod people;
 pub mod reserved;
 pub mod strip;
+pub mod tags;
 pub mod tasks;
 pub mod transcript;
 
@@ -26,6 +27,7 @@ pub use reserved::{
     is_session_owned_name,
 };
 pub use strip::strip_leading_frontmatter;
+pub use tags::normalize_tag_name;
 pub use tasks::{TaskItem, TasksFile};
 
 pub use hypr_fs_format::{

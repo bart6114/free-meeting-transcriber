@@ -104,6 +104,23 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
               "string",
               "null"
             ]
+          },
+          "tags": {
+            "description": "Only meetings carrying every one of these tags (case-insensitive)",
+            "items": {
+              "type": "string"
+            },
+            "type": [
+              "array",
+              "null"
+            ]
+          },
+          "untagged": {
+            "description": "Only meetings without any tags; cannot be combined with tags",
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         },
         "title": "ListMeetingsInput",

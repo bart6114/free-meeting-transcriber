@@ -44,6 +44,10 @@ pub struct ListMeetingsInput {
     pub limit: Option<u32>,
     #[schemars(description = "Number of results to skip; defaults to 0")]
     pub offset: Option<u32>,
+    #[schemars(description = "Only meetings carrying every one of these tags (case-insensitive)")]
+    pub tags: Option<Vec<String>>,
+    #[schemars(description = "Only meetings without any tags; cannot be combined with tags")]
+    pub untagged: Option<bool>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
@@ -81,6 +85,7 @@ pub struct MeetingListItem {
     pub updated_at: String,
     pub started_at: String,
     pub ended_at: String,
+    pub tags: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -133,6 +138,7 @@ pub struct Meeting {
     pub ended_at: String,
     pub timezone: String,
     pub language: String,
+    pub tags: Vec<String>,
     pub note: Option<Document>,
     pub summaries: Vec<Document>,
     pub action_items: Vec<ActionItem>,
@@ -237,6 +243,28 @@ fn list_meetings_sync(vault: &Path, input: ListMeetingsInput) -> Result<MeetingP
         });
     }
 
+    let wanted_tags = input
+        .tags
+        .as_deref()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|tag| hypr_vault_read::normalize_tag_name(tag))
+        .collect::<Vec<_>>();
+    let untagged = input.untagged.unwrap_or(false);
+    if !wanted_tags.is_empty() && untagged {
+        return Err(Error::InvalidInput(
+            "tags cannot be combined with untagged".to_string(),
+        ));
+    }
+    if !wanted_tags.is_empty() {
+        sessions.retain(|(_, meta)| {
+            let session_tags = normalized_tags(&meta.tags);
+            wanted_tags.iter().all(|tag| session_tags.contains(tag))
+        });
+    } else if untagged {
+        sessions.retain(|(_, meta)| normalized_tags(&meta.tags).is_empty());
+    }
+
     sort_sessions_recent_first(&mut sessions);
 
     let mut meetings = sessions
@@ -337,6 +365,7 @@ fn assemble_meeting_sync(
 
     Ok(Meeting {
         updated_at: file_updated_at(vault, &hypr_vault_read::paths::meta_path_in(session_dir)),
+        tags: normalized_tags(&meta.tags),
         id: meta.id,
         title: meta.title,
         kind: "meeting".to_string(),
@@ -435,6 +464,7 @@ fn meeting_list_item(
             vault,
             &hypr_vault_read::paths::meta_path_in(&location.relative_dir),
         ),
+        tags: normalized_tags(&meta.tags),
         id: meta.id,
         title: meta.title,
         kind: "meeting".to_string(),
@@ -443,6 +473,18 @@ fn meeting_list_item(
         started_at: meta.started_at.unwrap_or_default(),
         ended_at: meta.ended_at.unwrap_or_default(),
     }
+}
+
+/// Session tags for output and filtering: normalized (trimmed, `#`-stripped,
+/// lowercased), deduped, and sorted, matching what the desktop writes.
+fn normalized_tags(raw: &[String]) -> Vec<String> {
+    let mut tags = raw
+        .iter()
+        .filter_map(|tag| hypr_vault_read::normalize_tag_name(tag))
+        .collect::<Vec<_>>();
+    tags.sort();
+    tags.dedup();
+    tags
 }
 
 /// The retired index's `updated_at` column tracked the last write; the file's mtime is the
@@ -500,10 +542,13 @@ impl Meeting {
         } else {
             &self.started_at
         };
-        let lines = [
+        let mut lines = vec![
             format!("- ID: `{}`", self.id),
             format!("- Date: {occurred_at}"),
         ];
+        if !self.tags.is_empty() {
+            lines.push(format!("- Tags: {}", self.tags.join(", ")));
+        }
         lines.join("\n")
     }
 }
@@ -590,6 +635,16 @@ mod tests {
     use super::*;
 
     fn seed_session(vault: &Path, id: &str, title: &str, started_at: Option<&str>) {
+        seed_session_with_tags(vault, id, title, started_at, &[]);
+    }
+
+    fn seed_session_with_tags(
+        vault: &Path,
+        id: &str,
+        title: &str,
+        started_at: Option<&str>,
+        tags: &[&str],
+    ) {
         let dir = vault.join(format!("sessions/{id}"));
         std::fs::create_dir_all(&dir).unwrap();
         std::fs::write(
@@ -600,7 +655,7 @@ mod tests {
                 "started_at": started_at,
                 "ended_at": null,
                 "created_at": "2026-07-01T00:00:00Z",
-                "tags": [],
+                "tags": tags,
             })
             .to_string(),
         )
@@ -761,6 +816,7 @@ mod tests {
                 query: Some("alpha".to_string()),
                 limit: Some(1),
                 offset: Some(1),
+                ..Default::default()
             },
         )
         .await
@@ -878,6 +934,118 @@ mod tests {
         .await
         .unwrap_err();
         assert!(matches!(error, Error::NotFound(_)));
+    }
+
+    #[tokio::test]
+    async fn list_meetings_filters_by_tags_and_untagged() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session_with_tags(
+            vault.path(),
+            "meeting-both",
+            "Both",
+            Some("2026-07-01"),
+            &["Project-X", "#Hiring"],
+        );
+        seed_session_with_tags(
+            vault.path(),
+            "meeting-one",
+            "One",
+            Some("2026-07-02"),
+            &["hiring"],
+        );
+        seed_session(vault.path(), "meeting-untagged", "Bare", Some("2026-07-03"));
+
+        // AND semantics; filter inputs normalize the same way as stored tags.
+        let both = list_meetings(
+            vault.path(),
+            ListMeetingsInput {
+                tags: Some(vec!["HIRING".to_string(), "#project-x".to_string()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(both.meetings.len(), 1);
+        assert_eq!(both.meetings[0].id, "meeting-both");
+        // Output tags are normalized, deduped, and sorted.
+        assert_eq!(both.meetings[0].tags, vec!["hiring", "project-x"]);
+
+        let hiring = list_meetings(
+            vault.path(),
+            ListMeetingsInput {
+                tags: Some(vec!["hiring".to_string()]),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(
+            hiring
+                .meetings
+                .iter()
+                .map(|meeting| meeting.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["meeting-one", "meeting-both"]
+        );
+
+        let untagged = list_meetings(
+            vault.path(),
+            ListMeetingsInput {
+                untagged: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(untagged.meetings.len(), 1);
+        assert_eq!(untagged.meetings[0].id, "meeting-untagged");
+        assert!(untagged.meetings[0].tags.is_empty());
+
+        let error = list_meetings(
+            vault.path(),
+            ListMeetingsInput {
+                tags: Some(vec!["hiring".to_string()]),
+                untagged: Some(true),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap_err();
+        assert!(matches!(error, Error::InvalidInput(_)));
+    }
+
+    #[tokio::test]
+    async fn get_meeting_surfaces_normalized_tags_in_json_and_markdown() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session_with_tags(
+            vault.path(),
+            "meeting-1",
+            "Planning",
+            Some("2026-07-13"),
+            &["#Hiring", "Project-X", "hiring"],
+        );
+
+        let meeting = get_meeting(
+            vault.path(),
+            GetMeetingInput {
+                meeting_id: "meeting-1".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(meeting.tags, vec!["hiring", "project-x"]);
+        assert!(meeting.to_markdown().contains("- Tags: hiring, project-x"));
+
+        seed_session(vault.path(), "meeting-2", "Bare", Some("2026-07-14"));
+        let bare = get_meeting(
+            vault.path(),
+            GetMeetingInput {
+                meeting_id: "meeting-2".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert!(!bare.to_markdown().contains("- Tags:"));
     }
 
     #[tokio::test]

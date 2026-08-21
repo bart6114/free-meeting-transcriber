@@ -25,6 +25,27 @@ Read the full speaker-labeled transcript (`[HH:MM:SS] Speaker: ...` lines):
 fmtr --json meetings transcript MEETING_ID
 ```
 
+Filter the meeting list by tags (`--tag` is repeatable and all given tags must match, case-insensitively; `--untagged` keeps only meetings without tags and cannot be combined with `--tag`; each listed meeting's JSON includes its normalized `tags`):
+
+```bash
+fmtr --json meetings list --tag project-x --tag review
+fmtr --json meetings list --untagged
+```
+
+Edit a meeting's tags (`meetings tag add` registers new tags in the vault's registry; `meetings tag remove` never unregisters them; tags are normalized — trimmed, `#` stripped, lowercased — and adding a present tag or removing an absent one is a no-op):
+
+```bash
+fmtr --json meetings tag add MEETING_ID project-x review
+fmtr --json meetings tag remove MEETING_ID review
+```
+
+List every registered tag in the vault (`tags list`), and resolve a meeting id to its absolute session directory (`meetings path`):
+
+```bash
+fmtr --json tags list
+fmtr --json meetings path MEETING_ID
+```
+
 JSON success responses contain `schema_version`, `command`, `data`, and optional `pagination`. Continue from `pagination.next_offset` only when more context is necessary.
 
 Create a meeting note (prints the new meeting id; `--note` seeds the body from a file, or stdin with `-`). `--created-at`, `--started-at`, and `--ended-at` take RFC 3339 timestamps for backdating historical notes (`--created-at` sets the meeting's place on the timeline and in its folder name; invalid timestamps are rejected before anything is written), and `--tag` is repeatable and both tags the meeting and registers new tags in the vault:

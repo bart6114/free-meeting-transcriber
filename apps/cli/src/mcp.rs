@@ -151,6 +151,7 @@ impl ServerHandler for FmtrMcpServer {
                 query: None,
                 limit: Some(access::DEFAULT_LIST_LIMIT),
                 offset: Some(offset),
+                ..Default::default()
             },
         )
         .await
@@ -360,8 +361,7 @@ mod tests {
         let result = server
             .list_meetings(Parameters(access::ListMeetingsInput {
                 query: Some("plan".to_string()),
-                limit: None,
-                offset: None,
+                ..Default::default()
             }))
             .await
             .unwrap();
