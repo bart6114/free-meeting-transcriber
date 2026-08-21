@@ -24,6 +24,11 @@ import { useTabs } from "~/store/zustand/tabs";
 const MAX_RECENT_DISPLAY = 5;
 const SEARCH_LIMIT = 20;
 const SNIPPET_MAX_CHARS = 120;
+// cmdk mounts (and registers) a DOM item per row, so the empty-query list and the
+// per-keystroke title scan are capped -- typing a query is the path to older
+// notes, and everything beyond a cap is unreachable by scrolling anyway.
+const MAX_ALL_NOTES_DISPLAY = 50;
+const MAX_TITLE_MATCHES = 50;
 
 interface OpenNoteDialogProps {
   open: boolean;
@@ -155,10 +160,15 @@ export function OpenNoteDialog({
   }, [sessions, t]);
 
   const allNotesSortedByDate = useMemo(() => {
-    return [...sessionsMap.values()].sort((a, b) => {
-      if (!a.createdAt || !b.createdAt) return 0;
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
-    });
+    // Precompute sort keys: at 1,000+ notes a Date-parsing comparator dominates
+    // the dialog-open cost.
+    return [...sessionsMap.values()]
+      .map((note) => ({
+        note,
+        sortKey: note.createdAt ? Date.parse(note.createdAt) || 0 : 0,
+      }))
+      .sort((a, b) => b.sortKey - a.sortKey)
+      .map(({ note }) => note);
   }, [sessionsMap]);
 
   const recentSessions = useMemo(() => {
@@ -173,9 +183,9 @@ export function OpenNoteDialog({
   }, [recentSessions]);
 
   const otherNotes = useMemo(() => {
-    return allNotesSortedByDate.filter(
-      (note) => !recentSessionIdSet.has(note.id),
-    );
+    return allNotesSortedByDate
+      .filter((note) => !recentSessionIdSet.has(note.id))
+      .slice(0, MAX_ALL_NOTES_DISPLAY);
   }, [allNotesSortedByDate, recentSessionIdSet]);
 
   // Full-text hits (memo, summaries, transcripts) merged with client-side
@@ -196,6 +206,9 @@ export function OpenNoteDialog({
     const seen = new Set<string>();
 
     for (const note of allNotesSortedByDate) {
+      if (results.length >= MAX_TITLE_MATCHES) {
+        break;
+      }
       if (note.title.toLowerCase().includes(lowerQuery)) {
         seen.add(note.id);
         results.push({ ...note, snippet: snippetsById.get(note.id) ?? null });

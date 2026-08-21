@@ -217,4 +217,19 @@ describe("OpenNoteDialog", () => {
 
     expect(await screen.findByText("No notes found.")).toBeTruthy();
   });
+
+  it("caps the empty-query All Notes list to the most recent entries", () => {
+    mocks.sessions = Array.from({ length: 60 }, (_, index) => ({
+      id: `s-${index}`,
+      title: `Note ${index}`,
+      created_at: new Date(Date.UTC(2026, 0, 1, 0, index)).toISOString(),
+    }));
+
+    renderDialog();
+
+    // Newest-first: the 50 most recent survive the cap, the 10 oldest don't.
+    expect(screen.getByText("Note 59")).toBeTruthy();
+    expect(screen.getByText("Note 10")).toBeTruthy();
+    expect(screen.queryByText("Note 9")).toBeNull();
+  });
 });
