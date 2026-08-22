@@ -1,0 +1,175 @@
+name: cli-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build CLI binaries for (defaults to the latest release)
+        required: false
+        default: ""
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+
+permissions: {}
+
+concurrency:
+  group: cli-release
+  cancel-in-progress: false
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - id: tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "$INPUT_TAG" ]; then
+            tag="$(gh release view "$INPUT_TAG" --json tagName --jq .tagName)"
+          else
+            tag="$(gh release view --json tagName --jq .tagName)"
+          fi
+          echo "Building $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: resolve
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - triple: aarch64-apple-darwin
+            runner: macos-latest
+          - triple: x86_64-apple-darwin
+            runner: macos-15-intel
+          - triple: x86_64-unknown-linux-gnu
+            runner: ubuntu-22.04
+          - triple: aarch64-unknown-linux-gnu
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.resolve.outputs.tag }}
+          persist-credentials: false
+      - uses: ./.github/actions/rust_install
+      - run: cargo build --locked --release -p fmtr-cli
+      - env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          test "$(jq -r .version package.json)" = "$version"
+          bin=target/release/fmtr
+          if [ "$(uname -s)" = "Darwin" ]; then
+            strip -x "$bin"
+            codesign -s - -f "$bin"
+          else
+            strip "$bin"
+          fi
+          "$bin" --version | grep -F "$version"
+          asset="fmtr-${version}-${TRIPLE}.tar.gz"
+          COPYFILE_DISABLE=1 tar -czf "$asset" -C target/release fmtr
+          if command -v sha256sum >/dev/null; then
+            sha256sum "$asset" > "$asset.sha256"
+          else
+            shasum -a 256 "$asset" > "$asset.sha256"
+          fi
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+          TRIPLE: ${{ matrix.triple }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          gh release upload "$TAG" \
+            "fmtr-${version}-${TRIPLE}.tar.gz" \
+            "fmtr-${version}-${TRIPLE}.tar.gz.sha256" \
+            --clobber
+
+  publish-latest:
+    needs: [resolve, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          if ! gh release view updater >/dev/null 2>&1; then
+            gh release create updater --prerelease \
+              --title "Updater feed" \
+              --notes "Rolling release holding latest.json for the in-app updater and stable-named copies of the latest artifacts. Do not delete."
+          fi
+          feed_version="$(gh release download updater --pattern fmtr-latest-version.txt -O - 2>/dev/null || echo "0.0.0")"
+          newest="$(printf '%s\n%s\n' "$feed_version" "$version" | sort -V | tail -n1)"
+          if [ "$newest" != "$version" ]; then
+            echo "CLI feed already at $feed_version; not downgrading to $version"
+            exit 0
+          fi
+          gh release download "$TAG" --pattern "fmtr-${version}-*.tar.gz"
+          count="$(ls fmtr-"${version}"-*.tar.gz | wc -l)"
+          test "$count" -eq 4
+          for asset in fmtr-"${version}"-*.tar.gz; do
+            triple="${asset#fmtr-"${version}"-}"
+            triple="${triple%.tar.gz}"
+            latest="fmtr-latest-${triple}.tar.gz"
+            mv "$asset" "$latest"
+            sha256sum "$latest" > "$latest.sha256"
+          done
+          printf '%s\n' "$version" > fmtr-latest-version.txt
+          gh release upload updater fmtr-latest-* --clobber
+
+  verify:
+    needs: publish-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [macos-latest, ubuntu-22.04, ubuntu-22.04-arm]
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+    steps:
+      - env:
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          case "$(uname -s)/$(uname -m)" in
+            Darwin/arm64) triple=aarch64-apple-darwin ;;
+            Darwin/x86_64) triple=x86_64-apple-darwin ;;
+            Linux/x86_64) triple=x86_64-unknown-linux-gnu ;;
+            Linux/aarch64) triple=aarch64-unknown-linux-gnu ;;
+            *) echo "unsupported verify host"; exit 1 ;;
+          esac
+          asset="fmtr-latest-${triple}.tar.gz"
+          base="https://github.com/$REPO/releases/download/updater"
+          curl -fsSL --proto '=https' --tlsv1.2 -O "$base/$asset" -O "$base/$asset.sha256"
+          if command -v sha256sum >/dev/null; then
+            sha256sum -c "$asset.sha256"
+          else
+            shasum -a 256 -c "$asset.sha256"
+          fi
+          tar -xzf "$asset"
+          ./fmtr --version
+          if [ "$(uname -s)" = "Linux" ]; then
+            max="$(objdump -T fmtr | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -n1)"
+            echo "max glibc symbol: $max"
+            test "$(printf '%s\n%s\n' "${max#GLIBC_}" 2.35 | sort -V | tail -n1)" = "2.35"
+          fi
