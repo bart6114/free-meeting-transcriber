@@ -5,8 +5,14 @@ import { Decoration, DecorationSet } from "prosemirror-view";
 import { getChangedTextblockRanges, type ChangedRange } from "./changed-ranges";
 
 // Dashes join segments but never end the match, so "#org- and" only tags "org".
-const HASHTAG_REGEX =
-  /#([\p{L}\p{N}_\p{Emoji}\p{Emoji_Component}]+(?:-+[\p{L}\p{N}_\p{Emoji}\p{Emoji_Component}]+)*)/gu;
+// Slashes join path segments the same way ("#a/b" is one tag, "#a/ then" tags
+// only "a"), giving hierarchical tags a single highlight.
+const HASHTAG_SEGMENT_SOURCE =
+  "[\\p{L}\\p{N}_\\p{Emoji}\\p{Emoji_Component}]+(?:-+[\\p{L}\\p{N}_\\p{Emoji}\\p{Emoji_Component}]+)*";
+const HASHTAG_REGEX = new RegExp(
+  `#(${HASHTAG_SEGMENT_SOURCE}(?:\\/${HASHTAG_SEGMENT_SOURCE})*)`,
+  "gu",
+);
 const LEADING_PUNCTUATION_REGEX = /^[([{<"'`]+/u;
 const HTTP_PREFIXES = ["http://", "https://", "www."];
 

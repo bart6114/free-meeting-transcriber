@@ -94,6 +94,140 @@ describe("timeline utils", () => {
     expect(buckets.map((bucket) => bucket.label)).toEqual(["standup"]);
   });
 
+  test("buildTagTimelineBuckets nests slash tags preorder with virtual parents", () => {
+    const table: TimelineSessionsTable = {
+      "session-interview": {
+        title: "Interview",
+        created_at: "2024-01-15T10:00:00.000Z",
+        tags: ["dataroots/interviews"],
+      },
+      "session-roadmap": {
+        title: "Roadmap",
+        created_at: "2024-01-14T10:00:00.000Z",
+        tags: ["projects/2024/roadmap"],
+      },
+      "session-data": {
+        title: "Data catch-up",
+        created_at: "2024-01-13T10:00:00.000Z",
+        tags: ["data"],
+      },
+    };
+
+    const buckets = buildTagTimelineBuckets({ timelineSessionsTable: table });
+
+    expect(
+      buckets.map((bucket) => ({
+        id: bucket.id,
+        label: bucket.label,
+        depth: bucket.depth,
+        parentId: bucket.parentId,
+        ids: bucket.items.map((item) => item.id),
+      })),
+    ).toEqual([
+      // Prefixes don't collide: "data" and "dataroots" are separate roots.
+      {
+        id: "data",
+        label: "data",
+        depth: 0,
+        parentId: undefined,
+        ids: ["session-data"],
+      },
+      {
+        id: "dataroots",
+        label: "dataroots",
+        depth: 0,
+        parentId: undefined,
+        ids: [],
+      },
+      {
+        id: "dataroots/interviews",
+        label: "interviews",
+        depth: 1,
+        parentId: "dataroots",
+        ids: ["session-interview"],
+      },
+      {
+        id: "projects",
+        label: "projects",
+        depth: 0,
+        parentId: undefined,
+        ids: [],
+      },
+      {
+        id: "projects/2024",
+        label: "2024",
+        depth: 1,
+        parentId: "projects",
+        ids: [],
+      },
+      {
+        id: "projects/2024/roadmap",
+        label: "roadmap",
+        depth: 2,
+        parentId: "projects/2024",
+        ids: ["session-roadmap"],
+      },
+    ]);
+  });
+
+  test("buildTagTimelineBuckets dedupes totalCount across a subtree", () => {
+    const table: TimelineSessionsTable = {
+      "session-both": {
+        title: "Tagged parent and child",
+        created_at: "2024-01-15T10:00:00.000Z",
+        tags: ["a", "a/b"],
+      },
+      "session-child": {
+        title: "Child only",
+        created_at: "2024-01-14T10:00:00.000Z",
+        tags: ["a/b"],
+      },
+    };
+
+    const buckets = buildTagTimelineBuckets({ timelineSessionsTable: table });
+
+    expect(
+      buckets.map((bucket) => ({
+        id: bucket.id,
+        totalCount: bucket.totalCount,
+        ids: bucket.items.map((item) => item.id),
+      })),
+    ).toEqual([
+      // session-both appears in both buckets' items but counts once in "a".
+      { id: "a", totalCount: 2, ids: ["session-both"] },
+      { id: "a/b", totalCount: 2, ids: ["session-both", "session-child"] },
+    ]);
+  });
+
+  test("buildTagTimelineBuckets keeps Untagged outside the tree and tolerates degenerate tags", () => {
+    const table: TimelineSessionsTable = {
+      "session-untagged-name": {
+        title: "Tagged literally untagged",
+        created_at: "2024-01-15T10:00:00.000Z",
+        tags: ["untagged"],
+      },
+      "session-slashes": {
+        title: "Hand-edited degenerate tag",
+        created_at: "2024-01-14T10:00:00.000Z",
+        tags: ["///"],
+      },
+    };
+
+    const buckets = buildTagTimelineBuckets({ timelineSessionsTable: table });
+
+    expect(
+      buckets.map((bucket) => ({
+        id: bucket.id,
+        depth: bucket.depth,
+        ids: bucket.items.map((item) => item.id),
+      })),
+    ).toEqual([
+      // A user tag "untagged" (lowercase) never collides with the "Untagged" id.
+      { id: "untagged", depth: 0, ids: ["session-untagged-name"] },
+      { id: "Untagged", depth: 0, ids: ["session-slashes"] },
+    ]);
+  });
+
   test("calculateTodayIndicatorPlacement places indicator before the first past item", () => {
     const placement = calculateTodayIndicatorPlacement(
       [
@@ -337,6 +471,7 @@ function bucketsWith(data: {
 }): TimelineBucket[] {
   return [
     {
+      id: "Today",
       label: "Today",
       precision: "time",
       items: [makeTimelineItem("session-1", data)],

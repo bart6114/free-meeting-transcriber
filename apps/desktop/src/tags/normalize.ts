@@ -1,4 +1,7 @@
-export const TAG_NAME_RE = /^[\p{L}_][\p{L}\p{N}_-]*$/u;
+// Slash-separated segments: the first keeps the historical no-digit-first rule,
+// later segments may start with a digit (`projects/2024`).
+export const TAG_NAME_RE =
+  /^[\p{L}_][\p{L}\p{N}_-]*(?:\/[\p{L}\p{N}_][\p{L}\p{N}_-]*)*$/u;
 
 // Lowercase-dedupe, dropping anything outside the tag charset. The Rust side's
 // `ensure_tag` only guarantees trim/strip-#/lowercase; the strict charset filter
@@ -7,7 +10,12 @@ export function normalizeTagNames(tagNames: string[]): string[] {
   const result = new Map<string, string>();
 
   for (const rawTagName of tagNames) {
-    const tagName = rawTagName.replace(/^#/, "").trim().toLowerCase();
+    const tagName = rawTagName
+      .replace(/^#/, "")
+      .trim()
+      .toLowerCase()
+      .replace(/\/{2,}/g, "/")
+      .replace(/^\/+|\/+$/g, "");
     if (!TAG_NAME_RE.test(tagName)) {
       continue;
     }
@@ -16,4 +24,8 @@ export function normalizeTagNames(tagNames: string[]): string[] {
   }
 
   return [...result.values()];
+}
+
+export function splitTagPath(tag: string): string[] {
+  return tag.split("/").filter((segment) => segment.length > 0);
 }
