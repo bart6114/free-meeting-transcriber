@@ -100,6 +100,7 @@ pub struct SessionListHeader {
     pub created_at: String,
     pub folder: Option<String>,
     pub tags: Vec<String>,
+    pub author: Option<String>,
     pub has_transcript_words: bool,
 }
 
@@ -199,6 +200,7 @@ impl SessionStore {
                 created_at: entry.meta.created_at.clone(),
                 folder: entry.meta.folder.clone(),
                 tags: entry.meta.tags.clone(),
+                author: entry.meta.author.clone(),
                 has_transcript_words: has_transcript_words(&index, &entry.meta.id),
             })
             .collect();
@@ -800,6 +802,7 @@ mod tests {
             tags: vec![],
             tracking_id: None,
             folder: None,
+            author: None,
             extra: Default::default(),
         }
     }

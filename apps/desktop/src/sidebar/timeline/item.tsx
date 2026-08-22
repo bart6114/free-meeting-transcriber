@@ -1,5 +1,5 @@
 import { useLingui } from "@lingui/react/macro";
-import { SquareIcon } from "lucide-react";
+import { BotIcon, SquareIcon } from "lucide-react";
 import {
   memo,
   type DragEvent,
@@ -37,6 +37,7 @@ const EMPTY_TIMELINE_ITEM_KEYS: string[] = [];
 type ItemBaseProps = {
   title: string;
   displayTime: string;
+  author?: string | null;
   isLive?: boolean;
   amplitude?: number;
   showSpinner?: boolean;
@@ -111,6 +112,7 @@ export const TimelineItemComponent = memo(
 const ItemBase = memo(function ItemBase({
   title,
   displayTime,
+  author,
   isLive,
   amplitude,
   showSpinner,
@@ -190,6 +192,22 @@ const ItemBase = memo(function ItemBase({
           <div className="pointer-events-none min-w-0 flex-1 truncate text-sm font-normal">
             {title || t`Untitled`}
           </div>
+          {author && (
+            <span
+              title={t`Written by ${author}`}
+              className={cn([
+                "flex shrink-0 items-center",
+                isLive
+                  ? "text-destructive-foreground/65"
+                  : "text-muted-foreground/70",
+              ])}
+            >
+              <BotIcon
+                aria-label={t`Written by ${author}`}
+                className="size-3"
+              />
+            </span>
+          )}
           {displayTime && (
             <div
               className={cn([
@@ -269,6 +287,7 @@ function itemBasePropsAreEqual(prev: ItemBaseProps, next: ItemBaseProps) {
   return (
     prev.title === next.title &&
     prev.displayTime === next.displayTime &&
+    prev.author === next.author &&
     prev.isLive === next.isLive &&
     prev.amplitude === next.amplitude &&
     prev.showSpinner === next.showSpinner &&
@@ -437,6 +456,7 @@ const SessionItem = memo(
       <ItemBase
         title={title}
         displayTime={displayTime}
+        author={item.data.author ?? null}
         isLive={isLive}
         amplitude={Math.max(
           0.25,

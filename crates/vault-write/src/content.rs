@@ -26,6 +26,8 @@ pub struct SessionMetaPatch {
     pub tracking_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
 }
 
 impl SessionStore {
@@ -88,6 +90,7 @@ impl SessionStore {
             tags,
             tracking_id,
             folder,
+            author,
         } = patch;
 
         if let Some(title) = title {
@@ -110,6 +113,9 @@ impl SessionStore {
         }
         if let Some(folder) = folder {
             meta.folder = Some(folder);
+        }
+        if let Some(author) = author {
+            meta.author = Some(author);
         }
 
         self.write_meta_locked(&guard, &meta).await
@@ -434,6 +440,7 @@ mod tests {
             tags: vec![],
             tracking_id: None,
             folder: None,
+            author: None,
             extra: Default::default(),
         }
     }
@@ -557,6 +564,58 @@ mod tests {
             store.session_get("s1").unwrap().meta.title,
             "Renamed",
             "write-through must reach the index"
+        );
+    }
+
+    /// `author` marks not-vault-owner notes (agents); it must survive unrelated patches
+    /// and reach both list projections, or the "not written by you" UI silently lies.
+    #[tokio::test]
+    async fn author_round_trips_and_survives_unrelated_patches() {
+        let (store, _vault) = test_store().await;
+        let mut m = meta("s1", "Agent note");
+        m.author = Some("claude-code".to_string());
+        store.write_meta(&m).await.unwrap();
+
+        store
+            .update_meta(
+                "s1",
+                SessionMetaPatch {
+                    title: Some("Renamed".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+
+        let after = store.read_meta("s1").await.unwrap().unwrap();
+        assert_eq!(after.author.as_deref(), Some("claude-code"));
+        assert_eq!(
+            store.session_get("s1").unwrap().meta.author.as_deref(),
+            Some("claude-code")
+        );
+        let headers = store.session_list_headers();
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].author.as_deref(), Some("claude-code"));
+
+        store
+            .update_meta(
+                "s1",
+                SessionMetaPatch {
+                    author: Some("other-agent".to_string()),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            store
+                .read_meta("s1")
+                .await
+                .unwrap()
+                .unwrap()
+                .author
+                .as_deref(),
+            Some("other-agent")
         );
     }
 

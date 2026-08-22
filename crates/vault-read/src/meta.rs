@@ -20,6 +20,10 @@ pub struct SessionMeta {
     pub tracking_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub folder: Option<String>,
+    /// Who wrote this note. Absent = the human vault owner; present = an
+    /// agent/other writer (free-form, e.g. "claude-code").
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
     /// Forward-compat catch-all: fields written by newer app versions must survive a
     /// read-modify-write cycle from this version (vaults are file-synced across machines
     /// running different builds).
@@ -157,6 +161,33 @@ mod tests {
 
         assert_eq!(round_tripped["speakers"], raw["speakers"]);
         assert_eq!(round_tripped["some_future_field"], raw["some_future_field"]);
+    }
+
+    /// `author` is a typed field (absent = the vault owner wrote the note), not an
+    /// `extra` passenger -- and absence must serialize as no key, not `null`.
+    #[test]
+    fn author_is_typed_and_absent_when_unset() {
+        let raw = serde_json::json!({
+            "id": "s1",
+            "title": "Agent note",
+            "started_at": null,
+            "ended_at": null,
+            "created_at": "2026-07-01T00:00:00Z",
+            "tags": [],
+            "author": "claude-code",
+        });
+
+        let meta: SessionMeta = serde_json::from_value(raw).unwrap();
+        assert_eq!(meta.author.as_deref(), Some("claude-code"));
+        assert!(!meta.extra.contains_key("author"));
+
+        let round_tripped = serde_json::to_value(&meta).unwrap();
+        assert_eq!(round_tripped["author"], "claude-code");
+
+        let mut unset = meta.clone();
+        unset.author = None;
+        let serialized = serde_json::to_value(&unset).unwrap();
+        assert!(serialized.get("author").is_none());
     }
 
     #[test]

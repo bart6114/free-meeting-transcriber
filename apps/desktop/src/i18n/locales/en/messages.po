@@ -1542,6 +1542,14 @@ msgstr "Where your notes and recordings are stored"
 msgid "Words transcribed"
 msgstr "Words transcribed"
 
+#: src/sidebar/timeline/item.tsx
+msgid "Written by {author}"
+msgstr "Written by {author}"
+
+#: src/session/components/session-author-badge.tsx
+msgid "Written by {author} — not by you"
+msgstr "Written by {author} — not by you"
+
 #: src/settings/todo/permission.tsx
 msgid "You can"
 msgstr "You can"

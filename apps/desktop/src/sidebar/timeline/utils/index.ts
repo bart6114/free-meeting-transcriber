@@ -18,6 +18,7 @@ export type TimelineSessionRow = {
   created_at?: string | null;
   folder_id?: string | null;
   tags?: string[] | null;
+  author?: string | null;
 };
 
 export type TimelineSessionsTable =

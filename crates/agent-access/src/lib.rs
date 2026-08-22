@@ -86,6 +86,7 @@ pub struct MeetingListItem {
     pub started_at: String,
     pub ended_at: String,
     pub tags: Vec<String>,
+    pub author: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -139,6 +140,7 @@ pub struct Meeting {
     pub timezone: String,
     pub language: String,
     pub tags: Vec<String>,
+    pub author: Option<String>,
     pub note: Option<Document>,
     pub summaries: Vec<Document>,
     pub action_items: Vec<ActionItem>,
@@ -375,6 +377,7 @@ fn assemble_meeting_sync(
         ended_at: meta.ended_at.unwrap_or_default(),
         timezone: String::new(),
         language: String::new(),
+        author: meta.author,
         note,
         summaries,
         action_items,
@@ -472,6 +475,7 @@ fn meeting_list_item(
         created_at: meta.created_at,
         started_at: meta.started_at.unwrap_or_default(),
         ended_at: meta.ended_at.unwrap_or_default(),
+        author: meta.author,
     }
 }
 
@@ -546,6 +550,9 @@ impl Meeting {
             format!("- ID: `{}`", self.id),
             format!("- Date: {occurred_at}"),
         ];
+        if let Some(author) = self.author.as_deref().filter(|author| !author.is_empty()) {
+            lines.push(format!("- Author: {author}"));
+        }
         if !self.tags.is_empty() {
             lines.push(format!("- Tags: {}", self.tags.join(", ")));
         }
@@ -1046,6 +1053,47 @@ mod tests {
         .await
         .unwrap();
         assert!(!bare.to_markdown().contains("- Tags:"));
+    }
+
+    /// `author` marks notes not written by the vault owner; it must reach the JSON
+    /// DTOs and the markdown so agents can tell whose notes they are reading.
+    #[tokio::test]
+    async fn get_meeting_surfaces_author_in_json_and_markdown() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session(vault.path(), "meeting-1", "Agent note", None);
+        let meta_path = vault.path().join("sessions/meeting-1/_meta.json");
+        let mut meta: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&meta_path).unwrap()).unwrap();
+        meta["author"] = serde_json::json!("claude-code");
+        std::fs::write(&meta_path, meta.to_string()).unwrap();
+
+        let meeting = get_meeting(
+            vault.path(),
+            GetMeetingInput {
+                meeting_id: "meeting-1".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(meeting.author.as_deref(), Some("claude-code"));
+        assert!(meeting.to_markdown().contains("- Author: claude-code"));
+
+        let page = list_meetings(vault.path(), ListMeetingsInput::default())
+            .await
+            .unwrap();
+        assert_eq!(page.meetings[0].author.as_deref(), Some("claude-code"));
+
+        seed_session(vault.path(), "meeting-2", "Own note", None);
+        let own = get_meeting(
+            vault.path(),
+            GetMeetingInput {
+                meeting_id: "meeting-2".to_string(),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(own.author, None);
+        assert!(!own.to_markdown().contains("- Author:"));
     }
 
     #[tokio::test]

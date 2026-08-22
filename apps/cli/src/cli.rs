@@ -87,6 +87,13 @@ pub enum Command {
             help = "End timestamp for the new meeting (RFC 3339)"
         )]
         ended_at: Option<String>,
+        #[arg(
+            long,
+            value_name = "NAME",
+            conflicts_with = "into",
+            help = "Record who wrote the new meeting's note; set this when writing on behalf of someone other than the vault owner (e.g. claude-code)"
+        )]
+        author: Option<String>,
     },
     /// Transcribe a meeting's audio with the configured on-device model
     Transcribe {
@@ -190,6 +197,12 @@ pub enum MeetingCommand {
             help = "Tag for the new meeting; repeatable"
         )]
         tag: Vec<String>,
+        #[arg(
+            long,
+            value_name = "NAME",
+            help = "Record who wrote this meeting's note; set this when writing on behalf of someone other than the vault owner (e.g. claude-code)"
+        )]
+        author: Option<String>,
     },
     /// Show the note or generated summaries for a meeting, or edit the note
     Note {

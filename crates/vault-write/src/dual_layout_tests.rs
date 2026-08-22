@@ -21,6 +21,7 @@ fn meta(id: &str, title: &str) -> SessionMeta {
         tags: vec![],
         tracking_id: None,
         folder: None,
+        author: None,
         extra: Default::default(),
     }
 }

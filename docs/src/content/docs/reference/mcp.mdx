@@ -17,7 +17,7 @@ Run the server with `fmtr mcp`. It uses the MCP `2024-11-05` protocol over stdio
 | `tags` | array | None | Only meetings carrying every one of these tags (case-insensitive). |
 | `untagged` | boolean | `false` | Only meetings without any tags. Cannot be combined with `tags`. |
 
-Each returned meeting includes its normalized `tags`.
+Each returned meeting includes its normalized `tags` and its `author` (`null` when the vault owner wrote the note; otherwise the name of the agent or other writer that created it).
 
 ### `search_meetings`
 
@@ -35,7 +35,7 @@ Hits are ordered by meeting recency and carry `meeting_id`, `kind`, and a `snipp
 
 ### `get_meeting`
 
-Accepts required string `meeting_id`. Returns meeting metadata (including its normalized `tags`), the canonical note, summaries, and action items. Transcript words are intentionally separate.
+Accepts required string `meeting_id`. Returns meeting metadata (including its normalized `tags` and its `author` — `null` for the vault owner's own notes), the canonical note, summaries, and action items. Transcript words are intentionally separate.
 
 ### `get_meeting_transcript`
 

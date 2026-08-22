@@ -1542,6 +1542,14 @@ msgstr ""
 msgid "Words transcribed"
 msgstr ""
 
+#: src/sidebar/timeline/item.tsx
+msgid "Written by {author}"
+msgstr ""
+
+#: src/session/components/session-author-badge.tsx
+msgid "Written by {author} — not by you"
+msgstr ""
+
 #: src/settings/todo/permission.tsx
 msgid "You can"
 msgstr ""

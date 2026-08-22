@@ -32,12 +32,14 @@ pub async fn run(args: Args) -> Result<u8> {
             created_at,
             started_at,
             ended_at,
+            author,
         } => {
             let timestamps = commands::NewSessionOptions {
                 created_at,
                 started_at,
                 ended_at,
                 tags: Vec::new(),
+                author,
             };
             return commands::import::run(
                 &vault, file, title, into, transcribe, timestamps, args.json,
@@ -168,6 +170,7 @@ mod tests {
                     started_at: None,
                     ended_at: None,
                     tag: Vec::new(),
+                    author: None,
                 },
             },
         })
@@ -192,6 +195,8 @@ mod tests {
 
         assert_eq!(meta["title"], "Kickoff");
         assert_eq!(meta["tags"], serde_json::json!([]));
+        // No --author means the vault owner wrote it: the key must be absent, not null.
+        assert!(meta.get("author").is_none());
         // Desktop timestamp format: RFC3339 UTC with millisecond precision and Z.
         let created_at = meta["created_at"].as_str().unwrap();
         assert!(
@@ -222,6 +227,43 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn new_command_records_the_author_in_meta() {
+        let dir = tempfile::tempdir().unwrap();
+        let vault = dir.path().join("vault");
+        std::fs::create_dir_all(&vault).unwrap();
+
+        run(Args {
+            base: None,
+            vault_path: Some(vault.clone()),
+            json: true,
+            command: cli::Command::Meetings {
+                command: cli::MeetingCommand::New {
+                    title: "Agent note".to_string(),
+                    note: None,
+                    created_at: None,
+                    started_at: None,
+                    ended_at: None,
+                    tag: Vec::new(),
+                    author: Some("claude-code".to_string()),
+                },
+            },
+        })
+        .await
+        .unwrap();
+
+        let sessions = std::fs::read_dir(vault.join("sessions"))
+            .unwrap()
+            .map(|entry| entry.unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(sessions.len(), 1);
+        let meta: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(sessions[0].path().join("_meta.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(meta["author"], "claude-code");
+    }
+
+    #[tokio::test]
     async fn new_command_creates_nothing_when_the_note_source_is_unreadable() {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path().join("vault");
@@ -239,6 +281,7 @@ mod tests {
                     started_at: None,
                     ended_at: None,
                     tag: Vec::new(),
+                    author: None,
                 },
             },
         })
@@ -288,6 +331,7 @@ mod tests {
                 created_at: None,
                 started_at: None,
                 ended_at: None,
+                author: None,
             },
         })
         .await
@@ -339,6 +383,7 @@ mod tests {
                 created_at: None,
                 started_at: None,
                 ended_at: None,
+                author: None,
             },
         })
         .await
@@ -389,6 +434,7 @@ mod tests {
                 created_at: None,
                 started_at: None,
                 ended_at: None,
+                author: None,
             },
         })
         .await
@@ -420,6 +466,7 @@ mod tests {
                 created_at: None,
                 started_at: None,
                 ended_at: None,
+                author: None,
             },
         })
         .await
@@ -454,6 +501,7 @@ mod tests {
                 created_at: None,
                 started_at: None,
                 ended_at: None,
+                author: None,
             },
         })
         .await
@@ -482,6 +530,7 @@ mod tests {
                 created_at: None,
                 started_at: None,
                 ended_at: None,
+                author: None,
             },
         })
         .await
@@ -623,6 +672,7 @@ mod tests {
                 created_at: None,
                 started_at: None,
                 ended_at: None,
+                author: None,
             },
         })
         .await
@@ -896,6 +946,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 tag: vec!["#Hiring".to_string(), "project-x".to_string()],
+                author: None,
             },
         ))
         .await

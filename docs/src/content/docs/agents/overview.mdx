@@ -27,7 +27,7 @@ Every vault also carries a copy of the [vault guide for agents](/agents/vault/) 
 
 Use these interfaces instead of crawling the vault. They apply the same rules for canonical notes, summaries, speaker names, and transcript rendering.
 
-MCP cannot write: no tool creates or edits a note, action item, or meeting. The CLI can: `meetings new` creates a meeting, `meetings note --set` and `--append` edit a note body, `import` turns an audio file into a new meeting, and `transcribe` replaces a meeting's transcript. `meetings export` writes only to the file you pass with `--output`, and replaces an existing file only when `--force` is passed.
+MCP cannot write: no tool creates or edits a note, action item, or meeting. The CLI can: `meetings new` creates a meeting, `meetings note --set` and `--append` edit a note body, `import` turns an audio file into a new meeting, and `transcribe` replaces a meeting's transcript. `meetings export` writes only to the file you pass with `--output`, and replaces an existing file only when `--force` is passed. Agents creating meetings must always pass `--author <agent-name>` so the note is marked as not written by the vault owner.
 
 <CardGrid>
   <LinkCard title="Use the CLI" href="/agents/cli" description="Run commands with JSON output." />

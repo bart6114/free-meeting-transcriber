@@ -48,12 +48,12 @@ fmtr --json meetings path MEETING_ID
 
 JSON success responses contain `schema_version`, `command`, `data`, and optional `pagination`. Continue from `pagination.next_offset` only when more context is necessary.
 
-Create a meeting note (prints the new meeting id; `--note` seeds the body from a file, or stdin with `-`). `--created-at`, `--started-at`, and `--ended-at` take RFC 3339 timestamps for backdating historical notes (`--created-at` sets the meeting's place on the timeline and in its folder name; invalid timestamps are rejected before anything is written), and `--tag` is repeatable and both tags the meeting and registers new tags in the vault:
+Create a meeting note (prints the new meeting id; `--note` seeds the body from a file, or stdin with `-`). `--created-at`, `--started-at`, and `--ended-at` take RFC 3339 timestamps for backdating historical notes (`--created-at` sets the meeting's place on the timeline and in its folder name; invalid timestamps are rejected before anything is written), and `--tag` is repeatable and both tags the meeting and registers new tags in the vault. **Always pass `--author <your-agent-name>` (e.g. `--author claude-code`)** — it marks the meeting as not written by the vault owner, and the app surfaces that; leave it unset only when entering a note on the owner's dictation:
 
 ```bash
-fmtr --json meetings new --title "Weekly sync" --note notes.md
-echo "Agenda" | fmtr --json meetings new --title "Weekly sync" --note -
-fmtr --json meetings new --title "Q1 review" --created-at 2024-03-05T14:00:00Z --started-at 2024-03-05T14:00:00Z --ended-at 2024-03-05T15:00:00Z --tag project-x --tag review
+fmtr --json meetings new --title "Weekly sync" --note notes.md --author claude-code
+echo "Agenda" | fmtr --json meetings new --title "Weekly sync" --note - --author claude-code
+fmtr --json meetings new --title "Q1 review" --created-at 2024-03-05T14:00:00Z --started-at 2024-03-05T14:00:00Z --ended-at 2024-03-05T15:00:00Z --tag project-x --tag review --author claude-code
 ```
 
 Edit an existing meeting's note (`--set` replaces, `--append` adds after a separating newline; exactly one of the two, fails if the meeting does not exist):
@@ -70,10 +70,10 @@ fmtr --json meetings attach MEETING_ID diagram.png
 fmtr --json meetings attach MEETING_ID /tmp/export.pdf --name "Q1 report.pdf"
 ```
 
-Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; add `--transcribe` to transcribe right after the import). `--created-at`, `--started-at`, and `--ended-at` take RFC 3339 timestamps to backdate a historical recording on the timeline and in its folder name. With `--into MEETING_ID` the audio goes into that existing meeting instead — e.g. a note created with `meetings new` — keeping its title and timestamps (`--title` and the timestamp flags are rejected alongside `--into`) and failing if the meeting already has a recording:
+Import an audio file as a new meeting (prints the new meeting id; the audio is converted into the vault's format; accepts wav, mp3, ogg, mp4, m4a, flac, webm, or aac; `--title` defaults to the file name; add `--transcribe` to transcribe right after the import). `--created-at`, `--started-at`, and `--ended-at` take RFC 3339 timestamps to backdate a historical recording on the timeline and in its folder name, and `--author` records who created the meeting — always set it when importing as an agent. With `--into MEETING_ID` the audio goes into that existing meeting instead — e.g. a note created with `meetings new` — keeping its title, timestamps, and authorship (`--title`, the timestamp flags, and `--author` are rejected alongside `--into`) and failing if the meeting already has a recording:
 
 ```bash
-fmtr --json import recording.m4a --title "Weekly sync"
+fmtr --json import recording.m4a --title "Weekly sync" --author claude-code
 fmtr --json import recording.m4a --transcribe
 fmtr --json import recording.m4a --created-at 2024-03-05T14:00:00Z --started-at 2024-03-05T14:00:00Z
 fmtr --json import recording.m4a --into MEETING_ID --transcribe

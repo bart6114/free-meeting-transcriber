@@ -22,6 +22,7 @@ import { useSearch } from "./search/context";
 import { Transcript } from "./transcript";
 
 import { MemoImageStrip } from "~/session/components/memo-image-strip";
+import { SessionAuthorBadge } from "~/session/components/session-author-badge";
 import { SessionDate } from "~/session/components/session-date";
 import {
   SessionPeople,
@@ -346,6 +347,7 @@ const NoteInputContent = forwardRef<
     const peopleTrailer = useSessionPeopleTitleTrailer(
       sessionId,
       <>
+        <SessionAuthorBadge sessionId={sessionId} className="mt-1 mb-3" />
         <SessionTags sessionId={sessionId} className="mt-1 mb-3" />
         {renderedCurrentTab.type === "enhanced" && (
           <MemoImageStrip
@@ -428,6 +430,7 @@ const NoteInputContent = forwardRef<
                   {/* mt-2 = the editor title's 0.25rem margin-bottom plus the
                       trailer row's mt-1, so the title→pills gap matches. */}
                   <SessionPeople sessionId={sessionId} className="mt-2" />
+                  <SessionAuthorBadge sessionId={sessionId} className="mt-2" />
                   <SessionTags sessionId={sessionId} className="mt-2" />
                 </div>
                 <div className="min-h-0 flex-1">

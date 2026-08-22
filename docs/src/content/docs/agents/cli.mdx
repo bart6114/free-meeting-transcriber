@@ -44,13 +44,15 @@ For a non-default vault, use `--vault-path DIR` or `FMTR_VAULT_PATH`.
 ## Write only when asked
 
 ```bash
-fmtr --json meetings new --title "Weekly planning" --note notes.md
+fmtr --json meetings new --title "Weekly planning" --note notes.md --author claude-code
 fmtr --json meetings note MEETING_ID --append notes.md
-fmtr --json import recording.m4a --transcribe
+fmtr --json import recording.m4a --transcribe --author claude-code
 fmtr --json transcribe MEETING_ID
 ```
 
 `meetings new` creates a meeting and prints its ID; `--note` seeds the note body from a file or stdin (`-`). `meetings note --set` replaces the note body and `--append` extends it; both also accept `-` for stdin. `import` creates a meeting from an audio file, and `--transcribe` chains on-device transcription. `transcribe` replaces the meeting's existing transcript, so run it only when the user wants that.
+
+**Always pass `--author <your-agent-name>` when creating a meeting** (`meetings new`, `import`) — it marks the note as not written by the vault owner, and the app surfaces that. Use one stable name, such as `claude-code`. Write your own notes as new meetings with `--author`; when editing an existing note, never change its authorship.
 
 :::note
 On-device transcription requires macOS on Apple Silicon and the on-device Soniqo model configured in the desktop app. The CLI never downloads models — open the desktop app once to download it.

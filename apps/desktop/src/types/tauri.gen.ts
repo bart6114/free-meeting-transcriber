@@ -589,7 +589,7 @@ export type SessionListEntry = { meta: SessionMeta; has_transcript_words: boolea
  * The slim `session_list_headers` row -- exactly what the always-mounted list
  * subscribers (timeline, summaries, tags, float, audio retention) consume.
  */
-export type SessionListHeader = { id: string; title: string; created_at: string; folder: string | null; tags: string[]; has_transcript_words: boolean }
+export type SessionListHeader = { id: string; title: string; created_at: string; folder: string | null; tags: string[]; author: string | null; has_transcript_words: boolean }
 export type SessionMeta = { id: string; title: string; started_at: string | null; ended_at: string | null; created_at: string; tags: string[]; 
 /**
  * Marker for app-created special sessions (today only the onboarding welcome
@@ -597,13 +597,18 @@ export type SessionMeta = { id: string; title: string; started_at: string | null
  * this inside the retired calendar-event envelope, which now round-trips
  * through `extra` -- see `session_find_by_tracking_id`'s legacy fallback.
  */
-tracking_id?: string | null; folder?: string | null }
+tracking_id?: string | null; folder?: string | null; 
+/**
+ * Who wrote this note. Absent = the human vault owner; present = an
+ * agent/other writer (free-form, e.g. "claude-code").
+ */
+author?: string | null }
 /**
  * Partial update for `_meta.json`: `None` means "leave as-is", so callers can patch a single
  * field without knowing the rest. There is deliberately no way to clear a field back to
  * absent -- no mutation site needs that today.
  */
-export type SessionMetaPatch = { title?: string | null; started_at?: string | null; ended_at?: string | null; created_at?: string | null; tags?: string[] | null; tracking_id?: string | null; folder?: string | null }
+export type SessionMetaPatch = { title?: string | null; started_at?: string | null; ended_at?: string | null; created_at?: string | null; tags?: string[] | null; tracking_id?: string | null; folder?: string | null; author?: string | null }
 /**
  * What `session_get` returns: the file-canonical equivalent of the old
  * `SESSION_SELECT_SQL` (sessions row + COALESCE'd note document join). The note is

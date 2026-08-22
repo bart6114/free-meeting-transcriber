@@ -23,6 +23,7 @@ export type SessionRecord = {
   title: string;
   raw_md: string;
   tags: string[];
+  author: string | null;
 };
 
 // Note content ("raw_md") is intentionally excluded: it's written exclusively via
@@ -457,6 +458,7 @@ function mapSessionRecord(record: StoreSessionRecord): SessionRecord {
     title: record.meta.title,
     raw_md: rawMd,
     tags: record.meta.tags,
+    author: record.meta.author ?? null,
   };
 }
 

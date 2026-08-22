@@ -749,6 +749,7 @@ mod tests {
             tags: vec![],
             tracking_id: None,
             folder: None,
+            author: None,
             extra: Default::default(),
         }
     }

@@ -18,6 +18,7 @@ pub(crate) struct NewSessionOptions {
     pub started_at: Option<String>,
     pub ended_at: Option<String>,
     pub tags: Vec<String>,
+    pub author: Option<String>,
 }
 
 /// Create a session the same way the desktop frontend does: a `crypto.randomUUID()`-style
@@ -73,6 +74,7 @@ pub(crate) async fn create_session(
         tags: options.tags,
         tracking_id: None,
         folder: None,
+        author: options.author,
         extra: Default::default(),
     };
     store

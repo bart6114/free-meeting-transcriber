@@ -52,6 +52,7 @@ function mapTimelineSessionEntries(
         created_at: entry.created_at,
         folder_id: entry.folder ?? "",
         tags: entry.tags,
+        author: entry.author,
       },
     ]),
   );
