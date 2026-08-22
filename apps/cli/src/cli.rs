@@ -8,7 +8,8 @@ use hypr_agent_access::{DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, SearchKind};
 #[command(
     name = "fmtr",
     version = env!("FMTR_VERSION"),
-    about = "Query and edit local Free Meeting Transcriber meeting data"
+    about = "Query and edit local Free Meeting Transcriber meeting data",
+    after_help = "Agent guidance lives in AGENTS.md at the vault root; run 'fmtr doctor' to see the vault path and restore the file if stale."
 )]
 pub struct Args {
     #[arg(
@@ -455,6 +456,7 @@ mod tests {
         assert!(help.contains("meetings"));
         assert!(help.contains("mcp"));
         assert!(help.contains("doctor"));
+        assert!(help.contains("AGENTS.md at the vault root"));
 
         let Command::Meetings { command } = Args::parse_from([
             "fmtr",
