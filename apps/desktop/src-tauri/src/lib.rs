@@ -19,7 +19,7 @@ use tauri::{Emitter, Manager};
 use tauri_plugin_permissions::{Permission, PermissionsPluginExt};
 use tauri_plugin_windows::{AppWindow, WindowsPluginExt};
 
-#[cfg(any(feature = "dev", feature = "devtools"))]
+#[cfg(any(feature = "dev", feature = "devtools", feature = "staging"))]
 const STAGING_BUNDLE_ID: &str = "org.freemeetingtranscriber.staging";
 
 const APP_EXIT_REQUESTED_EVENT: &str = "app-exit-requested";
@@ -71,7 +71,7 @@ fn should_force_quit() -> bool {
 }
 
 fn create_audio_provider(_bundle_id: &str) -> std::sync::Arc<dyn hypr_audio_actual::AudioProvider> {
-    #[cfg(any(feature = "dev", feature = "devtools"))]
+    #[cfg(any(feature = "dev", feature = "devtools", feature = "staging"))]
     {
         let bundle_id = _bundle_id;
         let selection: u32 = std::env::var("MOCK_AUDIO")
@@ -242,12 +242,16 @@ pub async fn main() {
             Some(vec!["--background"]),
         ));
 
-    #[cfg(any(debug_assertions, feature = "devtools"))]
+    #[cfg(any(debug_assertions, feature = "devtools", feature = "staging"))]
     {
         builder = builder.plugin(tauri_plugin_relay::init());
     }
 
-    #[cfg(all(not(debug_assertions), not(feature = "devtools")))]
+    #[cfg(all(
+        not(debug_assertions),
+        not(feature = "devtools"),
+        not(feature = "staging")
+    ))]
     {
         let plugin = tauri_plugin_prevent_default::init();
         builder = builder.plugin(plugin);

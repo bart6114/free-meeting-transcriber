@@ -110,6 +110,13 @@ tracing = { workspace = true }
 default = []
 dev = ["dep:hypr-audio-mock"]
 devtools = ["tauri/devtools", "dep:hypr-audio-mock"]
+# The staging DMG flavor: everything `devtools` gives except `tauri/devtools`
+# itself. Flipping that tauri feature refingerprints the whole tauri/wry stack,
+# so the staging and stable lanes (which share one rust-cache key) would keep
+# clobbering each other's dependency artifacts — staging only gives up the
+# WebKit inspector; the in-app devtools panel and mock audio are bundle-id
+# gated and stay.
+staging = ["dep:hypr-audio-mock"]
 automation = ["tauri-plugin-automation"]
 
 [target.'cfg(target_os = "macos")'.dependencies]

@@ -47,8 +47,12 @@ pub async fn get_env<R: tauri::Runtime>(_app: tauri::AppHandle<R>, key: String) 
 }
 
 fn should_show_devtool(identifier: &str) -> bool {
-    cfg!(any(debug_assertions, feature = "dev", feature = "devtools"))
-        || identifier == STAGING_BUNDLE_ID
+    cfg!(any(
+        debug_assertions,
+        feature = "dev",
+        feature = "devtools",
+        feature = "staging"
+    )) || identifier == STAGING_BUNDLE_ID
 }
 
 #[tauri::command]
