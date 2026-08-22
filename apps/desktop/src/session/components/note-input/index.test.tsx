@@ -101,6 +101,10 @@ vi.mock("~/session/components/session-date", () => ({
   SessionDate: () => <div data-testid="session-date" />,
 }));
 
+vi.mock("~/session/components/session-author-badge", () => ({
+  SessionAuthorBadge: () => <div data-testid="session-author-badge" />,
+}));
+
 vi.mock("~/session/components/session-people", () => ({
   SessionPeople: () => <div data-testid="session-people" />,
   useSessionPeopleTitleTrailer: () => ({
