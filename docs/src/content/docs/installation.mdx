@@ -5,15 +5,44 @@ description: "Install fmtr and connect it to your local vault."
 
 The `fmtr` executable contains both the command-line interface and the MCP server.
 
-## Install it from the desktop app
+## Install with one command
 
-On macOS, open **Settings → Developers** and click **Install**. The app installs the bundled command at `~/.local/bin/fmtr`.
+On macOS or Linux, run:
 
-If your shell cannot find it, add that directory to `PATH`:
+```bash
+curl -fsSL https://freemeetingtranscriber.com/install.sh | bash
+```
+
+The script downloads the latest release binary for your platform, verifies its checksum, and installs it to `~/.local/bin/fmtr`. It never asks for `sudo`. Set `FMTR_INSTALL_DIR` to install somewhere else.
+
+Supported platforms:
+
+- macOS on Apple Silicon and Intel
+- Linux on x86_64 and arm64 (glibc 2.35 or newer — Ubuntu 22.04, Debian 12, RHEL 9, or later; musl-based distributions such as Alpine are not supported)
+
+:::note
+On-device transcription (`fmtr transcribe`) runs only on Apple Silicon Macs. Every other command and the MCP server work on all supported platforms.
+:::
+
+To upgrade, re-run the script. To uninstall, delete the binary:
+
+```bash
+rm ~/.local/bin/fmtr
+```
+
+If your shell cannot find `fmtr`, add the install directory to `PATH`:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
+
+:::caution
+Tarballs downloaded from the GitHub releases page with a browser are not notarized, so macOS Gatekeeper blocks them. Use the install script instead — it is the supported download path.
+:::
+
+## Install it from the desktop app
+
+On macOS, open **Settings → Developers** and click **Install**. The app installs the bundled command at `~/.local/bin/fmtr` — the same path the install script uses, so whichever ran last wins. Both ship the same binary.
 
 :::note
 The app uses `fmtr-dev` and `fmtr-staging` for development and staging builds, so those channels do not overwrite the stable command.
@@ -32,7 +61,7 @@ fmtr --version
 
 Cargo normally writes commands to `~/.cargo/bin`. Add that directory to `PATH` if needed.
 
-There is no published Homebrew formula, standalone CLI download, or Windows package at this time.
+There is no Homebrew formula or Windows package yet.
 
 ## Connect to the vault
 
