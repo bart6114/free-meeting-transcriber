@@ -7,6 +7,8 @@ import {
   TZDate,
 } from "@hypr/utils";
 
+import { splitTagPath } from "~/tags/normalize";
+
 function toTZ(date: Date, timezone?: string): Date {
   return timezone ? new TZDate(date, timezone) : date;
 }
@@ -47,11 +49,20 @@ export function makeTimelineItem(
 export type TimelinePrecision = "time" | "date";
 
 export type TimelineBucket = {
+  /** Stable key: full tag path for tag buckets, same as `label` for date
+   * buckets. Also the persisted expand-state key in `sidebar_expanded_tags`. */
+  id: string;
+  /** Display text: last path segment for tag buckets. */
   label: string;
   precision: TimelinePrecision;
   items: TimelineItem[];
   // Absent means "date" -- only `buildTagTimelineBuckets` produces "tag".
   kind?: "date" | "tag";
+  // Tag-mode tree metadata; absent on date buckets and 0/absent for roots.
+  depth?: number;
+  parentId?: string;
+  /** Own + descendant sessions, deduped by session id. */
+  totalCount?: number;
 };
 
 export type TimelineWindowData = {
@@ -319,50 +330,107 @@ function compareItemsNewestFirst(a: TimelineItem, b: TimelineItem): number {
 
 export const UNTAGGED_BUCKET_LABEL = "Untagged";
 
-/// Tag-mode grouping: one bucket per tag, alphabetical, a session under every tag
-/// it carries, `Untagged` last. No date windowing -- callers skip
+type TagTreeNode = {
+  path: string;
+  segment: string;
+  ownItems: TimelineItem[];
+  children: Map<string, TagTreeNode>;
+};
+
+/// Tag-mode grouping: slash-separated tags form a tree (`dataroots/interviews`
+/// nests under `dataroots`), flattened preorder with `depth`/`parentId` so the
+/// sidebar can render it as an indented flat list. A session sits under every
+/// tag it carries; `totalCount` dedupes it across a subtree. `Untagged` last,
+/// outside the tree. No date windowing -- callers skip
 /// `deriveTimelineWindowData` in tag mode.
 export function buildTagTimelineBuckets({
   timelineSessionsTable,
 }: {
   timelineSessionsTable: TimelineSessionsTable;
 }): TimelineBucket[] {
-  const itemsByTag = new Map<string, TimelineItem[]>();
   const untagged: TimelineItem[] = [];
+  const roots = new Map<string, TagTreeNode>();
 
   for (const [sessionId, row] of Object.entries(timelineSessionsTable ?? {})) {
     const item = makeTimelineItem(sessionId, row);
-    const tags = row.tags ?? [];
-    if (tags.length === 0) {
+    // Hand-edited `_meta.json` bypasses `normalizeTagNames`, so tolerate empty
+    // segments; a tag that is all slashes is treated as no tag.
+    const tagPaths = new Map(
+      (row.tags ?? [])
+        .map((tag) => splitTagPath(tag))
+        .filter((segments) => segments.length > 0)
+        .map((segments) => [segments.join("/"), segments]),
+    );
+    if (tagPaths.size === 0) {
       untagged.push(item);
       continue;
     }
-    for (const tag of new Set(tags)) {
-      const bucketItems = itemsByTag.get(tag) ?? [];
-      bucketItems.push(item);
-      itemsByTag.set(tag, bucketItems);
+    for (const segments of tagPaths.values()) {
+      let siblings = roots;
+      let node: TagTreeNode | undefined;
+      let path = "";
+      for (const segment of segments) {
+        path = path ? `${path}/${segment}` : segment;
+        node = siblings.get(segment);
+        if (!node) {
+          node = { path, segment, ownItems: [], children: new Map() };
+          siblings.set(segment, node);
+        }
+        siblings = node.children;
+      }
+      node!.ownItems.push(item);
     }
   }
 
-  const buckets: TimelineBucket[] = [...itemsByTag.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([tag, items]) => ({
-      label: tag,
-      precision: "date" as const,
-      items: items.sort(compareItemsNewestFirst),
-      kind: "tag" as const,
-    }));
+  const buckets: TimelineBucket[] = [];
+  const flatten = (
+    node: TagTreeNode,
+    depth: number,
+    parentId: string | undefined,
+  ): Set<string> => {
+    const bucket: TimelineBucket = {
+      id: node.path,
+      label: node.segment,
+      precision: "date",
+      items: node.ownItems.sort(compareItemsNewestFirst),
+      kind: "tag",
+      depth,
+      parentId,
+      totalCount: 0,
+    };
+    buckets.push(bucket);
+    const subtreeIds = new Set(node.ownItems.map((item) => item.id));
+    for (const child of sortedChildren(node.children)) {
+      for (const id of flatten(child, depth + 1, node.path)) {
+        subtreeIds.add(id);
+      }
+    }
+    bucket.totalCount = subtreeIds.size;
+    return subtreeIds;
+  };
+  for (const root of sortedChildren(roots)) {
+    flatten(root, 0, undefined);
+  }
 
   if (untagged.length > 0) {
     buckets.push({
+      id: UNTAGGED_BUCKET_LABEL,
       label: UNTAGGED_BUCKET_LABEL,
       precision: "date",
       items: untagged.sort(compareItemsNewestFirst),
       kind: "tag",
+      depth: 0,
+      totalCount: untagged.length,
     });
   }
 
   return buckets;
+}
+
+function sortedChildren(children: Map<string, TagTreeNode>): TagTreeNode[] {
+  return [...children.values()].sort((a, b) =>
+    a.segment.localeCompare(b.segment),
+  );
 }
 
 export function buildTimelineBuckets({
@@ -412,6 +480,7 @@ export function buildTimelineBuckets({
     .map(
       ([label, value]) =>
         ({
+          id: label,
           label,
           items: value.items,
           precision: value.precision,

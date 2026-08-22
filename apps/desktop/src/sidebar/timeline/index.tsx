@@ -85,18 +85,37 @@ export const TimelineView = memo(function TimelineView({
   const expandedTagSet = useMemo(() => new Set(expandedTags), [expandedTags]);
   // Tag sections default to collapsed: headers keep the full count but drop
   // their items -- also from the flat selection keys below, so keyboard/shift
-  // selection skips hidden rows.
+  // selection skips hidden rows. Nested tag buckets (slash tags) only render
+  // when every ancestor is expanded; walk `parentId` rather than splitting ids
+  // so synthetic buckets like `Untagged` are never parsed as paths.
   const buckets = useMemo(() => {
     if (groupBy !== "tag") {
       return allBuckets;
     }
-    return allBuckets.map((bucket) =>
-      expandedTagSet.has(bucket.label) ? bucket : { ...bucket, items: [] },
+    const bucketsById = new Map(
+      allBuckets.map((bucket) => [bucket.id, bucket]),
     );
+    return allBuckets
+      .filter((bucket) => {
+        for (let p = bucket.parentId; p; p = bucketsById.get(p)?.parentId) {
+          if (!expandedTagSet.has(p)) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .map((bucket) =>
+        expandedTagSet.has(bucket.id) ? bucket : { ...bucket, items: [] },
+      );
   }, [allBuckets, expandedTagSet, groupBy]);
   const bucketItemCounts = useMemo(
     () =>
-      new Map(allBuckets.map((bucket) => [bucket.label, bucket.items.length])),
+      new Map(
+        allBuckets.map((bucket) => [
+          bucket.id,
+          bucket.totalCount ?? bucket.items.length,
+        ]),
+      ),
     [allBuckets],
   );
   const toggleTagExpanded = useCallback(
@@ -111,11 +130,11 @@ export const TimelineView = memo(function TimelineView({
   const anyTagExpanded = useMemo(
     () =>
       groupBy === "tag" &&
-      allBuckets.some((bucket) => expandedTagSet.has(bucket.label)),
+      allBuckets.some((bucket) => expandedTagSet.has(bucket.id)),
     [allBuckets, expandedTagSet, groupBy],
   );
   const toggleAllTagsExpanded = useCallback(() => {
-    const next = anyTagExpanded ? [] : allBuckets.map((bucket) => bucket.label);
+    const next = anyTagExpanded ? [] : allBuckets.map((bucket) => bucket.id);
     void setSettingValue("sidebar_expanded_tags", JSON.stringify(next));
   }, [allBuckets, anyTagExpanded]);
   const hasToday = useMemo(
@@ -490,7 +509,7 @@ export const TimelineView = memo(function TimelineView({
           const isTopIndicator = shouldRenderIndicatorBefore && index === 0;
 
           return (
-            <div key={bucket.label} className={cn([isTopIndicator && "pt-3"])}>
+            <div key={bucket.id} className={cn([isTopIndicator && "pt-3"])}>
               {shouldRenderIndicatorBefore && (
                 <div data-sidebar-current-time-header-gap className="py-3">
                   <CurrentTimeIndicator
@@ -515,21 +534,26 @@ export const TimelineView = memo(function TimelineView({
                 {bucket.kind === "tag" ? (
                   <button
                     type="button"
-                    aria-expanded={expandedTagSet.has(bucket.label)}
-                    onClick={() => toggleTagExpanded(bucket.label)}
+                    aria-expanded={expandedTagSet.has(bucket.id)}
+                    onClick={() => toggleTagExpanded(bucket.id)}
+                    style={
+                      bucket.depth
+                        ? { paddingLeft: bucket.depth * 12 }
+                        : undefined
+                    }
                     className={cn([
                       "text-muted-foreground/70 hover:text-foreground flex w-full items-center gap-1",
                       "pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase transition-colors",
                     ])}
                   >
-                    {expandedTagSet.has(bucket.label) ? (
+                    {expandedTagSet.has(bucket.id) ? (
                       <ChevronDownIcon size={12} className="shrink-0" />
                     ) : (
                       <ChevronRightIcon size={12} className="shrink-0" />
                     )}
                     <span className="truncate">{bucket.label}</span>
                     <span className="tracking-normal">
-                      ({bucketItemCounts.get(bucket.label) ?? 0})
+                      ({bucketItemCounts.get(bucket.id) ?? 0})
                     </span>
                   </button>
                 ) : (

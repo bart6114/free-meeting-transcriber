@@ -1169,6 +1169,97 @@ describe("TimelineView", () => {
         JSON.stringify([]),
       );
     });
+
+    describe("slash-tag nesting", () => {
+      beforeEach(() => {
+        mocks.timelineSessionsTable = {
+          "interview-note": {
+            title: "Interview",
+            created_at: "2024-01-15T09:00:00.000Z",
+            tags: ["dataroots/interviews"],
+          },
+          "allhands-note": {
+            title: "All-hands",
+            created_at: "2024-01-14T09:00:00.000Z",
+            tags: ["dataroots"],
+          },
+        };
+      });
+
+      it("hides child headers until the parent is expanded", () => {
+        render(<TimelineView />);
+
+        expect(screen.getByText("dataroots")).toBeTruthy();
+        expect(screen.queryByText("interviews")).toBeNull();
+        // Parent count is the deduped subtree total.
+        expect(screen.getByText("(2)")).toBeTruthy();
+      });
+
+      it("expanding the parent shows its rows plus a collapsed child header", () => {
+        mocks.configValues.sidebar_expanded_tags = ["dataroots"];
+
+        render(<TimelineView />);
+
+        expect(screen.getByTestId("timeline-item-allhands-note")).toBeTruthy();
+        expect(screen.getByText("interviews")).toBeTruthy();
+        expect(screen.queryByTestId("timeline-item-interview-note")).toBeNull();
+
+        fireEvent.click(screen.getByText("interviews").closest("button")!);
+
+        expect(mocks.setSettingValue).toHaveBeenCalledWith(
+          "sidebar_expanded_tags",
+          JSON.stringify(["dataroots", "dataroots/interviews"]),
+        );
+      });
+
+      it("shows child rows only when parent and child are both expanded", () => {
+        mocks.configValues.sidebar_expanded_tags = [
+          "dataroots",
+          "dataroots/interviews",
+        ];
+
+        render(<TimelineView />);
+
+        expect(screen.getByTestId("timeline-item-interview-note")).toBeTruthy();
+      });
+
+      it("renders nothing for a child id expanded without its parent", () => {
+        mocks.configValues.sidebar_expanded_tags = ["dataroots/interviews"];
+
+        render(<TimelineView />);
+
+        expect(screen.queryByText("interviews")).toBeNull();
+        expect(screen.queryByTestId("timeline-item-interview-note")).toBeNull();
+      });
+
+      it("expand-all enumerates full paths including virtual parents", () => {
+        mocks.timelineSessionsTable = {
+          "roadmap-note": {
+            title: "Roadmap",
+            created_at: "2024-01-15T09:00:00.000Z",
+            tags: ["projects/2024/roadmap"],
+          },
+          "loose-note": {
+            title: "Scratch",
+            created_at: "2024-01-13T09:00:00.000Z",
+          },
+        };
+
+        render(<TimelineView />);
+
+        fireEvent.click(screen.getByLabelText("Expand all"));
+
+        expect(mocks.setSettingValue).toHaveBeenCalledWith(
+          "sidebar_expanded_tags",
+          JSON.stringify([
+            "projects",
+            "projects/2024",
+            "projects/2024/roadmap",
+            "Untagged",
+          ]),
+        );
+      });
+    });
   });
 });
 

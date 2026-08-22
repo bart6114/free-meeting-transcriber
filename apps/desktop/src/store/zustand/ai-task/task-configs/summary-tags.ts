@@ -4,7 +4,11 @@ import { normalizeTagNames, TAG_NAME_RE } from "~/tags/normalize";
 
 type EnhanceArgs = TaskArgsMapTransformed["enhance"];
 
-const HASHTAG_RE = /(^|[^\p{L}\p{N}_/#])#([\p{L}_][\p{L}\p{N}_-]*)/gu;
+// Mirrors `TAG_NAME_RE`'s segment shape so extraction never emits a name that
+// `normalizeTagNames` then drops; the preceding-char class keeps excluding `/`
+// so URL fragments (`…/#foo`) stay unmatched.
+const HASHTAG_RE =
+  /(^|[^\p{L}\p{N}_/#])#([\p{L}_][\p{L}\p{N}_-]*(?:\/[\p{L}\p{N}_][\p{L}\p{N}_-]*)*)/gu;
 
 export function extractEnhanceTagNames(
   summaryMarkdown: string,

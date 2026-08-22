@@ -16,6 +16,30 @@ describe("findHashtags", () => {
       { tag: "org", start: 0, end: 4 },
     ]);
   });
+
+  it("spans slashes inside a tag", () => {
+    expect(findHashtags("#dataroots/interviews today")).toEqual([
+      { tag: "dataroots/interviews", start: 0, end: 21 },
+    ]);
+    expect(findHashtags("#a/b-c/d")).toEqual([
+      { tag: "a/b-c/d", start: 0, end: 8 },
+    ]);
+  });
+
+  it("does not swallow a trailing slash", () => {
+    expect(findHashtags("#dataroots/ then")).toEqual([
+      { tag: "dataroots", start: 0, end: 10 },
+    ]);
+  });
+
+  it("does not match a slash-first hashtag", () => {
+    expect(findHashtags("see #/route")).toEqual([]);
+  });
+
+  it("still skips URL fragments containing slashes", () => {
+    expect(findHashtags("https://example.com/#/route stays")).toEqual([]);
+    expect(findHashtags("https://example.com/page#a/b stays")).toEqual([]);
+  });
 });
 
 describe("hashtagPlugin", () => {
