@@ -9,6 +9,51 @@
 
 set -euo pipefail
 
+# Persist $1 on PATH for the user's login shell. The script runs under
+# `curl | bash`, so $SHELL (not the running interpreter) picks the rc file.
+add_to_path() {
+  local dir="$1" line shell_name rc_file
+  case "$dir" in
+    "$HOME"/*) line="export PATH=\"\$HOME/${dir#"$HOME"/}:\$PATH\"" ;;
+    *) line="export PATH=\"$dir:\$PATH\"" ;;
+  esac
+
+  shell_name="$(basename "${SHELL:-}")"
+  case "$shell_name" in
+    zsh) rc_file="${ZDOTDIR:-$HOME}/.zshrc" ;;
+    bash)
+      # macOS terminals start login shells, which read .bash_profile, not .bashrc
+      if [ "$(uname -s)" = "Darwin" ]; then
+        rc_file="$HOME/.bash_profile"
+      else
+        rc_file="$HOME/.bashrc"
+      fi
+      ;;
+    fish)
+      rc_file="${XDG_CONFIG_HOME:-$HOME/.config}/fish/config.fish"
+      line="fish_add_path \"$dir\""
+      ;;
+    *)
+      echo
+      echo "warning: $dir is not on your PATH." >&2
+      echo "Add it by appending this line to your shell profile:" >&2
+      echo >&2
+      echo "  export PATH=\"$dir:\$PATH\"" >&2
+      return
+      ;;
+  esac
+
+  echo
+  if [ -f "$rc_file" ] && grep -Fqx "$line" "$rc_file"; then
+    echo "$dir is already added to PATH in $rc_file — restart your shell to pick it up."
+    return
+  fi
+  mkdir -p "$(dirname "$rc_file")"
+  printf '\n%s\n' "$line" >>"$rc_file"
+  echo "Added $dir to PATH in $rc_file."
+  echo "Restart your shell or run:  source $rc_file"
+}
+
 main() {
   local repo="bart6114/free-meeting-transcriber"
   local base="https://github.com/${repo}/releases/download/updater"
@@ -61,20 +106,7 @@ main() {
 
   case ":$PATH:" in
     *":$install_dir:"*) ;;
-    *)
-      echo
-      echo "warning: $install_dir is not on your PATH." >&2
-      local shell_name rc_file
-      shell_name="$(basename "${SHELL:-}")"
-      case "$shell_name" in
-        zsh) rc_file="~/.zshrc" ;;
-        bash) rc_file="~/.bashrc" ;;
-        *) rc_file="your shell profile" ;;
-      esac
-      echo "Add it by appending this line to ${rc_file}:" >&2
-      echo >&2
-      echo "  export PATH=\"$install_dir:\$PATH\"" >&2
-      ;;
+    *) add_to_path "$install_dir" ;;
   esac
 
   echo
