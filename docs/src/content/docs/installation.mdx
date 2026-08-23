@@ -30,7 +30,7 @@ To upgrade, re-run the script. To uninstall, delete the binary:
 rm ~/.local/bin/fmtr
 ```
 
-If your shell cannot find `fmtr`, add the install directory to `PATH`:
+If the install directory is not on `PATH`, the script adds it to your shell profile (`~/.zshrc`, `~/.bashrc`/`~/.bash_profile`, or fish's `config.fish`) — restart your shell afterwards. If your shell still cannot find `fmtr`, add it manually:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
