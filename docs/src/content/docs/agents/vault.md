@@ -36,16 +36,21 @@ Ownership rules:
 `_meta.json` may carry an optional `author` field. When it is absent the note
 was written by the vault owner; when set (a free-form name such as
 `claude-code`) the note was written by someone else, and the app marks it as
-not written by the owner.
+not written by the owner. Next to `author`, an optional `skill` field records
+the skill (a named, reusable instruction set such as `meeting-summarizer`)
+the author ran to produce the note, if any.
 
 Rules for agents:
 
 - **Always pass `--author <your-agent-name>` when creating a meeting** with
   `fmtr meetings new` or `fmtr import`. Pick one stable name (for example
   `claude-code`) and keep using it.
+- **If a skill produced the note, also pass `--skill <skill-name>`** so the
+  meeting records which skill was used. Use the skill's stable name; omit the
+  flag when no skill was involved.
 - Write your own notes as **new** meetings with `--author` set. When asked to
-  edit an existing note, never add, change, or remove its `author` — editing
-  the owner's note does not make it yours.
+  edit an existing note, never add, change, or remove its `author` or `skill`
+  — editing the owner's note does not make it yours.
 
 ## Reading meeting data
 
@@ -87,7 +92,7 @@ output.
 | `meetings list` | List meetings, optionally filtered with `--query`. |
 | `meetings search` | Full-text search across titles, notes, summaries, and transcripts. |
 | `meetings get` | Metadata, note, summaries, and action items for one meeting. |
-| `meetings new` | Create a meeting note and print its id; pass `--author` when writing as an agent. |
+| `meetings new` | Create a meeting note and print its id; pass `--author` when writing as an agent, plus `--skill` when a skill produced the note. |
 | `meetings note` | Show a meeting's note, or edit it with `--set` / `--append`. |
 | `meetings transcript` | The full speaker-labeled transcript. |
 | `meetings tag add` | Add tags to a meeting, registering new ones in the vault. |

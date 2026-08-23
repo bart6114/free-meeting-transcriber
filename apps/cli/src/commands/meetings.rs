@@ -81,6 +81,7 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
             ended_at,
             tag,
             author,
+            skill,
         } => {
             // Read the body before touching the vault, so a bad --note path creates nothing.
             let body = note.as_deref().map(read_body).transpose()?;
@@ -96,6 +97,7 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                     ended_at,
                     tags: tag,
                     author,
+                    skill,
                 },
             )
             .await?;
@@ -138,6 +140,7 @@ pub async fn run(vault: &Path, command: MeetingCommand, json: bool) -> Result<()
                         "ended_at": meta.ended_at,
                         "tags": meta.tags,
                         "author": meta.author,
+                        "skill": meta.skill,
                     }),
                     None,
                 )?
@@ -650,6 +653,7 @@ mod tests {
             ended_at: String::new(),
             tags: Vec::new(),
             author: None,
+            skill: None,
         }]);
         assert!(rendered.contains("meeting-1"));
         assert!(rendered.contains('…'));

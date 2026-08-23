@@ -87,6 +87,7 @@ pub struct MeetingListItem {
     pub ended_at: String,
     pub tags: Vec<String>,
     pub author: Option<String>,
+    pub skill: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -141,6 +142,7 @@ pub struct Meeting {
     pub language: String,
     pub tags: Vec<String>,
     pub author: Option<String>,
+    pub skill: Option<String>,
     pub note: Option<Document>,
     pub summaries: Vec<Document>,
     pub action_items: Vec<ActionItem>,
@@ -378,6 +380,7 @@ fn assemble_meeting_sync(
         timezone: String::new(),
         language: String::new(),
         author: meta.author,
+        skill: meta.skill,
         note,
         summaries,
         action_items,
@@ -476,6 +479,7 @@ fn meeting_list_item(
         started_at: meta.started_at.unwrap_or_default(),
         ended_at: meta.ended_at.unwrap_or_default(),
         author: meta.author,
+        skill: meta.skill,
     }
 }
 
@@ -552,6 +556,9 @@ impl Meeting {
         ];
         if let Some(author) = self.author.as_deref().filter(|author| !author.is_empty()) {
             lines.push(format!("- Author: {author}"));
+        }
+        if let Some(skill) = self.skill.as_deref().filter(|skill| !skill.is_empty()) {
+            lines.push(format!("- Skill: {skill}"));
         }
         if !self.tags.is_empty() {
             lines.push(format!("- Tags: {}", self.tags.join(", ")));

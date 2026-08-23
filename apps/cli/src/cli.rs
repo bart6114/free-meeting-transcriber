@@ -95,6 +95,14 @@ pub enum Command {
             help = "Record who wrote the new meeting's note; set this when writing on behalf of someone other than the vault owner (e.g. claude-code)"
         )]
         author: Option<String>,
+        #[arg(
+            long,
+            value_name = "NAME",
+            conflicts_with = "into",
+            requires = "author",
+            help = "Record the skill used to produce the new meeting's note (e.g. meeting-summarizer); only meaningful together with --author"
+        )]
+        skill: Option<String>,
     },
     /// Transcribe a meeting's audio with the configured on-device model
     Transcribe {
@@ -204,6 +212,13 @@ pub enum MeetingCommand {
             help = "Record who wrote this meeting's note; set this when writing on behalf of someone other than the vault owner (e.g. claude-code)"
         )]
         author: Option<String>,
+        #[arg(
+            long,
+            value_name = "NAME",
+            requires = "author",
+            help = "Record the skill used to produce this meeting's note (e.g. meeting-summarizer); only meaningful together with --author"
+        )]
+        skill: Option<String>,
     },
     /// Show the note or generated summaries for a meeting, or edit the note
     Note {

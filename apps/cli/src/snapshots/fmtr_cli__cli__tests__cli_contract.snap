@@ -1,5 +1,6 @@
 ---
 source: apps/cli/src/cli.rs
+assertion_line: 859
 expression: canonicalize_json(contract)
 ---
 {
@@ -241,13 +242,20 @@ expression: canonicalize_json(contract)
               "value_name": "NAME"
             },
             {
+              "flags": "--skill",
+              "help": "Record the skill used to produce this meeting's note (e.g. meeting-summarizer); only meaningful together with --author",
+              "is_flag": false,
+              "required": false,
+              "value_name": "NAME"
+            },
+            {
               "flags": "-h, --help",
               "help": "Print help",
               "is_flag": false,
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [-h]"
+          "synopsis": "fmtr meetings new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [--skill] [-h]"
         },
         {
           "about": "Show the note or generated summaries for a meeting, or edit the note",
@@ -529,13 +537,20 @@ expression: canonicalize_json(contract)
           "value_name": "NAME"
         },
         {
+          "flags": "--skill",
+          "help": "Record the skill used to produce the new meeting's note (e.g. meeting-summarizer); only meaningful together with --author",
+          "is_flag": false,
+          "required": false,
+          "value_name": "NAME"
+        },
+        {
           "flags": "-h, --help",
           "help": "Print help",
           "is_flag": false,
           "required": false
         }
       ],
-      "synopsis": "fmtr import [--title] [--into] [--transcribe] [--created-at] [--started-at] [--ended-at] [--author] [-h] <file>"
+      "synopsis": "fmtr import [--title] [--into] [--transcribe] [--created-at] [--started-at] [--ended-at] [--author] [--skill] [-h] <file>"
     },
     {
       "about": "Transcribe a meeting's audio with the configured on-device model",

@@ -24,6 +24,10 @@ pub struct SessionMeta {
     /// agent/other writer (free-form, e.g. "claude-code").
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub author: Option<String>,
+    /// The skill the author ran to produce this note, if any (free-form,
+    /// e.g. "meeting-summarizer"). Only meaningful alongside `author`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub skill: Option<String>,
     /// Forward-compat catch-all: fields written by newer app versions must survive a
     /// read-modify-write cycle from this version (vaults are file-synced across machines
     /// running different builds).
@@ -163,10 +167,11 @@ mod tests {
         assert_eq!(round_tripped["some_future_field"], raw["some_future_field"]);
     }
 
-    /// `author` is a typed field (absent = the vault owner wrote the note), not an
-    /// `extra` passenger -- and absence must serialize as no key, not `null`.
+    /// `author` and `skill` are typed fields (absent = the vault owner wrote the
+    /// note, no skill involved), not `extra` passengers -- and absence must
+    /// serialize as no key, not `null`.
     #[test]
-    fn author_is_typed_and_absent_when_unset() {
+    fn author_and_skill_are_typed_and_absent_when_unset() {
         let raw = serde_json::json!({
             "id": "s1",
             "title": "Agent note",
@@ -175,19 +180,25 @@ mod tests {
             "created_at": "2026-07-01T00:00:00Z",
             "tags": [],
             "author": "claude-code",
+            "skill": "meeting-summarizer",
         });
 
         let meta: SessionMeta = serde_json::from_value(raw).unwrap();
         assert_eq!(meta.author.as_deref(), Some("claude-code"));
+        assert_eq!(meta.skill.as_deref(), Some("meeting-summarizer"));
         assert!(!meta.extra.contains_key("author"));
+        assert!(!meta.extra.contains_key("skill"));
 
         let round_tripped = serde_json::to_value(&meta).unwrap();
         assert_eq!(round_tripped["author"], "claude-code");
+        assert_eq!(round_tripped["skill"], "meeting-summarizer");
 
         let mut unset = meta.clone();
         unset.author = None;
+        unset.skill = None;
         let serialized = serde_json::to_value(&unset).unwrap();
         assert!(serialized.get("author").is_none());
+        assert!(serialized.get("skill").is_none());
     }
 
     #[test]

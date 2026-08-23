@@ -250,6 +250,7 @@ mod tests {
             tracking_id: None,
             folder: None,
             author: None,
+            skill: None,
             extra: Default::default(),
         }
     }

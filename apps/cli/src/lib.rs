@@ -33,6 +33,7 @@ pub async fn run(args: Args) -> Result<u8> {
             started_at,
             ended_at,
             author,
+            skill,
         } => {
             let timestamps = commands::NewSessionOptions {
                 created_at,
@@ -40,6 +41,7 @@ pub async fn run(args: Args) -> Result<u8> {
                 ended_at,
                 tags: Vec::new(),
                 author,
+                skill,
             };
             return commands::import::run(
                 &vault, file, title, into, transcribe, timestamps, args.json,
@@ -171,6 +173,7 @@ mod tests {
                     ended_at: None,
                     tag: Vec::new(),
                     author: None,
+                    skill: None,
                 },
             },
         })
@@ -227,7 +230,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn new_command_records_the_author_in_meta() {
+    async fn new_command_records_the_author_and_skill_in_meta() {
         let dir = tempfile::tempdir().unwrap();
         let vault = dir.path().join("vault");
         std::fs::create_dir_all(&vault).unwrap();
@@ -245,6 +248,7 @@ mod tests {
                     ended_at: None,
                     tag: Vec::new(),
                     author: Some("claude-code".to_string()),
+                    skill: Some("meeting-summarizer".to_string()),
                 },
             },
         })
@@ -261,6 +265,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(meta["author"], "claude-code");
+        assert_eq!(meta["skill"], "meeting-summarizer");
     }
 
     #[tokio::test]
@@ -282,6 +287,7 @@ mod tests {
                     ended_at: None,
                     tag: Vec::new(),
                     author: None,
+                    skill: None,
                 },
             },
         })
@@ -332,6 +338,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 author: None,
+                skill: None,
             },
         })
         .await
@@ -384,6 +391,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 author: None,
+                skill: None,
             },
         })
         .await
@@ -435,6 +443,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 author: None,
+                skill: None,
             },
         })
         .await
@@ -467,6 +476,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 author: None,
+                skill: None,
             },
         })
         .await
@@ -502,6 +512,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 author: None,
+                skill: None,
             },
         })
         .await
@@ -531,6 +542,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 author: None,
+                skill: None,
             },
         })
         .await
@@ -673,6 +685,7 @@ mod tests {
                 started_at: None,
                 ended_at: None,
                 author: None,
+                skill: None,
             },
         })
         .await
@@ -947,6 +960,7 @@ mod tests {
                 ended_at: None,
                 tag: vec!["#Hiring".to_string(), "project-x".to_string()],
                 author: None,
+                skill: None,
             },
         ))
         .await

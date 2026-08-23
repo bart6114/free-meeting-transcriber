@@ -602,7 +602,12 @@ tracking_id?: string | null; folder?: string | null;
  * Who wrote this note. Absent = the human vault owner; present = an
  * agent/other writer (free-form, e.g. "claude-code").
  */
-author?: string | null }
+author?: string | null; 
+/**
+ * The skill the author ran to produce this note, if any (free-form,
+ * e.g. "meeting-summarizer"). Only meaningful alongside `author`.
+ */
+skill?: string | null }
 /**
  * Partial update for `_meta.json`: `None` means "leave as-is", so callers can patch a single
  * field without knowing the rest. There is deliberately no way to clear a field back to

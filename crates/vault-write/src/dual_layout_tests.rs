@@ -22,6 +22,7 @@ fn meta(id: &str, title: &str) -> SessionMeta {
         tracking_id: None,
         folder: None,
         author: None,
+        skill: None,
         extra: Default::default(),
     }
 }
