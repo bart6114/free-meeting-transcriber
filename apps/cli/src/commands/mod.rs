@@ -34,25 +34,18 @@ pub(crate) async fn create_session(
     let mut session_id = None;
     for _ in 0..5 {
         let candidate = uuid::Uuid::new_v4().to_string();
-        // Occupancy is logical, not physical: an id is taken when any directory
-        // claims it in `_meta.json`, wherever that directory lives and whatever
-        // it is named. Ambiguous (duplicate claims) and corrupt legacy metadata
-        // both count as taken — never risk clobbering either.
-        let scan_vault = vault.to_path_buf();
-        let scan_id = candidate.clone();
-        let occupied = match tokio::task::spawn_blocking(move || {
-            hypr_vault_read::find_session(&scan_vault, &scan_id)
-        })
-        .await
-        .map_err(|error| Error::operation(action, error.to_string()))?
-        {
-            Ok(existing) => existing.is_some(),
-            Err(
-                hypr_vault_read::SessionLookupError::Ambiguous { .. }
-                | hypr_vault_read::SessionLookupError::Corrupt { .. },
-            ) => true,
-            Err(error) => return Err(Error::operation(action, error.to_string())),
-        };
+        // Only the legacy `sessions/<id>` path is probed (one stat, O(1) in
+        // vault size): a readable-named directory can only claim a just-minted
+        // v4 UUID via RNG collision, so the full logical-occupancy scan this
+        // used to pay made every creation O(vault) — minutes on a network
+        // mount — to defend against a ~2^-122 event. The store's creation path
+        // below still refuses occupied directory names.
+        let probe = vault
+            .join(hypr_vault_read::paths::sessions_root())
+            .join(&candidate);
+        let occupied = tokio::task::spawn_blocking(move || probe.exists())
+            .await
+            .map_err(|error| Error::operation(action, error.to_string()))?;
         if !occupied {
             session_id = Some(candidate);
             break;
@@ -78,7 +71,7 @@ pub(crate) async fn create_session(
         extra: Default::default(),
     };
     store
-        .write_meta(&meta)
+        .create_session_meta(&meta)
         .await
         .map_err(|error| Error::operation(action, error.to_string()))?;
     Ok(meta)

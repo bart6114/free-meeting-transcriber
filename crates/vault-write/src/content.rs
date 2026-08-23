@@ -37,15 +37,39 @@ impl SessionStore {
         self.write_meta_locked(&guard, meta).await
     }
 
+    /// `write_meta` for a session id the caller just generated (a fresh random
+    /// UUID, as `fmtr meetings new`/`import` mint): identical writes and naming
+    /// policy, but resolving where the meta lands costs an O(1) legacy-path
+    /// probe instead of the full-vault discovery scan a cold location catalog
+    /// would otherwise pay. Never call this with an id that may already have a
+    /// directory somewhere: the skipped scan is exactly the lookup that would
+    /// find it, and missing a claimant mints a duplicate directory that
+    /// quarantines both.
+    pub async fn create_session_meta(&self, meta: &SessionMeta) -> Result<(), StoreError> {
+        validate_session_id(&meta.id)?;
+        let guard = self.lock_writes().await;
+        let dir = self.creation_dir_fresh_locked(&guard, meta).await?;
+        self.finish_meta_write_locked(&guard, meta, dir).await
+    }
+
     async fn write_meta_locked(
         &self,
         guard: &WriteGuard<'_>,
         meta: &SessionMeta,
     ) -> Result<(), StoreError> {
+        let dir = self.creation_dir_locked(guard, meta).await?;
+        self.finish_meta_write_locked(guard, meta, dir).await
+    }
+
+    async fn finish_meta_write_locked(
+        &self,
+        guard: &WriteGuard<'_>,
+        meta: &SessionMeta,
+        dir: std::path::PathBuf,
+    ) -> Result<(), StoreError> {
         let meta_json =
             serde_json::to_vec_pretty(meta).map_err(|e| StoreError::Serialize(e.to_string()))?;
 
-        let dir = self.creation_dir_locked(guard, meta).await?;
         self.write_file_locked(guard, paths::meta_path_in(&dir), meta_json)
             .await?;
         // The location becomes authoritative only after the meta write succeeds --
@@ -480,6 +504,106 @@ mod tests {
             store.read_meta("s1").await.unwrap().unwrap().title,
             "Jury feedback"
         );
+    }
+
+    #[tokio::test]
+    async fn create_session_meta_writes_a_readable_dir_and_indexes_without_a_scan_hit() {
+        let (store, vault) = test_store().await;
+        store
+            .create_session_meta(&meta("s1", "Jury feedback"))
+            .await
+            .unwrap();
+
+        let dir = session_path(&store, &vault, "s1").await;
+        assert!(dir.join("_meta.json").is_file());
+        assert_ne!(
+            dir,
+            vault.path().join("sessions/s1"),
+            "a fresh id gets a readable directory name, not the legacy path"
+        );
+        assert_eq!(store.session_get("s1").unwrap().meta.title, "Jury feedback");
+        assert_eq!(
+            store.read_meta("s1").await.unwrap().unwrap().title,
+            "Jury feedback"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_session_meta_adopts_a_legacy_ghost_dir() {
+        let (store, vault) = test_store().await;
+        // Recorder fallback: artifacts can land in `sessions/<id>` before the
+        // first meta write; creation must adopt that directory, not orphan it.
+        let ghost = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&ghost).unwrap();
+        std::fs::write(ghost.join("transcript.json"), "{}").unwrap();
+
+        store
+            .create_session_meta(&meta("s1", "Recovered"))
+            .await
+            .unwrap();
+        assert_eq!(session_path(&store, &vault, "s1").await, ghost);
+        assert!(ghost.join("_meta.json").is_file());
+    }
+
+    #[tokio::test]
+    async fn create_session_meta_reuses_the_legacy_dir_when_it_claims_the_id() {
+        let (store, vault) = test_store().await;
+        let dir = vault.path().join("sessions/s1");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("_meta.json"),
+            serde_json::to_vec_pretty(&meta("s1", "Existing")).unwrap(),
+        )
+        .unwrap();
+        // A corrupt legacy meta must also keep its directory rather than mint a
+        // sibling — same tolerance as the scanning lookup.
+        let corrupt = vault.path().join("sessions/s2");
+        std::fs::create_dir_all(&corrupt).unwrap();
+        std::fs::write(corrupt.join("_meta.json"), "{ invalid").unwrap();
+
+        store
+            .create_session_meta(&meta("s1", "Rewritten"))
+            .await
+            .unwrap();
+        store
+            .create_session_meta(&meta("s2", "Repaired"))
+            .await
+            .unwrap();
+
+        assert_eq!(session_path(&store, &vault, "s1").await, dir);
+        assert_eq!(
+            store.read_meta("s1").await.unwrap().unwrap().title,
+            "Rewritten"
+        );
+        assert_eq!(session_path(&store, &vault, "s2").await, corrupt);
+        assert_eq!(
+            store.read_meta("s2").await.unwrap().unwrap().title,
+            "Repaired"
+        );
+    }
+
+    #[tokio::test]
+    async fn create_session_meta_twice_for_one_id_keeps_a_single_directory() {
+        let (store, vault) = test_store().await;
+        store
+            .create_session_meta(&meta("s1", "First"))
+            .await
+            .unwrap();
+        let dir = session_path(&store, &vault, "s1").await;
+        store
+            .create_session_meta(&meta("s1", "Second"))
+            .await
+            .unwrap();
+
+        assert_eq!(session_path(&store, &vault, "s1").await, dir);
+        assert_eq!(
+            store.read_meta("s1").await.unwrap().unwrap().title,
+            "Second"
+        );
+        let dirs = std::fs::read_dir(vault.path().join("sessions"))
+            .unwrap()
+            .count();
+        assert_eq!(dirs, 1, "a re-create must never mint a sibling directory");
     }
 
     #[tokio::test]

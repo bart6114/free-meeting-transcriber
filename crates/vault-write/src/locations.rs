@@ -155,6 +155,55 @@ impl SessionStore {
         }
     }
 
+    /// `lookup_existing_dir` for an id the caller just generated (a fresh random
+    /// UUID): the same duplicate rejection and catalog probe, and the same
+    /// tolerance for every state of the legacy `sessions/<id>` directory, but a
+    /// miss costs one O(1) probe instead of a full discovery walk. The skipped
+    /// scan's only remaining job would be finding a readable-named or nested
+    /// directory claiming the id — impossible for a just-minted UUID short of an
+    /// RNG collision. Never use this for an id that may already exist somewhere:
+    /// an unseen claimant would get a duplicate sibling directory here.
+    async fn lookup_existing_dir_unscanned(&self, id: &str) -> Result<Option<PathBuf>, StoreError> {
+        self.ensure_not_duplicated(id)?;
+        if let Some(dir) = self.locations.read().unwrap().get(id) {
+            return Ok(Some(dir.clone()));
+        }
+
+        let legacy = legacy_session_dir(id);
+        let abs = self.vault_base.join(&legacy);
+        let id_owned = id.to_string();
+        let claimed = tokio::task::spawn_blocking(move || {
+            match hypr_vault_read::classify_session_dir(&abs) {
+                hypr_vault_read::SessionDirKind::Session(meta) => {
+                    hypr_vault_read::layout::eq_nfc(&meta.id, &id_owned)
+                }
+                // Matches the scanning lookup: a corrupt legacy meta keeps the
+                // directory as the id's home instead of minting a sibling.
+                hypr_vault_read::SessionDirKind::Corrupt(_) => true,
+                hypr_vault_read::SessionDirKind::Folder => false,
+            }
+        })
+        .await
+        .map_err(|e| StoreError::Io(format!("task join error: {e}")))?;
+        Ok(claimed.then_some(legacy))
+    }
+
+    /// `creation_dir_locked` for a caller-guaranteed-fresh id: identical naming
+    /// policy (ghost adoption and occupied-candidate refusal included), but the
+    /// cold-catalog lookup stays O(1) in session count — see
+    /// `lookup_existing_dir_unscanned` for why that is sound only for
+    /// just-generated ids.
+    pub(crate) async fn creation_dir_fresh_locked(
+        &self,
+        _guard: &WriteGuard<'_>,
+        meta: &super::SessionMeta,
+    ) -> Result<PathBuf, StoreError> {
+        match self.lookup_existing_dir_unscanned(&meta.id).await? {
+            Some(dir) => Ok(dir),
+            None => self.choose_new_session_dir(meta).await,
+        }
+    }
+
     async fn resolve_session_dir(&self, id: &str) -> Result<PathBuf, StoreError> {
         match self.lookup_existing_dir(id).await? {
             Some(dir) => Ok(dir),
