@@ -1,0 +1,40 @@
+---
+import { getCollection, render } from "astro:content";
+
+function parseVersion(id: string) {
+  return id.split(".").map(Number);
+}
+
+const entries = (await getCollection("changelog")).sort((a, b) => {
+  const va = parseVersion(a.id);
+  const vb = parseVersion(b.id);
+  for (let i = 0; i < Math.max(va.length, vb.length); i++) {
+    const diff = (vb[i] ?? 0) - (va[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+});
+
+const rendered = await Promise.all(
+  entries.map(async (entry) => ({ entry, Content: (await render(entry)).Content })),
+);
+
+const dateFormat = new Intl.DateTimeFormat("en-US", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  timeZone: "UTC",
+});
+---
+
+{
+  rendered.map(({ entry, Content }) => (
+    <section class="release-entry">
+      <h2 id={`v${entry.id.replaceAll(".", "-")}`}>Version {entry.id}</h2>
+      <p class="release-date">{dateFormat.format(new Date(entry.data.date))}</p>
+      <div class="release-body">
+        <Content />
+      </div>
+    </section>
+  ))
+}

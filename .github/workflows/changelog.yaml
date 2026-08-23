@@ -22,6 +22,7 @@ jobs:
     timeout-minutes: 20
     permissions:
       contents: write
+      actions: write
     concurrency:
       group: changelog-commit
       cancel-in-progress: false
@@ -155,6 +156,16 @@ jobs:
           done
           echo "gave up after 3 attempts"
           exit 1
+
+      # The commit above carries [skip ci], so the push does not trigger the
+      # path-filtered docs-deploy workflow; dispatch it so the release notes
+      # page on the docs site picks up the new entry.
+      - name: Deploy docs with the new entry
+        if: steps.meta.outputs.exists != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: gh workflow run docs-deploy
 
       - name: Sync release body from notes
         env:

@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - docs/**
+      - packages/changelog/content/**
       - .github/workflows/docs_deploy.yaml
   workflow_dispatch:
 

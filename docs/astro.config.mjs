@@ -3,8 +3,13 @@ import { defineConfig } from "astro/config";
 import starlightLinksValidator from "starlight-links-validator";
 import starlightLlmsTxt from "starlight-llms-txt";
 
+import { remarkChangelogBanner } from "./src/remark-changelog-banner.mjs";
+
 export default defineConfig({
   site: "https://freemeetingtranscriber.com",
+  markdown: {
+    remarkPlugins: [remarkChangelogBanner],
+  },
   integrations: [
     starlight({
       title: "Free Meeting Transcriber",
@@ -74,7 +79,7 @@ export default defineConfig({
         },
         {
           label: "Help",
-          items: ["help", "troubleshooting"],
+          items: ["help", "troubleshooting", "changelog"],
         },
       ],
     }),

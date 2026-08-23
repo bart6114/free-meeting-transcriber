@@ -55,3 +55,49 @@
 .download-cta .cta-arrow {
   font-size: var(--sl-text-xl);
 }
+
+/* Release notes listing (/changelog) */
+.release-entry {
+  padding-top: 1rem;
+}
+
+.release-entry + .release-entry {
+  margin-top: 3rem;
+  border-top: 1px solid var(--sl-color-hairline);
+}
+
+.release-entry .release-date {
+  margin-top: 0.25rem;
+  font-size: var(--sl-text-sm);
+  color: var(--sl-color-gray-3);
+}
+
+/* Entry bodies use h2/h3 for their sections; step them down so the
+   per-version headings stay the dominant level on the page. */
+.release-entry .release-body h2 {
+  font-size: var(--sl-text-h4);
+}
+
+.release-entry .release-body h3 {
+  font-size: var(--sl-text-h5);
+}
+
+.release-banner {
+  margin-top: 1rem;
+  border: 1px solid var(--sl-color-accent);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  background-color: var(--sl-color-accent-low);
+  font-size: var(--sl-text-sm);
+}
+
+.release-banner--warning {
+  border-color: var(--sl-color-orange);
+  background-color: var(--sl-color-orange-low);
+}
+
+.release-banner .release-banner-title {
+  margin-top: 0;
+  font-weight: 600;
+  font-size: var(--sl-text-base);
+}
