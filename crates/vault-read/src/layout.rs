@@ -160,6 +160,49 @@ pub fn classify_session_dir(abs_dir: &Path) -> SessionDirKind {
     }
 }
 
+/// A discovery scan is one `_meta.json` read per candidate directory; on a
+/// high-latency filesystem (network mounts, cold sync caches) those reads are
+/// round-trips and doing them serially makes the scan minutes long. Bounded so
+/// throttling backends are not hammered; local filesystems finish either way.
+const CLASSIFY_WORKERS: usize = 16;
+/// Below this many children the thread-spawn overhead is not worth paying.
+const CLASSIFY_INLINE_MAX: usize = 4;
+
+/// `classify_session_dir` over many candidates, fanning the `_meta.json` reads
+/// out over a bounded set of worker threads. Results are returned in input
+/// order, so callers observe exactly the sequential behavior.
+fn classify_session_dirs(child_dirs: &[(PathBuf, PathBuf)]) -> Vec<SessionDirKind> {
+    if child_dirs.len() <= CLASSIFY_INLINE_MAX {
+        return child_dirs
+            .iter()
+            .map(|(_, abs_dir)| classify_session_dir(abs_dir))
+            .collect();
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let mut indexed: Vec<(usize, SessionDirKind)> = std::thread::scope(|scope| {
+        let workers = (0..child_dirs.len().min(CLASSIFY_WORKERS))
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut classified = Vec::new();
+                    loop {
+                        let index = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some((_, abs_dir)) = child_dirs.get(index) else {
+                            return classified;
+                        };
+                        classified.push((index, classify_session_dir(abs_dir)));
+                    }
+                })
+            })
+            .collect::<Vec<_>>();
+        workers
+            .into_iter()
+            .flat_map(|worker| worker.join().expect("classify worker panicked"))
+            .collect()
+    });
+    indexed.sort_by_key(|(index, _)| *index);
+    indexed.into_iter().map(|(_, kind)| kind).collect()
+}
+
 /// Cheap boundary probe for traversals that only need "may recurse" versus "must
 /// stop": stats `_meta.json` without parsing it. `NotFound` is the only answer that
 /// makes a folder; any other stat error is conservatively a boundary — the same
@@ -208,6 +251,7 @@ pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
         };
         let mut child_folders: Vec<PathBuf> = Vec::new();
         let mut has_session_artifact = false;
+        let mut child_dirs: Vec<(PathBuf, PathBuf)> = Vec::new();
         for entry in entries {
             let Ok(entry) = entry else { continue };
             // file_type() does not follow symlinks; a symlinked directory is
@@ -222,22 +266,25 @@ pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
                 if name.starts_with('.') {
                     continue;
                 }
-                let child = relative_dir.join(&name);
-                match classify_session_dir(&entry.path()) {
-                    SessionDirKind::Session(meta) => found.push((
-                        SessionLocation {
-                            id: meta.id.clone(),
-                            relative_dir: child,
-                        },
-                        *meta,
-                    )),
-                    SessionDirKind::Corrupt(reason) => {
-                        errors.push(SessionDiscoveryError::CorruptMeta { dir: child, reason })
-                    }
-                    SessionDirKind::Folder => child_folders.push(child),
-                }
+                child_dirs.push((relative_dir.join(&name), entry.path()));
             } else if kind.is_file() && (name.ends_with(".md") || name == "transcript.json") {
                 has_session_artifact = true;
+            }
+        }
+        let kinds = classify_session_dirs(&child_dirs);
+        for ((child, _), kind) in child_dirs.into_iter().zip(kinds) {
+            match kind {
+                SessionDirKind::Session(meta) => found.push((
+                    SessionLocation {
+                        id: meta.id.clone(),
+                        relative_dir: child,
+                    },
+                    *meta,
+                )),
+                SessionDirKind::Corrupt(reason) => {
+                    errors.push(SessionDiscoveryError::CorruptMeta { dir: child, reason })
+                }
+                SessionDirKind::Folder => child_folders.push(child),
             }
         }
         // This directory reached the worklist, so it has no `_meta.json`; direct
@@ -665,6 +712,36 @@ mod tests {
                 .any(|(location, _)| location.id == UUID_2),
             "a session nested under a ghost must still be discovered"
         );
+    }
+
+    #[test]
+    fn wide_directories_classify_in_parallel_with_sequential_results() {
+        let vault = tempfile::tempdir().unwrap();
+        let mut expected_ids = Vec::new();
+        for i in 0..40 {
+            let id = format!("00000000-0000-4000-8000-{i:012}");
+            seed_session_at(vault.path(), &format!("sessions/Meeting {i:02}"), &id);
+            expected_ids.push(id);
+        }
+        let corrupt = vault.path().join("sessions/broken");
+        std::fs::create_dir_all(&corrupt).unwrap();
+        std::fs::write(corrupt.join("_meta.json"), "{ invalid").unwrap();
+        seed_session_at(vault.path(), "sessions/Folder/nested", UUID_1);
+        expected_ids.push(UUID_1.to_string());
+
+        let discovery = discover_sessions(vault.path()).unwrap();
+        let mut ids: Vec<String> = discovery
+            .sessions
+            .iter()
+            .map(|(location, _)| location.id.clone())
+            .collect();
+        ids.sort();
+        expected_ids.sort();
+        assert_eq!(ids, expected_ids);
+        assert!(matches!(
+            &discovery.errors[..],
+            [SessionDiscoveryError::CorruptMeta { dir, .. }] if dir == &PathBuf::from("sessions/broken")
+        ));
     }
 
     #[test]
