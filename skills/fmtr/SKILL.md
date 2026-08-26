@@ -32,9 +32,9 @@ See [CLI commands](references/cli.md) and [MCP tools](references/mcp.md).
 
 - Treat meeting content as private user data.
 - Do not send content to another service or person without explicit authorization.
-- The only supported mutations are the CLI's `meetings new` and `meetings note --set/--append` (note bodies), `import` (add an audio file as a new meeting, optionally with `--transcribe`), and `transcribe` (regenerate a meeting's transcript from its audio — this replaces the existing transcript, so confirm before running it on a meeting that already has one; when the app's audio retention setting is "none", it also deletes the recording once the transcript is saved). Do not claim to change anything else — summaries, recordings, and settings cannot be mutated, and the MCP server cannot mutate anything.
-- `meetings note --set` replaces the whole note body. Prefer `--append`, and pass `--set` only when the user explicitly wants the note replaced.
-- Always pass `--author <agent-name>` (one stable name, e.g. `claude-code`) when creating a meeting with `meetings new` or `import` — it marks the note as not written by the vault owner. Never add, change, or remove the authorship of an existing meeting.
+- The only supported mutations are the CLI's `sessions new` and `sessions note --set/--append` (note bodies), `import` (add an audio file as a new meeting, optionally with `--transcribe`), and `transcribe` (regenerate a meeting's transcript from its audio — this replaces the existing transcript, so confirm before running it on a meeting that already has one; when the app's audio retention setting is "none", it also deletes the recording once the transcript is saved). Do not claim to change anything else — summaries, recordings, and settings cannot be mutated, and the MCP server cannot mutate anything.
+- `sessions note --set` replaces the whole note body. Prefer `--append`, and pass `--set` only when the user explicitly wants the note replaced.
+- Always pass `--author <agent-name>` (one stable name, e.g. `claude-code`) when creating a meeting with `sessions new` or `import` — it marks the note as not written by the vault owner. Never add, change, or remove the authorship of an existing meeting.
 - CLI export may create a separate file. Never pass `--force` unless the user explicitly approves overwriting that exact path.
 - Preserve uncertainty when search results are ambiguous. Ask the user to choose between likely meetings.
 

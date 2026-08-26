@@ -1,11 +1,11 @@
 ---
 title: "Agent access"
-description: "Give an agent access to local meeting notes through the read-only MCP server or the read-write CLI."
+description: "Let agents search your local knowledge vault and store useful work through the CLI."
 ---
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
-Free Meeting Transcriber has two local interfaces for agents. Both work on the same vault. MCP is read-only; the CLI can also create and edit meetings.
+Free Meeting Transcriber has two local interfaces for agents. Both work on the same knowledge vault. MCP is read-only; the CLI can also create and edit sessions. A session may be a recorded meeting or a standalone note containing research, decisions, project context, or material brought in from another tool.
 
 | Interface | Use it when | Output |
 | --- | --- | --- |
@@ -14,12 +14,13 @@ Free Meeting Transcriber has two local interfaces for agents. Both work on the s
 
 ## A reliable workflow
 
-1. List recent meetings or search with a short phrase.
-2. Take the meeting ID from the result. Do not guess it.
-3. Read meeting details before fetching a transcript.
+1. List recent sessions or search with a short phrase.
+2. Take the session ID from the result. Do not guess it.
+3. Read session details before fetching a transcript.
 4. Fetch the transcript only when the notes and summaries are not enough.
+5. When the user asks to keep new work, create a session with clear authorship, useful tags, and the source artifact when appropriate.
 
-MCP is usually easier for reading because the client receives tool schemas directly. Use the CLI when MCP is not available, or when the task needs to create or edit a meeting — MCP cannot write.
+MCP is usually easier for reading because the client receives tool schemas directly. Use the CLI when MCP is not available, or when the task needs to create or edit a session — MCP cannot write.
 
 Every vault also carries a copy of the [vault guide for agents](/agents/vault/) at its root as `AGENTS.md`, so agents that land in the folder without this documentation still learn the layout and the rules.
 
@@ -27,7 +28,20 @@ Every vault also carries a copy of the [vault guide for agents](/agents/vault/) 
 
 Use these interfaces instead of crawling the vault. They apply the same rules for canonical notes, summaries, speaker names, and transcript rendering.
 
-MCP cannot write: no tool creates or edits a note, action item, or meeting. The CLI can: `meetings new` creates a meeting, `meetings note --set` and `--append` edit a note body, `import` turns an audio file into a new meeting, and `transcribe` replaces a meeting's transcript. `meetings export` writes only to the file you pass with `--output`, and replaces an existing file only when `--force` is passed. Agents creating meetings must always pass `--author <agent-name>` so the note is marked as not written by the vault owner.
+MCP cannot write: no MCP tool creates or edits a note, action item, or session. The CLI can: `sessions new` creates a standalone note, `sessions note --set` and `--append` edit a note body, `sessions attach` keeps a source file with the note, `import` turns an audio file into a new session, and `transcribe` replaces a session's transcript. `sessions export` writes only to the file you pass with `--output`, and replaces an existing file only when `--force` is passed. Agents creating sessions must always pass `--author <agent-name>` so the note is marked as not written by the vault owner.
+
+## Bring knowledge in from other tools
+
+The CLI is intentionally source-agnostic. If an agent is authorized to read a document, research result, issue tracker, knowledge service, or generated deck, it can turn the useful content into Markdown and store it as a new session. There is no separate importer to build for every source.
+
+For example, after researching a topic or extracting the important findings from a deck, an agent can run:
+
+```bash
+fmtr --json sessions new --title "Research: customer onboarding" --note findings.md --tag research --author claude-code
+fmtr --json sessions attach SESSION_ID onboarding-research.pdf
+```
+
+This keeps the synthesized note searchable while preserving the source artifact beside it. The agent must still follow the source tool's permissions and should only write when the user asks it to.
 
 <CardGrid>
   <LinkCard title="Use the CLI" href="/agents/cli" description="Run commands with JSON output." />

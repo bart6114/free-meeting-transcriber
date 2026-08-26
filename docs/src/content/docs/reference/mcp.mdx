@@ -43,7 +43,7 @@ Accepts required string `meeting_id`. Returns meeting metadata (including its no
 | --- | --- | --- | --- |
 | `meeting_id` | string | required | A returned Free Meeting Transcriber meeting ID. |
 
-Returns `meeting_id` and `text`. The text uses one `[HH:MM:SS] Speaker: ...` line per speaker turn, timed from the start of the meeting. Speaker names come from the people registry, and unknown voices fall back to `Speaker N`. Word-level detail, including IDs, timestamps, and channels, is available through `fmtr meetings export --format json`.
+Returns `meeting_id` and `text`. The text uses one `[HH:MM:SS] Speaker: ...` line per speaker turn, timed from the start of the meeting. Speaker names come from the people registry, and unknown voices fall back to `Speaker N`. Word-level detail, including IDs, timestamps, and channels, is available through `fmtr sessions export --format json`.
 
 ## Resources
 

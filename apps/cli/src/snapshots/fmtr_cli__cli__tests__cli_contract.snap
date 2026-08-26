@@ -54,8 +54,8 @@ expression: canonicalize_json(contract)
       "synopsis": "fmtr doctor [-h]"
     },
     {
-      "about": "Browse, create, edit, and export meetings",
-      "name": "fmtr meetings",
+      "about": "Browse, create, edit, and export sessions",
+      "name": "fmtr sessions",
       "options": [
         {
           "flags": "-h, --help",
@@ -67,7 +67,7 @@ expression: canonicalize_json(contract)
       "subcommands": [
         {
           "about": "List meetings, optionally filtered by text or tags",
-          "name": "fmtr meetings list",
+          "name": "fmtr sessions list",
           "options": [
             {
               "flags": "-q, --query",
@@ -111,7 +111,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings list [-q] [--limit] [--offset] [--tag] [--untagged] [-h]"
+          "synopsis": "fmtr sessions list [-q] [--limit] [--offset] [--tag] [--untagged] [-h]"
         },
         {
           "about": "Search across meeting titles, notes, summaries, and transcripts",
@@ -122,7 +122,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "name": "fmtr meetings search",
+          "name": "fmtr sessions search",
           "options": [
             {
               "flags": "--speaker",
@@ -167,7 +167,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings search [--speaker] [--kind] [--limit] [--offset] [-h] [query]"
+          "synopsis": "fmtr sessions search [--speaker] [--kind] [--limit] [--offset] [-h] [query]"
         },
         {
           "about": "Show meeting metadata, notes, summaries, and action items",
@@ -177,7 +177,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr meetings get",
+          "name": "fmtr sessions get",
           "options": [
             {
               "flags": "-h, --help",
@@ -186,11 +186,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings get [-h] <id>"
+          "synopsis": "fmtr sessions get [-h] <id>"
         },
         {
           "about": "Create a meeting note and print its id",
-          "name": "fmtr meetings new",
+          "name": "fmtr sessions new",
           "options": [
             {
               "flags": "--title",
@@ -255,7 +255,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [--skill] [-h]"
+          "synopsis": "fmtr sessions new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [--skill] [-h]"
         },
         {
           "about": "Show the note or generated summaries for a meeting, or edit the note",
@@ -265,7 +265,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr meetings note",
+          "name": "fmtr sessions note",
           "options": [
             {
               "default": "note",
@@ -300,7 +300,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings note [--kind] [--set] [--append] [-h] <id>"
+          "synopsis": "fmtr sessions note [--kind] [--set] [--append] [-h] <id>"
         },
         {
           "about": "Show the full speaker-labeled meeting transcript",
@@ -310,7 +310,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr meetings transcript",
+          "name": "fmtr sessions transcript",
           "options": [
             {
               "flags": "-h, --help",
@@ -319,11 +319,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings transcript [-h] <id>"
+          "synopsis": "fmtr sessions transcript [-h] <id>"
         },
         {
           "about": "Add or remove tags on a meeting",
-          "name": "fmtr meetings tag",
+          "name": "fmtr sessions tag",
           "options": [
             {
               "flags": "-h, --help",
@@ -345,7 +345,7 @@ expression: canonicalize_json(contract)
                   "required": true
                 }
               ],
-              "name": "fmtr meetings tag add",
+              "name": "fmtr sessions tag add",
               "options": [
                 {
                   "flags": "-h, --help",
@@ -354,7 +354,7 @@ expression: canonicalize_json(contract)
                   "required": false
                 }
               ],
-              "synopsis": "fmtr meetings tag add [-h] <id> <tags>"
+              "synopsis": "fmtr sessions tag add [-h] <id> <tags>"
             },
             {
               "about": "Remove tags from a meeting; the tag registry keeps the names",
@@ -368,7 +368,7 @@ expression: canonicalize_json(contract)
                   "required": true
                 }
               ],
-              "name": "fmtr meetings tag remove",
+              "name": "fmtr sessions tag remove",
               "options": [
                 {
                   "flags": "-h, --help",
@@ -377,10 +377,10 @@ expression: canonicalize_json(contract)
                   "required": false
                 }
               ],
-              "synopsis": "fmtr meetings tag remove [-h] <id> <tags>"
+              "synopsis": "fmtr sessions tag remove [-h] <id> <tags>"
             }
           ],
-          "synopsis": "fmtr meetings tag [-h] <command>"
+          "synopsis": "fmtr sessions tag [-h] <command>"
         },
         {
           "about": "Print the absolute path of a meeting's session directory",
@@ -390,7 +390,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr meetings path",
+          "name": "fmtr sessions path",
           "options": [
             {
               "flags": "-h, --help",
@@ -399,7 +399,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings path [-h] <id>"
+          "synopsis": "fmtr sessions path [-h] <id>"
         },
         {
           "about": "Store a file as a note attachment of a meeting and print its attachment id",
@@ -414,7 +414,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr meetings attach",
+          "name": "fmtr sessions attach",
           "options": [
             {
               "flags": "--name",
@@ -430,7 +430,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings attach [--name] [-h] <file> <id>"
+          "synopsis": "fmtr sessions attach [--name] [-h] <file> <id>"
         },
         {
           "about": "Export a meeting to Markdown or JSON",
@@ -440,7 +440,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr meetings export",
+          "name": "fmtr sessions export",
           "options": [
             {
               "default": "markdown",
@@ -472,10 +472,10 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr meetings export [--format] [-o] [--force] [-h] <id>"
+          "synopsis": "fmtr sessions export [--format] [-o] [--force] [-h] <id>"
         }
       ],
-      "synopsis": "fmtr meetings [-h] <command>"
+      "synopsis": "fmtr sessions [-h] <command>"
     },
     {
       "about": "Import an audio file into a new or existing meeting and print its id",

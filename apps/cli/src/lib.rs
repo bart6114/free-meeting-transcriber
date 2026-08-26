@@ -21,7 +21,7 @@ pub async fn run(args: Args) -> Result<u8> {
 
     match args.command {
         cli::Command::Doctor => unreachable!("doctor returns before opening the vault"),
-        cli::Command::Meetings { command } => {
+        cli::Command::Sessions { command } => {
             commands::meetings::run(&vault, command, args.json).await?
         }
         cli::Command::Import {
@@ -148,7 +148,7 @@ mod tests {
             base: None,
             vault_path: Some(vault.to_path_buf()),
             json: false,
-            command: cli::Command::Meetings { command },
+            command: cli::Command::Sessions { command },
         }
     }
 
@@ -164,7 +164,7 @@ mod tests {
             base: None,
             vault_path: Some(vault.clone()),
             json: true,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::New {
                     title: "Kickoff".to_string(),
                     note: Some(body_path),
@@ -216,7 +216,7 @@ mod tests {
             base: None,
             vault_path: Some(vault),
             json: true,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::Note {
                     id,
                     kind: cli::DocumentKind::Note,
@@ -239,7 +239,7 @@ mod tests {
             base: None,
             vault_path: Some(vault.clone()),
             json: true,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::New {
                     title: "Agent note".to_string(),
                     note: None,
@@ -278,7 +278,7 @@ mod tests {
             base: None,
             vault_path: Some(vault.clone()),
             json: false,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::New {
                     title: "Kickoff".to_string(),
                     note: Some(dir.path().join("missing.md")),
@@ -721,7 +721,7 @@ mod tests {
             base: None,
             vault_path: Some(vault.clone()),
             json: false,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::Note {
                     id: "meeting-1".to_string(),
                     kind: cli::DocumentKind::Note,
@@ -741,7 +741,7 @@ mod tests {
             base: None,
             vault_path: Some(vault.clone()),
             json: false,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::Note {
                     id: "meeting-1".to_string(),
                     kind: cli::DocumentKind::Note,
@@ -770,7 +770,7 @@ mod tests {
             base: None,
             vault_path: Some(vault.clone()),
             json: false,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::Note {
                     id: "missing".to_string(),
                     kind: cli::DocumentKind::Note,
@@ -1009,7 +1009,7 @@ mod tests {
             base: None,
             vault_path: Some(vault),
             json: false,
-            command: cli::Command::Meetings {
+            command: cli::Command::Sessions {
                 command: cli::MeetingCommand::Export {
                     id: "meeting-1".to_string(),
                     format: cli::ExportFormat::Markdown,

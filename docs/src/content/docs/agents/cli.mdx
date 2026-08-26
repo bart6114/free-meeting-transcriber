@@ -1,32 +1,32 @@
 ---
 title: "CLI for agents"
-description: "Use fmtr JSON output when MCP is not available or when the task needs to create or edit meetings."
+description: "Use fmtr to search the local knowledge vault and create notes from agent work or external sources."
 ---
 
 Pass the global `--json` flag when software consumes CLI output. A successful response contains `schema_version`, `command`, `data`, and, for paginated commands, `pagination`.
 
-## Find the meeting first
+## Find the session first
 
 ```bash
-fmtr --json meetings list --query "weekly planning" --limit 10
-fmtr --json meetings get MEETING_ID
+fmtr --json sessions list --query "weekly planning" --limit 10
+fmtr --json sessions get SESSION_ID
 ```
 
-List filtering matches titles and IDs without regard to case. For full-text search across notes, summaries, and transcripts, use `meetings search`. If several meetings match the user's request, ask which one they mean.
+List filtering matches titles and IDs without regard to case. For full-text search across notes, summaries, and transcripts, use `sessions search`. If several sessions match the user's request, ask which one they mean.
 
 ## Read only what you need
 
 ```bash
-fmtr --json meetings note MEETING_ID --kind note
-fmtr --json meetings note MEETING_ID --kind summary
+fmtr --json sessions note SESSION_ID --kind note
+fmtr --json sessions note SESSION_ID --kind summary
 ```
 
-Use `meetings get` when you also need metadata or action items.
+Use `sessions get` when you also need metadata or action items.
 
 ## Transcripts
 
 ```bash
-fmtr --json meetings transcript MEETING_ID
+fmtr --json sessions transcript SESSION_ID
 ```
 
 This returns the complete speaker-labeled transcript in one response. Transcripts can be large, so do not request one unless the task needs it.
@@ -41,18 +41,24 @@ The report includes the CLI version, a `ready` flag, the resolved vault path, pa
 
 For a non-default vault, use `--vault-path DIR` or `FMTR_VAULT_PATH`.
 
-## Write only when asked
+## Store agent work
 
 ```bash
-fmtr --json meetings new --title "Weekly planning" --note notes.md --author claude-code
-fmtr --json meetings note MEETING_ID --append notes.md
+fmtr --json sessions new --title "Weekly planning" --note notes.md --author claude-code
+fmtr --json sessions new --title "Research: payment providers" --note research.md --tag research --author claude-code --skill research-assistant
+fmtr --json sessions note SESSION_ID --append notes.md
+fmtr --json sessions attach SESSION_ID source-deck.pdf
 fmtr --json import recording.m4a --transcribe --author claude-code
-fmtr --json transcribe MEETING_ID
+fmtr --json transcribe SESSION_ID
 ```
 
-`meetings new` creates a meeting and prints its ID; `--note` seeds the note body from a file or stdin (`-`). `meetings note --set` replaces the note body and `--append` extends it; both also accept `-` for stdin. `import` creates a meeting from an audio file, and `--transcribe` chains on-device transcription. `transcribe` replaces the meeting's existing transcript, so run it only when the user wants that.
+`sessions new` creates a session and prints its ID; `--note` seeds the note body from a file or stdin (`-`). The session can stand alone as a note, with no recording or transcript. This lets an agent store a research brief, extracted deck insights, project context, or other useful output from any source it is authorized to access. The agent performs the source integration and supplies Markdown; `fmtr` provides the stable write path into the vault.
 
-**Always pass `--author <your-agent-name>` when creating a meeting** (`meetings new`, `import`) — it marks the note as not written by the vault owner, and the app surfaces that. Use one stable name, such as `claude-code`. Write your own notes as new meetings with `--author`; when editing an existing note, never change its authorship.
+`sessions note --set` replaces the note body and `--append` extends it; both also accept `-` for stdin. `sessions attach` stores a source artifact beside the note. `import` creates a session from an audio file, and `--transcribe` chains on-device transcription. `transcribe` replaces the session's existing transcript, so run it only when the user wants that.
+
+**Always pass `--author <your-agent-name>` when creating a session** (`sessions new`, `import`) — it marks the note as not written by the vault owner, and the app surfaces that. Use one stable name, such as `claude-code`. When a reusable skill produced the result, also pass `--skill <skill-name>`. Write your own notes as new sessions; when editing an existing note, never change its authorship.
+
+Only store content when the user asks. Respect the permissions and privacy boundary of the source tool, and do not send vault content elsewhere merely to re-import it.
 
 :::note
 On-device transcription requires macOS on Apple Silicon and the on-device Soniqo model configured in the desktop app. The CLI never downloads models — open the desktop app once to download it.
@@ -61,8 +67,8 @@ On-device transcription requires macOS on Apple Silicon and the on-device Soniqo
 ## Export only when asked
 
 ```bash
-fmtr meetings export MEETING_ID --format markdown --output meeting.md
-fmtr meetings export MEETING_ID --format json --output meeting.json
+fmtr sessions export SESSION_ID --format markdown --output session.md
+fmtr sessions export SESSION_ID --format json --output session.json
 ```
 
 Export refuses to replace an existing file. Pass `--force` only when the user has approved overwriting that exact path.

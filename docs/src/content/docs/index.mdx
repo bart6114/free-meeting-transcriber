@@ -1,6 +1,6 @@
 ---
 title: "Free Meeting Transcriber"
-description: "Local meeting transcription and plain Markdown notes, without accounts or subscriptions."
+description: "A local-first knowledge vault for notes, meetings, transcripts, and agent-created research."
 ---
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
@@ -15,29 +15,35 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
   </a>
 </div>
 
-I wanted a meeting notetaker that would transcribe locally, keep my notes in ordinary files, and stay out of the way. Free Meeting Transcriber is the result.
+Free Meeting Transcriber started as the meeting notetaker I wanted: local transcription, ordinary files, and no service getting between me and my notes. It has since become the place where I keep more of my working knowledge.
 
-It records your microphone and system audio without sending a bot into the call. It’s [free as in beer 🍺](https://en.wikipedia.org/wiki/Gratis_versus_libre): there is no account, subscription, cloud backend, or telemetry. Your vault stays on your Mac and remains useful outside the app. If you want generated summaries, connect your own hosted provider or a local model.
+A session can start as a recorded meeting, an imported recording or transcript, a note you write, or Markdown an agent creates from another tool. That means research, project context, decisions, and useful material from elsewhere can live beside meeting notes in one searchable vault. Agents can create sessions, add to notes, tag them, and attach source files through the CLI without editing vault internals.
+
+The app still records your microphone and system audio without sending a bot into the call. It’s [free as in beer 🍺](https://en.wikipedia.org/wiki/Gratis_versus_libre): there is no account, subscription, cloud backend, or telemetry. Your vault stays on your Mac and remains useful outside the app. If you want generated summaries, connect your own hosted provider or a local model.
+
+:::note[About the name]
+Free Meeting Transcriber describes where the project started, but no longer covers everything it does. I am considering a name change as the app grows into a broader local knowledge tool. For now, these docs use **session** for any entry in the vault, whether or not it came from a meeting.
+:::
 
 <CardGrid>
   <LinkCard title="Try your first meeting" href="/quickstart" description="Install the app, download a transcription model, and make a short test recording." />
   <LinkCard title="Record a meeting" href="/meetings" description="Create a note and click Record." />
-  <LinkCard title="Review and export" href="/notes" description="Edit the memo or summary, check the transcript, and export what you need." />
-  <LinkCard title="Set up summaries" href="/ai-setup" description="Bring your own provider or run a model locally." />
+  <LinkCard title="Build your knowledge vault" href="/notes" description="Keep standalone notes, research, meeting context, and agent-created material together." />
+  <LinkCard title="Connect an agent" href="/agents/overview" description="Search the vault and store useful work through local interfaces." />
 </CardGrid>
 
 ## Common questions
 
 <CardGrid>
   <LinkCard title="Can I use it offline?" href="/offline" description="Yes. Download the models before you disconnect." />
-  <LinkCard title="Where is my data?" href="/data-and-privacy" description="Meeting data is stored in files inside your local vault." />
+  <LinkCard title="Where is my data?" href="/data-and-privacy" description="Notes, transcripts, and attachments are stored as files in your local vault." />
   <LinkCard title="Can I import a recording?" href="/import-recordings" description="Import audio, SRT, or VTT files." />
   <LinkCard title="Can I change the summary?" href="/customize-summaries" description="Use a template or edit the Auto prompt." />
 </CardGrid>
 
 [See all common questions →](/help)
 
-## The short version
+## A meeting workflow
 
 1. Create a note.
 2. Click **Record**.
@@ -48,3 +54,5 @@ It records your microphone and system audio without sending a bot into the call.
 :::note
 For a quick check, open the **Welcome to Free Meeting Transcriber** note, click **Record**, and say a few sentences.
 :::
+
+For work that does not start with a meeting, create a standalone note in the app or ask an agent to store its result with `fmtr sessions new`. See [Notes and knowledge](/notes) and [Agent access](/agents/overview).

@@ -1,13 +1,13 @@
 ---
 title: "Data, privacy, and retention"
-description: "See where your files live and when meeting text can leave your Mac."
+description: "See where your knowledge vault lives and when its content can leave your Mac."
 ---
 
-Free Meeting Transcriber has no account or cloud backend. It records without adding a bot to the call, and the vault on your Mac is the source of truth.
+Free Meeting Transcriber has no account or cloud backend. Its vault on your Mac is the source of truth for standalone notes, meeting notes, transcripts, attachments, and agent-created material. Meeting recording still happens without adding a bot to the call.
 
 ## Files in the vault
 
-The app stores notes, transcripts, settings, retained recordings, people, and templates as files in the vault. The default vault is in the app's data directory. You can change its location under **Settings → App → Storage**.
+The app stores notes, transcripts, attachments, settings, retained recordings, people, and templates as files in the vault. The default vault is in the app's data directory. You can change its location under **Settings → App → Storage**.
 
 You can inspect and edit the vault with other tools. The app watches for external changes and refreshes its in-memory index. If the app is about to overwrite a version it did not write, it first moves that version into the vault's `.trash/` folder.
 
@@ -15,7 +15,7 @@ Downloaded transcription and speaker-detection models are also local, but they a
 
 ## Remote Intelligence providers
 
-Transcription and speaker detection run on your Mac. Meeting content only leaves the app when you ask a remote Intelligence provider to generate a summary or title. That request includes the prompt and the meeting context needed to produce the result.
+Transcription and speaker detection run on your Mac. Session content only leaves the app when you ask a remote Intelligence provider to generate a summary or title. That request includes the prompt and the context needed to produce the result.
 
 API keys are stored in the macOS login Keychain. Review a provider's retention and training policy before using it with sensitive meetings.
 
