@@ -97,6 +97,18 @@ describe("PermissionsSection", () => {
     expect(onContinue).toHaveBeenCalledTimes(1);
   });
 
+  it("allows continuing when only optional Accessibility access is unavailable", () => {
+    const onContinue = vi.fn();
+    mocks.permissions.microphone.status = "authorized";
+    mocks.permissions.systemAudio.status = "authorized";
+
+    render(<PermissionsSection onContinue={onContinue} />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(onContinue).toHaveBeenCalledTimes(1);
+  });
+
   it("preserves the audio-only flow outside macOS", () => {
     const onContinue = vi.fn();
     mocks.currentPlatform = "windows";

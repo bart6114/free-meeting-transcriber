@@ -223,6 +223,13 @@ pub fn has_session_boundary(abs_dir: &Path) -> bool {
 /// is never misread as nested sessions. A missing `sessions/` directory is an empty
 /// vault, not an error.
 pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
+    discover_sessions_with_progress(vault, |_| {})
+}
+
+pub fn discover_sessions_with_progress(
+    vault: &Path,
+    mut on_sessions_found: impl FnMut(usize),
+) -> Result<SessionDiscovery> {
     let root = vault.join(paths::sessions_root());
     match std::fs::metadata(&root) {
         Ok(_) => {}
@@ -274,13 +281,16 @@ pub fn discover_sessions(vault: &Path) -> Result<SessionDiscovery> {
         let kinds = classify_session_dirs(&child_dirs);
         for ((child, _), kind) in child_dirs.into_iter().zip(kinds) {
             match kind {
-                SessionDirKind::Session(meta) => found.push((
-                    SessionLocation {
-                        id: meta.id.clone(),
-                        relative_dir: child,
-                    },
-                    *meta,
-                )),
+                SessionDirKind::Session(meta) => {
+                    found.push((
+                        SessionLocation {
+                            id: meta.id.clone(),
+                            relative_dir: child,
+                        },
+                        *meta,
+                    ));
+                    on_sessions_found(found.len());
+                }
                 SessionDirKind::Corrupt(reason) => {
                     errors.push(SessionDiscoveryError::CorruptMeta { dir: child, reason })
                 }
@@ -519,6 +529,20 @@ mod tests {
             assert_eq!(location.id, id);
             assert_eq!(meta.id, id);
         }
+    }
+
+    #[test]
+    fn reports_each_healthy_session_as_discovery_progress() {
+        let vault = tempfile::tempdir().unwrap();
+        seed_session_at(vault.path(), &format!("sessions/{UUID_1}"), UUID_1);
+        seed_session_at(vault.path(), &format!("sessions/{UUID_2}"), UUID_2);
+
+        let mut progress = Vec::new();
+        let discovery =
+            discover_sessions_with_progress(vault.path(), |found| progress.push(found)).unwrap();
+
+        assert_eq!(discovery.sessions.len(), 2);
+        assert_eq!(progress, vec![1, 2]);
     }
 
     #[test]

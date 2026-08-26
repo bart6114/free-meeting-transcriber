@@ -6,6 +6,7 @@ mod legacy_db;
 mod recording_meta;
 mod search_index;
 mod session_store;
+mod startup;
 mod store;
 mod supervisor;
 mod vault_watch;
@@ -117,6 +118,13 @@ fn on_window_event(window: &tauri::Window<tauri::Wry>, event: &tauri::WindowEven
     };
     let store = store.inner().clone();
 
+    let Some(startup) = window.app_handle().try_state::<startup::StartupState>() else {
+        return;
+    };
+    if !startup.is_ready() {
+        return;
+    }
+
     let now = std::time::Instant::now();
     {
         let mut last = FOCUS_RESCAN_LAST.lock().unwrap();
@@ -212,7 +220,11 @@ pub async fn main() {
         .plugin(tauri_plugin_detect::init())
         .plugin(tauri_plugin_dock::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_notify::init())
+        .plugin(tauri_plugin_notify::init_with_options(
+            tauri_plugin_notify::InitOptions {
+                start_on_webview_ready: false,
+            },
+        ))
         .plugin(tauri_plugin_overlay::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::default().build())
@@ -305,107 +317,27 @@ pub async fn main() {
 
             {
                 use tauri_plugin_settings::SettingsPluginExt;
-                if let Ok(base) = app_handle.settings().vault_base()
-                    && let Err(e) =
-                        hypr_vault_write::agents_doc::ensure_agents_doc(base.as_std_path())
-                {
-                    tracing::error!("failed to write AGENTS.md: {}", e);
-                }
-            }
-
-            {
-                use tauri_plugin_settings::SettingsPluginExt;
                 match app_handle.settings().vault_base() {
                     Ok(base) => {
+                        let startup = startup::StartupState::new(Some(base.as_std_path()));
+                        app_handle.manage(startup);
                         let store = std::sync::Arc::new(session_store::SessionStore::new(
                             base.as_std_path().to_path_buf(),
                         ));
                         app_handle.manage(store.clone());
 
-                        // The Tantivy search projection rides the store's change
-                        // stream (Phase F). Spawned -- i.e. subscribed -- BEFORE the
-                        // startup rebuild below so edits made while the app was
-                        // closed flow into the search index as rebuild diffs; its
-                        // async worker then waits for the tantivy collection.
                         search_index::spawn(app_handle.clone(), store.clone());
-
-                        // One discovery walk covers all of startup normalization:
-                        // legacy readable-name migration, then provisional-name crash
-                        // recovery (a first title written while recording defers its
-                        // rename to recording stop; if the app died in between, finish
-                        // it here) -- both before the first rebuild and before
-                        // vault_watch starts (renames must not race the watcher or be
-                        // indexed at stale paths). Idempotent: an already-normalized
-                        // vault is a no-op, and partial completion resumes next
-                        // startup. The resulting snapshot then feeds the rebuild
-                        // directly, so startup never scans the layout twice.
-                        let startup_layout =
-                            match hypr_tauri_utils::block_on(store.normalize_startup_layout()) {
-                                Ok(layout) => {
-                                    let report = &layout.migration;
-                                    if !report.renamed.is_empty() || !report.failed.is_empty() {
-                                        tracing::info!(
-                                            renamed = report.renamed.len(),
-                                            skipped = report.skipped.len(),
-                                            failed = ?report.failed,
-                                            "migrated legacy session directories to readable names"
-                                        );
-                                    }
-                                    Some(layout)
-                                }
-                                Err(e) => {
-                                    tracing::error!("startup layout normalization failed: {}", e);
-                                    None
-                                }
-                            };
-
-                        // Files are the source of truth, so every startup rebuilds the
-                        // sessions/session_documents/transcripts index from what's on disk
-                        // before the UI proceeds. `block_on`: the UI must not come up
-                        // against a stale index.
-                        let rebuild_result = match startup_layout {
-                            Some(layout) => hypr_tauri_utils::block_on(
-                                store.rebuild_index_from_startup_layout(layout),
-                            ),
-                            // Normalization failed: fall back to a self-scanning rebuild.
-                            None => hypr_tauri_utils::block_on(store.rebuild_index()),
-                        };
-                        match rebuild_result {
-                            Ok(report) => {
-                                tracing::info!(
-                                    sessions = report.sessions,
-                                    notes = report.notes,
-                                    transcripts = report.transcripts,
-                                    error_count = report.errors.len(),
-                                    errors = ?report.errors,
-                                    ghost_session_count = report.ghost_sessions.len(),
-                                    ghost_sessions = ?report.ghost_sessions,
-                                    "startup session index rebuild complete"
-                                );
-                            }
-                            Err(e) => {
-                                tracing::error!("startup session index rebuild failed: {}", e);
-                            }
-                        }
-
-                        // Re-seed any bundled default template whose file is missing
-                        // (and isn't tombstoned in `.deleted-defaults.json`). This is
-                        // the file-side replacement for the retired SQL seed migration
-                        // and `repair_missing_core_tables` guarantee. `block_on`: the
-                        // template pickers must not come up against an empty folder on
-                        // first boot.
-                        match hypr_tauri_utils::block_on(store.seed_default_templates()) {
-                            Ok(seeded) if seeded > 0 => {
-                                tracing::info!(seeded, "seeded missing default templates");
-                            }
-                            Ok(_) => {}
-                            Err(e) => {
-                                tracing::error!("default template seeding failed: {}", e);
-                            }
-                        }
+                        session_store::spawn_dispatcher(app_handle.clone());
                     }
-                    Err(e) => {
-                        tracing::error!("failed to resolve vault_base for session_store: {}", e);
+                    Err(error) => {
+                        let startup = startup::StartupState::new(None);
+                        app_handle.manage(startup.clone());
+                        startup.update(
+                            &app_handle,
+                            startup::StartupPhase::Failed {
+                                message: error.to_string(),
+                            },
+                        );
                     }
                 }
             }
@@ -430,21 +362,6 @@ pub async fn main() {
                     embedded_cli::sync_installed(&app_handle);
                 });
             }
-
-            // Coalescing `index-changed` emitter for the in-memory vault index
-            // (Phase E1). Needs the store managed; changes queued before this point
-            // (startup rebuild) simply flush as the dispatcher's first batch.
-            session_store::spawn_dispatcher(app_handle.clone());
-            // Stamps `_meta.json` recording timestamps off capture lifecycle events.
-            // Needs the store managed (the block above); missing it only logs.
-            recording_meta::spawn(app_handle.clone());
-            // Spawned last, after the session-store block above has finished its
-            // startup `rebuild_index` pass: an external edit's refresh only needs to
-            // account for vault state from here on, since everything the vault held at
-            // launch is already indexed. Relies on that block having already
-            // `.manage()`d the `Arc<SessionStore>` this looks up. See `vault_watch.rs`'s
-            // module doc for the full ordering rationale.
-            vault_watch::spawn(app_handle);
 
             Ok(())
         })
@@ -482,6 +399,12 @@ pub async fn main() {
     {
         let app_handle = app.handle().clone();
         AppWindow::Main.show(&app_handle).unwrap();
+        if let Some(store) = app_handle
+            .try_state::<std::sync::Arc<session_store::SessionStore>>()
+            .map(|state| state.inner().clone())
+        {
+            startup::spawn(app_handle, store);
+        }
     }
 
     #[cfg(target_os = "macos")]
@@ -620,6 +543,7 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::check_embedded_cli::<tauri::Wry>,
             commands::install_embedded_cli::<tauri::Wry>,
             commands::relocate_vault::<tauri::Wry>,
+            startup::get_startup_status::<tauri::Wry>,
             session_store::commands::session_write_meta::<tauri::Wry>,
             session_store::commands::session_update_meta::<tauri::Wry>,
             session_store::commands::session_write_note::<tauri::Wry>,
@@ -668,7 +592,8 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         ])
         .events(tauri_specta::collect_events![
             session_store::IndexChanged,
-            crate::recording_meta::RecordingMetaSettled
+            crate::recording_meta::RecordingMetaSettled,
+            startup::StartupProgress
         ])
         .error_handling(tauri_specta::ErrorHandlingMode::Result)
 }

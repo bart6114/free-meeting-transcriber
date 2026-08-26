@@ -27,6 +27,10 @@ async function relaunch(): Promise<void> {
   await tauriRelaunch();
 }
 
+export async function relaunchNow(): Promise<void> {
+  await relaunch();
+}
+
 async function getOnboardingNeeded() {
   try {
     const result = await commands.getOnboardingNeeded();

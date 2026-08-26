@@ -90,6 +90,12 @@ pub struct StartupLayout {
     pub migration: migrate::MigrationReport,
 }
 
+impl StartupLayout {
+    pub fn session_count(&self) -> usize {
+        self.scan.sessions.len()
+    }
+}
+
 #[derive(Debug)]
 pub enum StoreError {
     Io(String),
