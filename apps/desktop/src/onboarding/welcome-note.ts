@@ -5,15 +5,16 @@ import { createSession } from "~/session/queries";
 import { DEFAULT_USER_ID } from "~/shared/utils";
 import { commands } from "~/types/tauri.gen";
 
-const PENDING_WELCOME_SESSION_KEY = "fmtr.pending-welcome-session";
+const PENDING_WELCOME_SESSION_KEY = "loofah.pending-welcome-session";
+const LEGACY_PENDING_WELCOME_SESSION_KEY = "fmtr.pending-welcome-session";
 
-const WELCOME_NOTE = `Welcome to Free Meeting Transcriber 👋
-
-
-This note is a quick way to see how Free Meeting Transcriber works.
+const WELCOME_NOTE = `Welcome to Loofah 👋
 
 
-Click **Record** in the top-right corner and say a few sentences out loud — or let any audio play on your speakers. Free Meeting Transcriber will listen, transcribe the conversation on your machine, and turn it into notes just like a real meeting.
+This note is a quick way to see how Loofah works.
+
+
+Click **Record** in the top-right corner and say a few sentences out loud — or let any audio play on your speakers. Loofah will listen, transcribe the conversation on your machine, and turn it into notes just like a real meeting.
 
 
 When you stop recording, come back here to review the transcript and notes.`;
@@ -34,12 +35,16 @@ export function setPendingWelcomeSession(sessionId: string | null) {
     localStorage.setItem(PENDING_WELCOME_SESSION_KEY, sessionId);
   } else {
     localStorage.removeItem(PENDING_WELCOME_SESSION_KEY);
+    localStorage.removeItem(LEGACY_PENDING_WELCOME_SESSION_KEY);
   }
 }
 
 export function takePendingWelcomeSession(): string | null {
-  const sessionId = localStorage.getItem(PENDING_WELCOME_SESSION_KEY);
+  const sessionId =
+    localStorage.getItem(PENDING_WELCOME_SESSION_KEY) ??
+    localStorage.getItem(LEGACY_PENDING_WELCOME_SESSION_KEY);
   localStorage.removeItem(PENDING_WELCOME_SESSION_KEY);
+  localStorage.removeItem(LEGACY_PENDING_WELCOME_SESSION_KEY);
   return sessionId;
 }
 
@@ -54,7 +59,7 @@ async function findOrCreateWelcomeSession(): Promise<string> {
     return result.data.id;
   }
 
-  return createSession("Welcome to Free Meeting Transcriber", DEFAULT_USER_ID, {
+  return createSession("Welcome to Loofah", DEFAULT_USER_ID, {
     tracking_id: WELCOME_NOTE_TRACKING_ID,
     raw_md: JSON.stringify(md2json(WELCOME_NOTE)),
   });

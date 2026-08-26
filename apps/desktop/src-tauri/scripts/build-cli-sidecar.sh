@@ -11,15 +11,15 @@ target_dir="${CARGO_TARGET_DIR:-$repo_root/target}"
 
 cd "$repo_root"
 if [ "$triple" = "$host_triple" ]; then
-  cargo build --locked --release -p fmtr-cli
-  built="$target_dir/release/fmtr"
+  cargo build --locked --release -p loofah-cli
+  built="$target_dir/release/loofah"
 else
-  cargo build --locked --release -p fmtr-cli --target "$triple"
-  built="$target_dir/$triple/release/fmtr"
+  cargo build --locked --release -p loofah-cli --target "$triple"
+  built="$target_dir/$triple/release/loofah"
 fi
 
-install -m 755 "$built" "$src_tauri_dir/binaries/fmtr-$triple"
+install -m 755 "$built" "$src_tauri_dir/binaries/loofah-$triple"
 # Extra copy so the dev app (no externalBin in the dev config) finds the CLI
 # via embedded_cli.rs's resources/cli fallback.
-install -m 755 "$built" "$src_tauri_dir/resources/cli/fmtr-$triple"
-echo "[build-cli-sidecar] fmtr -> binaries/fmtr-$triple (+ resources/cli copy)"
+install -m 755 "$built" "$src_tauri_dir/resources/cli/loofah-$triple"
+echo "[build-cli-sidecar] loofah -> binaries/loofah-$triple (+ resources/cli copy)"

@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    fmtr_desktop_lib::main()
+    loofah_desktop_lib::main()
 }

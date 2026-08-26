@@ -53,14 +53,14 @@ pub struct ListMeetingsInput {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub struct GetMeetingInput {
-    #[schemars(description = "Free Meeting Transcriber meeting id")]
+    #[schemars(description = "Loofah meeting id")]
     pub meeting_id: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema, Type)]
 #[serde(rename_all = "snake_case")]
 pub struct GetMeetingTranscriptInput {
-    #[schemars(description = "Free Meeting Transcriber meeting id")]
+    #[schemars(description = "Loofah meeting id")]
     pub meeting_id: String,
 }
 

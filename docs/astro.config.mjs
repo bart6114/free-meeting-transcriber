@@ -6,13 +6,13 @@ import starlightLlmsTxt from "starlight-llms-txt";
 import { remarkChangelogBanner } from "./src/remark-changelog-banner.mjs";
 
 export default defineConfig({
-  site: "https://freemeetingtranscriber.com",
+  site: "https://loofah.io",
   markdown: {
     remarkPlugins: [remarkChangelogBanner],
   },
   integrations: [
     starlight({
-      title: "Free Meeting Transcriber",
+      title: "Loofah",
       description:
         "A local-first knowledge vault for notes, meetings, transcripts, and agent-created research.",
       logo: {
@@ -32,23 +32,19 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/bart6114/free-meeting-transcriber",
+          href: "https://github.com/bart6114/loofah",
         },
       ],
       editLink: {
-        baseUrl:
-          "https://github.com/bart6114/free-meeting-transcriber/edit/main/docs/",
+        baseUrl: "https://github.com/bart6114/loofah/edit/main/docs/",
       },
       sidebar: [
         {
           label: "Getting started",
-          items: [
-            { label: "Free Meeting Transcriber", link: "/" },
-            "quickstart",
-          ],
+          items: [{ label: "Loofah", link: "/" }, "quickstart"],
         },
         {
-          label: "Using Free Meeting Transcriber",
+          label: "Using Loofah",
           items: [
             "meetings",
             "automatic-capture",

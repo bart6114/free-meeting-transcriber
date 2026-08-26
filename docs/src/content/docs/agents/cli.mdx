@@ -1,6 +1,6 @@
 ---
 title: "CLI for agents"
-description: "Use fmtr to search the local knowledge vault and create notes from agent work or external sources."
+description: "Use loofah to search the local knowledge vault and create notes from agent work or external sources."
 ---
 
 Pass the global `--json` flag when software consumes CLI output. A successful response contains `schema_version`, `command`, `data`, and, for paginated commands, `pagination`.
@@ -8,8 +8,8 @@ Pass the global `--json` flag when software consumes CLI output. A successful re
 ## Find the session first
 
 ```bash
-fmtr --json sessions list --query "weekly planning" --limit 10
-fmtr --json sessions get SESSION_ID
+loofah --json sessions list --query "weekly planning" --limit 10
+loofah --json sessions get SESSION_ID
 ```
 
 List filtering matches titles and IDs without regard to case. For full-text search across notes, summaries, and transcripts, use `sessions search`. If several sessions match the user's request, ask which one they mean.
@@ -17,8 +17,8 @@ List filtering matches titles and IDs without regard to case. For full-text sear
 ## Read only what you need
 
 ```bash
-fmtr --json sessions note SESSION_ID --kind note
-fmtr --json sessions note SESSION_ID --kind summary
+loofah --json sessions note SESSION_ID --kind note
+loofah --json sessions note SESSION_ID --kind summary
 ```
 
 Use `sessions get` when you also need metadata or action items.
@@ -26,7 +26,7 @@ Use `sessions get` when you also need metadata or action items.
 ## Transcripts
 
 ```bash
-fmtr --json sessions transcript SESSION_ID
+loofah --json sessions transcript SESSION_ID
 ```
 
 This returns the complete speaker-labeled transcript in one response. Transcripts can be large, so do not request one unless the task needs it.
@@ -34,25 +34,25 @@ This returns the complete speaker-labeled transcript in one response. Transcript
 ## Check the setup
 
 ```bash
-fmtr --json doctor
+loofah --json doctor
 ```
 
 The report includes the CLI version, a `ready` flag, the resolved vault path, path health, and the number of sessions. It exits with status 1 when `ready` is false, while still writing the report to standard output.
 
-For a non-default vault, use `--vault-path DIR` or `FMTR_VAULT_PATH`.
+For a non-default vault, use `--vault-path DIR` or `LOOFAH_VAULT_PATH`.
 
 ## Store agent work
 
 ```bash
-fmtr --json sessions new --title "Weekly planning" --note notes.md --author claude-code
-fmtr --json sessions new --title "Research: payment providers" --note research.md --tag research --author claude-code --skill research-assistant
-fmtr --json sessions note SESSION_ID --append notes.md
-fmtr --json sessions attach SESSION_ID source-deck.pdf
-fmtr --json import recording.m4a --transcribe --author claude-code
-fmtr --json transcribe SESSION_ID
+loofah --json sessions new --title "Weekly planning" --note notes.md --author claude-code
+loofah --json sessions new --title "Research: payment providers" --note research.md --tag research --author claude-code --skill research-assistant
+loofah --json sessions note SESSION_ID --append notes.md
+loofah --json sessions attach SESSION_ID source-deck.pdf
+loofah --json import recording.m4a --transcribe --author claude-code
+loofah --json transcribe SESSION_ID
 ```
 
-`sessions new` creates a session and prints its ID; `--note` seeds the note body from a file or stdin (`-`). The session can stand alone as a note, with no recording or transcript. This lets an agent store a research brief, extracted deck insights, project context, or other useful output from any source it is authorized to access. The agent performs the source integration and supplies Markdown; `fmtr` provides the stable write path into the vault.
+`sessions new` creates a session and prints its ID; `--note` seeds the note body from a file or stdin (`-`). The session can stand alone as a note, with no recording or transcript. This lets an agent store a research brief, extracted deck insights, project context, or other useful output from any source it is authorized to access. The agent performs the source integration and supplies Markdown; `loofah` provides the stable write path into the vault.
 
 `sessions note --set` replaces the note body and `--append` extends it; both also accept `-` for stdin. `sessions attach` stores a source artifact beside the note. `import` creates a session from an audio file, and `--transcribe` chains on-device transcription. `transcribe` replaces the session's existing transcript, so run it only when the user wants that.
 
@@ -67,8 +67,8 @@ On-device transcription requires macOS on Apple Silicon and the on-device Soniqo
 ## Export only when asked
 
 ```bash
-fmtr sessions export SESSION_ID --format markdown --output session.md
-fmtr sessions export SESSION_ID --format json --output session.json
+loofah sessions export SESSION_ID --format markdown --output session.md
+loofah sessions export SESSION_ID --format json --output session.json
 ```
 
 Export refuses to replace an existing file. Pass `--force` only when the user has approved overwriting that exact path.

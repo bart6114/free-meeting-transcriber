@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="apps/desktop/src-tauri/icons/stable/128x128.png" width="128" alt="Free Meeting Transcriber app icon" />
+  <img src="apps/desktop/src-tauri/icons/stable/128x128.png" width="128" alt="Loofah app icon" />
 </p>
 
-<h1 align="center">Free Meeting Transcriber</h1>
+<h1 align="center">Loofah</h1>
 
 <p align="center">
-  <a href="https://github.com/bart6114/free-meeting-transcriber/releases/download/updater/FreeMeetingTranscriber_latest_aarch64.dmg"><img src="https://img.shields.io/badge/Download_for_macOS-Apple_Silicon-1b2a6b?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS (Apple Silicon)" /></a>
+  <a href="https://github.com/bart6114/loofah/releases/download/updater/Loofah_latest_aarch64.dmg"><img src="https://img.shields.io/badge/Download_for_macOS-Apple_Silicon-1b2a6b?style=for-the-badge&logo=apple&logoColor=white" alt="Download for macOS (Apple Silicon)" /></a>
 </p>
 
 I wanted a meeting notetaker that did a few things well: transcribe locally,
@@ -25,7 +25,7 @@ edges, but if you want the same kind of tool, I hope it is useful to you too.
 
 Download the signed and notarized Apple Silicon build using the button above.
 That link always points to the latest published version; previous versions are
-available on the [releases page](https://github.com/bart6114/free-meeting-transcriber/releases).
+available on the [releases page](https://github.com/bart6114/loofah/releases).
 You can also build it from source using the instructions below.
 
 Open the app, start a session, and join your meeting. The app records and
@@ -41,7 +41,7 @@ transcribes on your Mac, then saves the notes as Markdown in your vault.
   model with Ollama or LM Studio.
 - **No account or tracking.** Install the app and use it. There is nothing to
   sign up for.
-- **CLI and MCP support.** The included `fmtr` CLI and MCP server can give your
+- **CLI and MCP support.** The included `loofah` CLI and MCP server can give your
   scripts and coding agents read-only access to meeting notes.
 
 ## Development
@@ -56,7 +56,7 @@ To run it locally:
 ```sh
 pnpm install
 pnpm -F @hypr/desktop tauri:dev   # run the desktop app
-cargo build -p fmtr-cli            # build the fmtr CLI
+cargo build -p loofah-cli            # build the loofah CLI
 ```
 
 See [AGENTS.md](./AGENTS.md) for development notes, including formatting,

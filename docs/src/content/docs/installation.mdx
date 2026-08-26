@@ -1,19 +1,19 @@
 ---
 title: "Install the CLI"
-description: "Install fmtr and connect it to your local vault."
+description: "Install loofah and connect it to your local vault."
 ---
 
-The `fmtr` executable contains both the command-line interface and the MCP server.
+The `loofah` executable contains both the command-line interface and the MCP server.
 
 ## Install with one command
 
 On macOS or Linux, run:
 
 ```bash
-curl -fsSL https://freemeetingtranscriber.com/install.sh | bash
+curl -fsSL https://loofah.io/install.sh | bash
 ```
 
-The script downloads the latest release binary for your platform, verifies its checksum, and installs it to `~/.local/bin/fmtr`. It never asks for `sudo`. Set `FMTR_INSTALL_DIR` to install somewhere else.
+The script downloads the latest release binary for your platform, verifies its checksum, and installs it to `~/.local/bin/loofah`. It also installs `fmtr` as a compatibility alias for existing scripts and MCP configurations. It never asks for `sudo`. Set `LOOFAH_INSTALL_DIR` to install somewhere else; the previous `FMTR_INSTALL_DIR` name remains accepted.
 
 Supported platforms:
 
@@ -21,16 +21,16 @@ Supported platforms:
 - Linux on x86_64 and arm64 (glibc 2.35 or newer — Ubuntu 22.04, Debian 12, RHEL 9, or later; musl-based distributions such as Alpine are not supported)
 
 :::note
-On-device transcription (`fmtr transcribe`) runs only on Apple Silicon Macs. Every other command and the MCP server work on all supported platforms.
+On-device transcription (`loofah transcribe`) runs only on Apple Silicon Macs. Every other command and the MCP server work on all supported platforms.
 :::
 
 To upgrade, re-run the script. To uninstall, delete the binary:
 
 ```bash
-rm ~/.local/bin/fmtr
+rm ~/.local/bin/loofah ~/.local/bin/fmtr
 ```
 
-If the install directory is not on `PATH`, the script adds it to your shell profile (`~/.zshrc`, `~/.bashrc`/`~/.bash_profile`, or fish's `config.fish`) — restart your shell afterwards. If your shell still cannot find `fmtr`, add it manually:
+If the install directory is not on `PATH`, the script adds it to your shell profile (`~/.zshrc`, `~/.bashrc`/`~/.bash_profile`, or fish's `config.fish`) — restart your shell afterwards. If your shell still cannot find `loofah`, add it manually:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
@@ -42,10 +42,10 @@ Tarballs downloaded from the GitHub releases page with a browser are not notariz
 
 ## Install it from the desktop app
 
-On macOS, open **Settings → Developers** and click **Install**. The app installs the bundled command at `~/.local/bin/fmtr` — the same path the install script uses, so whichever ran last wins. Both ship the same binary.
+On macOS, open **Settings → Developers** and click **Install**. The app installs the bundled command at `~/.local/bin/loofah` — the same path the install script uses, so whichever ran last wins. Both ship the same binary.
 
 :::note
-The app uses `fmtr-dev` and `fmtr-staging` for development and staging builds, so those channels do not overwrite the stable command.
+The app uses `loofah-dev` and `loofah-staging` for development and staging builds, so those channels do not overwrite the stable command.
 :::
 
 ## Build it from source
@@ -53,10 +53,10 @@ The app uses `fmtr-dev` and `fmtr-staging` for development and staging builds, s
 You can install the CLI directly from the repository:
 
 ```bash
-git clone https://github.com/bart6114/free-meeting-transcriber.git
-cd free-meeting-transcriber
+git clone https://github.com/bart6114/loofah.git
+cd loofah
 cargo install --locked --path apps/cli
-fmtr --version
+loofah --version
 ```
 
 Cargo normally writes commands to `~/.cargo/bin`. Add that directory to `PATH` if needed.
@@ -65,20 +65,20 @@ There is no Homebrew formula or Windows package yet.
 
 ## Connect to the vault
 
-Open the desktop app at least once before using the CLI. By default, `fmtr` looks in Free Meeting Transcriber's application-data directory. If you moved the vault in the app, the CLI follows the `vault_path` value in `global.json`.
+Open the desktop app at least once before using the CLI. By default, `loofah` looks in Loofah's application-data directory. If you moved the vault in the app, the CLI follows the `vault_path` value in `global.json`.
 
 You can override the path for one command:
 
 ```bash
-fmtr --vault-path /path/to/vault --json sessions list
+loofah --vault-path /path/to/vault --json sessions list
 ```
 
 Or set it in the environment:
 
 ```bash
-FMTR_VAULT_PATH=/path/to/vault fmtr --json sessions list
+LOOFAH_VAULT_PATH=/path/to/vault loofah --json sessions list
 ```
 
 `--base /path/to/vault` is an older equivalent, but `--vault-path` is clearer and takes precedence when both are present.
 
-The CLI reads and writes the vault: `fmtr sessions new`, `fmtr import`, and `fmtr sessions note --set` create and edit meeting data in the same format the desktop app writes, and `fmtr transcribe` replaces a meeting's transcript. The MCP server stays read-only. See the [CLI reference](/reference/cli) for every command.
+The CLI reads and writes the vault: `loofah sessions new`, `loofah import`, and `loofah sessions note --set` create and edit meeting data in the same format the desktop app writes, and `loofah transcribe` replaces a meeting's transcript. The MCP server stays read-only. See the [CLI reference](/reference/cli) for every command.

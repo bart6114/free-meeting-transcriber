@@ -1,37 +1,17 @@
 #!/bin/zsh
-# Generate the Free Meeting Transcriber icon artwork and fan it out to every surface.
-# Design: five rounded waveform bars (audio), amber center bar (the moment of capture),
-# on a deep indigo->slate diagonal gradient. Reproducible via ImageMagick.
+# Generate the Loofah icon artwork and fan it out to every surface.
+# Design: the Loofah wheel mark in deep green on a warm cream-to-sage field.
 set -euo pipefail
 cd "$(dirname "$0")/.."   # src-tauri
 
-OUT_FULL=icons/src/fmt-fullbleed-1024.png     # full-bleed square (Icon Composer / actool input)
-OUT_SQUIRCLE=icons/src/fmt-squircle-1024.png  # pre-rounded with margins (tauri icon input)
+OUT_FULL=icons/src/loofah-fullbleed-1024.png     # full-bleed square (Icon Composer / actool input)
+OUT_SQUIRCLE=icons/src/loofah-squircle-1024.png  # pre-rounded with margins (tauri icon input)
+MARK=icons/src/loofah-mark-1024.png
 
-# --- 1. full-bleed artwork: tipsy beer mug ("free as in beer") -------------
-MUG=$(mktemp -d)/mug.png
-magick -size 1024x1024 xc:none \
-  -fill '#f59e0b' \
-  -draw 'roundrectangle 330,400 660,800 40,40' \
-  -draw 'roundrectangle 640,480 800,700 70,70' \
-  \( -size 1024x1024 xc:none -fill white -draw 'roundrectangle 696,528 748,652 26,26' \) -compose DstOut -composite -compose Over \
-  -fill '#fffbeb' \
-  -draw 'roundrectangle 353,560 389,660 18,18' \
-  -draw 'roundrectangle 415,530 451,690 18,18' \
-  -draw 'roundrectangle 477,495 513,725 18,18' \
-  -draw 'roundrectangle 539,530 575,690 18,18' \
-  -draw 'roundrectangle 601,560 637,660 18,18' \
-  -fill '#f8fafc' \
-  -draw 'roundrectangle 328,368 662,430 30,30' \
-  -draw 'circle 370,368 370,300' \
-  -draw 'circle 455,352 455,272' \
-  -draw 'circle 545,362 545,290' \
-  -draw 'circle 615,355 615,285' \
-  -draw 'ellipse 340,462 24,42 0,360' \
-  -draw 'circle 332,570 332,552' \
-  -background none -rotate -8 \
-  -gravity center -extent 1024x1024 "$MUG"
-magick -size 1024x1024 -define gradient:angle=135 gradient:'#312e81'-'#0f172a' "$MUG" -gravity center -composite "$OUT_FULL"
+# --- 1. full-bleed artwork --------------------------------------------------
+magick -size 1024x1024 -define gradient:angle=135 gradient:'#f7f2e8'-'#d8e4d6' \
+  \( "$MARK" -trim +repage -resize 720x720 \) \
+  -gravity center -composite "$OUT_FULL"
 
 # --- 2. squircle rendition (margins + shadow) for tauri icon ---------------
 magick "$OUT_FULL" -resize 824x824 \
@@ -59,12 +39,20 @@ done
 iconutil -c icns "$ICONSET" -o resources/stable-dark/AppIcon.icns
 
 # --- 6. DMG background -----------------------------------------------------
-magick -size 1320x800 -define gradient:angle=135 gradient:'#1e1b4b'-'#0f172a' \
+magick -size 1320x800 -define gradient:angle=135 gradient:'#f7f2e8'-'#d8e4d6' \
   \( "$OUT_SQUIRCLE" -resize 220x220 \) -gravity northwest -geometry +180+240 -composite \
-  -gravity northwest -fill '#f8fafc' -pointsize 44 -font /System/Library/Fonts/HelveticaNeue.ttc \
-  -annotate +180+540 'Free Meeting Transcriber' \
-  -fill '#94a3b8' -pointsize 24 -font /System/Library/Fonts/HelveticaNeue.ttc \
+  -gravity northwest -fill '#293529' -pointsize 44 -font /System/Library/Fonts/HelveticaNeue.ttc \
+  -annotate +180+540 'Loofah' \
+  -fill '#5f6f61' -pointsize 24 -font /System/Library/Fonts/HelveticaNeue.ttc \
   -annotate +180+600 'Drag to Applications to install' \
   assets/dmg-background-stable.png
+
+magick -size 1320x800 -define gradient:angle=135 gradient:'#eee8f5'-'#c9d9c7' \
+  \( "$OUT_SQUIRCLE" -resize 220x220 \) -gravity northwest -geometry +180+240 -composite \
+  -gravity northwest -fill '#293529' -pointsize 44 -font /System/Library/Fonts/HelveticaNeue.ttc \
+  -annotate +180+540 'Loofah Staging' \
+  -fill '#655d72' -pointsize 24 -font /System/Library/Fonts/HelveticaNeue.ttc \
+  -annotate +180+600 'Drag to Applications to install' \
+  assets/dmg-background-staging.png
 
 echo "icon fan-out complete"

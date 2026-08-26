@@ -56,7 +56,7 @@ it("creates a welcome note carrying the tracking marker", async () => {
   await expect(getOrCreateWelcomeSession()).resolves.toBe("welcome-session");
 
   const [title, , initial] = mocks.createSession.mock.calls[0];
-  expect(title).toBe("Welcome to Free Meeting Transcriber");
+  expect(title).toBe("Welcome to Loofah");
   expect(initial.tracking_id).toBe("fmtr-onboarding-demo-v1");
   expect(initial.raw_md).toContain(
     "transcribe the conversation on your machine",

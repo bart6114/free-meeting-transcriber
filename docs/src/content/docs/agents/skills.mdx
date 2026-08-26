@@ -1,12 +1,12 @@
 ---
-title: "Free Meeting Transcriber skill"
-description: "Install the repository skill that teaches agents to use fmtr safely."
+title: "Loofah skill"
+description: "Install the repository skill that teaches agents to use loofah safely."
 ---
 
 The public skill gives compatible agents a simple workflow:
 
-1. Use connected Free Meeting Transcriber MCP tools for reading when available.
-2. Fall back to `fmtr --json` when MCP is unavailable.
+1. Use connected Loofah MCP tools for reading when available.
+2. Fall back to `loofah --json` when MCP is unavailable.
 3. Resolve session IDs from list or search results.
 4. Read session details before requesting the full transcript.
 5. Write only through the CLI — create standalone knowledge notes, edit note bodies, attach source artifacts, import audio, and transcribe it — because the MCP server is read-only.
@@ -14,14 +14,14 @@ The public skill gives compatible agents a simple workflow:
 
 ## Source
 
-The maintained package is [`skills/fmtr`](https://github.com/bart6114/free-meeting-transcriber/tree/main/skills/fmtr). It includes references for setup, CLI commands, MCP tools, and errors.
+The maintained package is [`skills/loofah`](https://github.com/bart6114/loofah/tree/main/skills/loofah). It includes references for setup, CLI commands, MCP tools, and errors.
 
 ## Install it
 
-For an agent that loads skills from the filesystem, copy the complete `skills/fmtr` directory into that agent's skills directory. Keep the directory name `fmtr` so its relative links continue to work.
+For an agent that loads skills from the filesystem, copy the complete `skills/loofah` directory into that agent's skills directory. Keep the directory name `loofah` so its relative links continue to work.
 
 :::note
 Skill locations differ between clients. Follow your agent's installation instructions and copy the whole directory, not just `SKILL.md`.
 :::
 
-The skills under `.agents/skills` are contributor workflows for this repository. They are not part of the public `fmtr` skill.
+The skills under `.agents/skills` are contributor workflows for this repository. They are not part of the public `loofah` skill.

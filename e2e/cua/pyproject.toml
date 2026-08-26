@@ -1,5 +1,5 @@
 [project]
-name = "fmtr-e2e-cua"
+name = "loofah-e2e-cua"
 version = "0.1.0"
 description = ""
 authors = [{ name = "Yujong Lee", email = "yujonglee.dev@gmail.com" }]
@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [tool.poetry]
-name = "fmtr-e2e-cua"
+name = "loofah-e2e-cua"
 version = "0.1.0"
 package-mode = false
 

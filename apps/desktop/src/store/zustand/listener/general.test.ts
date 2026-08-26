@@ -116,7 +116,7 @@ describe("General Listener Slice", () => {
   beforeEach(() => {
     store = createListenerStore();
     vi.clearAllMocks();
-    getIdentifierMock.mockResolvedValue("org.freemeetingtranscriber.stable");
+    getIdentifierMock.mockResolvedValue("io.loofah.stable");
     getCaptureSnapshotMock.mockResolvedValue({
       status: "ok",
       data: {

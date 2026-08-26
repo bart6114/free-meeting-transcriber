@@ -1,6 +1,6 @@
 # chrome-native-host
 
-Rust binary that bridges the Chrome extension to the Char desktop app.
+Rust binary that bridges the Chrome extension to the Loofah desktop app.
 It is registered as a Chrome Native Messaging host, so Chrome spawns it as a subprocess and communicates over stdio.
 
 ## System diagram

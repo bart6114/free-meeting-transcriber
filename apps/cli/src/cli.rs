@@ -6,16 +6,16 @@ use hypr_agent_access::{DEFAULT_SEARCH_LIMIT, MAX_SEARCH_LIMIT, SearchKind};
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "fmtr",
-    version = env!("FMTR_VERSION"),
-    about = "Query and edit local Free Meeting Transcriber meeting data",
-    after_help = "Agent guidance lives in AGENTS.md at the vault root; run 'fmtr doctor' to see the vault path and restore the file if stale."
+    name = "loofah",
+    version = env!("LOOFAH_VERSION"),
+    about = "Query and edit local Loofah meeting data",
+    after_help = "Agent guidance lives in AGENTS.md at the vault root; run 'loofah doctor' to see the vault path and restore the file if stale. The legacy 'fmtr' command remains an alias."
 )]
 pub struct Args {
     #[arg(
         long,
         global = true,
-        env = "FMTR_BASE",
+        env = "LOOFAH_BASE",
         hide_env_values = true,
         value_name = "DIR"
     )]
@@ -24,7 +24,7 @@ pub struct Args {
     #[arg(
         long,
         global = true,
-        env = "FMTR_VAULT_PATH",
+        env = "LOOFAH_VAULT_PATH",
         hide_env_values = true,
         value_name = "DIR"
     )]
@@ -110,7 +110,7 @@ pub enum Command {
         /// Meeting id whose audio should be transcribed
         id: String,
     },
-    /// Run the read-only Free Meeting Transcriber MCP server over stdio
+    /// Run the read-only Loofah MCP server over stdio
     Mcp,
     /// Browse the vault's tag registry
     Tags {
@@ -356,7 +356,7 @@ mod tests {
     #[test]
     fn parses_meeting_list_filters() {
         let args = Args::parse_from([
-            "fmtr", "--json", "meetings", "list", "--query", "planning", "--limit", "10",
+            "loofah", "--json", "meetings", "list", "--query", "planning", "--limit", "10",
         ]);
 
         assert!(args.json);
@@ -373,7 +373,7 @@ mod tests {
     #[test]
     fn parses_sessions_command_as_primary_namespace() {
         let Command::Sessions { command } =
-            Args::parse_from(["fmtr", "sessions", "list", "--query", "planning"]).command
+            Args::parse_from(["loofah", "sessions", "list", "--query", "planning"]).command
         else {
             panic!("expected sessions command");
         };
@@ -386,7 +386,7 @@ mod tests {
     #[test]
     fn parses_meeting_list_tag_filters_and_their_conflict() {
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "meetings",
             "list",
             "--tag",
@@ -405,7 +405,7 @@ mod tests {
         assert!(!untagged);
 
         let Command::Sessions { command } =
-            Args::parse_from(["fmtr", "meetings", "list", "--untagged"]).command
+            Args::parse_from(["loofah", "meetings", "list", "--untagged"]).command
         else {
             panic!("expected meetings command");
         };
@@ -415,14 +415,15 @@ mod tests {
         ));
 
         assert!(
-            Args::try_parse_from(["fmtr", "meetings", "list", "--tag", "a", "--untagged"]).is_err()
+            Args::try_parse_from(["loofah", "meetings", "list", "--tag", "a", "--untagged"])
+                .is_err()
         );
     }
 
     #[test]
     fn parses_tag_edit_path_and_tags_list_commands() {
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "meetings",
             "tag",
             "add",
@@ -444,7 +445,8 @@ mod tests {
         assert_eq!(tags, vec!["#Hiring".to_string(), "project-x".to_string()]);
 
         let Command::Sessions { command } =
-            Args::parse_from(["fmtr", "meetings", "tag", "remove", "meeting-1", "hiring"]).command
+            Args::parse_from(["loofah", "meetings", "tag", "remove", "meeting-1", "hiring"])
+                .command
         else {
             panic!("expected meetings command");
         };
@@ -456,13 +458,14 @@ mod tests {
         ));
 
         // At least one tag is required, and blank tags are rejected at parse time.
-        assert!(Args::try_parse_from(["fmtr", "meetings", "tag", "add", "meeting-1"]).is_err());
+        assert!(Args::try_parse_from(["loofah", "meetings", "tag", "add", "meeting-1"]).is_err());
         assert!(
-            Args::try_parse_from(["fmtr", "meetings", "tag", "remove", "meeting-1", "  "]).is_err()
+            Args::try_parse_from(["loofah", "meetings", "tag", "remove", "meeting-1", "  "])
+                .is_err()
         );
 
         let Command::Sessions { command } =
-            Args::parse_from(["fmtr", "meetings", "path", "meeting-1"]).command
+            Args::parse_from(["loofah", "meetings", "path", "meeting-1"]).command
         else {
             panic!("expected meetings command");
         };
@@ -472,7 +475,7 @@ mod tests {
         ));
 
         assert!(matches!(
-            Args::parse_from(["fmtr", "tags", "list"]).command,
+            Args::parse_from(["loofah", "tags", "list"]).command,
             Command::Tags {
                 command: TagsCommand::List
             }
@@ -488,7 +491,7 @@ mod tests {
         assert!(help.contains("AGENTS.md at the vault root"));
 
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "meetings",
             "export",
             "meeting-1",
@@ -511,7 +514,7 @@ mod tests {
     #[test]
     fn parses_transcript_command() {
         let Command::Sessions { command } =
-            Args::parse_from(["fmtr", "meetings", "transcript", "meeting-1"]).command
+            Args::parse_from(["loofah", "meetings", "transcript", "meeting-1"]).command
         else {
             panic!("expected meetings command");
         };
@@ -524,7 +527,7 @@ mod tests {
     #[test]
     fn parses_search_filters_and_requires_query_or_speaker() {
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "meetings",
             "search",
             "--speaker",
@@ -552,13 +555,13 @@ mod tests {
         assert_eq!(limit, 20);
         assert_eq!(offset, 0);
 
-        assert!(Args::try_parse_from(["fmtr", "meetings", "search"]).is_err());
+        assert!(Args::try_parse_from(["loofah", "meetings", "search"]).is_err());
     }
 
     #[test]
     fn parses_new_command_with_note_source() {
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr", "meetings", "new", "--title", "Planning", "--note", "-",
+            "loofah", "meetings", "new", "--title", "Planning", "--note", "-",
         ])
         .command
         else {
@@ -570,13 +573,13 @@ mod tests {
         assert_eq!(title, "Planning");
         assert_eq!(note.as_deref(), Some(Path::new("-")));
 
-        assert!(Args::try_parse_from(["fmtr", "meetings", "new"]).is_err());
+        assert!(Args::try_parse_from(["loofah", "meetings", "new"]).is_err());
     }
 
     #[test]
     fn parses_new_timestamps_normalized_to_utc_and_repeatable_tags() {
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "meetings",
             "new",
             "--title",
@@ -618,7 +621,7 @@ mod tests {
     fn rejects_invalid_timestamps_and_empty_tags_at_parse_time() {
         assert!(
             Args::try_parse_from([
-                "fmtr",
+                "loofah",
                 "meetings",
                 "new",
                 "--title",
@@ -630,7 +633,7 @@ mod tests {
         );
         assert!(
             Args::try_parse_from([
-                "fmtr",
+                "loofah",
                 "meetings",
                 "new",
                 "--title",
@@ -641,8 +644,10 @@ mod tests {
             .is_err()
         );
         assert!(
-            Args::try_parse_from(["fmtr", "meetings", "new", "--title", "Retro", "--tag", "  "])
-                .is_err()
+            Args::try_parse_from([
+                "loofah", "meetings", "new", "--title", "Retro", "--tag", "  "
+            ])
+            .is_err()
         );
     }
 
@@ -650,7 +655,7 @@ mod tests {
     fn note_edit_flags_are_mutually_exclusive_and_conflict_with_kind() {
         assert!(
             Args::try_parse_from([
-                "fmtr",
+                "loofah",
                 "meetings",
                 "note",
                 "meeting-1",
@@ -663,7 +668,7 @@ mod tests {
         );
         assert!(
             Args::try_parse_from([
-                "fmtr",
+                "loofah",
                 "meetings",
                 "note",
                 "meeting-1",
@@ -676,7 +681,7 @@ mod tests {
         );
 
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "meetings",
             "note",
             "meeting-1",
@@ -700,7 +705,7 @@ mod tests {
     #[test]
     fn parses_attach_with_and_without_name_override() {
         let Command::Sessions { command } =
-            Args::parse_from(["fmtr", "meetings", "attach", "meeting-1", "diagram.png"]).command
+            Args::parse_from(["loofah", "meetings", "attach", "meeting-1", "diagram.png"]).command
         else {
             panic!("expected meetings command");
         };
@@ -712,7 +717,7 @@ mod tests {
         assert_eq!(name, None);
 
         let Command::Sessions { command } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "meetings",
             "attach",
             "meeting-1",
@@ -729,7 +734,7 @@ mod tests {
         };
         assert_eq!(name.as_deref(), Some("Q1 report.pdf"));
 
-        assert!(Args::try_parse_from(["fmtr", "meetings", "attach", "meeting-1"]).is_err());
+        assert!(Args::try_parse_from(["loofah", "meetings", "attach", "meeting-1"]).is_err());
     }
 
     #[test]
@@ -740,7 +745,7 @@ mod tests {
             into,
             transcribe,
             ..
-        } = Args::parse_from(["fmtr", "import", "meeting.m4a"]).command
+        } = Args::parse_from(["loofah", "import", "meeting.m4a"]).command
         else {
             panic!("expected import command");
         };
@@ -750,19 +755,19 @@ mod tests {
         assert!(!transcribe);
 
         let Command::Import { title, .. } =
-            Args::parse_from(["fmtr", "import", "meeting.m4a", "--title", "Weekly sync"]).command
+            Args::parse_from(["loofah", "import", "meeting.m4a", "--title", "Weekly sync"]).command
         else {
             panic!("expected import command");
         };
         assert_eq!(title.as_deref(), Some("Weekly sync"));
 
-        assert!(Args::try_parse_from(["fmtr", "import"]).is_err());
+        assert!(Args::try_parse_from(["loofah", "import"]).is_err());
     }
 
     #[test]
     fn parses_import_into_and_rejects_combining_it_with_title() {
         let Command::Import { into, .. } =
-            Args::parse_from(["fmtr", "import", "meeting.m4a", "--into", "meeting-1"]).command
+            Args::parse_from(["loofah", "import", "meeting.m4a", "--into", "meeting-1"]).command
         else {
             panic!("expected import command");
         };
@@ -771,7 +776,7 @@ mod tests {
         // The target meeting already has a title; the two flags are exclusive.
         assert!(
             Args::try_parse_from([
-                "fmtr",
+                "loofah",
                 "import",
                 "meeting.m4a",
                 "--into",
@@ -786,7 +791,7 @@ mod tests {
     #[test]
     fn import_timestamps_only_apply_to_new_meetings() {
         let Command::Import { created_at, .. } = Args::parse_from([
-            "fmtr",
+            "loofah",
             "import",
             "meeting.m4a",
             "--created-at",
@@ -803,7 +808,7 @@ mod tests {
         for flag in ["--created-at", "--started-at", "--ended-at"] {
             assert!(
                 Args::try_parse_from([
-                    "fmtr",
+                    "loofah",
                     "import",
                     "meeting.m4a",
                     "--into",
@@ -819,26 +824,26 @@ mod tests {
     #[test]
     fn parses_import_transcribe_flag_and_transcribe_command() {
         let Command::Import { transcribe, .. } =
-            Args::parse_from(["fmtr", "import", "meeting.m4a", "--transcribe"]).command
+            Args::parse_from(["loofah", "import", "meeting.m4a", "--transcribe"]).command
         else {
             panic!("expected import command");
         };
         assert!(transcribe);
 
         let Command::Transcribe { id } =
-            Args::parse_from(["fmtr", "transcribe", "meeting-1"]).command
+            Args::parse_from(["loofah", "transcribe", "meeting-1"]).command
         else {
             panic!("expected transcribe command");
         };
         assert_eq!(id, "meeting-1");
 
-        assert!(Args::try_parse_from(["fmtr", "transcribe"]).is_err());
+        assert!(Args::try_parse_from(["loofah", "transcribe"]).is_err());
     }
 
     #[test]
     fn export_force_requires_an_output_path() {
         assert!(
-            Args::try_parse_from(["fmtr", "meetings", "export", "meeting-1", "--force"]).is_err()
+            Args::try_parse_from(["loofah", "meetings", "export", "meeting-1", "--force"]).is_err()
         );
     }
 
@@ -846,8 +851,8 @@ mod tests {
     fn public_docs_and_skill_cover_the_command_contract() {
         let docs = include_str!("../../../docs/src/content/docs/reference/cli.mdx");
         let skill = concat!(
-            include_str!("../../../skills/fmtr/references/cli.md"),
-            include_str!("../../../skills/fmtr/references/setup.md"),
+            include_str!("../../../skills/loofah/references/cli.md"),
+            include_str!("../../../skills/loofah/references/setup.md"),
         );
         let command = Args::command();
         let mut paths = Vec::new();
@@ -857,7 +862,7 @@ mod tests {
 
         for path in paths {
             assert!(docs.contains(&path), "CLI docs are missing `{path}`");
-            assert!(skill.contains(&path), "fmtr skill is missing `{path}`");
+            assert!(skill.contains(&path), "loofah skill is missing `{path}`");
             assert!(
                 vault_agents.contains(&path),
                 "vault AGENTS.md page is missing `{path}`"

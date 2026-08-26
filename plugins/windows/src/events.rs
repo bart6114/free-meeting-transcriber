@@ -119,12 +119,12 @@ mod test {
     fn navigate_from_str() {
         let test_cases = vec![
             (
-                "freemeetingtranscriber://freemeetingtranscriber/app/new?calendarEventId=123&record=true",
+                "loofah://loofah/app/new?calendarEventId=123&record=true",
                 "/app/new",
                 Some(serde_json::json!({ "calendarEventId": "123", "record": "true" })),
             ),
             (
-                "freemeetingtranscriber://freemeetingtranscriber/app/new?record=true",
+                "loofah://loofah/app/new?record=true",
                 "/app/new",
                 Some(serde_json::json!({ "record": "true" })),
             ),

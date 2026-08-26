@@ -10,10 +10,15 @@ pub struct TrayVersion;
 impl TrayVersion {
     fn get_channel(identifier: &str, app_name: &str) -> &'static str {
         match identifier {
+            "io.loofah.stable" => "stable",
+            "io.loofah.staging" => "staging",
+            "io.loofah.dev" => "dev",
             "org.freemeetingtranscriber.stable" => "stable",
             "org.freemeetingtranscriber.staging" => "staging",
             "org.freemeetingtranscriber.dev" => "dev",
             _ => match app_name {
+                "Loofah" => "stable",
+                "Loofah Staging" => "staging",
                 "Free Meeting Transcriber" => "stable",
                 "Free Meeting Transcriber Staging" => "staging",
                 _ => "dev",
@@ -46,41 +51,26 @@ mod tests {
     #[test]
     fn gets_channel_from_identifier() {
         assert_eq!(
-            TrayVersion::get_channel(
-                "org.freemeetingtranscriber.stable",
-                "Free Meeting Transcriber"
-            ),
+            TrayVersion::get_channel("io.loofah.stable", "Loofah"),
             "stable"
         );
         assert_eq!(
-            TrayVersion::get_channel(
-                "org.freemeetingtranscriber.staging",
-                "Free Meeting Transcriber Staging"
-            ),
+            TrayVersion::get_channel("io.loofah.staging", "Loofah Staging"),
             "staging"
         );
         assert_eq!(
-            TrayVersion::get_channel(
-                "org.freemeetingtranscriber.dev",
-                "Free Meeting Transcriber Dev"
-            ),
+            TrayVersion::get_channel("io.loofah.dev", "Loofah Dev"),
             "dev"
         );
     }
 
     #[test]
     fn falls_back_to_product_name_for_unknown_identifier() {
+        assert_eq!(TrayVersion::get_channel("unknown", "Loofah"), "stable");
         assert_eq!(
-            TrayVersion::get_channel("unknown", "Free Meeting Transcriber"),
-            "stable"
-        );
-        assert_eq!(
-            TrayVersion::get_channel("unknown", "Free Meeting Transcriber Staging"),
+            TrayVersion::get_channel("unknown", "Loofah Staging"),
             "staging"
         );
-        assert_eq!(
-            TrayVersion::get_channel("unknown", "Free Meeting Transcriber Dev"),
-            "dev"
-        );
+        assert_eq!(TrayVersion::get_channel("unknown", "Loofah Dev"), "dev");
     }
 }

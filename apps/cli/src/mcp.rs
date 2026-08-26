@@ -13,7 +13,7 @@ use crate::Error;
 use hypr_agent_access as access;
 
 #[derive(Clone)]
-struct FmtrMcpServer {
+struct LoofahMcpServer {
     vault: Arc<PathBuf>,
 }
 
@@ -23,7 +23,7 @@ enum ResourceRequest {
     Transcript { meeting_id: String },
 }
 
-impl FmtrMcpServer {
+impl LoofahMcpServer {
     fn new(vault: PathBuf) -> Self {
         Self {
             vault: Arc::new(vault),
@@ -32,9 +32,9 @@ impl FmtrMcpServer {
 }
 
 #[tool_router]
-impl FmtrMcpServer {
+impl LoofahMcpServer {
     #[tool(
-        description = "List recent Free Meeting Transcriber meetings with pagination metadata. Use query to narrow by title or meeting id, then pass next_offset as offset to continue.",
+        description = "List recent Loofah meetings with pagination metadata. Use query to narrow by title or meeting id, then pass next_offset as offset to continue.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -53,7 +53,7 @@ impl FmtrMcpServer {
     }
 
     #[tool(
-        description = "Get one Free Meeting Transcriber meeting with its canonical note, summaries, and action items. Use get_meeting_transcript separately for transcript words.",
+        description = "Get one Loofah meeting with its canonical note, summaries, and action items. Use get_meeting_transcript separately for transcript words.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -72,7 +72,7 @@ impl FmtrMcpServer {
     }
 
     #[tool(
-        description = "Get the full transcript of a Free Meeting Transcriber meeting as readable text: one '[HH:MM:SS] Speaker: ...' line per speaker turn, timed from the start of the meeting.",
+        description = "Get the full transcript of a Loofah meeting as readable text: one '[HH:MM:SS] Speaker: ...' line per speaker turn, timed from the start of the meeting.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -91,7 +91,7 @@ impl FmtrMcpServer {
     }
 
     #[tool(
-        description = "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a start_ms that matches the transcript's [HH:MM:SS] timestamps.",
+        description = "Full-text search across Loofah meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a start_ms that matches the transcript's [HH:MM:SS] timestamps.",
         annotations(
             read_only_hint = true,
             destructive_hint = false,
@@ -111,7 +111,7 @@ impl FmtrMcpServer {
 }
 
 #[tool_handler]
-impl ServerHandler for FmtrMcpServer {
+impl ServerHandler for LoofahMcpServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(
             ServerCapabilities::builder()
@@ -121,11 +121,11 @@ impl ServerHandler for FmtrMcpServer {
         )
         .with_protocol_version(ProtocolVersion::V_2024_11_05)
         .with_server_info(Implementation::new(
-            "fmtr",
-            env!("FMTR_VERSION"),
+            "loofah",
+            env!("LOOFAH_VERSION"),
         ))
         .with_instructions(
-            "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Call get_meeting_transcript for the full transcript as speaker-labeled '[HH:MM:SS] Speaker: ...' lines. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a start_ms that lines up with the transcript's timestamps. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+            "Read-only, local access to Loofah meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Call get_meeting_transcript for the full transcript as speaker-labeled '[HH:MM:SS] Speaker: ...' lines. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a start_ms that lines up with the transcript's timestamps. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/loofah",
         )
     }
 
@@ -166,8 +166,8 @@ impl ServerHandler for FmtrMcpServer {
                 } else {
                     meeting.title
                 };
-                RawResource::new(format!("fmtr://meetings/{}", meeting.id), name)
-                    .with_description("Free Meeting Transcriber meeting context")
+                RawResource::new(format!("loofah://meetings/{}", meeting.id), name)
+                    .with_description("Loofah meeting context")
                     .with_mime_type("text/markdown")
                     .no_annotation()
             })
@@ -188,16 +188,13 @@ impl ServerHandler for FmtrMcpServer {
         use rmcp::model::AnnotateAble;
 
         Ok(ListResourceTemplatesResult::with_all_items(vec![
+            RawResourceTemplate::new("loofah://meetings/{meeting_id}", "Loofah meeting")
+                .with_description("Meeting metadata, note, summaries, and action items")
+                .with_mime_type("text/markdown")
+                .no_annotation(),
             RawResourceTemplate::new(
-                "fmtr://meetings/{meeting_id}",
-                "Free Meeting Transcriber meeting",
-            )
-            .with_description("Meeting metadata, note, summaries, and action items")
-            .with_mime_type("text/markdown")
-            .no_annotation(),
-            RawResourceTemplate::new(
-                "fmtr://meetings/{meeting_id}/transcript",
-                "Free Meeting Transcriber meeting transcript",
+                "loofah://meetings/{meeting_id}/transcript",
+                "Loofah meeting transcript",
             )
             .with_description("The full speaker-labeled meeting transcript")
             .with_mime_type("text/plain")
@@ -236,7 +233,7 @@ impl ServerHandler for FmtrMcpServer {
 }
 
 pub async fn serve(vault: PathBuf) -> crate::Result<()> {
-    let running = FmtrMcpServer::new(vault)
+    let running = LoofahMcpServer::new(vault)
         .serve(rmcp::transport::stdio())
         .await
         .map_err(|error| Error::operation("start MCP server", error.to_string()))?;
@@ -250,9 +247,9 @@ pub async fn serve(vault: PathBuf) -> crate::Result<()> {
 fn parse_resource_uri(uri: &str) -> std::result::Result<ResourceRequest, McpError> {
     let url =
         url::Url::parse(uri).map_err(|_| McpError::invalid_params("invalid resource URI", None))?;
-    if url.scheme() != "fmtr" {
+    if !matches!(url.scheme(), "loofah" | "fmtr") {
         return Err(McpError::invalid_params(
-            "resource URI must use the fmtr scheme",
+            "resource URI must use the loofah or legacy fmtr scheme",
             None,
         ));
     }
@@ -327,15 +324,21 @@ mod tests {
     #[test]
     fn parses_supported_resource_uris() {
         assert_eq!(
-            parse_resource_uri("fmtr://meetings/meeting-1").unwrap(),
+            parse_resource_uri("loofah://meetings/meeting-1").unwrap(),
             ResourceRequest::Meeting {
                 meeting_id: "meeting-1".to_string()
             }
         );
         assert_eq!(
-            parse_resource_uri("fmtr://meetings/meeting-1/transcript").unwrap(),
+            parse_resource_uri("loofah://meetings/meeting-1/transcript").unwrap(),
             ResourceRequest::Transcript {
                 meeting_id: "meeting-1".to_string(),
+            }
+        );
+        assert_eq!(
+            parse_resource_uri("fmtr://meetings/meeting-1").unwrap(),
+            ResourceRequest::Meeting {
+                meeting_id: "meeting-1".to_string()
             }
         );
         assert!(parse_resource_uri("file:///tmp/meeting").is_err());
@@ -344,19 +347,19 @@ mod tests {
     #[tokio::test]
     async fn server_advertises_tools_and_resources() {
         let vault = tempfile::tempdir().unwrap();
-        let info = FmtrMcpServer::new(vault.path().to_path_buf()).get_info();
+        let info = LoofahMcpServer::new(vault.path().to_path_buf()).get_info();
         assert!(info.capabilities.tools.is_some());
         assert!(info.capabilities.resources.is_some());
         let instructions = info.instructions.unwrap();
         assert!(instructions.contains("Start with list_meetings"));
-        assert!(instructions.contains("https://github.com/bart6114/free-meeting-transcriber"));
+        assert!(instructions.contains("https://github.com/bart6114/loofah"));
         assert!(instructions.contains("performs no writes"));
     }
 
     #[tokio::test]
     async fn list_tool_returns_structured_meeting_data() {
         let vault = seed_vault_with_meeting();
-        let server = FmtrMcpServer::new(vault.path().to_path_buf());
+        let server = LoofahMcpServer::new(vault.path().to_path_buf());
 
         let result = server
             .list_meetings(Parameters(access::ListMeetingsInput {
@@ -376,7 +379,7 @@ mod tests {
     #[tokio::test]
     async fn search_tool_returns_structured_hits_and_rejects_empty_input() {
         let vault = seed_vault_with_meeting();
-        let server = FmtrMcpServer::new(vault.path().to_path_buf());
+        let server = LoofahMcpServer::new(vault.path().to_path_buf());
 
         let result = server
             .search_meetings(Parameters(access::SearchMeetingsInput {
@@ -401,7 +404,7 @@ mod tests {
     async fn client_server_handshake_lists_tools_and_resources() {
         let vault = seed_vault_with_meeting();
         let (server_transport, client_transport) = tokio::io::duplex(64 * 1024);
-        let server = FmtrMcpServer::new(vault.path().to_path_buf());
+        let server = LoofahMcpServer::new(vault.path().to_path_buf());
         let info = server.get_info();
         let server_handle = tokio::spawn(async move { server.serve(server_transport).await });
 
@@ -434,7 +437,7 @@ mod tests {
             ]
         );
         let mcp_docs = include_str!("../../../docs/src/content/docs/reference/mcp.mdx");
-        let mcp_skill = include_str!("../../../skills/fmtr/references/mcp.md");
+        let mcp_skill = include_str!("../../../skills/loofah/references/mcp.md");
         for tool_name in &tool_names {
             assert!(
                 mcp_docs.contains(tool_name),
@@ -442,7 +445,7 @@ mod tests {
             );
             assert!(
                 mcp_skill.contains(tool_name),
-                "fmtr skill is missing `{tool_name}`"
+                "loofah skill is missing `{tool_name}`"
             );
         }
         for tool in tools {
@@ -479,24 +482,24 @@ mod tests {
             template_contract,
             [
                 (
-                    "Free Meeting Transcriber meeting".to_string(),
-                    "fmtr://meetings/{meeting_id}".to_string(),
+                    "Loofah meeting".to_string(),
+                    "loofah://meetings/{meeting_id}".to_string(),
                     None,
                 ),
                 (
-                    "Free Meeting Transcriber meeting transcript".to_string(),
-                    "fmtr://meetings/{meeting_id}/transcript".to_string(),
+                    "Loofah meeting transcript".to_string(),
+                    "loofah://meetings/{meeting_id}/transcript".to_string(),
                     None,
                 ),
             ]
         );
         for (_, uri, _) in &template_contract {
             assert!(mcp_docs.contains(uri), "MCP docs are missing `{uri}`");
-            assert!(mcp_skill.contains(uri), "fmtr skill is missing `{uri}`");
+            assert!(mcp_skill.contains(uri), "loofah skill is missing `{uri}`");
         }
         assert_eq!(resources.len(), 1);
         assert_eq!(resources[0].raw.name, "Planning");
-        assert_eq!(resources[0].raw.uri, "fmtr://meetings/meeting-1");
+        assert_eq!(resources[0].raw.uri, "loofah://meetings/meeting-1");
         assert!(resources[0].annotations.is_none());
 
         client.cancel().await.unwrap();

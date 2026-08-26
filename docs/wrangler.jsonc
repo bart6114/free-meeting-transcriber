@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "fmtr-docs",
+  "name": "loofah-docs",
   "compatibility_date": "2026-08-01",
   // Static-assets-only Worker: no script, Cloudflare serves ./dist directly.
   "assets": {
@@ -9,10 +9,5 @@
     "not_found_handling": "404-page",
   },
   "workers_dev": true,
-  // Requires the freemeetingtranscriber.com zone to exist in the Cloudflare
-  // account before deploy; remove these lines to deploy to workers.dev only.
-  "routes": [
-    { "pattern": "freemeetingtranscriber.com", "custom_domain": true },
-    { "pattern": "www.freemeetingtranscriber.com", "custom_domain": true },
-  ],
+  "routes": [{ "pattern": "loofah.io", "custom_domain": true }],
 }

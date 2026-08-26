@@ -8,14 +8,14 @@ description: Use when running, restarting, or resetting the desktop dev app, whe
 Run: `pnpm -F @hypr/desktop tauri:dev` (first Rust build is slow; later ones ~10s).
 
 Cargo builds `target/debug/desktop`, but on macOS `dev-runner.mjs` hardlinks it to
-`target/debug/Free Meeting Transcriber Dev` and runs that, so the Dock shows the
+`target/debug/Loofah Dev` and runs that, so the Dock shows the
 product name — the running process is the hardlink, not `desktop`.
 
 ## Where state actually lives
 
 Dev builds use the **raw bundle id** as the folder name; release builds use
-`free-meeting-transcriber` (`crates/storage/src/global.rs:19`). For dev that means
-`~/Library/Application Support/org.freemeetingtranscriber.dev/`.
+`loofah` (`crates/storage/src/global.rs:19`). For dev that means
+`~/Library/Application Support/io.loofah.dev/`.
 
 | What | Where | Notes |
 |---|---|---|
@@ -48,7 +48,7 @@ to it. `models/llm/` is for summaries only and is irrelevant to transcription.
 theorising about a missing recording, transcript, or summary.
 
 ```bash
-grep -iE "error|warn|stt|transcri|session_" ~/Library/Logs/org.freemeetingtranscriber.dev/app.log | tail -40
+grep -iE "error|warn|stt|transcri|session_" ~/Library/Logs/io.loofah.dev/app.log | tail -40
 ```
 
 ## Clean-slate reset
@@ -56,8 +56,8 @@ grep -iE "error|warn|stt|transcri|session_" ~/Library/Logs/org.freemeetingtransc
 Move the state aside rather than deleting it — recordings are unrecoverable otherwise.
 
 ```bash
-pkill -f "target/debug/Free Meeting Transcriber Dev"; pkill -f "tauri dev"
-mv ~/Library/Application\ Support/org.freemeetingtranscriber.dev ~/fmtr-backup-$(date +%s)
+pkill -f "target/debug/Loofah Dev"; pkill -f "tauri dev"
+mv ~/Library/Application\ Support/io.loofah.dev ~/loofah-backup-$(date +%s)
 ```
 
 The Soniqo model cache is **not** under that path, so a reset costs no re-download — but
@@ -70,4 +70,4 @@ The Soniqo model cache is **not** under that path, so a reset costs no re-downlo
   neither `fmt` nor a CI `check` catches it. Always `source "$HOME/.cargo/env"` first.
 - **`cargo check` regenerates `apps/desktop/src/types/tauri.gen.ts` unformatted**, producing
   a ~500-line phantom diff. If the command/type sets are unchanged, `git checkout` it.
-- Desktop crate is `desktop` (lib `fmtr_desktop_lib`): `cargo test -p desktop --lib`.
+- Desktop crate is `desktop` (lib `loofah_desktop_lib`): `cargo test -p desktop --lib`.

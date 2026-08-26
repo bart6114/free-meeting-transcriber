@@ -1,21 +1,21 @@
 ---
 title: "CLI reference"
-description: "Commands and global options available in the Free Meeting Transcriber CLI."
+description: "Commands and global options available in the Loofah CLI."
 ---
 
 ## Global syntax
 
 ```text
-fmtr [--base DIR] [--vault-path DIR] [--json] <command>
+loofah [--base DIR] [--vault-path DIR] [--json] <command>
 ```
 
 | Option | Environment variable | Behavior |
 | --- | --- | --- |
-| `--base DIR` | `FMTR_BASE` | Use `DIR` as the vault directory. |
-| `--vault-path DIR` | `FMTR_VAULT_PATH` | Use an explicit vault directory. |
+| `--base DIR` | `LOOFAH_BASE` | Use `DIR` as the vault directory. |
+| `--vault-path DIR` | `LOOFAH_VAULT_PATH` | Use an explicit vault directory. |
 | `--json` | None | Emit a versioned JSON response or machine-readable JSON error. |
 
-`--vault-path` takes precedence over `--base`. Without either option, the CLI uses Free Meeting Transcriber's platform application-data directory, following the `vault_path` redirect in its `global.json` when the vault has been relocated.
+`--vault-path` takes precedence over `--base`. Without either option, the CLI uses Loofah's platform application-data directory, following the `vault_path` redirect in its `global.json` when the vault has been relocated.
 
 ## Session commands
 
@@ -38,7 +38,7 @@ fmtr [--base DIR] [--vault-path DIR] [--json] <command>
 ## Tags command
 
 ```bash
-fmtr tags list
+loofah tags list
 ```
 
 Lists every tag registered in the vault's `tags.json`, one name per line (`--json` returns each tag's `id` and `name`). The registry is append-only: tags stay listed after the last meeting carrying them loses the tag.
@@ -46,9 +46,9 @@ Lists every tag registered in the vault's `tags.json`, one name per line (`--jso
 ## Import command
 
 ```bash
-fmtr import recording.m4a --title "Weekly sync"
-fmtr import recording.m4a --transcribe
-fmtr import recording.m4a --into MEETING_ID
+loofah import recording.m4a --title "Weekly sync"
+loofah import recording.m4a --transcribe
+loofah import recording.m4a --into MEETING_ID
 ```
 
 Creates a meeting from an audio file and prints its id. The audio is converted to the vault's 16 kHz MP3 format, exactly as the desktop app's import does, so a running app picks the meeting up automatically. Accepts `wav`, `mp3`, `ogg`, `mp4`, `m4a`, `flac`, `webm`, and `aac` files; `--title` defaults to the audio file's name.
@@ -62,7 +62,7 @@ With `--transcribe`, the imported audio is transcribed immediately (see the tran
 ## Transcribe command
 
 ```bash
-fmtr transcribe MEETING_ID
+loofah transcribe MEETING_ID
 ```
 
 Transcribes the meeting's audio recording on-device with the speech-to-text model configured in the desktop app and replaces the meeting's transcript, exactly as the app's own batch transcription does. Prints the new transcript id (`--json` returns the meeting id plus a `transcript` object). Progress is written to stderr. The app's audio retention setting is honored: with retention set to "none", the recording is deleted as soon as the transcript is saved, just like in the app.
@@ -85,7 +85,7 @@ Pagination includes `offset`, `limit`, `returned`, optional `total`, and optiona
 ## Doctor command
 
 ```bash
-fmtr --json doctor
+loofah --json doctor
 ```
 
 Checks the resolved vault path and read access to its sessions without changing meeting data.
@@ -95,7 +95,7 @@ Inside a vault it also restores the root [`AGENTS.md` agent guide](/agents/vault
 ## MCP command
 
 ```bash
-fmtr mcp
+loofah mcp
 ```
 
 Starts the read-only MCP server over stdio. Do not write other output to the server's stdout.
@@ -103,8 +103,8 @@ Starts the read-only MCP server over stdio. Do not write other output to the ser
 ## Help and version
 
 ```bash
-fmtr --help
-fmtr sessions --help
-fmtr sessions list --help
-fmtr --version
+loofah --help
+loofah sessions --help
+loofah sessions list --help
+loofah --version
 ```

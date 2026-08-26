@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{SessionStore, StoreError, WriteGuard, paths, validate_doc_id, validate_session_id};
 
-// The `tasks.json` schema is shared with the read-only vault consumers (fmtr CLI/MCP);
+// The `tasks.json` schema is shared with the read-only vault consumers (loofah CLI/MCP);
 // the types live in `hypr-vault-read` so both sides parse the same shape.
 pub use hypr_vault_read::{TaskItem, TasksFile};
 

@@ -370,7 +370,7 @@ fn sha256(bytes: &[u8]) -> String {
 }
 
 // The legacy-exporter frontmatter strip is shared with the read-only vault consumers
-// (fmtr CLI/MCP); see `hypr_vault_read::strip_leading_frontmatter` for the full rationale.
+// (loofah CLI/MCP); see `hypr_vault_read::strip_leading_frontmatter` for the full rationale.
 pub(crate) use hypr_vault_read::strip_leading_frontmatter;
 
 #[cfg(test)]

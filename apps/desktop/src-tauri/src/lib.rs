@@ -1,7 +1,9 @@
 mod appearance;
+mod autostart;
 mod commands;
 mod embedded_cli;
 mod ext;
+mod identifier_migration;
 mod legacy_db;
 mod recording_meta;
 mod search_index;
@@ -21,7 +23,7 @@ use tauri_plugin_permissions::{Permission, PermissionsPluginExt};
 use tauri_plugin_windows::{AppWindow, WindowsPluginExt};
 
 #[cfg(any(feature = "dev", feature = "devtools", feature = "staging"))]
-const STAGING_BUNDLE_ID: &str = "org.freemeetingtranscriber.staging";
+const STAGING_BUNDLE_ID: &str = "io.loofah.staging";
 
 const APP_EXIT_REQUESTED_EVENT: &str = "app-exit-requested";
 static EXIT_FLUSH_COMPLETE: AtomicBool = AtomicBool::new(false);
@@ -189,7 +191,6 @@ pub async fn main() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_tracing::init())
         .plugin(tauri_plugin_analytics::init())
-        .plugin(tauri_plugin_agent::init())
         .plugin(tauri_plugin_bedrock::init());
 
     #[cfg(target_os = "macos")]
@@ -237,6 +238,7 @@ pub async fn main() {
         .plugin(tauri_plugin_dictation::init())
         .plugin(tauri_plugin_windows::init())
         .plugin(tauri_plugin_js::init())
+        .plugin(identifier_migration::plugin(&context.config().identifier))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_transcription::init())
         .plugin(tauri_plugin_tantivy::init())
@@ -249,10 +251,7 @@ pub async fn main() {
                     .map(|ctx| ctx.supervisor.get_cell()),
             },
         ))
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec!["--background"]),
-        ));
+        .plugin(autostart::plugin(&context.config().identifier));
 
     #[cfg(any(debug_assertions, feature = "devtools", feature = "staging"))]
     {
@@ -278,6 +277,8 @@ pub async fn main() {
         .on_window_event(on_window_event)
         .setup(move |app| {
             let app_handle = app.handle().clone();
+
+            autostart::migrate(&app_handle);
 
             specta_builder.mount_events(&app_handle);
 
@@ -473,7 +474,7 @@ pub async fn main() {
 }
 
 fn startup_failure_message(error: &impl std::fmt::Display) -> String {
-    format!("Free Meeting Transcriber failed to start: {error}")
+    format!("Loofah failed to start: {error}")
 }
 
 fn exit_after_startup_failure(error: &impl std::fmt::Display) -> ! {
@@ -486,7 +487,7 @@ fn exit_after_startup_failure(error: &impl std::fmt::Display) -> ! {
         let _ = std::process::Command::new("/usr/bin/osascript")
             .args([
                 "-e",
-                "display alert \"Free Meeting Transcriber could not start\" message \"Your existing data was left unchanged. Please restart the app. If the problem continues, contact support.\" as critical buttons {\"OK\"} default button \"OK\"",
+                "display alert \"Loofah could not start\" message \"Your existing data was left unchanged. Please restart the app. If the problem continues, contact support.\" as critical buttons {\"OK\"} default button \"OK\"",
             ])
             .spawn();
     }
@@ -647,7 +648,7 @@ mod test {
 
         assert_eq!(
             message,
-            "Free Meeting Transcriber failed to start: database schema preparation failed"
+            "Loofah failed to start: database schema preparation failed"
         );
     }
 

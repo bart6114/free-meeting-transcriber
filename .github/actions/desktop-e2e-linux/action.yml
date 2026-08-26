@@ -20,9 +20,9 @@ runs:
       run: |
         # Determine binary name based on channel
         if [[ "${{ inputs.channel }}" == "staging" ]]; then
-          BINARY_NAME="free-meeting-transcriber-staging"
+          BINARY_NAME="loofah-staging"
         else
-          BINARY_NAME="free-meeting-transcriber"
+          BINARY_NAME="loofah"
         fi
 
         # Construct full binary path

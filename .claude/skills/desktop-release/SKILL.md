@@ -68,7 +68,7 @@ When you do need to act:
   `updater` release's `latest.json`.
 
 The in-app "What's new in X?" dialog fetches the file at runtime from
-`https://raw.githubusercontent.com/bart6114/free-meeting-transcriber/main/packages/changelog/content/<version>.md`
+`https://raw.githubusercontent.com/bart6114/loofah/main/packages/changelog/content/<version>.md`
 — i.e. from `main`, so post-hoc fixes to the file reach users without a rebuild.
 
 ## 4. Build the DMG
@@ -87,7 +87,7 @@ All 5 assets on the release, and the updater feed advanced:
 gh release view <tag> --json assets --jq '.assets[].name'
 # expect: .dmg, .dmg.sha256, .app.tar.gz, .app.tar.gz.sig, latest.json
 gh release download updater --pattern latest.json -O - | jq -r .version
-curl -fsS https://raw.githubusercontent.com/bart6114/free-meeting-transcriber/main/packages/changelog/content/<version>.md >/dev/null && echo notes-ok
+curl -fsS https://raw.githubusercontent.com/bart6114/loofah/main/packages/changelog/content/<version>.md >/dev/null && echo notes-ok
 ```
 
 ## Gotchas

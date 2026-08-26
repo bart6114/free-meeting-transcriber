@@ -68,7 +68,8 @@ const FREQUENT_EMOJI_IDS = [
   "question",
 ];
 
-const RECENT_EMOJIS_KEY = "fmtr.template-picker.recent-emojis";
+const RECENT_EMOJIS_KEY = "loofah.template-picker.recent-emojis";
+const LEGACY_RECENT_EMOJIS_KEY = "fmtr.template-picker.recent-emojis";
 const data = emojiData as EmojiMartData;
 
 type EmojiItem = {
@@ -124,7 +125,9 @@ function loadRecentEmojiIds() {
 
   try {
     const value = JSON.parse(
-      window.localStorage.getItem(RECENT_EMOJIS_KEY) ?? "[]",
+      window.localStorage.getItem(RECENT_EMOJIS_KEY) ??
+        window.localStorage.getItem(LEGACY_RECENT_EMOJIS_KEY) ??
+        "[]",
     );
     return Array.isArray(value)
       ? value.filter((item): item is string => typeof item === "string")
@@ -245,6 +248,7 @@ export function TemplateIconPicker({
         RECENT_EMOJIS_KEY,
         JSON.stringify(nextRecent),
       );
+      window.localStorage.removeItem(LEGACY_RECENT_EMOJIS_KEY);
     } catch {
       // Recent emoji history is optional in restricted webviews.
     }

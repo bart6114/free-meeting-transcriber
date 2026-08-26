@@ -6,9 +6,11 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const appId = process.env.FMTR_APP_ID || "org.freemeetingtranscriber.dev";
+const appId =
+  process.env.LOOFAH_APP_ID || process.env.FMTR_APP_ID || "io.loofah.dev";
 const pluginRoot = resolve(__dirname);
 const targetRoot =
+  process.env.LOOFAH_PLUGIN_DIR ||
   process.env.FMTR_PLUGIN_DIR ||
   (() => {
     switch (process.platform) {

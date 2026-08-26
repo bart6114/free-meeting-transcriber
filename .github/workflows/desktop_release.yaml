@@ -79,7 +79,7 @@ jobs:
         run: |
           printf '%s\n' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/AuthKey.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
-      - name: Build fmtr CLI sidecar
+      - name: Build Loofah CLI sidecar
         run: bash apps/desktop/src-tauri/scripts/build-cli-sidecar.sh
       - run: pnpm -F desktop tauri build --ci --bundles app,dmg --config ./src-tauri/tauri.conf.stable.json
         env:
@@ -98,9 +98,11 @@ jobs:
           version="${TAG#v}"
           bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
           dmg="$(ls "$bundle_dir"/*.dmg | head -n1)"
-          asset="FreeMeetingTranscriber_${version}_aarch64.dmg"
+          asset="Loofah_${version}_aarch64.dmg"
           mv "$dmg" "$bundle_dir/$asset"
           (cd "$bundle_dir" && shasum -a 256 "$asset" > "$asset.sha256")
+          cp "$bundle_dir/$asset" "$bundle_dir/FreeMeetingTranscriber_${version}_aarch64.dmg"
+          (cd "$bundle_dir" && shasum -a 256 "FreeMeetingTranscriber_${version}_aarch64.dmg" > "FreeMeetingTranscriber_${version}_aarch64.dmg.sha256")
       - name: Prepare updater artifacts
         env:
           TAG: ${{ needs.resolve.outputs.tag }}
@@ -110,9 +112,11 @@ jobs:
           version="${TAG#v}"
           macos_dir="apps/desktop/src-tauri/target/release/bundle/macos"
           archive="$(ls "$macos_dir"/*.app.tar.gz | head -n1)"
-          asset="FreeMeetingTranscriber_${version}_aarch64.app.tar.gz"
+          asset="Loofah_${version}_aarch64.app.tar.gz"
           mv "$archive" "$macos_dir/$asset"
           mv "$archive.sig" "$macos_dir/$asset.sig"
+          cp "$macos_dir/$asset" "$macos_dir/FreeMeetingTranscriber_${version}_aarch64.app.tar.gz"
+          cp "$macos_dir/$asset.sig" "$macos_dir/FreeMeetingTranscriber_${version}_aarch64.app.tar.gz.sig"
           jq -n \
             --arg version "$version" \
             --arg pub_date "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
@@ -152,8 +156,13 @@ jobs:
             echo "Feed already at $feed_version; not downgrading to $version"
             exit 0
           fi
-          cp "$bundle_dir/FreeMeetingTranscriber_${version}_aarch64.dmg" "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg"
-          gh release upload updater "$macos_dir/latest.json" "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg" --clobber
+          cp "$bundle_dir/Loofah_${version}_aarch64.dmg" "$bundle_dir/Loofah_latest_aarch64.dmg"
+          cp "$bundle_dir/Loofah_${version}_aarch64.dmg" "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg"
+          gh release upload updater \
+            "$macos_dir/latest.json" \
+            "$bundle_dir/Loofah_latest_aarch64.dmg" \
+            "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg" \
+            --clobber
 
   cli:
     needs: [resolve, macos]

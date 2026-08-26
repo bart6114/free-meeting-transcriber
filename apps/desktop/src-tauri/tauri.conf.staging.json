@@ -1,15 +1,17 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Free Meeting Transcriber Staging",
-  "mainBinaryName": "free-meeting-transcriber-staging",
-  "identifier": "org.freemeetingtranscriber.staging",
+  "productName": "Loofah Staging",
+  "mainBinaryName": "loofah-staging",
+  "identifier": "io.loofah.staging",
   "plugins": {
     "deep-link": {
-      "desktop": { "schemes": ["freemeetingtranscriber-staging"] }
+      "desktop": {
+        "schemes": ["loofah-staging", "freemeetingtranscriber-staging"]
+      }
     }
   },
   "bundle": {
-    "externalBin": ["binaries/check-permissions", "binaries/fmtr"],
+    "externalBin": ["binaries/check-permissions", "binaries/loofah"],
     "icon": [
       "icons/stable/32x32.png",
       "icons/stable/128x128.png",

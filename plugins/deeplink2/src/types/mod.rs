@@ -10,7 +10,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 use std::str::FromStr;
 
-const SHARE_OPEN_PREFIXES: [&str; 2] = [
+const SHARE_OPEN_PREFIXES: [&str; 4] = [
+    "loofah://share/open",
+    "loofah-staging://share/open",
     "freemeetingtranscriber://share/open",
     "freemeetingtranscriber-staging://share/open",
 ];

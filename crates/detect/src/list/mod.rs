@@ -16,18 +16,29 @@ pub fn list_installed_apps() -> Vec<InstalledApp> {
 }
 
 const SELF_BUNDLE_IDS: &[&str] = &[
+    "io.loofah.dev",
+    "io.loofah.stable",
+    "io.loofah.staging",
     "org.freemeetingtranscriber.dev",
     "org.freemeetingtranscriber.stable",
     "org.freemeetingtranscriber.staging",
 ];
 
 const SELF_APP_NAMES: &[&str] = &[
+    "loofah",
+    "loofah dev",
+    "loofah staging",
     "free meeting transcriber",
+    "free meeting transcriber dev",
     "free meeting transcriber staging",
 ];
 
 const SELF_APP_PATH_SEGMENTS: &[&str] = &[
+    "/loofah.app/",
+    "/loofah dev.app/",
+    "/loofah staging.app/",
     "/free meeting transcriber.app/",
+    "/free meeting transcriber dev.app/",
     "/free meeting transcriber staging.app/",
 ];
 
@@ -81,6 +92,11 @@ mod tests {
 
     #[test]
     fn test_is_self_app_matches_known_bundle_ids() {
+        assert!(is_self_app(&app("io.loofah.stable", "Loofah")));
+    }
+
+    #[test]
+    fn test_is_self_app_keeps_matching_legacy_bundle_ids() {
         assert!(is_self_app(&app(
             "org.freemeetingtranscriber.stable",
             "Free Meeting Transcriber"
@@ -89,17 +105,14 @@ mod tests {
 
     #[test]
     fn test_is_self_app_matches_renamed_app_names() {
-        assert!(is_self_app(&app("pid:41", "Free Meeting Transcriber")));
-        assert!(is_self_app(&app(
-            "pid:45",
-            "Free Meeting Transcriber Staging"
-        )));
+        assert!(is_self_app(&app("pid:41", "Loofah")));
+        assert!(is_self_app(&app("pid:45", "Loofah Staging")));
     }
 
     #[test]
     fn test_is_self_app_matches_path_fallbacks() {
         assert!(is_self_app(&app(
-            "/Applications/Free Meeting Transcriber.app/Contents/MacOS/free-meeting-transcriber",
+            "/Applications/Loofah.app/Contents/MacOS/loofah",
             "Unknown",
         )));
     }

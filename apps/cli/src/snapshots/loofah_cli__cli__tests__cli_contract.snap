@@ -1,10 +1,9 @@
 ---
 source: apps/cli/src/cli.rs
-assertion_line: 859
 expression: canonicalize_json(contract)
 ---
 {
-  "about": "Query and edit local Free Meeting Transcriber meeting data",
+  "about": "Query and edit local Loofah meeting data",
   "global_options": [
     {
       "flags": "--base",
@@ -24,7 +23,7 @@ expression: canonicalize_json(contract)
       "required": false
     }
   ],
-  "name": "fmtr",
+  "name": "loofah",
   "options": [
     {
       "flags": "-h, --help",
@@ -42,7 +41,7 @@ expression: canonicalize_json(contract)
   "subcommands": [
     {
       "about": "Check the local CLI and vault access, restoring the vault's AGENTS.md if stale",
-      "name": "fmtr doctor",
+      "name": "loofah doctor",
       "options": [
         {
           "flags": "-h, --help",
@@ -51,11 +50,11 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "fmtr doctor [-h]"
+      "synopsis": "loofah doctor [-h]"
     },
     {
       "about": "Browse, create, edit, and export sessions",
-      "name": "fmtr sessions",
+      "name": "loofah sessions",
       "options": [
         {
           "flags": "-h, --help",
@@ -67,7 +66,7 @@ expression: canonicalize_json(contract)
       "subcommands": [
         {
           "about": "List meetings, optionally filtered by text or tags",
-          "name": "fmtr sessions list",
+          "name": "loofah sessions list",
           "options": [
             {
               "flags": "-q, --query",
@@ -111,7 +110,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions list [-q] [--limit] [--offset] [--tag] [--untagged] [-h]"
+          "synopsis": "loofah sessions list [-q] [--limit] [--offset] [--tag] [--untagged] [-h]"
         },
         {
           "about": "Search across meeting titles, notes, summaries, and transcripts",
@@ -122,7 +121,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "name": "fmtr sessions search",
+          "name": "loofah sessions search",
           "options": [
             {
               "flags": "--speaker",
@@ -167,7 +166,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions search [--speaker] [--kind] [--limit] [--offset] [-h] [query]"
+          "synopsis": "loofah sessions search [--speaker] [--kind] [--limit] [--offset] [-h] [query]"
         },
         {
           "about": "Show meeting metadata, notes, summaries, and action items",
@@ -177,7 +176,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr sessions get",
+          "name": "loofah sessions get",
           "options": [
             {
               "flags": "-h, --help",
@@ -186,11 +185,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions get [-h] <id>"
+          "synopsis": "loofah sessions get [-h] <id>"
         },
         {
           "about": "Create a meeting note and print its id",
-          "name": "fmtr sessions new",
+          "name": "loofah sessions new",
           "options": [
             {
               "flags": "--title",
@@ -255,7 +254,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [--skill] [-h]"
+          "synopsis": "loofah sessions new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [--skill] [-h]"
         },
         {
           "about": "Show the note or generated summaries for a meeting, or edit the note",
@@ -265,7 +264,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr sessions note",
+          "name": "loofah sessions note",
           "options": [
             {
               "default": "note",
@@ -300,7 +299,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions note [--kind] [--set] [--append] [-h] <id>"
+          "synopsis": "loofah sessions note [--kind] [--set] [--append] [-h] <id>"
         },
         {
           "about": "Show the full speaker-labeled meeting transcript",
@@ -310,7 +309,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr sessions transcript",
+          "name": "loofah sessions transcript",
           "options": [
             {
               "flags": "-h, --help",
@@ -319,11 +318,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions transcript [-h] <id>"
+          "synopsis": "loofah sessions transcript [-h] <id>"
         },
         {
           "about": "Add or remove tags on a meeting",
-          "name": "fmtr sessions tag",
+          "name": "loofah sessions tag",
           "options": [
             {
               "flags": "-h, --help",
@@ -345,7 +344,7 @@ expression: canonicalize_json(contract)
                   "required": true
                 }
               ],
-              "name": "fmtr sessions tag add",
+              "name": "loofah sessions tag add",
               "options": [
                 {
                   "flags": "-h, --help",
@@ -354,7 +353,7 @@ expression: canonicalize_json(contract)
                   "required": false
                 }
               ],
-              "synopsis": "fmtr sessions tag add [-h] <id> <tags>"
+              "synopsis": "loofah sessions tag add [-h] <id> <tags>"
             },
             {
               "about": "Remove tags from a meeting; the tag registry keeps the names",
@@ -368,7 +367,7 @@ expression: canonicalize_json(contract)
                   "required": true
                 }
               ],
-              "name": "fmtr sessions tag remove",
+              "name": "loofah sessions tag remove",
               "options": [
                 {
                   "flags": "-h, --help",
@@ -377,10 +376,10 @@ expression: canonicalize_json(contract)
                   "required": false
                 }
               ],
-              "synopsis": "fmtr sessions tag remove [-h] <id> <tags>"
+              "synopsis": "loofah sessions tag remove [-h] <id> <tags>"
             }
           ],
-          "synopsis": "fmtr sessions tag [-h] <command>"
+          "synopsis": "loofah sessions tag [-h] <command>"
         },
         {
           "about": "Print the absolute path of a meeting's session directory",
@@ -390,7 +389,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr sessions path",
+          "name": "loofah sessions path",
           "options": [
             {
               "flags": "-h, --help",
@@ -399,7 +398,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions path [-h] <id>"
+          "synopsis": "loofah sessions path [-h] <id>"
         },
         {
           "about": "Store a file as a note attachment of a meeting and print its attachment id",
@@ -414,7 +413,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr sessions attach",
+          "name": "loofah sessions attach",
           "options": [
             {
               "flags": "--name",
@@ -430,7 +429,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions attach [--name] [-h] <file> <id>"
+          "synopsis": "loofah sessions attach [--name] [-h] <file> <id>"
         },
         {
           "about": "Export a meeting to Markdown or JSON",
@@ -440,7 +439,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "fmtr sessions export",
+          "name": "loofah sessions export",
           "options": [
             {
               "default": "markdown",
@@ -472,10 +471,10 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr sessions export [--format] [-o] [--force] [-h] <id>"
+          "synopsis": "loofah sessions export [--format] [-o] [--force] [-h] <id>"
         }
       ],
-      "synopsis": "fmtr sessions [-h] <command>"
+      "synopsis": "loofah sessions [-h] <command>"
     },
     {
       "about": "Import an audio file into a new or existing meeting and print its id",
@@ -486,7 +485,7 @@ expression: canonicalize_json(contract)
           "required": true
         }
       ],
-      "name": "fmtr import",
+      "name": "loofah import",
       "options": [
         {
           "flags": "--title",
@@ -550,7 +549,7 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "fmtr import [--title] [--into] [--transcribe] [--created-at] [--started-at] [--ended-at] [--author] [--skill] [-h] <file>"
+      "synopsis": "loofah import [--title] [--into] [--transcribe] [--created-at] [--started-at] [--ended-at] [--author] [--skill] [-h] <file>"
     },
     {
       "about": "Transcribe a meeting's audio with the configured on-device model",
@@ -561,7 +560,7 @@ expression: canonicalize_json(contract)
           "required": true
         }
       ],
-      "name": "fmtr transcribe",
+      "name": "loofah transcribe",
       "options": [
         {
           "flags": "-h, --help",
@@ -570,11 +569,11 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "fmtr transcribe [-h] <id>"
+      "synopsis": "loofah transcribe [-h] <id>"
     },
     {
-      "about": "Run the read-only Free Meeting Transcriber MCP server over stdio",
-      "name": "fmtr mcp",
+      "about": "Run the read-only Loofah MCP server over stdio",
+      "name": "loofah mcp",
       "options": [
         {
           "flags": "-h, --help",
@@ -583,11 +582,11 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "fmtr mcp [-h]"
+      "synopsis": "loofah mcp [-h]"
     },
     {
       "about": "Browse the vault's tag registry",
-      "name": "fmtr tags",
+      "name": "loofah tags",
       "options": [
         {
           "flags": "-h, --help",
@@ -599,7 +598,7 @@ expression: canonicalize_json(contract)
       "subcommands": [
         {
           "about": "List every tag registered in the vault",
-          "name": "fmtr tags list",
+          "name": "loofah tags list",
           "options": [
             {
               "flags": "-h, --help",
@@ -608,11 +607,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "fmtr tags list [-h]"
+          "synopsis": "loofah tags list [-h]"
         }
       ],
-      "synopsis": "fmtr tags [-h] <command>"
+      "synopsis": "loofah tags [-h] <command>"
     }
   ],
-  "synopsis": "fmtr [--base] [--vault-path] [--json] [-h] [-V] <command>"
+  "synopsis": "loofah [--base] [--vault-path] [--json] [-h] [-V] <command>"
 }

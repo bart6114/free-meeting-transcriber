@@ -43,7 +43,7 @@ export function AppSettingsView({
       <section>
         <div className="flex flex-col gap-4">
           <SettingRow
-            title={<Trans>Start Free Meeting Transcriber at login</Trans>}
+            title={<Trans>Start Loofah at login</Trans>}
             description={
               <Trans>Always ready without manually launching.</Trans>
             }
@@ -54,8 +54,7 @@ export function AppSettingsView({
             title={<Trans>Share usage data</Trans>}
             description={
               <Trans>
-                Send anonymous usage analytics to help improve Free Meeting
-                Transcriber.
+                Send anonymous usage analytics to help improve Loofah.
               </Trans>
             }
             checked={telemetryConsent.value}
@@ -64,9 +63,7 @@ export function AppSettingsView({
           <SettingRow
             title={<Trans>Show app in Dock</Trans>}
             description={
-              <Trans>
-                Show Free Meeting Transcriber in the Dock and app switcher.
-              </Trans>
+              <Trans>Show Loofah in the Dock and app switcher.</Trans>
             }
             checked={showAppInDock.value}
             onChange={showAppInDock.onChange}
@@ -74,9 +71,7 @@ export function AppSettingsView({
           <SettingRow
             title={<Trans>Show tray icon</Trans>}
             description={
-              <Trans>
-                Keep Free Meeting Transcriber available from the menu bar.
-              </Trans>
+              <Trans>Keep Loofah available from the menu bar.</Trans>
             }
             checked={showTrayIcon.value}
             onChange={showTrayIcon.onChange}

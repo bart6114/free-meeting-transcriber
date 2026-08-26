@@ -1,7 +1,7 @@
 //! Read-only access to the on-disk vault layout: shared file-format types plus
 //! scanning/parsing helpers. The desktop store (`apps/desktop/src-tauri/src/session_store`)
 //! owns every write path and reuses the types and pure parse/render functions from here;
-//! `crates/agent-access` (fmtr CLI/MCP) reads vaults exclusively through this crate.
+//! `crates/agent-access` (loofah CLI/MCP) reads vaults exclusively through this crate.
 
 pub mod enhanced;
 pub mod layout;

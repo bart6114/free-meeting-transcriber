@@ -1,15 +1,15 @@
-# Free Meeting Transcriber documentation instructions
+# Loofah documentation instructions
 
 ## Scope
 
 - This is an Astro Starlight project, published at
-  https://freemeetingtranscriber.com through a Cloudflare Worker serving the
+  https://loofah.io through a Cloudflare Worker serving the
   static build (`.github/workflows/docs_deploy.yaml`).
-- Write for Free Meeting Transcriber users, developers, and agents using the
+- Write for Loofah users, developers, and agents using the
   CLI or MCP server.
 - Site configuration (sidebar, theme, plugins) lives in `astro.config.mjs`;
   content pages are MDX under `src/content/docs/`.
-- The public agent skill is maintained in `../skills/fmtr/`.
+- The public agent skill is maintained in `../skills/loofah/`.
 
 ## Sources of truth
 
@@ -23,7 +23,7 @@
 - Use active voice and second person.
 - Keep headings and sentences concise.
 - Put the result before implementation detail.
-- Use `Free Meeting Transcriber` for the product and `fmtr` for the executable.
+- Use `Loofah` for the product and `loofah` for the executable.
 - Use root-relative links between docs pages (e.g. `/quickstart`).
 - Use Starlight components: `:::note` / `:::caution` asides, and `Steps`,
   `CardGrid`, `LinkCard` from `@astrojs/starlight/components`.

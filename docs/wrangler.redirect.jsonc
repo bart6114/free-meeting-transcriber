@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "loofah-docs-redirect",
+  "main": "redirect-worker.ts",
+  "compatibility_date": "2026-08-01",
+  "workers_dev": false,
+  "routes": [
+    { "pattern": "www.loofah.io", "custom_domain": true },
+    { "pattern": "freemeetingtranscriber.com", "custom_domain": true },
+    { "pattern": "www.freemeetingtranscriber.com", "custom_domain": true },
+  ],
+}

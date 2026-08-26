@@ -222,7 +222,7 @@ describe("ChangeLocationRow", () => {
 
     await waitFor(() =>
       expect(mocks.relocateVault).toHaveBeenCalledWith(
-        "/Users/x/Google Drive/My Drive/Free Meeting Transcriber",
+        "/Users/x/Google Drive/My Drive/Loofah",
         false,
       ),
     );
@@ -243,7 +243,7 @@ describe("ChangeLocationRow", () => {
 
     await waitFor(() =>
       expect(mocks.setVaultBase).toHaveBeenCalledWith(
-        "/Users/x/Google Drive/My Drive/Free Meeting Transcriber",
+        "/Users/x/Google Drive/My Drive/Loofah",
       ),
     );
     expect(mocks.relocateVault).not.toHaveBeenCalled();

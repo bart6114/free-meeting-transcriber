@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Free Meeting Transcriber Dev",
-  "mainBinaryName": "free-meeting-transcriber-dev",
-  "identifier": "org.freemeetingtranscriber.dev",
+  "productName": "Loofah Dev",
+  "mainBinaryName": "loofah-dev",
+  "identifier": "io.loofah.dev",
   "version": "../package.json",
   "build": {
     "beforeDevCommand": "pnpm -F desktop dev",
@@ -71,6 +71,7 @@
     "deep-link": {
       "desktop": {
         "schemes": [
+          "loofah",
           "freemeetingtranscriber"
         ]
       }

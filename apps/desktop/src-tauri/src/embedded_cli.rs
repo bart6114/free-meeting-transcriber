@@ -4,11 +4,13 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 
-const DEV_BUNDLE_ID: &str = "org.freemeetingtranscriber.dev";
+const DEV_BUNDLE_ID: &str = "io.loofah.dev";
 #[cfg(target_os = "macos")]
-const MANAGED_CLI_DIR: &str = ".fmtr-cli";
-const STABLE_BUNDLE_ID: &str = "org.freemeetingtranscriber.stable";
-const STAGING_BUNDLE_ID: &str = "org.freemeetingtranscriber.staging";
+const MANAGED_CLI_DIR: &str = ".loofah-cli";
+#[cfg(target_os = "macos")]
+const LEGACY_MANAGED_CLI_DIR: &str = ".fmtr-cli";
+const STABLE_BUNDLE_ID: &str = "io.loofah.stable";
+const STAGING_BUNDLE_ID: &str = "io.loofah.staging";
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, specta::Type)]
@@ -34,10 +36,7 @@ pub struct EmbeddedCliStatus {
 pub fn check<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -> EmbeddedCliStatus {
     let command_name = command_name_from_identifier(manager.config().identifier.as_ref());
     let Some(install_path) = install_path_for_command(command_name) else {
-        return unavailable_status(
-            command_name,
-            "Free Meeting Transcriber could not find your home directory.",
-        );
+        return unavailable_status(command_name, "Loofah could not find your home directory.");
     };
 
     #[cfg(not(target_os = "macos"))]
@@ -60,10 +59,7 @@ pub fn check<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -> EmbeddedCl
                 command_name: command_name.to_string(),
                 install_path: install_path.display().to_string(),
                 state: EmbeddedCliState::ResourceMissing,
-                details: Some(
-                    "The CLI is not included in this build of Free Meeting Transcriber."
-                        .to_string(),
-                ),
+                details: Some("The CLI is not included in this build of Loofah.".to_string()),
             };
         };
 
@@ -89,7 +85,7 @@ pub fn install<R: tauri::Runtime, T: tauri::Manager<R>>(
             }
             EmbeddedCliState::Conflict => {
                 return Err(format!(
-                    "Another file already exists at {}. Move it before installing the fmtr CLI.",
+                    "Another file already exists at {}. Move it before installing the loofah CLI.",
                     status.install_path
                 ));
             }
@@ -102,6 +98,20 @@ pub fn install<R: tauri::Runtime, T: tauri::Manager<R>>(
 
         install_symlink(&resource_path, &install_path)?;
         remove_legacy_managed_copies(&install_path, &status.command_name);
+        if let Some(legacy_path) = install_path_for_command(legacy_command_name_from_identifier(
+            manager.config().identifier.as_ref(),
+        )) {
+            match classify_installation(&legacy_path, &resource_path) {
+                Ok(EmbeddedCliState::Installed | EmbeddedCliState::Missing) => {
+                    install_symlink(&resource_path, &legacy_path)?;
+                    remove_legacy_managed_copies(
+                        &legacy_path,
+                        legacy_command_name_from_identifier(manager.config().identifier.as_ref()),
+                    );
+                }
+                Ok(_) | Err(_) => {}
+            }
+        }
         Ok(classify_status(
             &status.command_name,
             install_path,
@@ -112,7 +122,7 @@ pub fn install<R: tauri::Runtime, T: tauri::Manager<R>>(
 
 /// Re-points a previously installed CLI symlink at the current app bundle.
 /// Runs at startup so the command on PATH follows app updates and moves,
-/// and so pre-symlink installs (versioned copies under `.fmtr-cli/`) migrate.
+/// and so pre-symlink installs (versioned copies under `.loofah-cli/`) migrate.
 /// Never installs for users who haven't opted in via Settings -> Developers.
 pub fn sync_installed<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) {
     #[cfg(not(target_os = "macos"))]
@@ -126,9 +136,15 @@ pub fn sync_installed<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) {
         if status.state != EmbeddedCliState::Missing {
             return;
         }
-        let is_symlink = std::fs::symlink_metadata(PathBuf::from(&status.install_path))
+        let primary_is_symlink = std::fs::symlink_metadata(PathBuf::from(&status.install_path))
             .is_ok_and(|metadata| metadata.file_type().is_symlink());
-        if !is_symlink {
+        let legacy_is_symlink = install_path_for_command(legacy_command_name_from_identifier(
+            manager.config().identifier.as_ref(),
+        ))
+        .is_some_and(|path| {
+            std::fs::symlink_metadata(path).is_ok_and(|metadata| metadata.file_type().is_symlink())
+        });
+        if !primary_is_symlink && !legacy_is_symlink {
             return;
         }
 
@@ -136,11 +152,11 @@ pub fn sync_installed<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) {
             Ok(status) if status.state == EmbeddedCliState::Installed => {
                 tracing::info!(
                     command = status.command_name,
-                    "relinked the fmtr CLI to the current app"
+                    "relinked the loofah CLI to the current app"
                 );
             }
             Ok(_) => {}
-            Err(error) => tracing::warn!(%error, "failed to relink the fmtr CLI"),
+            Err(error) => tracing::warn!(%error, "failed to relink the loofah CLI"),
         }
     }
 }
@@ -156,6 +172,15 @@ fn unavailable_status(command_name: &str, details: &str) -> EmbeddedCliStatus {
 }
 
 fn command_name_from_identifier(identifier: &str) -> &'static str {
+    match identifier {
+        STABLE_BUNDLE_ID => "loofah",
+        STAGING_BUNDLE_ID => "loofah-staging",
+        DEV_BUNDLE_ID => "loofah-dev",
+        _ => "loofah-dev",
+    }
+}
+
+fn legacy_command_name_from_identifier(identifier: &str) -> &'static str {
     match identifier {
         STABLE_BUNDLE_ID => "fmtr",
         STAGING_BUNDLE_ID => "fmtr-staging",
@@ -174,7 +199,7 @@ fn resolve_resource_path<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -
 
     if let Some(sidecar_path) = std::env::current_exe()
         .ok()
-        .and_then(|path| path.parent().map(|parent| parent.join("fmtr")))
+        .and_then(|path| path.parent().map(|parent| parent.join("loofah")))
         .filter(|path| path.is_file())
     {
         return Some(sidecar_path);
@@ -202,12 +227,12 @@ fn resolve_resource_path<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) -
 fn bundled_binary_name() -> Option<&'static str> {
     #[cfg(target_arch = "aarch64")]
     {
-        return Some("fmtr-aarch64-apple-darwin");
+        return Some("loofah-aarch64-apple-darwin");
     }
 
     #[cfg(target_arch = "x86_64")]
     {
-        return Some("fmtr-x86_64-apple-darwin");
+        return Some("loofah-x86_64-apple-darwin");
     }
 
     #[allow(unreachable_code)]
@@ -299,16 +324,15 @@ fn points_at(target: &Path, resource_path: &Path) -> bool {
 }
 
 /// Targets a previous install could have left behind: the legacy versioned
-/// copies under `.fmtr-cli/`, a sidecar inside an app bundle (older app
+/// copies under the old or current managed CLI directory, a sidecar inside an app bundle (older app
 /// location or channel), the dev `resources/cli` tree, or a dangling link
 /// (replacing one cannot lose anything). Anything else is someone else's
 /// file and must not be overwritten.
 #[cfg(target_os = "macos")]
 fn is_replaceable_symlink_target(target: &Path) -> bool {
-    if target
-        .components()
-        .any(|component| component.as_os_str() == MANAGED_CLI_DIR)
-    {
+    if target.components().any(|component| {
+        component.as_os_str() == MANAGED_CLI_DIR || component.as_os_str() == LEGACY_MANAGED_CLI_DIR
+    }) {
         return true;
     }
     if !target.exists() {
@@ -418,16 +442,17 @@ fn ensure_install_path_replaceable(
     ))
 }
 
-/// Earlier releases copied the CLI to `~/.local/bin/.fmtr-cli/<name>/<version>`
-/// and symlinked to the copy. Best effort -- leftovers only waste disk.
+/// Earlier releases copied the CLI to a versioned managed directory and symlinked to the copy.
 #[cfg(target_os = "macos")]
 fn remove_legacy_managed_copies(install_path: &Path, command_name: &str) {
     let Some(install_dir) = install_path.parent() else {
         return;
     };
-    let managed_dir = install_dir.join(MANAGED_CLI_DIR);
-    let _ = std::fs::remove_dir_all(managed_dir.join(command_name));
-    let _ = std::fs::remove_dir(managed_dir);
+    for directory in [MANAGED_CLI_DIR, LEGACY_MANAGED_CLI_DIR] {
+        let managed_dir = install_dir.join(directory);
+        let _ = std::fs::remove_dir_all(managed_dir.join(command_name));
+        let _ = std::fs::remove_dir(managed_dir);
+    }
 }
 
 #[cfg(test)]
@@ -436,18 +461,22 @@ mod tests {
 
     #[test]
     fn maps_bundle_id_to_command_name() {
-        assert_eq!(command_name_from_identifier(STABLE_BUNDLE_ID), "fmtr");
+        assert_eq!(command_name_from_identifier(STABLE_BUNDLE_ID), "loofah");
         assert_eq!(
             command_name_from_identifier(STAGING_BUNDLE_ID),
-            "fmtr-staging"
+            "loofah-staging"
         );
-        assert_eq!(command_name_from_identifier(DEV_BUNDLE_ID), "fmtr-dev");
-        assert_eq!(command_name_from_identifier("unknown"), "fmtr-dev");
+        assert_eq!(command_name_from_identifier(DEV_BUNDLE_ID), "loofah-dev");
+        assert_eq!(command_name_from_identifier("unknown"), "loofah-dev");
+        assert_eq!(
+            legacy_command_name_from_identifier(STABLE_BUNDLE_ID),
+            "fmtr"
+        );
     }
 
     #[cfg(target_os = "macos")]
     fn write_app_bundle_cli(dir: &Path, app_name: &str) -> PathBuf {
-        let resource_path = dir.join(app_name).join("Contents/MacOS/fmtr");
+        let resource_path = dir.join(app_name).join("Contents/MacOS/loofah");
         std::fs::create_dir_all(resource_path.parent().unwrap()).unwrap();
         std::fs::write(&resource_path, app_name).unwrap();
         resource_path
@@ -457,9 +486,9 @@ mod tests {
     #[test]
     fn classifies_missing_install() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
 
-        let state = classify_installation(&dir.path().join("fmtr"), &resource_path).unwrap();
+        let state = classify_installation(&dir.path().join("loofah"), &resource_path).unwrap();
         assert_eq!(state, EmbeddedCliState::Missing);
     }
 
@@ -467,8 +496,8 @@ mod tests {
     #[test]
     fn classifies_symlink_into_current_app_as_installed() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
-        let install_path = dir.path().join("fmtr");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
+        let install_path = dir.path().join("loofah");
         std::os::unix::fs::symlink(&resource_path, &install_path).unwrap();
 
         let state = classify_installation(&install_path, &resource_path).unwrap();
@@ -479,11 +508,11 @@ mod tests {
     #[test]
     fn classifies_legacy_managed_copy_as_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
         let legacy_path = dir.path().join(".fmtr-cli/fmtr/1.2.0");
         std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
         std::fs::write(&legacy_path, "old cli").unwrap();
-        let install_path = dir.path().join("fmtr");
+        let install_path = dir.path().join("loofah");
         std::os::unix::fs::symlink(&legacy_path, &install_path).unwrap();
 
         let state = classify_installation(&install_path, &resource_path).unwrap();
@@ -494,8 +523,8 @@ mod tests {
     #[test]
     fn classifies_dangling_symlink_as_missing() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
-        let install_path = dir.path().join("fmtr");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
+        let install_path = dir.path().join("loofah");
         std::os::unix::fs::symlink(dir.path().join("gone"), &install_path).unwrap();
 
         let state = classify_installation(&install_path, &resource_path).unwrap();
@@ -508,7 +537,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let old_resource_path = write_app_bundle_cli(dir.path(), "Old.app");
         let new_resource_path = write_app_bundle_cli(dir.path(), "New.app");
-        let install_path = dir.path().join("fmtr");
+        let install_path = dir.path().join("loofah");
         std::os::unix::fs::symlink(&old_resource_path, &install_path).unwrap();
 
         let state = classify_installation(&install_path, &new_resource_path).unwrap();
@@ -519,10 +548,10 @@ mod tests {
     #[test]
     fn classifies_foreign_symlink_as_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
         let foreign_target = dir.path().join("other-tool");
         std::fs::write(&foreign_target, "not ours").unwrap();
-        let install_path = dir.path().join("fmtr");
+        let install_path = dir.path().join("loofah");
         std::os::unix::fs::symlink(&foreign_target, &install_path).unwrap();
 
         let state = classify_installation(&install_path, &resource_path).unwrap();
@@ -533,8 +562,8 @@ mod tests {
     #[test]
     fn classifies_regular_file_as_conflict() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
-        let install_path = dir.path().join("fmtr");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
+        let install_path = dir.path().join("loofah");
         std::fs::write(&install_path, "other").unwrap();
 
         let state = classify_installation(&install_path, &resource_path).unwrap();
@@ -545,8 +574,8 @@ mod tests {
     #[test]
     fn install_symlinks_directly_into_the_app_bundle() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
-        let install_path = dir.path().join("home/.local/bin/fmtr");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
+        let install_path = dir.path().join("home/.local/bin/loofah");
 
         install_symlink(&resource_path, &install_path).unwrap();
 
@@ -563,7 +592,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let old_resource_path = write_app_bundle_cli(dir.path(), "Old.app");
         let new_resource_path = write_app_bundle_cli(dir.path(), "New.app");
-        let install_path = dir.path().join("home/.local/bin/fmtr");
+        let install_path = dir.path().join("home/.local/bin/loofah");
         install_symlink(&old_resource_path, &install_path).unwrap();
         std::fs::remove_dir_all(dir.path().join("Old.app")).unwrap();
 
@@ -584,10 +613,10 @@ mod tests {
     #[test]
     fn installer_refuses_to_replace_foreign_symlink() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
         let foreign_target = dir.path().join("other-tool");
         std::fs::write(&foreign_target, "not ours").unwrap();
-        let install_path = dir.path().join("fmtr");
+        let install_path = dir.path().join("loofah");
         std::os::unix::fs::symlink(&foreign_target, &install_path).unwrap();
 
         assert!(install_symlink(&resource_path, &install_path).is_err());
@@ -598,8 +627,8 @@ mod tests {
     #[test]
     fn install_prunes_legacy_managed_copies() {
         let dir = tempfile::tempdir().unwrap();
-        let resource_path = write_app_bundle_cli(dir.path(), "Free Meeting Transcriber.app");
-        let install_path = dir.path().join("home/.local/bin/fmtr");
+        let resource_path = write_app_bundle_cli(dir.path(), "Loofah.app");
+        let install_path = dir.path().join("home/.local/bin/loofah");
         let legacy_path = dir.path().join("home/.local/bin/.fmtr-cli/fmtr/1.2.0");
         std::fs::create_dir_all(legacy_path.parent().unwrap()).unwrap();
         std::fs::write(&legacy_path, "old cli").unwrap();

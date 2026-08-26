@@ -131,7 +131,7 @@ mod test {
 
     fn create_mock_app() -> tauri::App<tauri::test::MockRuntime> {
         let mut ctx = tauri::test::mock_context(tauri::test::noop_assets());
-        ctx.config_mut().identifier = "org.freemeetingtranscriber.dev".to_string();
+        ctx.config_mut().identifier = "io.loofah.dev".to_string();
         ctx.config_mut().version = Some("0.0.1".to_string());
 
         tauri::test::mock_builder().build(ctx).unwrap()

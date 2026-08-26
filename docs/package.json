@@ -7,7 +7,7 @@
     "dev": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
-    "deploy": "astro build && wrangler deploy"
+    "deploy": "astro build && wrangler deploy && wrangler deploy --config wrangler.redirect.jsonc"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.41.7",

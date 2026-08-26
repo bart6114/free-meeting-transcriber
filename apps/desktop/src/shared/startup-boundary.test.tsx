@@ -128,9 +128,7 @@ describe("StartupBoundary", () => {
       status: "ok",
       data: "other",
     });
-    mocks.join.mockResolvedValue(
-      "/Users/me/Documents/Free Meeting Transcriber",
-    );
+    mocks.join.mockResolvedValue("/Users/me/Documents/Loofah");
 
     renderBoundary();
     fireEvent.click(
@@ -139,7 +137,7 @@ describe("StartupBoundary", () => {
 
     await waitFor(() =>
       expect(mocks.setVaultBase).toHaveBeenCalledWith(
-        "/Users/me/Documents/Free Meeting Transcriber",
+        "/Users/me/Documents/Loofah",
       ),
     );
     expect(mocks.relaunchNow).toHaveBeenCalledTimes(1);

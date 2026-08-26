@@ -30,6 +30,9 @@ impl AppCategory {
     pub fn bundle_ids(&self) -> &'static [&'static str] {
         match self {
             Self::SelfApp => &[
+                "io.loofah.dev",
+                "io.loofah.stable",
+                "io.loofah.staging",
                 "org.freemeetingtranscriber.dev",
                 "org.freemeetingtranscriber.stable",
                 "org.freemeetingtranscriber.staging",
@@ -219,7 +222,7 @@ mod tests {
     #[test]
     fn test_app_category_find() {
         assert_eq!(
-            AppCategory::find_category("org.freemeetingtranscriber.dev"),
+            AppCategory::find_category("io.loofah.dev"),
             Some(AppCategory::SelfApp)
         );
         assert_eq!(AppCategory::find_category("com.zoom.us"), None);
@@ -315,7 +318,7 @@ mod tests {
     #[test]
     fn test_should_not_track_categorized_app() {
         let policy = MicNotificationPolicy::default();
-        assert!(!policy.should_track_app("org.freemeetingtranscriber.dev"));
+        assert!(!policy.should_track_app("io.loofah.dev"));
         assert!(!policy.should_track_app("com.electron.aqua-voice"));
         assert!(!policy.should_track_app("com.microsoft.VSCode"));
     }
@@ -366,10 +369,7 @@ mod tests {
     #[test]
     fn test_evaluate_filters_all_categorized_apps() {
         let policy = MicNotificationPolicy::default();
-        let apps = vec![
-            app("org.freemeetingtranscriber.dev"),
-            app("com.electron.aqua-voice"),
-        ];
+        let apps = vec![app("io.loofah.dev"), app("com.electron.aqua-voice")];
         let ctx = PolicyContext {
             apps: &apps,
             is_dnd: false,
@@ -563,7 +563,7 @@ mod tests {
             ignored_categories: vec![],
             ..Default::default()
         };
-        let apps = vec![app("org.freemeetingtranscriber.dev"), app("us.zoom.xos")];
+        let apps = vec![app("io.loofah.dev"), app("us.zoom.xos")];
         let ctx = PolicyContext {
             apps: &apps,
             is_dnd: false,
@@ -581,7 +581,7 @@ mod tests {
         };
         let apps = vec![
             app("com.electron.aqua-voice"),
-            app("org.freemeetingtranscriber.dev"),
+            app("io.loofah.dev"),
             app("us.zoom.xos"),
         ];
         let ctx = PolicyContext {
@@ -591,6 +591,6 @@ mod tests {
         };
         let result = policy.evaluate(&ctx).unwrap();
         let ids: Vec<_> = result.filtered_apps.iter().map(|a| a.id.as_str()).collect();
-        assert_eq!(ids, vec!["org.freemeetingtranscriber.dev", "us.zoom.xos"]);
+        assert_eq!(ids, vec!["io.loofah.dev", "us.zoom.xos"]);
     }
 }

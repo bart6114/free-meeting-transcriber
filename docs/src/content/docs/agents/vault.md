@@ -1,9 +1,9 @@
 ---
 title: "Vault guide for agents"
-description: "The standing AGENTS.md every vault carries: what Free Meeting Transcriber is, how the vault is structured, and how to work with it."
+description: "The standing AGENTS.md every vault carries: what Loofah is, how the vault is structured, and how to work with it."
 ---
 
-Free Meeting Transcriber (fmtr) is a local-first knowledge and note-taking app that began with meeting transcription. Its **vault** can hold recorded meetings, standalone notes, imported material, and work an agent creates from other authorized sources. The vault is a plain folder of Markdown and JSON files and the only source of truth — there is no database or cloud copy. A copy of this page is kept at the vault root as `AGENTS.md`. Full, current documentation lives at https://freemeetingtranscriber.com/ — machine-readable indexes at https://freemeetingtranscriber.com/llms.txt and https://freemeetingtranscriber.com/llms-full.txt.
+Loofah (loofah) is a local-first knowledge and note-taking app that began with meeting transcription. Its **vault** can hold recorded meetings, standalone notes, imported material, and work an agent creates from other authorized sources. The vault is a plain folder of Markdown and JSON files and the only source of truth — there is no database or cloud copy. A copy of this page is kept at the vault root as `AGENTS.md`. Full, current documentation lives at https://loofah.io/ — machine-readable indexes at https://loofah.io/llms.txt and https://loofah.io/llms-full.txt.
 
 ## Vault structure
 
@@ -43,7 +43,7 @@ the author ran to produce the note, if any.
 Rules for agents:
 
 - **Always pass `--author <your-agent-name>` when creating a session** with
-  `fmtr sessions new` or `fmtr import`. Pick one stable name (for example
+  `loofah sessions new` or `loofah import`. Pick one stable name (for example
   `claude-code`) and keep using it.
 - **If a skill produced the note, also pass `--skill <skill-name>`** so the
   session records which skill was used. Use the skill's stable name; omit the
@@ -54,11 +54,11 @@ Rules for agents:
 
 ## Reading session data
 
-Use Free Meeting Transcriber's typed, read-only interfaces for session data.
+Use Loofah's typed, read-only interfaces for session data.
 Do not use `find`, `grep`, `rg`, filesystem crawling, or direct SQLite queries
 to find or read sessions.
 
-Prefer the fmtr MCP tools when they are available:
+Prefer the loofah MCP tools when they are available:
 
 - `list_meetings` to resolve a session ID
 - `get_meeting` for notes, summaries, and action items
@@ -66,17 +66,17 @@ Prefer the fmtr MCP tools when they are available:
 
 The MCP tool names retain `meeting` for compatibility even when the session is a standalone note.
 
-If MCP is unavailable, use the fmtr CLI with `--json`:
+If MCP is unavailable, use the loofah CLI with `--json`:
 
 (`meetings` is a compatibility alias for `sessions` while deprecation is phased in.)
 
 ```sh
-fmtr --json sessions list --query "planning"
-fmtr --json sessions get SESSION_ID
-fmtr --json sessions transcript SESSION_ID
+loofah --json sessions list --query "planning"
+loofah --json sessions get SESSION_ID
+loofah --json sessions transcript SESSION_ID
 ```
 
-The CLI discovers Free Meeting Transcriber's vault from the platform
+The CLI discovers Loofah's vault from the platform
 application-data directory, following the `vault_path` redirect in its
 `global.json` when the vault has been relocated. Use
 `--vault-path ABSOLUTE_VAULT_DIR` only when the user explicitly provides a
@@ -84,9 +84,9 @@ non-default vault path; do not crawl the filesystem to find one. Never guess a
 session ID. Fetch a transcript only when notes and summaries do not contain
 the needed context.
 
-## The fmtr CLI
+## The loofah CLI
 
-Run `fmtr doctor` first to verify the CLI can reach the vault (it also repairs
+Run `loofah doctor` first to verify the CLI can reach the vault (it also repairs
 a missing or stale `AGENTS.md`). Always pass `--json` for machine-readable
 output.
 
@@ -110,4 +110,4 @@ output.
 | `tags list` | List every tag registered in the vault. |
 
 Per-command flags are documented at
-https://freemeetingtranscriber.com/reference/cli/.
+https://loofah.io/reference/cli/.

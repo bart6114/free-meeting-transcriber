@@ -30,6 +30,9 @@ describe("session drag", () => {
     writeSessionContextDragData(dataTransfer, "session-1", "Meeting notes");
 
     expect(dataTransfer.effectAllowed).toBe("copy");
+    expect(dataTransfer.types).toContain(
+      "application/x-loofah-session-context",
+    );
     expect(hasSessionContextDragData(dataTransfer)).toBe(true);
     expect(dataTransfer.getData("text/plain")).toBe("Meeting notes");
     expect(readSessionMentionDragData(dataTransfer)).toEqual({

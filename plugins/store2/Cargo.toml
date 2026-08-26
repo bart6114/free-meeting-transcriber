@@ -22,6 +22,7 @@ objc2-security = { workspace = true, features = ["SecBase", "SecKeychain"] }
 security-framework = { workspace = true }
 
 [dependencies]
+dirs = { workspace = true }
 tauri = { workspace = true, features = ["test"] }
 tauri-plugin-settings = { workspace = true }
 tauri-plugin-store = { workspace = true }

@@ -107,7 +107,7 @@ const notifyTranscriptionStalled = () => {
   sonnerToast.warning("Live transcription stalled", {
     id: "live-transcription-stalled",
     description:
-      "Free Meeting Transcriber keeps recording. The missing part of the transcript will be rebuilt from the recording when you stop listening.",
+      "Loofah keeps recording. The missing part of the transcript will be rebuilt from the recording when you stop listening.",
   });
 };
 
@@ -384,7 +384,7 @@ export const startLiveSession = <T extends LiveStore>(
             .then((r) =>
               r.status === "ok" ? r.data.map((app) => app.id) : null,
             ),
-          getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
+          getIdentifier().catch(() => "io.loofah.stable"),
         ]);
       },
       catch: (error) => error,
@@ -657,7 +657,7 @@ export const stopLiveSession = <T extends GeneralState>(
                 .then((dataDirPath) =>
                   getSessionResourcePath(dataDirPath, sessionId),
                 ),
-              getIdentifier().catch(() => "org.freemeetingtranscriber.stable"),
+              getIdentifier().catch(() => "io.loofah.stable"),
             ]),
           )
           .then(([sessionPath, bundleId]) => {

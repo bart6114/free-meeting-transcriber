@@ -236,7 +236,7 @@ impl NotificationManager {
         });
 
         Application::builder()
-            .application_id("org.freemeetingtranscriber.notifications")
+            .application_id("io.loofah.notifications")
             .build()
     }
 

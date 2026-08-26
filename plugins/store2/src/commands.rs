@@ -86,16 +86,12 @@ fn repair_macos_keychain_access() -> Result<(), String> {
     Ok(())
 }
 
-fn secret_entry<R: tauri::Runtime>(
-    app: &tauri::AppHandle<R>,
-    scope: &str,
-    key: &str,
-) -> Result<keyring::Entry, String> {
+fn secret_entry(identifier: &str, scope: &str, key: &str) -> Result<keyring::Entry, String> {
     if scope.trim().is_empty() || key.trim().is_empty() {
         return Err("secure-store scope and key must not be empty".to_string());
     }
 
-    let service = secure_store_service(&app.config().identifier);
+    let service = secure_store_service(identifier);
     let account = format!("{scope}:{key}");
     keyring::Entry::new(&service, &account).map_err(|error| error.to_string())
 }
@@ -242,11 +238,25 @@ async fn read_secret_for<R: tauri::Runtime>(
     key: String,
 ) -> Result<Option<String>, String> {
     validate_secret_coordinate(caller, &scope, &key)?;
+    let identifier = app.config().identifier.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let entry = secret_entry(&app, &scope, &key)?;
+        let entry = secret_entry(&identifier, &scope, &key)?;
         match entry.get_password() {
             Ok(secret) => Ok(Some(secret)),
-            Err(keyring::Error::NoEntry) => Ok(None),
+            Err(keyring::Error::NoEntry) => {
+                let Some(legacy_identifier) = crate::legacy_identifier(&identifier) else {
+                    return Ok(None);
+                };
+                let legacy_entry = secret_entry(legacy_identifier, &scope, &key)?;
+                match legacy_entry.get_password() {
+                    Ok(secret) => {
+                        entry.set_password(&secret).map_err(secure_store_error)?;
+                        Ok(Some(secret))
+                    }
+                    Err(keyring::Error::NoEntry) => Ok(None),
+                    Err(error) => Err(secure_store_error(error)),
+                }
+            }
             Err(error) => Err(secure_store_error(error)),
         }
     })
@@ -282,9 +292,15 @@ async fn write_secret_for<R: tauri::Runtime>(
     value: String,
 ) -> Result<(), String> {
     validate_secret_coordinate(caller, &scope, &key)?;
+    let identifier = app.config().identifier.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let entry = secret_entry(&app, &scope, &key)?;
+        let entry = secret_entry(&identifier, &scope, &key)?;
         entry.set_password(&value).map_err(secure_store_error)?;
+        if let Some(legacy_identifier) = crate::legacy_identifier(&identifier) {
+            secret_entry(legacy_identifier, &scope, &key)?
+                .set_password(&value)
+                .map_err(secure_store_error)?;
+        }
         Ok(())
     })
     .await
@@ -308,11 +324,18 @@ async fn delete_secret_for<R: tauri::Runtime>(
     key: String,
 ) -> Result<(), String> {
     validate_secret_coordinate(caller, &scope, &key)?;
+    let identifier = app.config().identifier.to_string();
     tauri::async_runtime::spawn_blocking(move || {
-        let entry = secret_entry(&app, &scope, &key)?;
-        match entry.delete_credential() {
-            Ok(()) | Err(keyring::Error::NoEntry) => {}
-            Err(error) => return Err(secure_store_error(error)),
+        let mut identifiers = vec![identifier.as_str()];
+        if let Some(legacy_identifier) = crate::legacy_identifier(&identifier) {
+            identifiers.push(legacy_identifier);
+        }
+        for identifier in identifiers {
+            let entry = secret_entry(identifier, &scope, &key)?;
+            match entry.delete_credential() {
+                Ok(()) | Err(keyring::Error::NoEntry) => {}
+                Err(error) => return Err(secure_store_error(error)),
+            }
         }
         Ok(())
     })
@@ -327,17 +350,34 @@ mod tests {
     #[test]
     fn uses_branded_service_names_for_current_identifiers() {
         assert_eq!(
-            secure_store_service("org.freemeetingtranscriber.dev"),
-            "org.freemeetingtranscriber.dev.secure-store"
+            secure_store_service("io.loofah.dev"),
+            "io.loofah.dev.secure-store"
         );
         assert_eq!(
-            secure_store_service("org.freemeetingtranscriber.staging"),
-            "org.freemeetingtranscriber.staging.secure-store"
+            secure_store_service("io.loofah.staging"),
+            "io.loofah.staging.secure-store"
         );
         assert_eq!(
-            secure_store_service("org.freemeetingtranscriber.stable"),
-            "org.freemeetingtranscriber.stable.secure-store"
+            secure_store_service("io.loofah.stable"),
+            "io.loofah.stable.secure-store"
         );
+    }
+
+    #[test]
+    fn maps_current_identifiers_to_legacy_keychain_services() {
+        assert_eq!(
+            crate::legacy_identifier("io.loofah.dev"),
+            Some("org.freemeetingtranscriber.dev")
+        );
+        assert_eq!(
+            crate::legacy_identifier("io.loofah.staging"),
+            Some("org.freemeetingtranscriber.staging")
+        );
+        assert_eq!(
+            crate::legacy_identifier("io.loofah.stable"),
+            Some("org.freemeetingtranscriber.stable")
+        );
+        assert_eq!(crate::legacy_identifier("com.example.app"), None);
     }
 
     #[test]

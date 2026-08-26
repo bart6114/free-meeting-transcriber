@@ -49,7 +49,7 @@ jobs:
         run: |
           printf '%s\n' "$APPLE_API_KEY_CONTENT" > "$RUNNER_TEMP/AuthKey.p8"
           echo "APPLE_API_KEY_PATH=$RUNNER_TEMP/AuthKey.p8" >> "$GITHUB_ENV"
-      - name: Build fmtr CLI sidecar
+      - name: Build Loofah CLI sidecar
         run: bash apps/desktop/src-tauri/scripts/build-cli-sidecar.sh
       # `staging`, not `devtools`: flipping tauri/devtools would refingerprint the
       # tauri/wry stack and poison the rust-cache shared with desktop_release.
@@ -72,7 +72,7 @@ jobs:
           (cd "$bundle_dir" && shasum -a 256 "$(basename "$dmg")" > "$(basename "$dmg").sha256")
       - uses: actions/upload-artifact@v4
         with:
-          name: fmtr-macos-arm64-dmg-${{ github.sha }}
+          name: loofah-macos-arm64-dmg-${{ github.sha }}
           path: |
             apps/desktop/src-tauri/target/release/bundle/dmg/*.dmg
             apps/desktop/src-tauri/target/release/bundle/dmg/*.sha256

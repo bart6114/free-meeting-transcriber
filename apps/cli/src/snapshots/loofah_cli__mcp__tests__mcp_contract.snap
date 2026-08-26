@@ -3,20 +3,20 @@ source: apps/cli/src/mcp.rs
 expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": info.protocol_version, \"instructions\":\n    info.instructions, \"tools\": tools, \"resource_templates\": templates,\n}))"
 ---
 {
-  "instructions": "Read-only, local access to Free Meeting Transcriber meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Call get_meeting_transcript for the full transcript as speaker-labeled '[HH:MM:SS] Speaker: ...' lines. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a start_ms that lines up with the transcript's timestamps. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/free-meeting-transcriber",
+  "instructions": "Read-only, local access to Loofah meeting data. Start with list_meetings to resolve a meeting_id, then call get_meeting for notes, summaries, and action items. Call get_meeting_transcript for the full transcript as speaker-labeled '[HH:MM:SS] Speaker: ...' lines. Use search_meetings for keyword search across titles, notes, summaries, and transcript words, optionally limited to meetings where a specific speaker spoke; transcript hits include a start_ms that lines up with the transcript's timestamps. Never invent meeting ids, access SQLite directly, or claim a write occurred: every tool is idempotent and performs no writes. Documentation: https://github.com/bart6114/loofah",
   "protocol_version": "2024-11-05",
   "resource_templates": [
     {
       "description": "Meeting metadata, note, summaries, and action items",
       "mimeType": "text/markdown",
-      "name": "Free Meeting Transcriber meeting",
-      "uriTemplate": "fmtr://meetings/{meeting_id}"
+      "name": "Loofah meeting",
+      "uriTemplate": "loofah://meetings/{meeting_id}"
     },
     {
       "description": "The full speaker-labeled meeting transcript",
       "mimeType": "text/plain",
-      "name": "Free Meeting Transcriber meeting transcript",
-      "uriTemplate": "fmtr://meetings/{meeting_id}/transcript"
+      "name": "Loofah meeting transcript",
+      "uriTemplate": "loofah://meetings/{meeting_id}/transcript"
     }
   ],
   "tools": [
@@ -27,12 +27,12 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Get one Free Meeting Transcriber meeting with its canonical note, summaries, and action items. Use get_meeting_transcript separately for transcript words.",
+      "description": "Get one Loofah meeting with its canonical note, summaries, and action items. Use get_meeting_transcript separately for transcript words.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "meeting_id": {
-            "description": "Free Meeting Transcriber meeting id",
+            "description": "Loofah meeting id",
             "type": "string"
           }
         },
@@ -51,12 +51,12 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Get the full transcript of a Free Meeting Transcriber meeting as readable text: one '[HH:MM:SS] Speaker: ...' line per speaker turn, timed from the start of the meeting.",
+      "description": "Get the full transcript of a Loofah meeting as readable text: one '[HH:MM:SS] Speaker: ...' line per speaker turn, timed from the start of the meeting.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
           "meeting_id": {
-            "description": "Free Meeting Transcriber meeting id",
+            "description": "Loofah meeting id",
             "type": "string"
           }
         },
@@ -75,7 +75,7 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "List recent Free Meeting Transcriber meetings with pagination metadata. Use query to narrow by title or meeting id, then pass next_offset as offset to continue.",
+      "description": "List recent Loofah meetings with pagination metadata. Use query to narrow by title or meeting id, then pass next_offset as offset to continue.",
       "inputSchema": {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "properties": {
@@ -135,7 +135,7 @@ expression: "canonicalize_json(serde_json::json!({\n    \"protocol_version\": in
         "openWorldHint": false,
         "readOnlyHint": true
       },
-      "description": "Full-text search across Free Meeting Transcriber meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a start_ms that matches the transcript's [HH:MM:SS] timestamps.",
+      "description": "Full-text search across Loofah meeting titles, notes, summaries, and transcript words. Set speaker to limit results to meetings where that person spoke, with the query matching anywhere in those transcripts (without query it lists those meetings); transcript hits carry a start_ms that matches the transcript's [HH:MM:SS] timestamps.",
       "inputSchema": {
         "$defs": {
           "SearchKind": {

@@ -1,12 +1,12 @@
 ---
-title: "Free Meeting Transcriber"
+title: "Loofah"
 description: "A local-first knowledge vault for notes, meetings, transcripts, and agent-created research."
 ---
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 <div class="download-cta">
-  <a href="https://github.com/bart6114/free-meeting-transcriber/releases/download/updater/FreeMeetingTranscriber_latest_aarch64.dmg">
+  <a href="https://github.com/bart6114/loofah/releases/download/updater/Loofah_latest_aarch64.dmg">
     <span class="cta-label">
       <span class="cta-title">Download for macOS</span>
       <span class="cta-subtitle">Apple Silicon · Signed and notarized</span>
@@ -15,15 +15,11 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
   </a>
 </div>
 
-Free Meeting Transcriber started as the meeting notetaker I wanted: local transcription, ordinary files, and no service getting between me and my notes. It has since become the place where I keep more of my working knowledge.
+Loofah started as the meeting notetaker I wanted: local transcription, ordinary files, and no service getting between me and my notes. It has since become the place where I keep more of my working knowledge.
 
 A session can start as a recorded meeting, an imported recording or transcript, a note you write, or Markdown an agent creates from another tool. That means research, project context, decisions, and useful material from elsewhere can live beside meeting notes in one searchable vault. Agents can create sessions, add to notes, tag them, and attach source files through the CLI without editing vault internals.
 
 The app still records your microphone and system audio without sending a bot into the call. It’s [free as in beer 🍺](https://en.wikipedia.org/wiki/Gratis_versus_libre): there is no account, subscription, cloud backend, or telemetry. Your vault stays on your Mac and remains useful outside the app. If you want generated summaries, connect your own hosted provider or a local model.
-
-:::note[About the name]
-Free Meeting Transcriber describes where the project started, but no longer covers everything it does. I am considering a name change as the app grows into a broader local knowledge tool. For now, these docs use **session** for any entry in the vault, whether or not it came from a meeting.
-:::
 
 <CardGrid>
   <LinkCard title="Try your first meeting" href="/quickstart" description="Install the app, download a transcription model, and make a short test recording." />
@@ -52,7 +48,7 @@ Free Meeting Transcriber describes where the project started, but no longer cove
 5. If you configured Intelligence, review the generated summary.
 
 :::note
-For a quick check, open the **Welcome to Free Meeting Transcriber** note, click **Record**, and say a few sentences.
+For a quick check, open the **Welcome to Loofah** note, click **Record**, and say a few sentences.
 :::
 
-For work that does not start with a meeting, create a standalone note in the app or ask an agent to store its result with `fmtr sessions new`. See [Notes and knowledge](/notes) and [Agent access](/agents/overview).
+For work that does not start with a meeting, create a standalone note in the app or ask an agent to store its result with `loofah sessions new`. See [Notes and knowledge](/notes) and [Agent access](/agents/overview).

@@ -3953,7 +3953,6 @@ dependencies = [
  "tantivy",
  "tauri",
  "tauri-build",
- "tauri-plugin-agent",
  "tauri-plugin-analytics",
  "tauri-plugin-audio-priority",
  "tauri-plugin-automation",
@@ -4017,6 +4016,7 @@ dependencies = [
  "tracing",
  "vault-read",
  "vault-write",
+ "winreg 0.55.0",
 ]
 
 [[package]]
@@ -4936,33 +4936,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b09cf3155332e944990140d967ff5eceb70df778b34f77d8075db46e4704e6d8"
 dependencies = [
  "num-traits",
-]
-
-[[package]]
-name = "fmtr-cli"
-version = "0.1.0"
-dependencies = [
- "agent-access",
- "audio-norm",
- "chrono",
- "clap",
- "cli-docs",
- "dirs 6.0.0",
- "hound",
- "insta",
- "listener2-core",
- "owhisper-interface",
- "rmcp",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.18",
- "tokio",
- "transcribe-soniqo",
- "url",
- "uuid",
- "vault-read",
- "vault-write",
 ]
 
 [[package]]
@@ -9392,6 +9365,33 @@ name = "log"
 version = "0.4.29"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "5e5032e24019045c762d3c0f28f5b6b8bbf38563a65908389bf7978758920897"
+
+[[package]]
+name = "loofah-cli"
+version = "0.1.0"
+dependencies = [
+ "agent-access",
+ "audio-norm",
+ "chrono",
+ "clap",
+ "cli-docs",
+ "dirs 6.0.0",
+ "hound",
+ "insta",
+ "listener2-core",
+ "owhisper-interface",
+ "rmcp",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "transcribe-soniqo",
+ "url",
+ "uuid",
+ "vault-read",
+ "vault-write",
+]
 
 [[package]]
 name = "lru"
@@ -16419,6 +16419,7 @@ name = "tauri-plugin-store2"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "dirs 6.0.0",
  "keyring",
  "objc2-security",
  "security-framework",

@@ -21,7 +21,7 @@ const SOCIALS = [
   {
     label: "GitHub",
     icon: "simple-icons:github",
-    url: "https://github.com/bart6114/free-meeting-transcriber",
+    url: "https://github.com/bart6114/loofah",
   },
 ] as const;
 
@@ -90,18 +90,17 @@ export function FinalSection({
         {status === "loading" ? (
           <span className="flex items-center gap-2">
             <Loader2Icon className="size-4 animate-spin" />
-            <Trans>Open Free Meeting Transcriber</Trans>
+            <Trans>Open Loofah</Trans>
           </span>
         ) : (
-          <Trans>Open Free Meeting Transcriber</Trans>
+          <Trans>Open Loofah</Trans>
         )}
       </OnboardingButton>
       {status === "error" && (
         <p className="text-destructive text-sm" role="alert">
           {translate({
             id: "onboarding.finish-error",
-            message:
-              "Couldn't open Free Meeting Transcriber. Please try again.",
+            message: "Couldn't open Loofah. Please try again.",
           })}
         </p>
       )}

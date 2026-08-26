@@ -168,8 +168,8 @@ mod test {
     #[test]
     fn redacts_query_and_fragment_from_logged_urls() {
         let value = redact_url(
-            "freemeetingtranscriber://share/open?mode=handoff&request_id=ba5ca57a-8f88-44e8-ab92-f9e10c89425c#secret",
+            "loofah://share/open?mode=handoff&request_id=ba5ca57a-8f88-44e8-ab92-f9e10c89425c#secret",
         );
-        assert_eq!(value, "freemeetingtranscriber://share/open");
+        assert_eq!(value, "loofah://share/open");
     }
 }

@@ -8,7 +8,7 @@
     "predev": "pnpm run ui:css",
     "dev": "vite",
     "predev:relay": "pnpm run ui:css",
-    "dev:relay": "echo 'Make sure Free Meeting Transcriber Staging app is running, then open http://localhost:1423' && vite",
+    "dev:relay": "echo 'Make sure Loofah Staging app is running, then open http://localhost:1423' && vite",
     "prebuild": "pnpm run ui:css",
     "build": "tsc && vite build",
     "preview": "vite preview",

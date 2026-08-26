@@ -4,7 +4,7 @@ use tauri::Manager;
 
 use crate::{AppExt, embedded_cli::EmbeddedCliStatus, session_store::SessionStore};
 
-const STAGING_BUNDLE_ID: &str = "org.freemeetingtranscriber.staging";
+const STAGING_BUNDLE_ID: &str = "io.loofah.staging";
 
 #[tauri::command]
 #[specta::specta]

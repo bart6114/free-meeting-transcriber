@@ -37,7 +37,7 @@ if (command === "run" || command === "build") {
 // app would show up in the Dock as "desktop". Run through a hardlink named
 // after the product instead.
 function displayNamedBinary(binary) {
-  const displayPath = resolve(dirname(binary), "Free Meeting Transcriber Dev");
+  const displayPath = resolve(dirname(binary), "Loofah Dev");
   try {
     rmSync(displayPath, { force: true });
     linkSync(binary, displayPath);
@@ -60,9 +60,9 @@ function signBinary(binary) {
       "--sign",
       "-",
       "--identifier",
-      "org.freemeetingtranscriber.dev",
+      "io.loofah.dev",
       "--requirements",
-      '=designated => identifier "org.freemeetingtranscriber.dev"',
+      '=designated => identifier "io.loofah.dev"',
       "--entitlements",
       entitlements,
       binary,

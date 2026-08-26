@@ -13,7 +13,8 @@ pub fn compute_settings_path(base: &Path) -> PathBuf {
 pub fn compute_config_path(base: &Path) -> PathBuf {
     base.join(CONFIG_FILENAME)
 }
-const VAULT_BASE_ENV_VAR: &str = "FMTR_VAULT_BASE";
+const VAULT_BASE_ENV_VAR: &str = "LOOFAH_VAULT_BASE";
+const LEGACY_VAULT_BASE_ENV_VAR: &str = "FMTR_VAULT_BASE";
 
 fn expand_path(path: &str, default_base: Option<&Path>) -> PathBuf {
     let home_dir = || dirs::home_dir().map(|p| p.to_string_lossy().into_owned());
@@ -58,7 +59,10 @@ pub fn resolve_base(global_base: &Path, default_base: &Path) -> PathBuf {
 }
 
 pub fn resolve_custom(global_base: &Path, default_base: &Path) -> Option<PathBuf> {
-    if let Ok(path) = std::env::var(VAULT_BASE_ENV_VAR) {
+    if let Some(path) = [VAULT_BASE_ENV_VAR, LEGACY_VAULT_BASE_ENV_VAR]
+        .into_iter()
+        .find_map(|key| std::env::var(key).ok())
+    {
         let path = expand_path(&path, Some(default_base));
         if ensure_vault_dir(&path).is_ok() {
             return Some(path);

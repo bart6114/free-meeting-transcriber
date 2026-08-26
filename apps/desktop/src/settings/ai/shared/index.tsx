@@ -68,7 +68,7 @@ export function AppProviderIcon() {
   return (
     <img
       src={APP_ICON_SRC}
-      alt="Free Meeting Transcriber"
+      alt="Loofah"
       data-slot="provider-logo"
       className="size-4 object-contain object-center [clip-path:inset(6%_round_18%)]"
     />
@@ -236,9 +236,9 @@ export function NonHyprProviderCard({
     },
   });
   const keychainToastDescription = isKeychainRecoveryInProgress
-    ? t`Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically.`
+    ? t`Unlock your login Keychain in the macOS prompt. Loofah will retry saving this API key automatically.`
     : (repairMutation.error?.message ??
-      t`macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Free Meeting Transcriber retries this API key.`);
+      t`macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Loofah retries this API key.`);
 
   return (
     <AccordionItem

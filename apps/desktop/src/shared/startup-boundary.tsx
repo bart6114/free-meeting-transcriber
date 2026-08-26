@@ -19,7 +19,7 @@ import {
 } from "~/types/tauri.gen";
 
 const CLOUD_STORAGE_HINT_DELAY_MS = 5000;
-const NEW_VAULT_FOLDER_NAME = "Free Meeting Transcriber";
+const NEW_VAULT_FOLDER_NAME = "Loofah";
 
 export function StartupBoundary({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StartupStatus | null>(null);
@@ -152,7 +152,7 @@ function StartupScreen({ status }: { status: StartupStatus | null }) {
                 : t`Your cloud provider may still be downloading files`}
             </p>
             <p className="text-muted-foreground mt-1 text-xs">
-              {t`Free Meeting Transcriber will continue automatically when the vault is available.`}
+              {t`Loofah will continue automatically when the vault is available.`}
             </p>
           </div>
         ) : null}

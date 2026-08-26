@@ -123,7 +123,7 @@ function OnboardingScreenContent({
         ])}
       >
         <h1 className="text-foreground text-4xl leading-none font-semibold tracking-tight">
-          <Trans>Welcome to Free Meeting Transcriber</Trans>
+          <Trans>Welcome to Loofah</Trans>
         </h1>
       </div>
 
@@ -135,14 +135,14 @@ function OnboardingScreenContent({
             description={
               currentPlatform === "macos" ? (
                 <Trans>
-                  Free Meeting Transcriber needs microphone and system audio to
-                  transcribe your meetings, plus Accessibility to read meeting
-                  controls, visible chat, and participant status.
+                  Loofah needs microphone and system audio to transcribe your
+                  meetings, plus Accessibility to read meeting controls, visible
+                  chat, and participant status.
                 </Trans>
               ) : (
                 <Trans>
-                  Free Meeting Transcriber needs access to your microphone and
-                  system audio to record and transcribe your meetings
+                  Loofah needs access to your microphone and system audio to
+                  record and transcribe your meetings
                 </Trans>
               )
             }
@@ -172,9 +172,8 @@ function OnboardingScreenContent({
             completedTitle={<Trans>Transcription model configured</Trans>}
             description={
               <Trans>
-                Free Meeting Transcriber transcribes meetings on your device.
-                Pick a model to download — you can keep going while it
-                downloads.
+                Loofah transcribes meetings on your device. Pick a model to
+                download — you can keep going while it downloads.
               </Trans>
             }
             status={getStepStatus("stt-model", currentStep)}

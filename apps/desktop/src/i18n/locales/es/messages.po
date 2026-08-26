@@ -79,7 +79,7 @@ msgid "A to Z"
 msgstr ""
 
 #: src/main/about-dialog.tsx
-msgid "About Free Meeting Transcriber"
+msgid "About Loofah"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
@@ -543,38 +543,6 @@ msgstr ""
 msgid "Forever"
 msgstr ""
 
-#: src/onboarding/permissions.tsx
-msgid "Free Meeting Transcriber can hear others"
-msgstr ""
-
-#: src/onboarding/permissions.tsx
-msgid "Free Meeting Transcriber can hear your voice"
-msgstr ""
-
-#: src/onboarding/permissions.tsx
-msgid "Free Meeting Transcriber can read meeting details"
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Free Meeting Transcriber needs access to your microphone and system audio to record and transcribe your meetings"
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Free Meeting Transcriber needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
-msgstr ""
-
-#: src/templates/auto-form.tsx
-msgid "Free Meeting Transcriber sends these separately, so editing the prompt cannot remove the meeting source material."
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Free Meeting Transcriber transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
-msgstr ""
-
-#: src/shared/startup-boundary.tsx
-msgid "Free Meeting Transcriber will continue automatically when the vault is available."
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr ""
@@ -617,15 +585,15 @@ msgid "Having trouble?"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
-msgid "Help Free Meeting Transcriber listen to others"
+msgid "Help Loofah listen to others"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
-msgid "Help Free Meeting Transcriber listen to you"
+msgid "Help Loofah listen to you"
 msgstr ""
 
 #: src/onboarding/permissions.tsx
-msgid "Help Free Meeting Transcriber read meeting activity"
+msgid "Help Loofah read meeting activity"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
@@ -717,7 +685,7 @@ msgid "Join our community and stay updated:"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-msgid "Keep Free Meeting Transcriber available from the menu bar."
+msgid "Keep Loofah available from the menu bar."
 msgstr ""
 
 #: src/settings/general/index.tsx
@@ -737,7 +705,7 @@ msgid "Language model configured"
 msgstr ""
 
 #: src/settings/ai/llm/select.tsx
-msgid "Language model is needed to make Free Meeting Transcriber summarize and chat about your conversations."
+msgid "Language model is needed to make Loofah summarize and chat about your conversations."
 msgstr ""
 
 #: src/settings/general/theme.tsx
@@ -774,8 +742,40 @@ msgstr ""
 msgid "Loading..."
 msgstr ""
 
+#: src/onboarding/permissions.tsx
+msgid "Loofah can hear others"
+msgstr ""
+
+#: src/onboarding/permissions.tsx
+msgid "Loofah can hear your voice"
+msgstr ""
+
+#: src/onboarding/permissions.tsx
+msgid "Loofah can read meeting details"
+msgstr ""
+
+#: src/onboarding/index.tsx
+msgid "Loofah needs access to your microphone and system audio to record and transcribe your meetings"
+msgstr ""
+
+#: src/onboarding/index.tsx
+msgid "Loofah needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
+msgstr ""
+
+#: src/templates/auto-form.tsx
+msgid "Loofah sends these separately, so editing the prompt cannot remove the meeting source material."
+msgstr ""
+
+#: src/onboarding/index.tsx
+msgid "Loofah transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
+msgstr ""
+
+#: src/shared/startup-boundary.tsx
+msgid "Loofah will continue automatically when the vault is available."
+msgstr ""
+
 #: src/settings/ai/shared/index.tsx
-msgid "macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Free Meeting Transcriber retries this API key."
+msgid "macOS cannot access your login Keychain. Repairing briefly locks it and asks for your Mac password before Loofah retries this API key."
 msgstr ""
 
 #: src/settings/general/main-language.tsx
@@ -969,13 +969,13 @@ msgstr ""
 msgid "Open floating panel"
 msgstr ""
 
-#: src/onboarding/final.tsx
-msgid "Open Free Meeting Transcriber"
-msgstr ""
-
 #: src/session/components/outer-header/overflow/index.tsx
 #: src/sidebar/timeline/item.tsx
 msgid "Open in New Window"
+msgstr ""
+
+#: src/onboarding/final.tsx
+msgid "Open Loofah"
 msgstr ""
 
 #: src/task/resource-view.tsx
@@ -1242,7 +1242,7 @@ msgid "Select..."
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-msgid "Send anonymous usage analytics to help improve Free Meeting Transcriber."
+msgid "Send anonymous usage analytics to help improve Loofah."
 msgstr ""
 
 #: src/templates/auto-form.tsx
@@ -1283,10 +1283,6 @@ msgstr ""
 msgid "Show floating bar"
 msgstr ""
 
-#: src/settings/general/app-settings.tsx
-msgid "Show Free Meeting Transcriber in the Dock and app switcher."
-msgstr ""
-
 #: src/session/components/memo-image-strip.tsx
 msgid "Show image in note"
 msgstr ""
@@ -1294,6 +1290,10 @@ msgstr ""
 #: src/settings/ai/stt/select.tsx
 #: src/sidebar/timeline/item.tsx
 msgid "Show in Finder"
+msgstr ""
+
+#: src/settings/general/app-settings.tsx
+msgid "Show Loofah in the Dock and app switcher."
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
@@ -1329,7 +1329,7 @@ msgid "Start a new empty vault here"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
-msgid "Start Free Meeting Transcriber at login"
+msgid "Start Loofah at login"
 msgstr ""
 
 #: src/settings/general/storage/change-location.tsx
@@ -1500,7 +1500,7 @@ msgid "Transcription model configured"
 msgstr ""
 
 #: src/settings/ai/stt/select.tsx
-msgid "Transcription model is needed to make Free Meeting Transcriber listen to your conversations."
+msgid "Transcription model is needed to make Loofah listen to your conversations."
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -1516,7 +1516,7 @@ msgid "Unknown date"
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx
-msgid "Unlock your login Keychain in the macOS prompt. Free Meeting Transcriber will retry saving this API key automatically."
+msgid "Unlock your login Keychain in the macOS prompt. Loofah will retry saving this API key automatically."
 msgstr ""
 
 #: src/session/components/outer-header/overflow/export-modal.tsx
@@ -1565,7 +1565,7 @@ msgid "We couldn't open your vault"
 msgstr ""
 
 #: src/onboarding/index.tsx
-msgid "Welcome to Free Meeting Transcriber"
+msgid "Welcome to Loofah"
 msgstr ""
 
 #: src/changelog/index.tsx

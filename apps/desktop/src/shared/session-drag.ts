@@ -1,4 +1,5 @@
-const SESSION_CONTEXT_DRAG_TYPE = "application/x-fmtr-session-context";
+const SESSION_CONTEXT_DRAG_TYPE = "application/x-loofah-session-context";
+const LEGACY_SESSION_CONTEXT_DRAG_TYPE = "application/x-fmtr-session-context";
 
 type SessionDragPayload = {
   sessionId: string;
@@ -17,7 +18,9 @@ export const hasSessionContextDragData = (
     return false;
   }
 
-  return Array.from(dataTransfer.types).includes(SESSION_CONTEXT_DRAG_TYPE);
+  return [SESSION_CONTEXT_DRAG_TYPE, LEGACY_SESSION_CONTEXT_DRAG_TYPE].some(
+    (type) => Array.from(dataTransfer.types).includes(type),
+  );
 };
 
 export const writeSessionContextDragData = (
@@ -44,7 +47,8 @@ const readSessionContextDragPayload = (
 
   try {
     const payload = JSON.parse(
-      dataTransfer.getData(SESSION_CONTEXT_DRAG_TYPE),
+      dataTransfer.getData(SESSION_CONTEXT_DRAG_TYPE) ||
+        dataTransfer.getData(LEGACY_SESSION_CONTEXT_DRAG_TYPE),
     ) as SessionDragPayload;
 
     if (

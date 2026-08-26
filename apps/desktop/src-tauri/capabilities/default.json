@@ -30,7 +30,6 @@
     "tracing:default",
     "hypr-tray:default",
     "analytics:default",
-    "agent:default",
     "bedrock:default",
     "updater:default",
     "updater2:default",

@@ -207,8 +207,8 @@ export function AutoPromptForm({
             </p>
             <p className="text-muted-foreground mt-1 text-sm">
               <Trans>
-                Free Meeting Transcriber sends these separately, so editing the
-                prompt cannot remove the meeting source material.
+                Loofah sends these separately, so editing the prompt cannot
+                remove the meeting source material.
               </Trans>
             </p>
             <div className="mt-3 flex flex-wrap gap-2">

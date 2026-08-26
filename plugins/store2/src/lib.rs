@@ -10,6 +10,15 @@ use tauri::Manager;
 
 const PLUGIN_NAME: &str = "store2";
 
+fn legacy_identifier(identifier: &str) -> Option<&'static str> {
+    match identifier {
+        "io.loofah.dev" => Some("org.freemeetingtranscriber.dev"),
+        "io.loofah.staging" => Some("org.freemeetingtranscriber.staging"),
+        "io.loofah.stable" => Some("org.freemeetingtranscriber.stable"),
+        _ => None,
+    }
+}
+
 fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
     tauri_specta::Builder::<R>::new()
         .plugin_name(PLUGIN_NAME)
@@ -42,17 +51,21 @@ pub fn init<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
 }
 
 fn migrate<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> Result<(), Error> {
-    let old_path = app.path().app_data_dir()?.join(FILENAME);
     let new_path = store_path(app)?;
-    if !old_path.exists() {
-        return Ok(());
-    }
-
     if new_path.exists() {
         return Ok(());
     }
 
-    std::fs::rename(&old_path, &new_path)?;
+    let mut old_paths = vec![app.path().app_data_dir()?.join(FILENAME)];
+    if let (Some(data_dir), Some(identifier)) = (
+        dirs::data_dir(),
+        legacy_identifier(&app.config().identifier),
+    ) {
+        old_paths.push(data_dir.join(identifier).join(FILENAME));
+    }
+    if let Some(old_path) = old_paths.into_iter().find(|path| path.is_file()) {
+        std::fs::rename(old_path, new_path)?;
+    }
     Ok(())
 }
 

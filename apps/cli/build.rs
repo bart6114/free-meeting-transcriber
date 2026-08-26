@@ -15,5 +15,5 @@ fn main() {
         .as_str()
         .unwrap_or_else(|| panic!("no version field in {}", package_json.display()));
 
-    println!("cargo:rustc-env=FMTR_VERSION={version}");
+    println!("cargo:rustc-env=LOOFAH_VERSION={version}");
 }

@@ -23,7 +23,7 @@ export function AboutDialog() {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-sm gap-0 p-0">
         <DialogTitle className="sr-only">
-          <Trans>About Free Meeting Transcriber</Trans>
+          <Trans>About Loofah</Trans>
         </DialogTitle>
         {open && <AboutContent />}
       </DialogContent>
@@ -73,7 +73,7 @@ function AboutContent() {
           className="mb-2 size-16 rounded-2xl shadow-sm"
           draggable={false}
         />
-        <h2 className="text-base font-semibold">Free Meeting Transcriber</h2>
+        <h2 className="text-base font-semibold">Loofah</h2>
         <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
           {info.data ? (
             <>
@@ -121,7 +121,7 @@ function CopyBuildInfo({ version, sha }: { version: string; sha: string }) {
       className="text-muted-foreground h-6 gap-1.5 px-2 font-mono text-[11px]"
       onClick={() => {
         void navigator.clipboard
-          .writeText(`Free Meeting Transcriber ${version} (${sha})`)
+          .writeText(`Loofah ${version} (${sha})`)
           .then(() => setCopied(true));
       }}
     >

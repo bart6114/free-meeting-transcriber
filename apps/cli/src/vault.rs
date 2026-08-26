@@ -18,6 +18,12 @@ pub(crate) fn resolve_path(args: &Args) -> Result<PathBuf> {
     if let Some(base) = &args.base {
         return Ok(base.clone());
     }
+    if let Some(path) = std::env::var_os("FMTR_VAULT_PATH").map(PathBuf::from) {
+        return Ok(path);
+    }
+    if let Some(path) = std::env::var_os("FMTR_BASE").map(PathBuf::from) {
+        return Ok(path);
+    }
 
     let data_dir = dirs::data_dir()
         .ok_or_else(|| Error::operation("resolve vault path", "data directory is unavailable"))?;
@@ -32,14 +38,24 @@ fn resolve_default_path(data_dir: &Path) -> PathBuf {
 }
 
 fn resolve_default_path_for_command(data_dir: &Path, command_name: Option<&OsStr>) -> PathBuf {
-    let channel_identifier = match command_name.and_then(OsStr::to_str) {
-        Some("fmtr-dev") => Some("org.freemeetingtranscriber.dev"),
-        Some("fmtr-staging") => Some("org.freemeetingtranscriber.staging"),
-        _ => None,
+    let (current, legacy) = match command_name.and_then(OsStr::to_str) {
+        Some("loofah-dev" | "fmtr-dev") => (
+            data_dir.join("io.loofah.dev"),
+            data_dir.join("org.freemeetingtranscriber.dev"),
+        ),
+        Some("loofah-staging" | "fmtr-staging") => (
+            data_dir.join("io.loofah.staging"),
+            data_dir.join("org.freemeetingtranscriber.staging"),
+        ),
+        _ => (
+            data_dir.join("loofah"),
+            data_dir.join("free-meeting-transcriber"),
+        ),
     };
-    let base = match channel_identifier {
-        Some(identifier) => data_dir.join(identifier),
-        None => data_dir.join("free-meeting-transcriber"),
+    let base = if current.exists() || !legacy.exists() {
+        current
+    } else {
+        legacy
     };
     apply_vault_redirect(base)
 }
@@ -69,8 +85,20 @@ mod tests {
     fn default_path_targets_the_app_data_vault() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
-            dir.path().join("free-meeting-transcriber")
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
+            dir.path().join("loofah")
+        );
+    }
+
+    #[test]
+    fn default_path_falls_back_to_the_legacy_app_data_vault() {
+        let dir = tempfile::tempdir().unwrap();
+        let legacy = dir.path().join("free-meeting-transcriber");
+        std::fs::create_dir_all(&legacy).unwrap();
+
+        assert_eq!(
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
+            legacy
         );
     }
 
@@ -78,19 +106,23 @@ mod tests {
     fn channel_commands_target_their_channel_vault() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr-dev"))),
-            dir.path().join("org.freemeetingtranscriber.dev")
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah-dev"))),
+            dir.path().join("io.loofah.dev")
         );
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr-staging"))),
-            dir.path().join("org.freemeetingtranscriber.staging")
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah-staging"))),
+            dir.path().join("io.loofah.staging")
+        );
+        assert_eq!(
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr-dev"))),
+            dir.path().join("io.loofah.dev")
         );
     }
 
     #[test]
     fn default_path_follows_the_global_json_vault_redirect() {
         let dir = tempfile::tempdir().unwrap();
-        let base = dir.path().join("free-meeting-transcriber");
+        let base = dir.path().join("loofah");
         let vault = dir.path().join("my-vault");
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(
@@ -100,7 +132,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
             vault
         );
     }
@@ -108,7 +140,7 @@ mod tests {
     #[test]
     fn relative_or_malformed_redirects_are_ignored() {
         let dir = tempfile::tempdir().unwrap();
-        let base = dir.path().join("free-meeting-transcriber");
+        let base = dir.path().join("loofah");
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(
             base.join("global.json"),
@@ -116,13 +148,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
             base
         );
 
         std::fs::write(base.join("global.json"), "{ invalid").unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("fmtr"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
             base
         );
     }

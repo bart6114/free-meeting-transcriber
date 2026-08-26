@@ -62,44 +62,45 @@ jobs:
       - uses: ./.github/actions/rust_install
       - run: |
           cargo test --locked -p agent-access
-          cargo test --locked -p fmtr-cli
+          cargo test --locked -p loofah-cli
           cargo test --locked -p tiptap
       - run: |
           cargo clippy --locked \
             -p agent-access \
-            -p fmtr-cli \
+            -p loofah-cli \
             -p tiptap \
             --all-targets \
             --no-deps \
             -- \
             -D warnings
-      - run: cargo build --locked --release -p fmtr-cli
+      - run: cargo build --locked --release -p loofah-cli
       - run: |
-          target/release/fmtr --help
+          target/release/loofah --help
+          target/release/loofah --version
           target/release/fmtr --version
-          target/release/fmtr meetings --help
-          target/release/fmtr mcp --help
-          if doctor_output="$(target/release/fmtr --json --vault-path "$RUNNER_TEMP/missing-vault" doctor)"; then
+          target/release/loofah meetings --help
+          target/release/loofah mcp --help
+          if doctor_output="$(target/release/loofah --json --vault-path "$RUNNER_TEMP/missing-vault" doctor)"; then
             echo "doctor unexpectedly reported a missing vault as ready"
             exit 1
           fi
           grep -q '"ready": false' <<<"$doctor_output"
-          if invalid_output="$(target/release/fmtr --json meetings list --limit 0 2>&1)"; then
+          if invalid_output="$(target/release/loofah --json meetings list --limit 0 2>&1)"; then
             echo "invalid arguments unexpectedly succeeded"
             exit 1
           fi
           grep -q '"code": "invalid_arguments"' <<<"$invalid_output"
       - run: |
-          test -s skills/fmtr/SKILL.md
-          test "$(sed -n '1p' skills/fmtr/SKILL.md)" = "---"
-          grep -Eq '^name:[[:space:]]+fmtr[[:space:]]*$' skills/fmtr/SKILL.md
-          grep -Eq '^description:[[:space:]]*(>|\||[^[:space:]])' skills/fmtr/SKILL.md
-          awk 'NR > 1 && $0 == "---" { found = 1; exit } END { if (!found) exit 1 }' skills/fmtr/SKILL.md
+          test -s skills/loofah/SKILL.md
+          test "$(sed -n '1p' skills/loofah/SKILL.md)" = "---"
+          grep -Eq '^name:[[:space:]]+loofah[[:space:]]*$' skills/loofah/SKILL.md
+          grep -Eq '^description:[[:space:]]*(>|\||[^[:space:]])' skills/loofah/SKILL.md
+          awk 'NR > 1 && $0 == "---" { found = 1; exit } END { if (!found) exit 1 }' skills/loofah/SKILL.md
           test "$(readlink docs/.mintlify/skills)" = "../../skills"
-          test -f docs/.mintlify/skills/fmtr/SKILL.md
+          test -f docs/.mintlify/skills/loofah/SKILL.md
           skill_list="$(npx --yes skills@1.5.16 add . --list)"
           echo "$skill_list"
-          grep -q 'fmtr' <<<"$skill_list"
+          grep -q 'loofah' <<<"$skill_list"
           ! grep -q 'add-plugin' <<<"$skill_list"
       - run: |
           pnpm install --frozen-lockfile --filter @hypr/docs

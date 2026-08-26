@@ -27,7 +27,7 @@ import { commands as tauriCommands } from "~/types/tauri.gen";
 
 const VAULT_BASE_QUERY_KEY = ["vault-base-path"] as const;
 
-const NEW_VAULT_FOLDER_NAME = "Free Meeting Transcriber";
+const NEW_VAULT_FOLDER_NAME = "Loofah";
 
 type VaultAction =
   | { kind: "move"; path: string }

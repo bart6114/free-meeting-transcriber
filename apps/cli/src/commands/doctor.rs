@@ -70,7 +70,7 @@ fn inspect(args: &Args) -> Result<DoctorReport> {
     }
 
     Ok(DoctorReport {
-        cli_version: env!("FMTR_VERSION"),
+        cli_version: env!("LOOFAH_VERSION"),
         ready: report.is_directory && report.sessions.is_some(),
         vault: report,
     })
@@ -79,7 +79,7 @@ fn inspect(args: &Args) -> Result<DoctorReport> {
 fn render(report: &DoctorReport) -> String {
     let status = |value| if value { "yes" } else { "no" };
     let mut lines = vec![
-        format!("fmtr CLI {}", report.cli_version),
+        format!("Loofah CLI {}", report.cli_version),
         format!("Ready: {}", status(report.ready)),
         format!("Vault: {}", report.vault.path.display()),
         format!("Exists: {}", status(report.vault.exists)),

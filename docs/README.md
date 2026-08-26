@@ -1,7 +1,7 @@
-# Free Meeting Transcriber documentation
+# Loofah documentation
 
-This Astro Starlight project holds the Free Meeting Transcriber docs, published
-at https://freemeetingtranscriber.com via a Cloudflare Worker serving static
+This Astro Starlight project holds the Loofah docs, published
+at https://loofah.io via a Cloudflare Worker serving static
 assets.
 
 ## Local preview
@@ -25,6 +25,7 @@ pnpm -F @hypr/docs deploy    # build + wrangler deploy (needs Cloudflare auth)
 
 Pushes to `main` that touch `docs/` deploy automatically through
 `.github/workflows/docs_deploy.yaml` (requires the `CLOUDFLARE_API_TOKEN` and
-`CLOUDFLARE_ACCOUNT_ID` repository secrets). The Worker (`fmtr-docs`) is
-configured in `wrangler.jsonc`, including the custom domains
-`freemeetingtranscriber.com` and `www.freemeetingtranscriber.com`.
+`CLOUDFLARE_ACCOUNT_ID` repository secrets). The canonical Worker
+(`loofah-docs`) is configured in `wrangler.jsonc`.
+`wrangler.redirect.jsonc` keeps the old domains and `www.loofah.io`
+redirecting to `https://loofah.io` while preserving paths and query strings.

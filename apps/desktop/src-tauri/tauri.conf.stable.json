@@ -1,20 +1,20 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Free Meeting Transcriber",
-  "mainBinaryName": "free-meeting-transcriber",
-  "identifier": "org.freemeetingtranscriber.stable",
+  "productName": "Loofah",
+  "mainBinaryName": "loofah",
+  "identifier": "io.loofah.stable",
   "plugins": {
     "deep-link": {
-      "desktop": { "schemes": ["freemeetingtranscriber"] }
+      "desktop": { "schemes": ["loofah", "freemeetingtranscriber"] }
     },
     "updater": {
       "endpoints": [
-        "https://github.com/bart6114/free-meeting-transcriber/releases/download/updater/latest.json"
+        "https://github.com/bart6114/loofah/releases/download/updater/latest.json"
       ]
     }
   },
   "bundle": {
     "createUpdaterArtifacts": true,
-    "externalBin": ["binaries/check-permissions", "binaries/fmtr"]
+    "externalBin": ["binaries/check-permissions", "binaries/loofah"]
   }
 }

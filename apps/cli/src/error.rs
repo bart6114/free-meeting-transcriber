@@ -2,9 +2,7 @@
 pub enum Error {
     #[error("{0} not found")]
     NotFound(String),
-    #[error(
-        "Free Meeting Transcriber vault not found at {0}; start Free Meeting Transcriber once or pass --vault-path"
-    )]
+    #[error("Loofah vault not found at {0}; start Loofah once or pass --vault-path")]
     VaultNotFound(std::path::PathBuf),
     #[error("output file already exists at {0}; pass --force to overwrite it")]
     OutputExists(std::path::PathBuf),

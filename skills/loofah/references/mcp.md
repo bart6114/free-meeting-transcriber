@@ -11,7 +11,7 @@ All tools are read-only and idempotent.
 
 Available resources:
 
-- `fmtr://meetings/{meeting_id}`
-- `fmtr://meetings/{meeting_id}/transcript`
+- `loofah://meetings/{meeting_id}`
+- `loofah://meetings/{meeting_id}/transcript`
 
 Prefer tools when the workflow needs structured JSON. Use resources when the client needs concise Markdown or plain-text context.

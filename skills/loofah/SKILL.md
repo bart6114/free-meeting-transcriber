@@ -1,19 +1,19 @@
 ---
-name: fmtr
-description: Query local Free Meeting Transcriber meetings, notes, summaries, transcripts, and action items, create and edit meeting notes, or import and transcribe audio recordings. Use when a user asks about their Free Meeting Transcriber meeting data or wants meeting context for another task.
+name: loofah
+description: Query local Loofah meetings, notes, summaries, transcripts, and action items, create and edit meeting notes, or import and transcribe audio recordings. Use when a user asks about their Loofah meeting data or wants meeting context for another task.
 ---
 
-# Free Meeting Transcriber
+# Loofah
 
-Use Free Meeting Transcriber's data surfaces. For reading, prefer the MCP server when its tools are connected; otherwise use the `fmtr` CLI with `--json`. Writing (creating a meeting note, editing a note body, importing or transcribing an audio file) is CLI-only — the MCP server is read-only.
+Use Loofah's data surfaces. For reading, prefer the MCP server when its tools are connected; otherwise use the `loofah` CLI with `--json`. Writing (creating a meeting note, editing a note body, importing or transcribing an audio file) is CLI-only — the MCP server is read-only.
 
 ## Choose a transport
 
 1. If `list_meetings`, `get_meeting`, and `get_meeting_transcript` are available, use MCP.
-2. Otherwise, check `fmtr --version` and use CLI commands with `--json`.
+2. Otherwise, check `loofah --version` and use CLI commands with `--json`.
 3. If neither surface is available, direct the user to [setup](references/setup.md). Do not install software unless the user asks.
 
-Never crawl or modify Free Meeting Transcriber's vault files directly. The CLI and MCP server own compatibility with the application's file formats.
+Never crawl or modify Loofah's vault files directly. The CLI and MCP server own compatibility with the application's file formats.
 
 ## Find the right meeting
 

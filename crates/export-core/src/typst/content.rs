@@ -112,9 +112,7 @@ fn build_cover_page(
 
     cover.push_str("    #v(1fr)\n");
 
-    cover.push_str(
-        "    #text(size: 10pt, fill: muted-color)[Exported from freemeetingtranscriber.com]\n",
-    );
+    cover.push_str("    #text(size: 10pt, fill: muted-color)[Exported from loofah.io]\n");
 
     cover.push_str("  ]\n");
     cover.push_str("]\n\n");

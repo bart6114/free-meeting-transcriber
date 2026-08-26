@@ -1,33 +1,19 @@
 <svg width="64" height="64" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#312e81" />
-      <stop offset="1" stop-color="#0f172a" />
+      <stop offset="0" stop-color="#f7f2e8" />
+      <stop offset="1" stop-color="#d8e4d6" />
     </linearGradient>
-    <mask id="handle">
-      <rect x="640" y="480" width="160" height="220" rx="70" fill="white" />
-      <rect x="696" y="528" width="52" height="124" rx="26" fill="black" />
-    </mask>
   </defs>
   <rect width="1024" height="1024" rx="224" fill="url(#bg)" />
-  <g transform="rotate(-8 512 512)">
-    <rect x="330" y="400" width="330" height="400" rx="40" fill="#f59e0b" />
-    <rect x="640" y="480" width="160" height="220" rx="70" fill="#f59e0b" mask="url(#handle)" />
-    <g fill="#fffbeb">
-      <rect x="353" y="560" width="36" height="100" rx="18" />
-      <rect x="415" y="530" width="36" height="160" rx="18" />
-      <rect x="477" y="495" width="36" height="230" rx="18" />
-      <rect x="539" y="530" width="36" height="160" rx="18" />
-      <rect x="601" y="560" width="36" height="100" rx="18" />
-    </g>
-    <g fill="#f8fafc">
-      <rect x="328" y="368" width="334" height="62" rx="30" />
-      <circle cx="370" cy="368" r="68" />
-      <circle cx="455" cy="352" r="80" />
-      <circle cx="545" cy="362" r="72" />
-      <circle cx="615" cy="355" r="70" />
-      <ellipse cx="340" cy="462" rx="24" ry="42" />
-      <circle cx="332" cy="570" r="18" />
-    </g>
+  <g fill="#293529">
+    <circle cx="512" cy="512" r="360" fill="none" stroke="#293529" stroke-width="48" />
+    <path id="petal" d="M590 512C590 451 640 415 727 415C786 415 825 458 821 512C817 566 775 605 718 599C639 591 590 559 590 512Z" />
+    <use href="#petal" transform="rotate(60 512 512)" />
+    <use href="#petal" transform="rotate(120 512 512)" />
+    <use href="#petal" transform="rotate(180 512 512)" />
+    <use href="#petal" transform="rotate(240 512 512)" />
+    <use href="#petal" transform="rotate(300 512 512)" />
+    <circle cx="512" cy="512" r="36" />
   </g>
 </svg>
