@@ -16,9 +16,7 @@ export default defineConfig({
       description:
         "A local-first knowledge vault for notes, meetings, transcripts, and agent-created research.",
       logo: {
-        light: "./src/assets/logo-light.svg",
-        dark: "./src/assets/logo-dark.svg",
-        replacesTitle: true,
+        src: "../apps/desktop/src-tauri/icons/src/loofah-mark-1024.png",
       },
       favicon: "/favicon.svg",
       customCss: ["./src/styles/custom.css"],
@@ -71,7 +69,12 @@ export default defineConfig({
         },
         {
           label: "Reference",
-          items: ["reference/cli", "reference/mcp", "reference/errors"],
+          items: [
+            "reference/cli",
+            "reference/mcp",
+            "reference/errors",
+            "artwork",
+          ],
         },
         {
           label: "Help",

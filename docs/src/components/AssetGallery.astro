@@ -1,0 +1,182 @@
+---
+const brandSources = import.meta.glob<string>(
+  "../../../apps/desktop/src-tauri/icons/src/**/*.{jpg,jpeg,png,svg}",
+  { eager: true, import: "default", query: "?url" },
+);
+const platformIcons = import.meta.glob<string>(
+  "../../../apps/desktop/src-tauri/icons/stable/**/*.png",
+  { eager: true, import: "default", query: "?url" },
+);
+
+const toAssets = (modules: Record<string, string>) =>
+  Object.entries(modules)
+    .map(([path, url]) => {
+      const filename = path.split("/").at(-1) ?? path;
+      return {
+        name: filename
+          .replace(/\.[^.]+$/, "")
+          .replace(/[-_]+/g, " ")
+          .replace(/^\w/, (letter) => letter.toUpperCase()),
+        path: path.replace(/^\.\.\/\.\.\/\.\.\//, ""),
+        url,
+      };
+    })
+    .sort((left, right) => left.path.localeCompare(right.path));
+
+const groups = [
+  {
+    title: "Loofah artwork",
+    description: "Editable source marks used to produce the application icon.",
+    assets: toAssets(brandSources),
+  },
+  {
+    title: "Platform icons",
+    description: "Generated renditions bundled for supported platforms and stores.",
+    assets: toAssets(platformIcons),
+  },
+];
+---
+
+<div class="asset-groups">
+  {
+    groups.map(({ title, description, assets }) => (
+      <section class="asset-group">
+        <div class="asset-group-heading">
+          <div>
+            <h2>{title}</h2>
+            <p>{description}</p>
+          </div>
+          <span class="asset-count">{assets.length}</span>
+        </div>
+        <div class="asset-grid">
+          {assets.map((asset) => (
+            <a class="asset-card" href={asset.url} target="_blank">
+              <span class="asset-preview">
+                <img src={asset.url} alt={asset.name} loading="lazy" decoding="async" />
+              </span>
+              <span class="asset-details">
+                <strong>{asset.name}</strong>
+                <code title={asset.path}>{asset.path}</code>
+              </span>
+            </a>
+          ))}
+        </div>
+      </section>
+    ))
+  }
+</div>
+
+<style>
+  .asset-groups,
+  .asset-group {
+    display: grid;
+    gap: 1.25rem;
+  }
+
+  .asset-groups {
+    gap: 3rem;
+    margin-top: 2rem;
+  }
+
+  .asset-group-heading {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .asset-group-heading h2,
+  .asset-group-heading p {
+    margin: 0;
+  }
+
+  .asset-group-heading p {
+    margin-top: 0.35rem;
+    color: var(--sl-color-gray-3);
+    font-size: var(--sl-text-sm);
+  }
+
+  .asset-count {
+    min-width: 2rem;
+    border: 1px solid var(--sl-color-accent);
+    border-radius: 999px;
+    padding: 0.1rem 0.5rem;
+    color: var(--sl-color-text-accent);
+    background: var(--sl-color-accent-low);
+    font-size: var(--sl-text-xs);
+    text-align: center;
+  }
+
+  .asset-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+    gap: 1rem;
+  }
+
+  .asset-card {
+    min-width: 0;
+    overflow: hidden;
+    border: 1px solid var(--sl-color-gray-5);
+    border-radius: 0.85rem;
+    color: var(--sl-color-white);
+    background: var(--sl-color-bg-nav);
+    box-shadow: var(--sl-shadow-sm);
+    text-decoration: none;
+    transition:
+      border-color 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .asset-card:hover {
+    border-color: var(--sl-color-accent);
+    transform: translateY(-2px);
+  }
+
+  .asset-preview {
+    display: grid;
+    height: 9rem;
+    place-items: center;
+    padding: 1rem;
+    background-color: #f7faf7;
+    background-image:
+      linear-gradient(45deg, #e6eee8 25%, transparent 25%),
+      linear-gradient(-45deg, #e6eee8 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e6eee8 75%),
+      linear-gradient(-45deg, transparent 75%, #e6eee8 75%);
+    background-position:
+      0 0,
+      0 0.5rem,
+      0.5rem -0.5rem,
+      -0.5rem 0;
+    background-size: 1rem 1rem;
+  }
+
+  .asset-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
+  .asset-details {
+    display: grid;
+    gap: 0.3rem;
+    padding: 0.8rem;
+  }
+
+  .asset-details strong {
+    overflow: hidden;
+    font-size: var(--sl-text-sm);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .asset-details code {
+    overflow: hidden;
+    padding: 0;
+    color: var(--sl-color-gray-3);
+    background: none;
+    font-size: var(--sl-text-2xs);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+</style>

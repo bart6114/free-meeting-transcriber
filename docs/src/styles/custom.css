@@ -1,14 +1,71 @@
-/* Brand accent palette (gold, matches the previous Mintlify colors). */
+@import "@fontsource-variable/fraunces/full.css";
+
+/* The green and mint palette nods to the plant, while the warm neutrals keep it from feeling clinical. */
 :root {
-  --sl-color-accent-low: #3b2a09;
-  --sl-color-accent: #c38b22;
-  --sl-color-accent-high: #ecd0a2;
+  --sl-color-white: #f4fbf6;
+  --sl-color-gray-1: #dcebe2;
+  --sl-color-gray-2: #b9cfc2;
+  --sl-color-gray-3: #89a797;
+  --sl-color-gray-4: #587566;
+  --sl-color-gray-5: #304b3e;
+  --sl-color-gray-6: #1b3027;
+  --sl-color-black: #10211a;
+  --sl-color-accent-low: #173d2e;
+  --sl-color-accent: #7ad6aa;
+  --sl-color-accent-high: #d9f7e7;
 }
 
 :root[data-theme="light"] {
-  --sl-color-accent-low: #f7e8ca;
-  --sl-color-accent: #9a6918;
-  --sl-color-accent-high: #4c3407;
+  --sl-color-white: #1b3026;
+  --sl-color-gray-1: #243c31;
+  --sl-color-gray-2: #3b574a;
+  --sl-color-gray-3: #5e776b;
+  --sl-color-gray-4: #8ea398;
+  --sl-color-gray-5: #c6d5cc;
+  --sl-color-gray-6: #eaf1ec;
+  --sl-color-gray-7: #f5f8f3;
+  --sl-color-black: #fffdf7;
+  --sl-color-accent-low: #def3e7;
+  --sl-color-accent: #28734f;
+  --sl-color-accent-high: #17452f;
+}
+
+header.header {
+  background-image:
+    radial-gradient(
+      circle at 9% 28%,
+      rgb(122 214 170 / 14%) 0 0.3rem,
+      transparent 0.34rem
+    ),
+    radial-gradient(
+    circle at 13% 68%,
+    rgb(122 214 170 / 9%) 0 0.18rem,
+    transparent 0.22rem
+  ),
+    radial-gradient(
+    circle at 88% 34%,
+    rgb(122 214 170 / 10%) 0 0.42rem,
+    transparent 0.46rem
+  );
+}
+
+:root[data-theme="dark"] .site-title img {
+  filter: brightness(0) saturate(100%) invert(93%) sepia(8%) saturate(318%)
+    hue-rotate(82deg) brightness(101%) contrast(94%);
+}
+
+.site-title span {
+  font-family: "Fraunces Variable", Georgia, serif;
+  font-weight: 650;
+  font-variation-settings: "opsz" 24, "SOFT" 80, "WONK" 1;
+  letter-spacing: -0.02em;
+}
+
+body:has(.download-cta) h1#_top {
+  font-family: "Fraunces Variable", Georgia, serif;
+  font-weight: 650;
+  font-variation-settings: "opsz" 72, "SOFT" 65, "WONK" 1;
+  letter-spacing: -0.035em;
 }
 
 .download-cta {
@@ -23,13 +80,24 @@
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
-  border: 1px solid #efc86f;
+  border: 1px solid #8de0ba;
   border-radius: 1rem;
   padding: 1rem 1.5rem;
   color: #fff;
   text-decoration: none;
-  background: linear-gradient(135deg, #e2a936 0%, #c38b22 55%, #9a6918 100%);
-  box-shadow: 0 14px 35px rgba(154, 105, 24, 0.3);
+  background:
+    radial-gradient(
+      circle at 91% 22%,
+      rgb(255 255 255 / 28%) 0 0.35rem,
+      transparent 0.39rem
+    ),
+    radial-gradient(
+    circle at 84% 68%,
+    rgb(255 255 255 / 18%) 0 0.18rem,
+    transparent 0.22rem
+  ),
+    linear-gradient(135deg, #2a7b55 0%, #267554 52%, #216668 100%);
+  box-shadow: 0 14px 35px rgb(31 103 73 / 28%);
   transition: transform 0.15s ease;
 }
 
@@ -49,7 +117,7 @@
 
 .download-cta .cta-subtitle {
   font-size: var(--sl-text-xs);
-  color: rgba(255, 248, 235, 0.8);
+  color: #f4fbf6;
 }
 
 .download-cta .cta-arrow {
