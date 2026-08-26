@@ -13,8 +13,12 @@ if [ "$cache" = "$HOME/.cache/loofah" ] && [ ! -e "$cache" ] && [ -d "$legacy_ca
 fi
 
 link_target() {
-  local dir="$1" shared="$2"
+  local dir="$1" shared="$2" legacy_shared="$3"
   if [ -L "$dir" ]; then
+    if [ "$(readlink "$dir")" = "$legacy_shared" ] && [ "$shared" != "$legacy_shared" ]; then
+      ln -sfn "$shared" "$dir"
+      echo "relinked $dir -> $shared"
+    fi
     return
   fi
   mkdir -p "$shared"
@@ -30,5 +34,5 @@ link_target() {
   echo "linked $dir -> $shared"
 }
 
-link_target "$root/target" "$cache/target-root"
-link_target "$root/apps/desktop/src-tauri/target" "$cache/target-tauri"
+link_target "$root/target" "$cache/target-root" "$legacy_cache/target-root"
+link_target "$root/apps/desktop/src-tauri/target" "$cache/target-tauri" "$legacy_cache/target-tauri"
