@@ -21,8 +21,10 @@ magick "$OUT_FULL" -resize 824x824 \
   \( +clone -background black -shadow 40x24+0+12 \) \
   +swap -background none -layers merge +repage -extent 1024x1024 "$OUT_SQUIRCLE"
 
-# --- 3. tauri icon set (window/ico/android/etc.) ---------------------------
+# --- 3. tauri icon set and in-app surfaces ---------------------------------
 (cd .. && ./node_modules/.bin/tauri icon src-tauri/"$OUT_SQUIRCLE" -o src-tauri/icons/stable)
+cp icons/stable/icon.png ../public/assets/app-icon.png
+zsh ../../../plugins/tray/scripts/make-tray-icons.sh
 
 # --- 4. Icon Composer source + recompile Assets.car ------------------------
 magick "$OUT_FULL" -quality 95 icons/src/stable.icon/Assets/icon.jpg
