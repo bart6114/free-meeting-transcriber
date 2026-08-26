@@ -82,11 +82,6 @@ msgstr ""
 msgid "About Loofah"
 msgstr ""
 
-#: src/onboarding/permissions.tsx
-#: src/settings/general/permissions.tsx
-msgid "Accessibility"
-msgstr ""
-
 #: src/templates/template-icon-picker.tsx
 msgid "Activity"
 msgstr ""
@@ -317,7 +312,6 @@ msgid "Context always provided"
 msgstr ""
 
 #: src/onboarding/llm-provider.tsx
-#: src/onboarding/permissions.tsx
 msgid "Continue"
 msgstr ""
 
@@ -592,10 +586,6 @@ msgstr ""
 msgid "Help Loofah listen to you"
 msgstr ""
 
-#: src/onboarding/permissions.tsx
-msgid "Help Loofah read meeting activity"
-msgstr ""
-
 #: src/settings/general/app-settings.tsx
 msgid "How long recorded meeting audio is kept on this device."
 msgstr ""
@@ -750,16 +740,8 @@ msgstr ""
 msgid "Loofah can hear your voice"
 msgstr ""
 
-#: src/onboarding/permissions.tsx
-msgid "Loofah can read meeting details"
-msgstr ""
-
 #: src/onboarding/index.tsx
 msgid "Loofah needs access to your microphone and system audio to record and transcribe your meetings"
-msgstr ""
-
-#: src/onboarding/index.tsx
-msgid "Loofah needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
 msgstr ""
 
 #: src/templates/auto-form.tsx
@@ -792,10 +774,6 @@ msgstr ""
 
 #: src/sidebar/timeline/index.tsx
 msgid "Meeting"
-msgstr ""
-
-#: src/onboarding/permissions.tsx
-msgid "Meeting details access turned on"
 msgstr ""
 
 #: src/templates/auto-form.tsx
@@ -1036,10 +1014,6 @@ msgstr ""
 msgid "Re-transcribing resets speaker names"
 msgstr ""
 
-#: src/onboarding/permissions.tsx
-msgid "Read meeting controls, visible chat, and participant status"
-msgstr ""
-
 #: src/settings/ai/stt/diarization-status.tsx
 msgid "Ready"
 msgstr ""
@@ -1116,10 +1090,6 @@ msgstr ""
 
 #: src/settings/general/permissions.tsx
 msgid "Required to capture other participants' voices in meetings"
-msgstr ""
-
-#: src/settings/general/permissions.tsx
-msgid "Required to read meeting controls, visible chat, and participant status"
 msgstr ""
 
 #: src/settings/general/permissions.tsx

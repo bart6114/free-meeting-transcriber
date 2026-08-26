@@ -94,7 +94,6 @@ export function Permissions() {
   const { t } = useLingui();
   const mic = usePermission("microphone");
   const systemAudio = usePermission("systemAudio");
-  const accessibility = usePermission("accessibility");
 
   return (
     <div className="flex flex-col gap-8">
@@ -116,15 +115,6 @@ export function Permissions() {
           onOpen={systemAudio.open}
         />
       </PermissionGroup>
-
-      <PermissionRow
-        title={t`Accessibility`}
-        description={t`Required to read meeting controls, visible chat, and participant status`}
-        status={accessibility.status}
-        isPending={accessibility.isPending}
-        onRequest={accessibility.request}
-        onOpen={accessibility.open}
-      />
     </div>
   );
 }

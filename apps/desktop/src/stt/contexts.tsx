@@ -309,7 +309,6 @@ export const useListener = <T,>(
 
 const useHandleDetectEvents = (store: ListenerStore) => {
   const stop = useStore(store, (state) => state.stop);
-  const setMuted = useStore(store, (state) => state.setMuted);
   const autoStopMeetings = useConfigValue("auto_stop_meetings");
   const notificationDetect = useConfigValue("notification_detect");
 
@@ -549,8 +548,6 @@ const useHandleDetectEvents = (store: ListenerStore) => {
             clearPendingAutoStop();
             stop();
           }
-        } else if (payload.type === "micMuted") {
-          setMuted(payload.value);
         }
       })
       .then((fn) => {

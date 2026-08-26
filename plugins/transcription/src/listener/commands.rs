@@ -30,22 +30,6 @@ pub async fn get_current_microphone_device<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
-pub async fn get_mic_muted<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<bool, String> {
-    Ok(app.listener().get_mic_muted().await)
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn set_mic_muted<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    muted: bool,
-) -> Result<(), String> {
-    app.listener().set_mic_muted(muted).await;
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
 pub async fn start_capture<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     params: CaptureParams,

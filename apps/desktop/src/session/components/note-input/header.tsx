@@ -1,7 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import { writeText as writeClipboardText } from "@tauri-apps/plugin-clipboard-manager";
 import {
-  AudioLinesIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   HeartIcon,
@@ -630,7 +629,6 @@ function HeaderViewTranscriptButton({
   live?: {
     amplitude: number;
     degraded: boolean;
-    muted: boolean;
   };
 }) {
   const { t } = useLingui();
@@ -673,35 +671,29 @@ function HeaderViewTranscriptLiveIcon({
   live: {
     amplitude: number;
     degraded: boolean;
-    muted: boolean;
   };
 }) {
   const color = live.degraded ? "hsl(var(--brand))" : "hsl(var(--recording))";
 
   return (
     <span className="relative flex size-4 items-center justify-center">
-      {live.muted ? (
-        <AudioLinesIcon className="size-4" />
-      ) : (
-        <DancingSticks
-          amplitude={live.amplitude}
-          color={color}
-          height={16}
-          width={16}
-        />
-      )}
+      <DancingSticks
+        amplitude={live.amplitude}
+        color={color}
+        height={16}
+        width={16}
+      />
     </span>
   );
 }
 
 function useTranscriptLiveViewState(sessionId: string) {
-  const { amplitude, degraded, mode, muted } = useListener((state) => {
+  const { amplitude, degraded, mode } = useListener((state) => {
     const mode = state.getSessionMode(sessionId);
     return {
       amplitude: state.live.amplitude,
       degraded: state.live.degraded,
       mode,
-      muted: state.live.muted,
     };
   });
   return {
@@ -713,7 +705,6 @@ function useTranscriptLiveViewState(sessionId: string) {
               1,
             ),
             degraded: Boolean(degraded),
-            muted,
           }
         : undefined,
   };
@@ -733,7 +724,6 @@ function HeaderViewTranscriptActive({
   live?: {
     amplitude: number;
     degraded: boolean;
-    muted: boolean;
   };
 }) {
   const regenerate = useRegenerateTranscript(sessionId);

@@ -19,8 +19,6 @@ common_event_derives! {
         MicStopped {
             apps: Vec<hypr_detect::InstalledApp>,
         },
-        #[serde(rename = "micMuted")]
-        MicMuteStateChanged { value: bool },
         #[serde(rename = "sleepStateChanged")]
         SleepStateChanged { value: bool },
     }

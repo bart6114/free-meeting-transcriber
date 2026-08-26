@@ -1,10 +1,8 @@
 import { useLingui } from "@lingui/react/macro";
-import { platform } from "@tauri-apps/plugin-os";
 import {
   ArrowRightIcon,
   CheckIcon,
   MicIcon,
-  MousePointer2Icon,
   type LucideIcon,
   Volume2Icon,
 } from "lucide-react";
@@ -12,8 +10,6 @@ import { useRef } from "react";
 
 import { type PermissionStatus } from "@hypr/plugin-permissions";
 import { cn } from "@hypr/utils";
-
-import { OnboardingButton } from "./shared";
 
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import { usePermission } from "~/shared/hooks/usePermissions";
@@ -28,7 +24,6 @@ function PermissionBlock({
   status,
   isPending,
   onAction,
-  opensSettingsWhenDenied = true,
 }: {
   enabledLabel: string;
   enableLabel: string;
@@ -39,12 +34,10 @@ function PermissionBlock({
   status: PermissionStatus | undefined;
   isPending: boolean;
   onAction: () => void;
-  opensSettingsWhenDenied?: boolean;
 }) {
   const { t } = useLingui();
   const isAuthorized = status === "authorized";
-  const opensSettings =
-    isAuthorized || (opensSettingsWhenDenied && status === "denied");
+  const opensSettings = isAuthorized || status === "denied";
   const title = isAuthorized ? enabledLabel : enableLabel;
   const body = isAuthorized ? enabledBody : enableBody;
 
@@ -113,23 +106,18 @@ function ContinueWhenComplete({
   return null;
 }
 
-function PermissionsSectionContent({
+export function PermissionsSection({
   onContinue,
-  accessibility,
 }: {
   onContinue?: () => void;
-  accessibility?: ReturnType<typeof usePermission>;
 }) {
   const { t } = useLingui();
   const mic = usePermission("microphone");
   const systemAudio = usePermission("systemAudio");
   const hasContinuedRef = useRef(false);
 
-  const isAudioComplete =
-    mic.status === "authorized" && systemAudio.status === "authorized";
   const isComplete =
-    isAudioComplete &&
-    (!accessibility || accessibility.status === "authorized");
+    mic.status === "authorized" && systemAudio.status === "authorized";
 
   const handleAction = (perm: ReturnType<typeof usePermission>) => {
     if (perm.status === "denied") {
@@ -172,57 +160,7 @@ function PermissionsSectionContent({
           isPending={systemAudio.isPending}
           onAction={() => handleAction(systemAudio)}
         />
-
-        {accessibility && (
-          <PermissionBlock
-            enabledLabel={t`Loofah can read meeting details`}
-            enableLabel={t`Help Loofah read meeting activity`}
-            enabledBody={t`Meeting details access turned on`}
-            enableBody={t`Read meeting controls, visible chat, and participant status`}
-            Icon={MousePointer2Icon}
-            permissionName={t`Accessibility`}
-            status={accessibility.status}
-            isPending={accessibility.isPending}
-            onAction={accessibility.request}
-            opensSettingsWhenDenied={false}
-          />
-        )}
       </div>
-
-      {isAudioComplete &&
-        accessibility &&
-        accessibility.status !== "authorized" && (
-          <OnboardingButton
-            variant="secondary"
-            className="mt-3"
-            onClick={onContinue}
-          >
-            {t`Continue`}
-          </OnboardingButton>
-        )}
     </div>
   );
-}
-
-function MacOSPermissionsSection({ onContinue }: { onContinue?: () => void }) {
-  const accessibility = usePermission("accessibility");
-
-  return (
-    <PermissionsSectionContent
-      onContinue={onContinue}
-      accessibility={accessibility}
-    />
-  );
-}
-
-export function PermissionsSection({
-  onContinue,
-}: {
-  onContinue?: () => void;
-}) {
-  if (platform() === "macos") {
-    return <MacOSPermissionsSection onContinue={onContinue} />;
-  }
-
-  return <PermissionsSectionContent onContinue={onContinue} />;
 }

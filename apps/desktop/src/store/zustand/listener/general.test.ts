@@ -69,7 +69,6 @@ vi.mock("@hypr/plugin-settings", () => ({
 vi.mock("@hypr/plugin-transcription", () => ({
   commands: {
     getCaptureSnapshot: getCaptureSnapshotMock,
-    setMicMuted: vi.fn(),
     startCapture: startCaptureMock,
     startTranscription: vi.fn(),
     stopCapture: stopCaptureMock,

@@ -95,7 +95,7 @@ detectEvent: "plugin:detect:detect-event"
 
 /** user-defined types **/
 
-export type DetectEvent = { type: "micDetected"; key: string; apps: InstalledApp[]; duration_secs: number } | { type: "micStopped"; apps: InstalledApp[] } | { type: "micMuted"; value: boolean } | { type: "sleepStateChanged"; value: boolean }
+export type DetectEvent = { type: "micDetected"; key: string; apps: InstalledApp[]; duration_secs: number } | { type: "micStopped"; apps: InstalledApp[] } | { type: "sleepStateChanged"; value: boolean }
 export type InstalledApp = { id: string; name: string }
 
 /** tauri-specta globals **/

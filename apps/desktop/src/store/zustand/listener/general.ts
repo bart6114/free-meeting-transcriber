@@ -1,4 +1,3 @@
-import { create as mutate } from "mutative";
 import type { StoreApi } from "zustand";
 
 import {
@@ -45,7 +44,6 @@ export type GeneralActions = {
   ) => Promise<boolean>;
   stop: () => void;
   attachLiveSession: (sessionId: string) => Promise<void>;
-  setMuted: (value: boolean) => void;
   setTriggerAppIds: (appIds: string[] | null) => void;
   updateCaptureConfig: (
     update: Pick<
@@ -130,14 +128,6 @@ export const createGeneralSlice = <
     }
 
     await attachLiveSession(set, get, sessionId);
-  },
-  setMuted: (value) => {
-    set((state) =>
-      mutate(state, (draft) => {
-        draft.live.muted = value;
-        void listenerCommands.setMicMuted(value);
-      }),
-    );
   },
   setTriggerAppIds: (appIds) => {
     setLiveState(set, (live) => {

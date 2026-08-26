@@ -308,16 +308,6 @@ const createSessionEventHandlers = <T extends LiveStore>(
       );
       return;
     }
-
-    if (payload.type === "mic_muted") {
-      if (get().live.sessionId !== targetSessionId) {
-        return;
-      }
-
-      setLiveState(set, (live) => {
-        live.muted = payload.value;
-      });
-    }
   },
 });
 

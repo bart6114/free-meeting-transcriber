@@ -128,13 +128,12 @@ describe("tickTranscriptionStallWatchdog", () => {
     expect(tickTranscriptionStallWatchdog(stalled)).toBe(false);
   });
 
-  it("keeps watching audible speaker audio while the mic is muted", () => {
-    const muted = createActiveLive();
-    muted.muted = true;
-    muted.amplitude = { mic: 0, speaker: 1 };
+  it("keeps watching audible speaker audio while the mic is silent", () => {
+    const live = createActiveLive();
+    live.amplitude = { mic: 0, speaker: 1 };
 
-    tickTranscriptionStallWatchdog(muted);
-    expect(muted.stallAudibleSeconds).toBe(1);
+    tickTranscriptionStallWatchdog(live);
+    expect(live.stallAudibleSeconds).toBe(1);
   });
 
   it("keeps the batch repair flag after transcript activity resumes", () => {

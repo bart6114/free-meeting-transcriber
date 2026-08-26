@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => {
@@ -12,11 +12,9 @@ const mocks = vi.hoisted(() => {
   const permissions = {
     microphone: createPermission(),
     systemAudio: createPermission(),
-    accessibility: createPermission(),
   };
 
   return {
-    currentPlatform: "macos",
     permissions,
     usePermission: vi.fn((type: keyof typeof permissions) => permissions[type]),
   };
@@ -35,10 +33,6 @@ vi.mock("@lingui/react/macro", () => ({
   useLingui: () => ({ t: lingui.t }),
 }));
 
-vi.mock("@tauri-apps/plugin-os", () => ({
-  platform: () => mocks.currentPlatform,
-}));
-
 vi.mock("~/shared/hooks/usePermissions", () => ({
   usePermission: mocks.usePermission,
 }));
@@ -49,7 +43,6 @@ afterEach(cleanup);
 
 describe("PermissionsSection", () => {
   beforeEach(() => {
-    mocks.currentPlatform = "macos";
     vi.clearAllMocks();
 
     Object.values(mocks.permissions).forEach((permission) => {
@@ -58,30 +51,23 @@ describe("PermissionsSection", () => {
     });
   });
 
-  it("collects Accessibility permission on macOS", () => {
+  it("collects microphone and system audio permissions", () => {
     const { container } = render(<PermissionsSection />);
 
     expect(screen.getByText("Help Loofah listen to you")).toBeTruthy();
     expect(screen.getByText("Help Loofah listen to others")).toBeTruthy();
-    expect(screen.getByText("Help Loofah read meeting activity")).toBeTruthy();
-    expect(
-      screen
-        .getByRole("button", { name: "Enable accessibility" })
-        .getAttribute("title"),
-    ).toBe("Read meeting controls, visible chat, and participant status");
-    expect(container.querySelectorAll(".lucide-arrow-right")).toHaveLength(3);
+    expect(container.querySelectorAll(".lucide-arrow-right")).toHaveLength(2);
   });
 
-  it("waits for all three macOS permissions before continuing", () => {
+  it("waits for both audio permissions before continuing", () => {
     const onContinue = vi.fn();
     mocks.permissions.microphone.status = "authorized";
-    mocks.permissions.systemAudio.status = "authorized";
 
     const view = render(<PermissionsSection onContinue={onContinue} />);
 
     expect(onContinue).not.toHaveBeenCalled();
 
-    mocks.permissions.accessibility.status = "authorized";
+    mocks.permissions.systemAudio.status = "authorized";
     view.rerender(<PermissionsSection onContinue={onContinue} />);
 
     expect(onContinue).toHaveBeenCalledTimes(1);
@@ -89,41 +75,5 @@ describe("PermissionsSection", () => {
     view.rerender(<PermissionsSection onContinue={onContinue} />);
 
     expect(onContinue).toHaveBeenCalledTimes(1);
-  });
-
-  it("allows continuing when only optional Accessibility access is unavailable", () => {
-    const onContinue = vi.fn();
-    mocks.permissions.microphone.status = "authorized";
-    mocks.permissions.systemAudio.status = "authorized";
-
-    render(<PermissionsSection onContinue={onContinue} />);
-
-    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-    expect(onContinue).toHaveBeenCalledTimes(1);
-  });
-
-  it("preserves the audio-only flow outside macOS", () => {
-    const onContinue = vi.fn();
-    mocks.currentPlatform = "windows";
-    mocks.permissions.microphone.status = "authorized";
-    mocks.permissions.systemAudio.status = "authorized";
-
-    render(<PermissionsSection onContinue={onContinue} />);
-
-    expect(screen.queryByText("Help Loofah read meeting activity")).toBeNull();
-    expect(mocks.usePermission).not.toHaveBeenCalledWith("accessibility");
-    expect(onContinue).toHaveBeenCalledTimes(1);
-  });
-
-  it("requests denied Accessibility permission instead of opening Settings", () => {
-    render(<PermissionsSection />);
-
-    fireEvent.click(
-      screen.getByRole("button", { name: "Enable accessibility" }),
-    );
-
-    expect(mocks.permissions.accessibility.request).toHaveBeenCalledTimes(1);
-    expect(mocks.permissions.accessibility.open).not.toHaveBeenCalled();
   });
 });
