@@ -14,8 +14,8 @@ use tauri::{
 use crate::tray_icon::{RECORDING_FRAMES, TrayIconState};
 
 use crate::menu_items::{
-    AppInfo, AppNew, HelpReportBug, HelpSuggestFeature, MenuItemHandler, TrayCheckUpdate, TrayOpen,
-    TrayQuit, TraySettings, TrayStart, TrayVersion,
+    AppInfo, AppNew, HelpDocumentation, HelpReportBug, HelpSuggestFeature, MenuItemHandler,
+    TrayCheckUpdate, TrayOpen, TrayQuit, TraySettings, TrayStart, TrayVersion,
 };
 
 const TRAY_ID: &str = "hypr-tray";
@@ -39,6 +39,7 @@ impl<'a, M: tauri::Manager<tauri::Wry>> Tray<'a, tauri::Wry, M> {
         let check_update_item = TrayCheckUpdate::build(app)?;
         let settings_item = TraySettings::build(app)?;
         let new_item = AppNew::build(app)?;
+        let documentation_item = HelpDocumentation::build(app)?;
         let report_bug_item = HelpReportBug::build(app)?;
         let suggest_feature_item = HelpSuggestFeature::build(app)?;
 
@@ -94,7 +95,7 @@ impl<'a, M: tauri::Manager<tauri::Wry>> Tray<'a, tauri::Wry, M> {
                 app,
                 "Help",
                 true,
-                &[&report_bug_item, &suggest_feature_item],
+                &[&documentation_item, &report_bug_item, &suggest_feature_item],
             )?;
             menu.append(&help_submenu)?;
         }

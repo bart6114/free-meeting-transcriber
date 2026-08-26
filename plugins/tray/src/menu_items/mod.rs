@@ -1,5 +1,6 @@
 mod app_info;
 mod app_new;
+mod help_documentation;
 mod help_report_bug;
 mod help_suggest_feature;
 mod tray_check_update;
@@ -11,6 +12,7 @@ mod tray_version;
 
 pub use app_info::AppInfo;
 pub use app_new::AppNew;
+pub use help_documentation::HelpDocumentation;
 pub use help_report_bug::HelpReportBug;
 pub use help_suggest_feature::HelpSuggestFeature;
 pub use tray_check_update::{TrayCheckUpdate, UpdateMenuState};
@@ -75,6 +77,7 @@ menu_items! {
     TrayVersion => TrayVersion,
     AppInfo => AppInfo,
     AppNew => AppNew,
+    HelpDocumentation => HelpDocumentation,
     HelpReportBug => HelpReportBug,
     HelpSuggestFeature => HelpSuggestFeature,
 }
