@@ -3,7 +3,6 @@ mod stream;
 
 use std::sync::{
     Arc,
-    atomic::{AtomicBool, Ordering},
     mpsc::{self, Receiver},
 };
 
@@ -24,19 +23,12 @@ use stream::start_source_loop;
 use hypr_device_monitor::{DeviceMonitorHandle, DeviceSwitch, DeviceSwitchMonitor};
 
 pub enum SourceMsg {
-    SetMicMute(bool),
-    GetMicMute(RpcReplyPort<bool>),
     GetMicDevice(RpcReplyPort<Option<String>>),
     PrepareListenerRefresh(RpcReplyPort<ListenerRefreshReplay>),
     SetListenerRouting(ListenerRouting),
     SetRecorder(Option<ActorRef<RecMsg>>),
-    Frame(SourceFrame),
+    Frame(CaptureFrame),
     StreamFailed(String),
-}
-
-pub struct SourceFrame {
-    pub capture: CaptureFrame,
-    pub mic_muted: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -67,7 +59,6 @@ pub struct SourceState {
     pub(super) session_id: String,
     pub(super) mic_device: Option<String>,
     pub(super) onboarding: bool,
-    pub(super) mic_muted: Arc<AtomicBool>,
     pub(super) run_task: Option<tokio::task::JoinHandle<()>>,
     pub(super) stream_cancel_token: Option<CancellationToken>,
     pub(super) current_mode: ChannelMode,
@@ -153,7 +144,6 @@ impl Actor for SourceActor {
                 session_id: args.session_id,
                 mic_device,
                 onboarding: args.onboarding,
-                mic_muted: Arc::new(AtomicBool::new(false)),
                 run_task: None,
                 stream_cancel_token: None,
                 _device_watcher: Some(device_watcher),
@@ -181,14 +171,6 @@ impl Actor for SourceActor {
         let _guard = span.enter();
 
         match msg {
-            SourceMsg::SetMicMute(muted) => {
-                st.mic_muted.store(muted, Ordering::Relaxed);
-            }
-            SourceMsg::GetMicMute(reply) => {
-                if !reply.is_closed() {
-                    let _ = reply.send(st.mic_muted.load(Ordering::Relaxed));
-                }
-            }
             SourceMsg::GetMicDevice(reply) => {
                 if !reply.is_closed() {
                     let _ = reply.send(st.mic_device.clone());

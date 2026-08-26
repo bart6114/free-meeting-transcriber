@@ -8,8 +8,7 @@ links = "tauri-plugin-detect"
 description = ""
 
 [features]
-default = ["zoom", "sleep"]
-zoom = ["hypr-detect/zoom"]
+default = ["sleep"]
 language = ["hypr-detect/language"]
 sleep = ["hypr-detect/sleep"]
 test-support = []

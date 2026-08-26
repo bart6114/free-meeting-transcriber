@@ -16,14 +16,6 @@ pub use error::Error;
 
 pub use utils::BackgroundTask;
 
-#[cfg(all(
-    target_os = "macos",
-    feature = "zoom",
-    feature = "mic",
-    feature = "list"
-))]
-mod zoom;
-
 #[cfg(feature = "app")]
 pub use app::*;
 #[cfg(all(target_os = "macos", feature = "language"))]
@@ -33,14 +25,6 @@ pub use list::*;
 #[cfg(feature = "mic")]
 pub use mic::*;
 
-#[cfg(all(
-    target_os = "macos",
-    feature = "zoom",
-    feature = "mic",
-    feature = "list"
-))]
-pub use zoom::*;
-
 #[cfg(all(target_os = "macos", feature = "sleep"))]
 pub use sleep::*;
 
@@ -49,10 +33,6 @@ pub use sleep::*;
 pub enum DetectEvent {
     MicStarted(Vec<InstalledApp>),
     MicStopped(Vec<InstalledApp>),
-    #[cfg(all(target_os = "macos", feature = "zoom"))]
-    ZoomMuteStateChanged {
-        value: bool,
-    },
     #[cfg(all(target_os = "macos", feature = "sleep"))]
     SleepStateChanged {
         value: bool,
@@ -80,8 +60,6 @@ pub(crate) trait Observer: Send + Sync {
 #[derive(Default)]
 pub struct Detector {
     mic_detector: MicDetector,
-    #[cfg(all(target_os = "macos", feature = "zoom", feature = "list"))]
-    zoom_watcher: ZoomMuteWatcher,
     #[cfg(all(target_os = "macos", feature = "sleep"))]
     sleep_detector: SleepDetector,
 }
@@ -91,18 +69,12 @@ impl Detector {
     pub fn start(&mut self, f: DetectCallback) {
         self.mic_detector.start(f.clone());
 
-        #[cfg(all(target_os = "macos", feature = "zoom", feature = "list"))]
-        self.zoom_watcher.start(f.clone());
-
         #[cfg(all(target_os = "macos", feature = "sleep"))]
         self.sleep_detector.start(f);
     }
 
     pub fn stop(&mut self) {
         self.mic_detector.stop();
-
-        #[cfg(all(target_os = "macos", feature = "zoom", feature = "list"))]
-        self.zoom_watcher.stop();
 
         #[cfg(all(target_os = "macos", feature = "sleep"))]
         self.sleep_detector.stop();

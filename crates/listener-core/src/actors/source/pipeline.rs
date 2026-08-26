@@ -10,10 +10,11 @@ use crate::{
     ListenerRuntime, SessionDataEvent,
     actors::{ChannelMode, ListenerMsg, RecMsg, SAMPLE_RATE},
 };
+use hypr_audio::CaptureFrame;
 use hypr_audio_utils::f32_to_i16_bytes;
 use hypr_vad_masking::VadMask;
 
-use super::{ListenerRefreshReplay, ListenerRouting, SourceFrame};
+use super::{ListenerRefreshReplay, ListenerRouting};
 
 const AUDIO_AMPLITUDE_THROTTLE: Duration = Duration::from_millis(100);
 const MAX_BUFFER_CHUNKS: usize = 150;
@@ -68,7 +69,7 @@ impl Pipeline {
 
     pub(super) fn dispatch_frame(
         &mut self,
-        frame: SourceFrame,
+        frame: CaptureFrame,
         mode: ChannelMode,
         listener_routing: &ListenerRouting,
         recorder: Option<&ActorRef<RecMsg>>,
@@ -107,7 +108,7 @@ impl Pipeline {
 
     fn dispatch(
         &mut self,
-        frame: SourceFrame,
+        frame: CaptureFrame,
         mode: ChannelMode,
         listener_routing: &ListenerRouting,
         recorder: Option<&ActorRef<RecMsg>>,
@@ -196,21 +197,15 @@ impl Pipeline {
         }
     }
 
-    fn select_tracks(frame: SourceFrame, mode: ChannelMode) -> (Vec<f32>, Arc<[f32]>) {
-        let raw_speaker = Arc::clone(&frame.capture.raw_speaker);
+    fn select_tracks(frame: CaptureFrame, mode: ChannelMode) -> (Vec<f32>, Arc<[f32]>) {
+        let raw_speaker = Arc::clone(&frame.raw_speaker);
 
         let mic_source = match mode {
             ChannelMode::SpeakerOnly => Arc::<[f32]>::from(vec![0.0; raw_speaker.len()]),
-            ChannelMode::MicOnly | ChannelMode::MicAndSpeaker => frame.capture.preferred_mic(),
+            ChannelMode::MicOnly | ChannelMode::MicAndSpeaker => frame.preferred_mic(),
         };
 
-        let mic = if frame.mic_muted {
-            vec![0.0; mic_source.len()]
-        } else {
-            mic_source.to_vec()
-        };
-
-        (mic, raw_speaker)
+        (mic_source.to_vec(), raw_speaker)
     }
 }
 
@@ -515,19 +510,12 @@ mod tests {
         }
     }
 
-    fn source_frame(mic_muted: bool) -> SourceFrame {
-        SourceFrame {
-            capture: capture_frame(),
-            mic_muted,
-        }
-    }
-
     #[tokio::test]
     async fn buffers_until_listener_attaches_then_flushes() {
         let mut pipeline = test_pipeline();
 
         pipeline.dispatch_frame(
-            source_frame(false),
+            capture_frame(),
             ChannelMode::MicAndSpeaker,
             &ListenerRouting::Buffering,
             None,
@@ -563,7 +551,7 @@ mod tests {
 
         for _ in 0..3 {
             pipeline.dispatch_frame(
-                source_frame(false),
+                capture_frame(),
                 ChannelMode::MicAndSpeaker,
                 &ListenerRouting::Attached(old_listener_ref.clone()),
                 None,
@@ -604,7 +592,7 @@ mod tests {
         let mut pipeline = test_pipeline();
 
         pipeline.dispatch_frame(
-            source_frame(false),
+            capture_frame(),
             ChannelMode::MicAndSpeaker,
             &ListenerRouting::Buffering,
             None,
@@ -622,7 +610,7 @@ mod tests {
         pipeline.on_listener_routing_changed(&ListenerRouting::Attached(listener_ref));
 
         pipeline.dispatch_frame(
-            source_frame(false),
+            capture_frame(),
             ChannelMode::MicAndSpeaker,
             &ListenerRouting::Dropped,
             None,
@@ -647,7 +635,7 @@ mod tests {
             .unwrap();
 
         pipeline.dispatch_frame(
-            source_frame(false),
+            capture_frame(),
             ChannelMode::MicAndSpeaker,
             &ListenerRouting::Dropped,
             Some(&recorder_ref),
@@ -664,16 +652,15 @@ mod tests {
 
     #[test]
     fn select_tracks_prefers_aec_mic() {
-        let (mic, speaker) =
-            Pipeline::select_tracks(source_frame(false), ChannelMode::MicAndSpeaker);
+        let (mic, speaker) = Pipeline::select_tracks(capture_frame(), ChannelMode::MicAndSpeaker);
         assert_eq!(mic, vec![0.1, -0.1, 0.2, -0.2]);
         assert_eq!(&*speaker, &[0.75, -0.75, 1.0, -1.0]);
     }
 
     #[test]
     fn select_tracks_falls_back_to_raw_mic() {
-        let mut frame = source_frame(false);
-        frame.capture.aec_mic = None;
+        let mut frame = capture_frame();
+        frame.aec_mic = None;
 
         let (mic, speaker) = Pipeline::select_tracks(frame, ChannelMode::MicAndSpeaker);
         assert_eq!(mic, vec![0.25, -0.25, 0.5, -0.5]);
@@ -681,16 +668,8 @@ mod tests {
     }
 
     #[test]
-    fn select_tracks_zeroes_muted_mic() {
-        let (mic, speaker) =
-            Pipeline::select_tracks(source_frame(true), ChannelMode::MicAndSpeaker);
-        assert_eq!(mic, vec![0.0, 0.0, 0.0, 0.0]);
-        assert_eq!(&*speaker, &[0.75, -0.75, 1.0, -1.0]);
-    }
-
-    #[test]
     fn select_tracks_zeroes_mic_for_speaker_only() {
-        let (mic, speaker) = Pipeline::select_tracks(source_frame(false), ChannelMode::SpeakerOnly);
+        let (mic, speaker) = Pipeline::select_tracks(capture_frame(), ChannelMode::SpeakerOnly);
         assert_eq!(mic, vec![0.0, 0.0, 0.0, 0.0]);
         assert_eq!(&*speaker, &[0.75, -0.75, 1.0, -1.0]);
     }

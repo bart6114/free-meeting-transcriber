@@ -139,8 +139,6 @@ pub enum CaptureDataEvent {
         mic: u16,
         speaker: u16,
     },
-    #[serde(rename = "mic_muted")]
-    MicMuted { session_id: String, value: bool },
     #[serde(rename = "transcript_delta")]
     TranscriptDelta {
         session_id: String,
@@ -320,9 +318,6 @@ impl From<listener::SessionDataEvent> for CaptureDataEvent {
                 mic,
                 speaker,
             },
-            listener::SessionDataEvent::MicMuted { session_id, value } => {
-                Self::MicMuted { session_id, value }
-            }
             listener::SessionDataEvent::TranscriptDelta { session_id, delta } => {
                 Self::TranscriptDelta { session_id, delta }
             }

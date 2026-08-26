@@ -6,7 +6,7 @@ use crate::{SessionProgressEvent, actors::ChannelMode};
 use hypr_audio::{AudioProvider, CaptureConfig, CaptureFrame, CaptureStream};
 use hypr_audio_utils::chunk_size_for_stt;
 
-use super::{SourceFrame, SourceMsg, SourceState};
+use super::{SourceMsg, SourceState};
 
 pub(super) async fn start_source_loop(
     myself: &ActorRef<SourceMsg>,
@@ -39,7 +39,6 @@ async fn start_streams(
 ) -> Result<(), ActorProcessingErr> {
     let mode = st.current_mode;
     let myself2 = myself.clone();
-    let mic_muted = st.mic_muted.clone();
     let mic_device = st.mic_device.clone();
     let audio = st.audio.clone();
 
@@ -50,7 +49,6 @@ async fn start_streams(
         let ctx = StreamContext {
             actor: myself2,
             cancel_token: stream_cancel_token,
-            mic_muted,
             mic_device,
             audio,
         };
@@ -65,7 +63,6 @@ async fn start_streams(
 struct StreamContext {
     actor: ActorRef<SourceMsg>,
     cancel_token: CancellationToken,
-    mic_muted: std::sync::Arc<std::sync::atomic::AtomicBool>,
     mic_device: Option<String>,
     audio: std::sync::Arc<dyn AudioProvider>,
 }
@@ -137,10 +134,6 @@ fn handle_capture_item(
 ) -> StreamResult {
     match item {
         Some(Ok(frame)) => {
-            let frame = SourceFrame {
-                capture: frame,
-                mic_muted: ctx.mic_muted.load(std::sync::atomic::Ordering::Relaxed),
-            };
             if ctx.actor.cast(SourceMsg::Frame(frame)).is_err() {
                 if !ctx.is_cancelled() {
                     tracing::debug!("failed_to_cast_capture_frame");

@@ -133,18 +133,10 @@ function OnboardingScreenContent({
             title={<Trans>Start with permissions</Trans>}
             completedTitle={<Trans>Permissions granted</Trans>}
             description={
-              currentPlatform === "macos" ? (
-                <Trans>
-                  Loofah needs microphone and system audio to transcribe your
-                  meetings, plus Accessibility to read meeting controls, visible
-                  chat, and participant status.
-                </Trans>
-              ) : (
-                <Trans>
-                  Loofah needs access to your microphone and system audio to
-                  record and transcribe your meetings
-                </Trans>
-              )
+              <Trans>
+                Loofah needs access to your microphone and system audio to
+                record and transcribe your meetings
+              </Trans>
             }
             status={getStepStatus("permissions", currentStep)}
             skippable={false}

@@ -8,8 +8,6 @@ Default permissions for the plugin
 - `allow-get-current-microphone-device`
 - `allow-start-capture`
 - `allow-stop-capture`
-- `allow-get-mic-muted`
-- `allow-set-mic-muted`
 - `allow-get-capture-state`
 - `allow-get-capture-snapshot`
 - `allow-is-supported-languages-live`
@@ -134,32 +132,6 @@ Enables the get_current_microphone_device command without any pre-configured sco
 <td>
 
 Denies the get_current_microphone_device command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`transcription:allow-get-mic-muted`
-
-</td>
-<td>
-
-Enables the get_mic_muted command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`transcription:deny-get-mic-muted`
-
-</td>
-<td>
-
-Denies the get_mic_muted command without any pre-configured scope.
 
 </td>
 </tr>
@@ -368,32 +340,6 @@ Enables the run_denoise command without any pre-configured scope.
 <td>
 
 Denies the run_denoise command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`transcription:allow-set-mic-muted`
-
-</td>
-<td>
-
-Enables the set_mic_muted command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`transcription:deny-set-mic-muted`
-
-</td>
-<td>
-
-Denies the set_mic_muted command without any pre-configured scope.
 
 </td>
 </tr>

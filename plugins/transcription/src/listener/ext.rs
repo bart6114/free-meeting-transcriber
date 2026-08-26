@@ -89,24 +89,6 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Listener<'a, R, M> {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn get_mic_muted(&self) -> bool {
-        if let Some(cell) = registry::where_is(SourceActor::name()) {
-            let actor: ActorRef<SourceMsg> = cell.into();
-            call_t!(actor, SourceMsg::GetMicMute, 100).unwrap_or_default()
-        } else {
-            false
-        }
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub async fn set_mic_muted(&self, muted: bool) {
-        if let Some(cell) = registry::where_is(SourceActor::name()) {
-            let actor: ActorRef<SourceMsg> = cell.into();
-            let _ = actor.cast(SourceMsg::SetMicMute(muted));
-        }
-    }
-
-    #[tracing::instrument(skip_all)]
     pub async fn start_capture(&self, params: CaptureParams) -> Result<(), crate::Error> {
         let params: SessionParams = params.into();
         if let Some(cell) = registry::where_is(RootActor::name()) {

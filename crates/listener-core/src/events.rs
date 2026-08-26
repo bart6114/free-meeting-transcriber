@@ -69,8 +69,6 @@ pub enum SessionDataEvent {
         mic: u16,
         speaker: u16,
     },
-    #[serde(rename = "mic_muted")]
-    MicMuted { session_id: String, value: bool },
     #[serde(rename = "transcript_delta")]
     TranscriptDelta {
         session_id: String,

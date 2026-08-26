@@ -39,7 +39,6 @@ export type GeneralState = {
     seconds: number;
     intervalId?: LiveIntervalId;
     sessionId: string | null;
-    muted: boolean;
     lastError: string | null;
     device: string | null;
     degraded: DegradedError | null;
@@ -67,7 +66,6 @@ const initialLiveState: LiveState = {
   amplitude: { mic: 0, speaker: 0 },
   seconds: 0,
   sessionId: null,
-  muted: false,
   lastError: null,
   device: null,
   degraded: null,
@@ -203,7 +201,6 @@ export const markLiveInactive = (live: LiveState, error: string | null) => {
   live.stallAudibleSeconds = 0;
   live.finalStallAudibleSeconds = 0;
   live.transcriptionStalled = false;
-  live.muted = initialLiveState.muted;
   live.triggerAppIds = null;
 };
 
@@ -215,7 +212,6 @@ export const markLiveStartFailed = (live: LiveState) => {
   live.amplitude = { mic: 0, speaker: 0 };
   live.seconds = 0;
   live.sessionId = null;
-  live.muted = initialLiveState.muted;
   live.lastError = null;
   live.device = null;
   live.degraded = null;

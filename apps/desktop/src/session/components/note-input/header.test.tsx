@@ -35,7 +35,6 @@ const hoisted = vi.hoisted(() => ({
   liveSessionId: null as string | null,
   liveAmplitude: { mic: 0.5, speaker: 0.25 },
   liveDegraded: null as unknown,
-  liveMuted: false,
   sessionMode: "inactive",
   isMainWebviewWindow: true,
   isDeletingRecording: false,
@@ -251,7 +250,6 @@ vi.mock("~/stt/contexts", () => ({
         finalizingBySession: Record<string, unknown>;
         amplitude: { mic: number; speaker: number };
         degraded: unknown;
-        muted: boolean;
       };
       liveSegments: unknown[];
       getSessionMode: (sessionId?: string) => string;
@@ -266,7 +264,6 @@ vi.mock("~/stt/contexts", () => ({
         finalizingBySession: {},
         amplitude: hoisted.liveAmplitude,
         degraded: hoisted.liveDegraded,
-        muted: hoisted.liveMuted,
       },
       liveSegments: hoisted.liveSegments,
       getSessionMode: () => hoisted.sessionMode,
@@ -324,7 +321,6 @@ describe("Header", () => {
     hoisted.liveSessionId = null;
     hoisted.liveAmplitude = { mic: 0.5, speaker: 0.25 };
     hoisted.liveDegraded = null;
-    hoisted.liveMuted = false;
     hoisted.sessionMode = "inactive";
     hoisted.isMainWebviewWindow = true;
     hoisted.isDeletingRecording = false;

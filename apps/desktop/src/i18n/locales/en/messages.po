@@ -82,11 +82,6 @@ msgstr "A to Z"
 msgid "About Loofah"
 msgstr "About Loofah"
 
-#: src/onboarding/permissions.tsx
-#: src/settings/general/permissions.tsx
-msgid "Accessibility"
-msgstr "Accessibility"
-
 #: src/templates/template-icon-picker.tsx
 msgid "Activity"
 msgstr "Activity"
@@ -317,7 +312,6 @@ msgid "Context always provided"
 msgstr "Context always provided"
 
 #: src/onboarding/llm-provider.tsx
-#: src/onboarding/permissions.tsx
 msgid "Continue"
 msgstr "Continue"
 
@@ -592,10 +586,6 @@ msgstr "Help Loofah listen to others"
 msgid "Help Loofah listen to you"
 msgstr "Help Loofah listen to you"
 
-#: src/onboarding/permissions.tsx
-msgid "Help Loofah read meeting activity"
-msgstr "Help Loofah read meeting activity"
-
 #: src/settings/general/app-settings.tsx
 msgid "How long recorded meeting audio is kept on this device."
 msgstr "How long recorded meeting audio is kept on this device."
@@ -750,17 +740,9 @@ msgstr "Loofah can hear others"
 msgid "Loofah can hear your voice"
 msgstr "Loofah can hear your voice"
 
-#: src/onboarding/permissions.tsx
-msgid "Loofah can read meeting details"
-msgstr "Loofah can read meeting details"
-
 #: src/onboarding/index.tsx
 msgid "Loofah needs access to your microphone and system audio to record and transcribe your meetings"
 msgstr "Loofah needs access to your microphone and system audio to record and transcribe your meetings"
-
-#: src/onboarding/index.tsx
-msgid "Loofah needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
-msgstr "Loofah needs microphone and system audio to transcribe your meetings, plus Accessibility to read meeting controls, visible chat, and participant status."
 
 #: src/templates/auto-form.tsx
 msgid "Loofah sends these separately, so editing the prompt cannot remove the meeting source material."
@@ -793,10 +775,6 @@ msgstr "Match whole word"
 #: src/sidebar/timeline/index.tsx
 msgid "Meeting"
 msgstr "Meeting"
-
-#: src/onboarding/permissions.tsx
-msgid "Meeting details access turned on"
-msgstr "Meeting details access turned on"
 
 #: src/templates/auto-form.tsx
 msgid "Meeting notes"
@@ -1036,10 +1014,6 @@ msgstr "Re-transcribe"
 msgid "Re-transcribing resets speaker names"
 msgstr "Re-transcribing resets speaker names"
 
-#: src/onboarding/permissions.tsx
-msgid "Read meeting controls, visible chat, and participant status"
-msgstr "Read meeting controls, visible chat, and participant status"
-
 #: src/settings/ai/stt/diarization-status.tsx
 msgid "Ready"
 msgstr "Ready"
@@ -1117,10 +1091,6 @@ msgstr "Request {0} permission"
 #: src/settings/general/permissions.tsx
 msgid "Required to capture other participants' voices in meetings"
 msgstr "Required to capture other participants' voices in meetings"
-
-#: src/settings/general/permissions.tsx
-msgid "Required to read meeting controls, visible chat, and participant status"
-msgstr "Required to read meeting controls, visible chat, and participant status"
 
 #: src/settings/general/permissions.tsx
 msgid "Required to record your voice during meetings and calls"
