@@ -1,0 +1,4 @@
+interface:
+  display_name: "Run Tests"
+  short_description: "Run the pull-request CI checks locally"
+  default_prompt: "Use $run-tests to run the relevant CI checks locally."
