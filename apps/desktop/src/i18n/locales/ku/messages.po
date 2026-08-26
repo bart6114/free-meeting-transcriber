@@ -249,6 +249,7 @@ msgstr ""
 
 #: src/onboarding/folder-location.tsx
 #: src/settings/general/storage/change-location.tsx
+#: src/shared/startup-boundary.tsx
 msgid "Choose storage location"
 msgstr ""
 
@@ -316,6 +317,7 @@ msgid "Context always provided"
 msgstr ""
 
 #: src/onboarding/llm-provider.tsx
+#: src/onboarding/permissions.tsx
 msgid "Continue"
 msgstr ""
 
@@ -569,6 +571,10 @@ msgstr ""
 msgid "Free Meeting Transcriber transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
 msgstr ""
 
+#: src/shared/startup-boundary.tsx
+msgid "Free Meeting Transcriber will continue automatically when the vault is available."
+msgstr ""
+
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr ""
@@ -596,6 +602,10 @@ msgstr ""
 
 #: src/onboarding/shared.tsx
 msgid "Go to previous section"
+msgstr ""
+
+#: src/shared/startup-boundary.tsx
+msgid "Google Drive may still be downloading files"
 msgstr ""
 
 #: src/settings/ai/stt/select.tsx
@@ -745,6 +755,10 @@ msgstr ""
 
 #: src/settings/ai/stt/select.tsx
 msgid "Live transcription isn't available for this language combination. You'll get the transcript right after the recording ends instead."
+msgstr ""
+
+#: src/shared/startup-boundary.tsx
+msgid "Loading"
 msgstr ""
 
 #: src/templates/auto-form.tsx
@@ -968,6 +982,10 @@ msgstr ""
 msgid "Open on GitHub"
 msgstr ""
 
+#: src/shared/startup-boundary.tsx
+msgid "Opening your vault…"
+msgstr ""
+
 #: src/settings/todo/permission.tsx
 msgid "or"
 msgstr ""
@@ -1118,6 +1136,10 @@ msgstr ""
 
 #: src/settings/general/notification.tsx
 msgid "Respect Do-Not-Disturb mode"
+msgstr ""
+
+#: src/shared/startup-boundary.tsx
+msgid "Restarting…"
 msgstr ""
 
 #: src/session/components/outer-header/index.tsx
@@ -1373,8 +1395,16 @@ msgstr ""
 msgid "Switch to this vault?"
 msgstr ""
 
+#: src/shared/startup-boundary.tsx
+msgid "Switch vault"
+msgstr ""
+
 #: src/settings/general/storage/change-location.tsx
 msgid "Switching..."
+msgstr ""
+
+#: src/shared/startup-boundary.tsx
+msgid "Switching…"
 msgstr ""
 
 #: src/templates/template-icon-picker.tsx
@@ -1477,6 +1507,10 @@ msgstr ""
 msgid "Travel & Places"
 msgstr ""
 
+#: src/shared/startup-boundary.tsx
+msgid "Try again"
+msgstr ""
+
 #: src/session/components/session-date.tsx
 msgid "Unknown date"
 msgstr ""
@@ -1526,6 +1560,10 @@ msgstr ""
 msgid "Version {0}"
 msgstr ""
 
+#: src/shared/startup-boundary.tsx
+msgid "We couldn't open your vault"
+msgstr ""
+
 #: src/onboarding/index.tsx
 msgid "Welcome to Free Meeting Transcriber"
 msgstr ""
@@ -1552,6 +1590,10 @@ msgstr ""
 
 #: src/settings/todo/permission.tsx
 msgid "You can"
+msgstr ""
+
+#: src/shared/startup-boundary.tsx
+msgid "Your cloud provider may still be downloading files"
 msgstr ""
 
 #: src/settings/general/storage/change-location.tsx

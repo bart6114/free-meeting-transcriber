@@ -111,6 +111,9 @@ async relocateVault(newPath: string, keepOriginal: boolean) : Promise<Result<nul
     else return { status: "error", error: e  as any };
 }
 },
+async getStartupStatus() : Promise<StartupStatus> {
+    return await TAURI_INVOKE("get_startup_status");
+},
 async sessionWriteMeta(meta: SessionMeta) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_write_meta", { meta }) };
@@ -489,10 +492,12 @@ async sessionRenameDirToTitle(sessionId: string) : Promise<Result<string, string
 
 export const events = __makeEvents__<{
 indexChanged: IndexChanged,
-recordingMetaSettled: RecordingMetaSettled
+recordingMetaSettled: RecordingMetaSettled,
+startupProgress: StartupProgress
 }>({
 indexChanged: "index-changed",
-recordingMetaSettled: "recording-meta-settled"
+recordingMetaSettled: "recording-meta-settled",
+startupProgress: "startup-progress"
 })
 
 /** user-defined constants **/
@@ -622,6 +627,9 @@ export type SessionMetaPatch = { title?: string | null; started_at?: string | nu
  * preferring the file loses nothing.
  */
 export type SessionRecord = { meta: SessionMeta; note_markdown: string | null }
+export type StartupPhase = { kind: "openingVault" } | { kind: "scanning"; sessions_found: number } | { kind: "indexing"; completed: number; total: number } | { kind: "preparingTemplates" } | { kind: "ready" } | { kind: "failed"; message: string }
+export type StartupProgress = { status: StartupStatus }
+export type StartupStatus = { revision: number; vaultPath: string; isCloudStorage: boolean; phase: StartupPhase }
 /**
  * One tag, file-canonical in the vault-root `tags.json`. The id is the normalized
  * (lowercased) name itself — unlike people's lossy slug, two names normalizing

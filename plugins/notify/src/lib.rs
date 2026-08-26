@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use notify::RecommendedWatcher;
-use notify_debouncer_full::{Debouncer, RecommendedCache};
+use notify_debouncer_full::{Debouncer, NoCache};
 use tauri::Manager;
 
 pub use error::*;
@@ -18,7 +18,7 @@ pub use ext::*;
 const PLUGIN_NAME: &str = "notify";
 
 pub struct WatcherState {
-    pub(crate) debouncer: Mutex<Option<Debouncer<RecommendedWatcher, RecommendedCache>>>,
+    pub(crate) debouncer: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,
     pub(crate) own_writes: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
@@ -44,8 +44,25 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
         .events(tauri_specta::collect_events![FileChanged,])
 }
 
+pub struct InitOptions {
+    pub start_on_webview_ready: bool,
+}
+
+impl Default for InitOptions {
+    fn default() -> Self {
+        Self {
+            start_on_webview_ready: true,
+        }
+    }
+}
+
 pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
+    init_with_options(InitOptions::default())
+}
+
+pub fn init_with_options(options: InitOptions) -> tauri::plugin::TauriPlugin<tauri::Wry> {
     let specta_builder = make_specta_builder();
+    let start_on_webview_ready = options.start_on_webview_ready;
 
     tauri::plugin::Builder::new(PLUGIN_NAME)
         .invoke_handler(specta_builder.invoke_handler())
@@ -59,8 +76,8 @@ pub fn init() -> tauri::plugin::TauriPlugin<tauri::Wry> {
 
             Ok(())
         })
-        .on_webview_ready(|webview| {
-            if let Err(e) = webview.app_handle().notify().start() {
+        .on_webview_ready(move |webview| {
+            if start_on_webview_ready && let Err(e) = webview.app_handle().notify().start() {
                 tracing::error!("failed_to_start_watcher: {}", e);
             }
         })

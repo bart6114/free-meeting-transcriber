@@ -36,6 +36,7 @@ import { initializeAppExitFlush } from "./shared/app-exit";
 import { useConfigValue } from "./shared/config";
 import { initConfigStore } from "./shared/config/store";
 import { ErrorComponent, NotFoundComponent } from "./shared/control";
+import { StartupBoundary } from "./shared/startup-boundary";
 import { bootstrapThemeFromSettings } from "./shared/theme/apply";
 import { AppThemeProvider } from "./shared/theme/provider";
 import type { ThemePreference } from "./shared/theme/resolve";
@@ -61,19 +62,17 @@ function App() {
   const aiTaskStore = useMemo(() => createAITaskStore(), []);
 
   return (
-    <AppThemeProvider>
-      <AppI18nProvider>
-        <AITaskWindowSyncBridge store={aiTaskStore} />
-        <RegenerateTranscriptConfirmDialog />
-        <RouterProvider
-          router={router}
-          context={{
-            listenerStore,
-            aiTaskStore,
-          }}
-        />
-      </AppI18nProvider>
-    </AppThemeProvider>
+    <>
+      <AITaskWindowSyncBridge store={aiTaskStore} />
+      <RegenerateTranscriptConfirmDialog />
+      <RouterProvider
+        router={router}
+        context={{
+          listenerStore,
+          aiTaskStore,
+        }}
+      />
+    </>
   );
 }
 
@@ -87,12 +86,18 @@ function AppRoot() {
   return (
     <QueryClientProvider client={queryClient}>
       <TinyTickProvider manager={manager}>
-        <App />
-        <LocationInvalidationSync />
-        {isMainWindow ? <TaskManager /> : null}
-        {isMainWindow ? <FloatingMeetingWindowHost /> : null}
-        {isMainWindow ? <EventListeners /> : null}
-        <Toaster position="bottom-right" theme={theme} />
+        <AppThemeProvider>
+          <AppI18nProvider>
+            <StartupBoundary>
+              <App />
+              <LocationInvalidationSync />
+              {isMainWindow ? <TaskManager /> : null}
+              {isMainWindow ? <FloatingMeetingWindowHost /> : null}
+              {isMainWindow ? <EventListeners /> : null}
+            </StartupBoundary>
+            <Toaster position="bottom-right" theme={theme} />
+          </AppI18nProvider>
+        </AppThemeProvider>
       </TinyTickProvider>
     </QueryClientProvider>
   );

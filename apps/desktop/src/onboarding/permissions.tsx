@@ -13,6 +13,8 @@ import { useRef } from "react";
 import { type PermissionStatus } from "@hypr/plugin-permissions";
 import { cn } from "@hypr/utils";
 
+import { OnboardingButton } from "./shared";
+
 import { useMountEffect } from "~/shared/hooks/useMountEffect";
 import { usePermission } from "~/shared/hooks/usePermissions";
 
@@ -123,9 +125,10 @@ function PermissionsSectionContent({
   const systemAudio = usePermission("systemAudio");
   const hasContinuedRef = useRef(false);
 
+  const isAudioComplete =
+    mic.status === "authorized" && systemAudio.status === "authorized";
   const isComplete =
-    mic.status === "authorized" &&
-    systemAudio.status === "authorized" &&
+    isAudioComplete &&
     (!accessibility || accessibility.status === "authorized");
 
   const handleAction = (perm: ReturnType<typeof usePermission>) => {
@@ -185,6 +188,18 @@ function PermissionsSectionContent({
           />
         )}
       </div>
+
+      {isAudioComplete &&
+        accessibility &&
+        accessibility.status !== "authorized" && (
+          <OnboardingButton
+            variant="secondary"
+            className="mt-3"
+            onClick={onContinue}
+          >
+            {t`Continue`}
+          </OnboardingButton>
+        )}
     </div>
   );
 }

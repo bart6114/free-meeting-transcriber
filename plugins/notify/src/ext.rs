@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use notify::RecursiveMode;
-use notify_debouncer_full::{DebouncedEvent, new_debouncer};
+use notify::{RecommendedWatcher, RecursiveMode};
+use notify_debouncer_full::{DebouncedEvent, NoCache, new_debouncer_opt};
 use tauri_plugin_settings::SettingsPluginExt;
 use tauri_specta::Event;
 
@@ -43,7 +43,7 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Notify<'a, R, M> {
         let base_for_closure = base.clone();
         let own_writes = state.own_writes.clone();
 
-        let mut debouncer = new_debouncer(
+        let mut debouncer = new_debouncer_opt::<_, RecommendedWatcher, NoCache>(
             Duration::from_millis(DEBOUNCE_DELAY_MS),
             None,
             move |events: Result<Vec<DebouncedEvent>, Vec<notify::Error>>| {
@@ -96,6 +96,8 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> Notify<'a, R, M> {
                     }
                 }
             },
+            NoCache::new(),
+            notify::Config::default(),
         )?;
 
         debouncer.watch(&base, RecursiveMode::Recursive)?;

@@ -17,8 +17,8 @@ pub mod transcript;
 pub use enhanced::{ENHANCED_KINDS, EnhancedDoc, parse_enhanced_file, render_enhanced_file};
 pub use layout::{
     SessionDirKind, SessionDiscovery, SessionDiscoveryError, SessionLocation, SessionLookupError,
-    classify_session_dir, discover_sessions, find_session, find_session_and_scan,
-    has_session_boundary,
+    classify_session_dir, discover_sessions, discover_sessions_with_progress, find_session,
+    find_session_and_scan, has_session_boundary,
 };
 pub use meta::SessionMeta;
 pub use people::{Person, read_people};

@@ -249,6 +249,7 @@ msgstr "Choose light, dark, or match your system setting."
 
 #: src/onboarding/folder-location.tsx
 #: src/settings/general/storage/change-location.tsx
+#: src/shared/startup-boundary.tsx
 msgid "Choose storage location"
 msgstr "Choose storage location"
 
@@ -316,6 +317,7 @@ msgid "Context always provided"
 msgstr "Context always provided"
 
 #: src/onboarding/llm-provider.tsx
+#: src/onboarding/permissions.tsx
 msgid "Continue"
 msgstr "Continue"
 
@@ -569,6 +571,10 @@ msgstr "Free Meeting Transcriber sends these separately, so editing the prompt c
 msgid "Free Meeting Transcriber transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
 msgstr "Free Meeting Transcriber transcribes meetings on your device. Pick a model to download — you can keep going while it downloads."
 
+#: src/shared/startup-boundary.tsx
+msgid "Free Meeting Transcriber will continue automatically when the vault is available."
+msgstr "Free Meeting Transcriber will continue automatically when the vault is available."
+
 #: src/templates/template-icon-picker.tsx
 msgid "Frequently used"
 msgstr "Frequently used"
@@ -597,6 +603,10 @@ msgstr "Go to next section"
 #: src/onboarding/shared.tsx
 msgid "Go to previous section"
 msgstr "Go to previous section"
+
+#: src/shared/startup-boundary.tsx
+msgid "Google Drive may still be downloading files"
+msgstr "Google Drive may still be downloading files"
 
 #: src/settings/ai/stt/select.tsx
 msgid "Got it"
@@ -746,6 +756,10 @@ msgstr "Live transcription isn't available for {0}. You'll get the transcript ri
 #: src/settings/ai/stt/select.tsx
 msgid "Live transcription isn't available for this language combination. You'll get the transcript right after the recording ends instead."
 msgstr "Live transcription isn't available for this language combination. You'll get the transcript right after the recording ends instead."
+
+#: src/shared/startup-boundary.tsx
+msgid "Loading"
+msgstr "Loading"
 
 #: src/templates/auto-form.tsx
 msgid "Loading Auto prompt..."
@@ -968,6 +982,10 @@ msgstr "Open in New Window"
 msgid "Open on GitHub"
 msgstr "Open on GitHub"
 
+#: src/shared/startup-boundary.tsx
+msgid "Opening your vault…"
+msgstr "Opening your vault…"
+
 #: src/settings/todo/permission.tsx
 msgid "or"
 msgstr "or"
@@ -1119,6 +1137,10 @@ msgstr "Reset to default"
 #: src/settings/general/notification.tsx
 msgid "Respect Do-Not-Disturb mode"
 msgstr "Respect Do-Not-Disturb mode"
+
+#: src/shared/startup-boundary.tsx
+msgid "Restarting…"
+msgstr "Restarting…"
 
 #: src/session/components/outer-header/index.tsx
 msgid "Resume"
@@ -1373,9 +1395,17 @@ msgstr "Switch"
 msgid "Switch to this vault?"
 msgstr "Switch to this vault?"
 
+#: src/shared/startup-boundary.tsx
+msgid "Switch vault"
+msgstr "Switch vault"
+
 #: src/settings/general/storage/change-location.tsx
 msgid "Switching..."
 msgstr "Switching..."
+
+#: src/shared/startup-boundary.tsx
+msgid "Switching…"
+msgstr "Switching…"
 
 #: src/templates/template-icon-picker.tsx
 msgid "Symbols"
@@ -1477,6 +1507,10 @@ msgstr "Transcription model is needed to make Free Meeting Transcriber listen to
 msgid "Travel & Places"
 msgstr "Travel & Places"
 
+#: src/shared/startup-boundary.tsx
+msgid "Try again"
+msgstr "Try again"
+
 #: src/session/components/session-date.tsx
 msgid "Unknown date"
 msgstr "Unknown date"
@@ -1526,6 +1560,10 @@ msgstr "Variables"
 msgid "Version {0}"
 msgstr "Version {0}"
 
+#: src/shared/startup-boundary.tsx
+msgid "We couldn't open your vault"
+msgstr "We couldn't open your vault"
+
 #: src/onboarding/index.tsx
 msgid "Welcome to Free Meeting Transcriber"
 msgstr "Welcome to Free Meeting Transcriber"
@@ -1553,6 +1591,10 @@ msgstr "Written by {author} — not by you"
 #: src/settings/todo/permission.tsx
 msgid "You can"
 msgstr "You can"
+
+#: src/shared/startup-boundary.tsx
+msgid "Your cloud provider may still be downloading files"
+msgstr "Your cloud provider may still be downloading files"
 
 #: src/settings/general/storage/change-location.tsx
 msgid "Your current vault stays untouched — switch back anytime."

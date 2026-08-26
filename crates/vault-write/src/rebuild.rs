@@ -6,6 +6,9 @@ use super::index::{
 };
 use super::{SessionMeta, SessionStore, StoreError, paths};
 
+type DiscoveryProgress = std::sync::Arc<dyn Fn(usize) + Send + Sync>;
+type RebuildProgress = std::sync::Arc<dyn Fn(usize, usize) + Send + Sync>;
+
 /// Bounded fan-out for the rebuild content refresh. Every read inside `refresh_one`
 /// is `spawn_blocking`, so even the single-threaded startup runtime gets real
 /// parallel I/O; 8 matches the search projection's batch size and stays far below
@@ -44,7 +47,7 @@ impl SessionStore {
         // from -- which would make the next write recreate the old path.
         let guard = self.lock_writes().await;
         let scan = self.scan_session_locations().await?;
-        self.rebuild_with_scan(guard, scan).await
+        self.rebuild_with_scan(guard, scan, None).await
     }
 
     /// Startup entry point: rebuild from the layout snapshot
@@ -54,7 +57,17 @@ impl SessionStore {
         layout: super::StartupLayout,
     ) -> Result<RebuildReport, StoreError> {
         let guard = self.lock_writes().await;
-        self.rebuild_with_scan(guard, layout.scan).await
+        self.rebuild_with_scan(guard, layout.scan, None).await
+    }
+
+    pub async fn rebuild_index_from_startup_layout_with_progress(
+        &self,
+        layout: super::StartupLayout,
+        on_progress: impl Fn(usize, usize) + Send + Sync + 'static,
+    ) -> Result<RebuildReport, StoreError> {
+        let guard = self.lock_writes().await;
+        self.rebuild_with_scan(guard, layout.scan, Some(std::sync::Arc::new(on_progress)))
+            .await
     }
 
     /// Startup layout normalization from ONE discovery walk: legacy readable-name
@@ -63,8 +76,17 @@ impl SessionStore {
     /// follows indexes the directories as they now are. Runs under the write lock;
     /// no content is read here -- that stays in the rebuild, outside the lock.
     pub async fn normalize_startup_layout(&self) -> Result<super::StartupLayout, StoreError> {
+        self.normalize_startup_layout_with_progress(|_| {}).await
+    }
+
+    pub async fn normalize_startup_layout_with_progress(
+        &self,
+        on_sessions_found: impl Fn(usize) + Send + Sync + 'static,
+    ) -> Result<super::StartupLayout, StoreError> {
         let guard = self.lock_writes().await;
-        let mut scan = self.scan_session_locations().await?;
+        let mut scan = self
+            .scan_session_locations_with_progress(Some(std::sync::Arc::new(on_sessions_found)))
+            .await?;
         let migration = self.migrate_from_scan(&guard, &mut scan).await;
         self.reconcile_provisional_from_scan(&guard, &mut scan)
             .await;
@@ -79,6 +101,7 @@ impl SessionStore {
         &self,
         guard: super::WriteGuard<'_>,
         scan: SessionLayoutScan,
+        on_progress: Option<RebuildProgress>,
     ) -> Result<RebuildReport, StoreError> {
         let mut report = RebuildReport::default();
 
@@ -157,6 +180,8 @@ impl SessionStore {
             (0..scan.sessions.len()).map(|_| None).collect();
         let mut join_failure: Option<StoreError> = None;
         {
+            let total = scan.sessions.len();
+            let mut completed = 0usize;
             let mut join_set = tokio::task::JoinSet::new();
             let mut next = 0usize;
             while next < scan.sessions.len() || !join_set.is_empty() {
@@ -174,8 +199,18 @@ impl SessionStore {
                     next += 1;
                 }
                 match join_set.join_next().await {
-                    Some(Ok((pos, sub, outcome))) => slots[pos] = Some((sub, outcome)),
+                    Some(Ok((pos, sub, outcome))) => {
+                        slots[pos] = Some((sub, outcome));
+                        completed += 1;
+                        if let Some(on_progress) = &on_progress {
+                            on_progress(completed, total);
+                        }
+                    }
                     Some(Err(e)) => {
+                        completed += 1;
+                        if let Some(on_progress) = &on_progress {
+                            on_progress(completed, total);
+                        }
                         if join_failure.is_none() {
                             join_failure = Some(StoreError::Io(format!("task join error: {e}")));
                         }
@@ -488,10 +523,22 @@ impl SessionStore {
     /// directory, and ghost directories (session-like content with no metadata). One
     /// traversal: ghosts come out of the same discovery walk.
     pub(super) async fn scan_session_locations(&self) -> Result<SessionLayoutScan, StoreError> {
+        self.scan_session_locations_with_progress(None).await
+    }
+
+    async fn scan_session_locations_with_progress(
+        &self,
+        on_sessions_found: Option<DiscoveryProgress>,
+    ) -> Result<SessionLayoutScan, StoreError> {
         let vault_base = self.vault_base.clone();
         tokio::task::spawn_blocking(move || -> Result<SessionLayoutScan, StoreError> {
             let started = std::time::Instant::now();
-            let discovery = hypr_vault_read::discover_sessions(&vault_base)?;
+            let discovery =
+                hypr_vault_read::discover_sessions_with_progress(&vault_base, |found| {
+                    if let Some(on_sessions_found) = &on_sessions_found {
+                        on_sessions_found(found);
+                    }
+                })?;
 
             let mut scan = SessionLayoutScan {
                 ghost_dirs: discovery
@@ -740,6 +787,38 @@ mod tests {
     /// everything it knows must come back from the files alone.
     fn cold_store(vault: &tempfile::TempDir) -> SessionStore {
         SessionStore::new(vault.path().to_path_buf())
+    }
+
+    #[tokio::test]
+    async fn startup_callbacks_report_discovery_and_completed_index_work() {
+        let (writer, vault) = test_store().await;
+        writer.write_meta(&meta("s1", "One")).await.unwrap();
+        writer.write_meta(&meta("s2", "Two")).await.unwrap();
+        let store = cold_store(&vault);
+
+        let discovered = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let discovered_for_callback = discovered.clone();
+        let layout = store
+            .normalize_startup_layout_with_progress(move |found| {
+                discovered_for_callback.lock().unwrap().push(found);
+            })
+            .await
+            .unwrap();
+        assert_eq!(*discovered.lock().unwrap(), vec![1, 2]);
+
+        let indexed = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let indexed_for_callback = indexed.clone();
+        store
+            .rebuild_index_from_startup_layout_with_progress(layout, move |completed, total| {
+                indexed_for_callback
+                    .lock()
+                    .unwrap()
+                    .push((completed, total));
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(*indexed.lock().unwrap(), vec![(1, 2), (2, 2)]);
     }
 
     /// Drains everything currently queued on the store's change bus. The bus is the
