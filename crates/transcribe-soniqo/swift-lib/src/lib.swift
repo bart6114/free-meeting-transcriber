@@ -162,13 +162,15 @@ private enum SpeechModelKind: String, CaseIterable {
 
   private static func regularFileExists(at url: URL) -> Bool {
     var isDirectory = ObjCBool(false)
-    return FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+    return Foundation.FileManager().fileExists(atPath: url.path, isDirectory: &isDirectory)
       && !isDirectory.boolValue
   }
 
   private static func compiledCoreMLModelReady(at directory: URL) -> Bool {
     var isDirectory = ObjCBool(false)
-    guard FileManager.default.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+    guard
+      Foundation.FileManager().fileExists(
+        atPath: directory.path, isDirectory: &isDirectory),
       isDirectory.boolValue
     else {
       return false
@@ -182,7 +184,7 @@ private enum SpeechModelKind: String, CaseIterable {
     -> Bool
   {
     guard
-      let contents = try? FileManager.default.contentsOfDirectory(
+      let contents = try? Foundation.FileManager().contentsOfDirectory(
         at: directory,
         includingPropertiesForKeys: [.isRegularFileKey]
       )
@@ -204,7 +206,7 @@ private enum SpeechModelKind: String, CaseIterable {
 
   private static func directoryContainsRegularFile(at directory: URL) -> Bool {
     guard
-      let enumerator = FileManager.default.enumerator(
+      let enumerator = Foundation.FileManager().enumerator(
         at: directory,
         includingPropertiesForKeys: [.isRegularFileKey],
         options: [.skipsHiddenFiles]

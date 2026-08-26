@@ -237,13 +237,14 @@ private actor DiarizeBridge {
       var isDirectory = ObjCBool(false)
       let model = directory.appendingPathComponent(name)
       guard
-        FileManager.default.fileExists(atPath: model.path, isDirectory: &isDirectory),
+        Foundation.FileManager().fileExists(
+          atPath: model.path, isDirectory: &isDirectory),
         isDirectory.boolValue
       else {
         return false
       }
 
-      return FileManager.default.fileExists(
+      return Foundation.FileManager().fileExists(
         atPath: model.appendingPathComponent("coremldata.bin").path
       )
     }
