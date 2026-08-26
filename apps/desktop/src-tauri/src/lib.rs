@@ -329,6 +329,7 @@ pub async fn main() {
 
                         search_index::spawn(app_handle.clone(), store.clone());
                         session_store::spawn_dispatcher(app_handle.clone());
+                        startup::spawn(app_handle.clone(), store);
                     }
                     Err(error) => {
                         let startup = startup::StartupState::new(None);
@@ -400,12 +401,6 @@ pub async fn main() {
     {
         let app_handle = app.handle().clone();
         AppWindow::Main.show(&app_handle).unwrap();
-        if let Some(store) = app_handle
-            .try_state::<std::sync::Arc<session_store::SessionStore>>()
-            .map(|state| state.inner().clone())
-        {
-            startup::spawn(app_handle, store);
-        }
     }
 
     #[cfg(target_os = "macos")]
