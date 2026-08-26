@@ -12,6 +12,8 @@ if [ "$cache" = "$HOME/.cache/loofah" ] && [ ! -e "$cache" ] && [ -d "$legacy_ca
   mv "$legacy_cache" "$cache"
 fi
 
+mkdir -p "$cache"
+
 # Cargo and Swift build outputs can contain absolute paths into the old cache.
 # Keep those artifacts valid while new worktrees link to the renamed location.
 if [ "$cache" = "$HOME/.cache/loofah" ] && [ -d "$cache" ] && [ ! -e "$legacy_cache" ] && [ ! -L "$legacy_cache" ]; then
