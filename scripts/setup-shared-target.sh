@@ -5,28 +5,13 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-legacy_cache="$HOME/.cache/fmtr"
-cache="${LOOFAH_TARGET_CACHE:-${FMTR_TARGET_CACHE:-$HOME/.cache/loofah}}"
-
-if [ "$cache" = "$HOME/.cache/loofah" ] && [ ! -e "$cache" ] && [ -d "$legacy_cache" ]; then
-  mv "$legacy_cache" "$cache"
-fi
+cache="${LOOFAH_TARGET_CACHE:-$HOME/.cache/loofah}"
 
 mkdir -p "$cache"
 
-# Cargo and Swift build outputs can contain absolute paths into the old cache.
-# Keep those artifacts valid while new worktrees link to the renamed location.
-if [ "$cache" = "$HOME/.cache/loofah" ] && [ -d "$cache" ] && [ ! -e "$legacy_cache" ] && [ ! -L "$legacy_cache" ]; then
-  ln -s "$cache" "$legacy_cache"
-fi
-
 link_target() {
-  local dir="$1" shared="$2" legacy_shared="$3"
+  local dir="$1" shared="$2"
   if [ -L "$dir" ]; then
-    if [ "$(readlink "$dir")" = "$legacy_shared" ] && [ "$shared" != "$legacy_shared" ]; then
-      ln -sfn "$shared" "$dir"
-      echo "relinked $dir -> $shared"
-    fi
     return
   fi
   mkdir -p "$shared"
@@ -42,5 +27,5 @@ link_target() {
   echo "linked $dir -> $shared"
 }
 
-link_target "$root/target" "$cache/target-root" "$legacy_cache/target-root"
-link_target "$root/apps/desktop/src-tauri/target" "$cache/target-tauri" "$legacy_cache/target-tauri"
+link_target "$root/target" "$cache/target-root"
+link_target "$root/apps/desktop/src-tauri/target" "$cache/target-tauri"
