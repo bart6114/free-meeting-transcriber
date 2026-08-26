@@ -92,7 +92,7 @@ readonly rust_excludes=(
 run_tests_tmp=""
 
 cleanup() {
-  local temp_root="${TMPDIR:-/tmp}/fmtr-run-tests."
+  local temp_root="${TMPDIR:-/tmp}/loofah-run-tests."
   if [[ -n "$run_tests_tmp" && "$run_tests_tmp" == "$temp_root"* && -d "$run_tests_tmp" ]]; then
     rm -rf -- "$run_tests_tmp"
   fi
@@ -149,51 +149,52 @@ run_rust() {
 
 run_cli() {
   run_step "agent-access tests" cargo test --locked -p agent-access
-  run_step "CLI tests" cargo test --locked -p fmtr-cli
+  run_step "CLI tests" cargo test --locked -p loofah-cli
   run_step "TipTap tests" cargo test --locked -p tiptap
   run_step "CLI clippy" cargo clippy --locked \
     -p agent-access \
-    -p fmtr-cli \
+    -p loofah-cli \
     -p tiptap \
     --all-targets \
     --no-deps \
     -- \
     -D warnings
-  run_step "release CLI build" cargo build --locked --release -p fmtr-cli
+  run_step "release CLI build" cargo build --locked --release -p loofah-cli
 
-  run_step "CLI help" target/release/fmtr --help
-  run_step "CLI version" target/release/fmtr --version
-  run_step "sessions help" target/release/fmtr sessions --help
-  run_step "MCP help" target/release/fmtr mcp --help
+  run_step "CLI help" target/release/loofah --help
+  run_step "CLI version" target/release/loofah --version
+  run_step "legacy CLI version" target/release/fmtr --version
+  run_step "sessions help" target/release/loofah sessions --help
+  run_step "MCP help" target/release/loofah mcp --help
 
-  run_tests_tmp="$(mktemp -d "${TMPDIR:-/tmp}/fmtr-run-tests.XXXXXX")"
+  run_tests_tmp="$(mktemp -d "${TMPDIR:-/tmp}/loofah-run-tests.XXXXXX")"
 
   local doctor_output
-  if doctor_output="$(target/release/fmtr --json --vault-path "$run_tests_tmp/missing-vault" doctor)"; then
+  if doctor_output="$(target/release/loofah --json --vault-path "$run_tests_tmp/missing-vault" doctor)"; then
     echo "doctor unexpectedly reported a missing vault as ready" >&2
     return 1
   fi
   grep -q '"ready": false' <<<"$doctor_output"
 
   local invalid_output
-  if invalid_output="$(target/release/fmtr --json sessions list --limit 0 2>&1)"; then
+  if invalid_output="$(target/release/loofah --json sessions list --limit 0 2>&1)"; then
     echo "invalid arguments unexpectedly succeeded" >&2
     return 1
   fi
   grep -q '"code": "invalid_arguments"' <<<"$invalid_output"
 
-  test -s skills/fmtr/SKILL.md
-  test "$(sed -n '1p' skills/fmtr/SKILL.md)" = "---"
-  grep -Eq '^name:[[:space:]]+fmtr[[:space:]]*$' skills/fmtr/SKILL.md
-  grep -Eq '^description:[[:space:]]*(>|\||[^[:space:]])' skills/fmtr/SKILL.md
-  awk 'NR > 1 && $0 == "---" { found = 1; exit } END { if (!found) exit 1 }' skills/fmtr/SKILL.md
+  test -s skills/loofah/SKILL.md
+  test "$(sed -n '1p' skills/loofah/SKILL.md)" = "---"
+  grep -Eq '^name:[[:space:]]+loofah[[:space:]]*$' skills/loofah/SKILL.md
+  grep -Eq '^description:[[:space:]]*(>|\||[^[:space:]])' skills/loofah/SKILL.md
+  awk 'NR > 1 && $0 == "---" { found = 1; exit } END { if (!found) exit 1 }' skills/loofah/SKILL.md
   test "$(readlink docs/.mintlify/skills)" = "../../skills"
-  test -f docs/.mintlify/skills/fmtr/SKILL.md
+  test -f docs/.mintlify/skills/loofah/SKILL.md
 
   local skill_list
   skill_list="$(npx --yes skills@1.5.16 add . --list)"
   echo "$skill_list"
-  grep -q 'fmtr' <<<"$skill_list"
+  grep -q 'loofah' <<<"$skill_list"
   if grep -q 'add-plugin' <<<"$skill_list"; then
     echo "repository-only skills leaked into the published skill list" >&2
     return 1

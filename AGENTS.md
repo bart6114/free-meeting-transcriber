@@ -18,7 +18,7 @@ Inside `sessions/<id>/` the app owns a fixed set of names (canonical list: `crat
 
 ## Shared cargo target cache
 
-- In a fresh worktree, run `scripts/setup-shared-target.sh` before the first Rust build. It symlinks the two cargo target dirs (workspace root `target/` and `apps/desktop/src-tauri/target/`) to a machine-shared cache in `~/.cache/loofah/`, so compiled dependencies are reused instead of rebuilt cold (~10 min saved per worktree). The script migrates the previous `~/.cache/fmtr/` location.
+- In a fresh worktree, run `scripts/setup-shared-target.sh` before the first Rust build. It symlinks the two cargo target dirs (workspace root `target/` and `apps/desktop/src-tauri/target/`) to a machine-shared cache in `~/.cache/loofah/`, so compiled dependencies are reused instead of rebuilt cold (~10 min saved per worktree).
 - The script is idempotent and seeds the cache from an existing local build when the cache is empty. Symlinks are used (rather than cargo config) because the checked-in `apps/desktop/src-tauri/.cargo/config.toml` pins `target-dir`, which takes precedence over any parent-directory cargo config.
 - Caveats: concurrent builds from different worktrees serialize on cargo's file lock, the cache grows as branches accumulate artifacts (`rm -rf ~/.cache/loofah` resets it at the cost of one cold build), and deleting a worktree no longer frees build space.
 - The `.gitignore` patterns for `target` deliberately have no trailing slash — `target/` only matches real directories, not the symlinks.

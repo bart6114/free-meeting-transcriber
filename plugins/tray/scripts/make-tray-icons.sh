@@ -1,104 +1,46 @@
 #!/bin/zsh
-# Generate the menu-bar tray icon set from the beer-mug brand artwork
-# (see apps/desktop/src-tauri/scripts/make-icon.sh for the app-icon variant).
-# States: default (white mug, waveform bars knocked out), recording_0..3 (gray
-# mug, white bars dancing inside), degraded (amber mug + "!"), update (mug +
-# down-arrow badge). Reproducible via ImageMagick.
+# Generate the menu-bar tray icon set from the canonical Loofah mark.
+# States: default, recording pulse frames, degraded (!), and update (down arrow).
 set -euo pipefail
 cd "$(dirname "$0")/.."   # plugins/tray
 
-# bar columns: x1,x2 fixed; y2 (bottom) fixed; full height per bar
-BARS=(
-  "353,389,660,100"
-  "415,451,690,160"
-  "477,513,725,230"
-  "539,575,690,160"
-  "601,637,660,100"
-)
-
-mug_shapes() { # stdout: -draw args for the mug silhouette (no bars)
-  echo "-draw 'roundrectangle 330,400 660,800 40,40'"
-  echo "-draw 'roundrectangle 640,480 800,700 70,70'"
-  echo "-draw 'roundrectangle 328,368 662,430 30,30'"
-  echo "-draw 'circle 370,368 370,300'"
-  echo "-draw 'circle 455,352 455,272'"
-  echo "-draw 'circle 545,362 545,290'"
-  echo "-draw 'circle 615,355 615,285'"
-  echo "-draw 'ellipse 340,462 24,42 0,360'"
-  echo "-draw 'circle 332,570 332,552'"
-}
-
-knock_shapes() { # handle hole + full-height bars
-  echo "-draw 'roundrectangle 696,528 748,652 26,26'"
-  for b in $BARS; do
-    IFS=, read x1 x2 y2 h <<<"$b"
-    echo "-draw 'roundrectangle $x1,$((y2 - h)) $x2,$y2 18,18'"
-  done
-}
-
-bar_overlay() { # $1..$5 height fractions (percent) -> white bars, bottom-anchored
-  local i=1
-  for b in $BARS; do
-    IFS=, read x1 x2 y2 h <<<"$b"
-    local frac=${(P)i}
-    local bh=$((h * frac / 100))
-    echo "-draw 'roundrectangle $x1,$((y2 - bh)) $x2,$y2 18,18'"
-    i=$((i + 1))
-  done
-}
-
-render_mug() { # $1 fill color, $2 out file, $3 optional extra white-bar draws
-  local fill=$1 out=$2 bars=${3:-}
-  eval magick -size 1024x1024 xc:none \
-    -fill "'$fill'" $(mug_shapes | tr '\n' ' ') \
-    \\\( -size 1024x1024 xc:none -fill white $(knock_shapes | tr '\n' ' ') \\\) \
-    -compose DstOut -composite -compose Over \
-    ${bars:+-fill white $bars} \
-    -background none -rotate -8 -gravity center -extent 1024x1024 "$out"
-}
-
+MARK=../../apps/desktop/src-tauri/icons/src/loofah-mark-1024.png
+CANVAS=160
 T=$(mktemp -d)
+trap 'rm -rf "$T"' EXIT
 
-# default: white mug, bars as negative space
-render_mug white "$T/default.png"
+render_mark() { # $1 size, $2 output, $3 optional x offset, $4 optional y offset
+  local size=$1 out=$2 x=${3:-0} y=${4:-0}
+  magick "$MARK" -trim +repage \
+    -channel RGB -fill white -colorize 100 +channel \
+    -resize "${size}x${size}" \
+    -background none -gravity center -extent "${CANVAS}x${CANVAS}" \
+    -roll "+${x}+${y}" "$out"
+}
 
-# recording frames: gray mug, white bars dancing inside the knockouts
-render_mug '#8e8e8e' "$T/rec0.png" "$(bar_overlay 40 70 100 70 40 | tr '\n' ' ')"
-render_mug '#8e8e8e' "$T/rec1.png" "$(bar_overlay 70 100 55 85 50 | tr '\n' ' ')"
-render_mug '#8e8e8e' "$T/rec2.png" "$(bar_overlay 100 55 80 45 75 | tr '\n' ' ')"
-render_mug '#8e8e8e' "$T/rec3.png" "$(bar_overlay 55 85 40 100 60 | tr '\n' ' ')"
+add_badge() { # $1 base, $2 output, $3 badge cutout drawing
+  local base=$1 out=$2 cutout=$3
+  magick "$base" \
+    \( -size "${CANVAS}x${CANVAS}" xc:none -fill white -draw 'circle 121,121 121,79' \) \
+    -compose DstOut -composite -compose Over \
+    -fill white -draw 'circle 121,121 121,84' \
+    \( -size "${CANVAS}x${CANVAS}" xc:none -fill white -draw "$cutout" \) \
+    -compose DstOut -composite -compose Over "$out"
+}
 
-# degraded: amber mug + upright white exclamation on the right
-render_mug '#f59e0b' "$T/degraded_base.png"
-magick "$T/degraded_base.png" -fill white \
-  -draw 'roundrectangle 858,420 922,640 32,32' \
-  -draw 'circle 890,724 890,684' "$T/degraded.png"
+render_mark 148 icons/tray_default.png
 
-# update: white mug + down-arrow badge bottom-right (ring gap for contrast)
-render_mug white "$T/update_base.png"
-magick "$T/update_base.png" \
-  \( -size 1024x1024 xc:none -fill white -draw 'circle 780,780 780,628' \) \
-  -compose DstOut -composite -compose Over \
-  -fill white -draw 'circle 780,780 780,662' \
-  \( -size 1024x1024 xc:none -fill white \
-     -draw 'roundrectangle 762,682 798,790 18,18' \
-     -draw 'polygon 712,780 848,780 780,872' \) \
-  -compose DstOut -composite -compose Over "$T/update.png"
+# A subtle size pulse remains legible at macOS menu-bar scale while preserving
+# the complete mark in every frame.
+render_mark 128 icons/tray_recording_0.png
+render_mark 138 icons/tray_recording_1.png
+render_mark 148 icons/tray_recording_2.png
+render_mark 138 icons/tray_recording_3.png
 
-# crop away the transparent canvas padding (macOS scales the whole canvas to
-# menu-bar height, so padding shrinks the glyph). One union bbox across all
-# states keeps the mug the same size/position when the icon changes state.
-bbox=$(magick "$T"/{default,rec0,rec1,rec2,rec3,degraded,update}.png \
-  -background none -flatten -format '%@' info:)
-w=${bbox%%x*} rest=${bbox#*x} h=${rest%%+*}
-side=$(( w > h ? w : h ))
-
-for pair in default:tray_default rec0:tray_recording_0 rec1:tray_recording_1 \
-  rec2:tray_recording_2 rec3:tray_recording_3 degraded:tray_degraded update:tray_update; do
-  src=${pair%%:*} dst=${pair##*:}
-  magick "$T/$src.png" -crop "$bbox" +repage \
-    -background none -gravity center -extent "${side}x${side}" \
-    -resize 160x160 "icons/$dst.png"
-done
+render_mark 126 "$T/badge-base.png" -13 -13
+add_badge "$T/badge-base.png" icons/tray_degraded.png \
+  'roundrectangle 116,95 126,126 5,5 circle 121,137 121,132'
+add_badge "$T/badge-base.png" icons/tray_update.png \
+  'roundrectangle 116,94 126,124 5,5 polygon 105,119 137,119 121,139'
 
 echo "tray icons regenerated"

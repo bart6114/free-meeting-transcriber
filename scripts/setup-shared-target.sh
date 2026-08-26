@@ -5,12 +5,9 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
-legacy_cache="$HOME/.cache/fmtr"
-cache="${LOOFAH_TARGET_CACHE:-${FMTR_TARGET_CACHE:-$HOME/.cache/loofah}}"
+cache="${LOOFAH_TARGET_CACHE:-$HOME/.cache/loofah}"
 
-if [ "$cache" = "$HOME/.cache/loofah" ] && [ ! -e "$cache" ] && [ -d "$legacy_cache" ]; then
-  mv "$legacy_cache" "$cache"
-fi
+mkdir -p "$cache"
 
 link_target() {
   local dir="$1" shared="$2"
