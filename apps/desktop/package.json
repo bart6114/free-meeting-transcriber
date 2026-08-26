@@ -1,6 +1,6 @@
 {
   "name": "@hypr/desktop",
-  "version": "0.30.7",
+  "version": "0.30.8",
   "private": true,
   "type": "module",
   "scripts": {
