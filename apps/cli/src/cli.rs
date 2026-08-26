@@ -41,8 +41,9 @@ pub struct Args {
 pub enum Command {
     /// Check the local CLI and vault access, restoring the vault's AGENTS.md if stale
     Doctor,
-    /// Browse, create, edit, and export meetings
-    Meetings {
+    /// Browse, create, edit, and export sessions
+    #[command(name = "sessions", alias = "meetings")]
+    Sessions {
         #[command(subcommand)]
         command: MeetingCommand,
     },
@@ -359,8 +360,8 @@ mod tests {
         ]);
 
         assert!(args.json);
-        let Command::Meetings { command } = args.command else {
-            panic!("expected meetings command");
+        let Command::Sessions { command } = args.command else {
+            panic!("expected sessions command");
         };
         let MeetingCommand::List { query, limit, .. } = command else {
             panic!("expected list command");
@@ -370,8 +371,21 @@ mod tests {
     }
 
     #[test]
+    fn parses_sessions_command_as_primary_namespace() {
+        let Command::Sessions { command } =
+            Args::parse_from(["fmtr", "sessions", "list", "--query", "planning"]).command
+        else {
+            panic!("expected sessions command");
+        };
+        let MeetingCommand::List { query, .. } = command else {
+            panic!("expected list command");
+        };
+        assert_eq!(query.as_deref(), Some("planning"));
+    }
+
+    #[test]
     fn parses_meeting_list_tag_filters_and_their_conflict() {
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr",
             "meetings",
             "list",
@@ -390,7 +404,7 @@ mod tests {
         assert_eq!(tag, vec!["Hiring".to_string(), "project-x".to_string()]);
         assert!(!untagged);
 
-        let Command::Meetings { command } =
+        let Command::Sessions { command } =
             Args::parse_from(["fmtr", "meetings", "list", "--untagged"]).command
         else {
             panic!("expected meetings command");
@@ -407,7 +421,7 @@ mod tests {
 
     #[test]
     fn parses_tag_edit_path_and_tags_list_commands() {
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr",
             "meetings",
             "tag",
@@ -429,7 +443,7 @@ mod tests {
         assert_eq!(id, "meeting-1");
         assert_eq!(tags, vec!["#Hiring".to_string(), "project-x".to_string()]);
 
-        let Command::Meetings { command } =
+        let Command::Sessions { command } =
             Args::parse_from(["fmtr", "meetings", "tag", "remove", "meeting-1", "hiring"]).command
         else {
             panic!("expected meetings command");
@@ -447,7 +461,7 @@ mod tests {
             Args::try_parse_from(["fmtr", "meetings", "tag", "remove", "meeting-1", "  "]).is_err()
         );
 
-        let Command::Meetings { command } =
+        let Command::Sessions { command } =
             Args::parse_from(["fmtr", "meetings", "path", "meeting-1"]).command
         else {
             panic!("expected meetings command");
@@ -468,12 +482,12 @@ mod tests {
     #[test]
     fn help_exposes_mcp_and_export() {
         let help = Args::command().render_long_help().to_string();
-        assert!(help.contains("meetings"));
+        assert!(help.contains("sessions"));
         assert!(help.contains("mcp"));
         assert!(help.contains("doctor"));
         assert!(help.contains("AGENTS.md at the vault root"));
 
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr",
             "meetings",
             "export",
@@ -496,7 +510,7 @@ mod tests {
 
     #[test]
     fn parses_transcript_command() {
-        let Command::Meetings { command } =
+        let Command::Sessions { command } =
             Args::parse_from(["fmtr", "meetings", "transcript", "meeting-1"]).command
         else {
             panic!("expected meetings command");
@@ -509,7 +523,7 @@ mod tests {
 
     #[test]
     fn parses_search_filters_and_requires_query_or_speaker() {
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr",
             "meetings",
             "search",
@@ -543,7 +557,7 @@ mod tests {
 
     #[test]
     fn parses_new_command_with_note_source() {
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr", "meetings", "new", "--title", "Planning", "--note", "-",
         ])
         .command
@@ -561,7 +575,7 @@ mod tests {
 
     #[test]
     fn parses_new_timestamps_normalized_to_utc_and_repeatable_tags() {
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr",
             "meetings",
             "new",
@@ -661,7 +675,7 @@ mod tests {
             .is_err()
         );
 
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr",
             "meetings",
             "note",
@@ -685,7 +699,7 @@ mod tests {
 
     #[test]
     fn parses_attach_with_and_without_name_override() {
-        let Command::Meetings { command } =
+        let Command::Sessions { command } =
             Args::parse_from(["fmtr", "meetings", "attach", "meeting-1", "diagram.png"]).command
         else {
             panic!("expected meetings command");
@@ -697,7 +711,7 @@ mod tests {
         assert_eq!(file, Path::new("diagram.png"));
         assert_eq!(name, None);
 
-        let Command::Meetings { command } = Args::parse_from([
+        let Command::Sessions { command } = Args::parse_from([
             "fmtr",
             "meetings",
             "attach",

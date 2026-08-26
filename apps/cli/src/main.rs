@@ -1,4 +1,7 @@
-use std::process::ExitCode;
+use std::{
+    ffi::{OsStr, OsString},
+    process::ExitCode,
+};
 
 use clap::Parser;
 use clap::error::ErrorKind;
@@ -6,8 +9,14 @@ use fmtr_cli::Args;
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let json = std::env::args_os().any(|arg| arg == "--json");
-    let args = match Args::try_parse() {
+    let argv: Vec<OsString> = std::env::args_os().collect();
+    let json = argv.iter().any(|arg| arg == "--json");
+    if should_warn_about_legacy_command(&argv) {
+        eprintln!(
+            "warning: `fmtr meetings` is deprecated and will be removed; use `fmtr sessions` instead"
+        );
+    }
+    let args = match Args::try_parse_from(argv) {
         Ok(args) => args,
         Err(error) => {
             let exit_code = error.exit_code();
@@ -45,5 +54,88 @@ async fn main() -> ExitCode {
             }
             ExitCode::from(error.exit_code())
         }
+    }
+}
+
+fn should_warn_about_legacy_command(argv: &[OsString]) -> bool {
+    !argv.iter().any(|arg| arg == "--json") && is_legacy_meeting_command(argv)
+}
+
+fn is_legacy_meeting_command(argv: &[OsString]) -> bool {
+    let mut iter = argv.iter().skip(1);
+
+    while let Some(arg) = iter.next() {
+        if arg == OsStr::new("--base") {
+            iter.next();
+            continue;
+        }
+        if arg == OsStr::new("--vault-path") {
+            iter.next();
+            continue;
+        }
+        if arg == OsStr::new("--json") {
+            continue;
+        }
+        if let Some(arg) = arg.to_str() {
+            if arg.starts_with("--base=") || arg.starts_with("--vault-path=") {
+                continue;
+            }
+            if arg.starts_with('-') {
+                continue;
+            }
+            return arg == "meetings";
+        }
+        return false;
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn argv(args: &[&str]) -> Vec<OsString> {
+        args.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn detects_legacy_command_after_global_options() {
+        assert!(is_legacy_meeting_command(&argv(&[
+            "fmtr",
+            "--vault-path",
+            "/tmp/vault",
+            "--json",
+            "meetings",
+            "list",
+        ])));
+        assert!(is_legacy_meeting_command(&argv(&[
+            "fmtr",
+            "--base=/tmp/vault",
+            "meetings",
+            "list",
+        ])));
+        assert!(!is_legacy_meeting_command(&argv(&[
+            "fmtr", "sessions", "list",
+        ])));
+        assert!(!should_warn_about_legacy_command(&argv(&[
+            "fmtr", "--json", "meetings", "list",
+        ])));
+        assert!(should_warn_about_legacy_command(&argv(&[
+            "fmtr", "meetings", "list",
+        ])));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn tolerates_non_utf8_arguments() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let argv = vec![
+            OsString::from("fmtr"),
+            OsString::from("import"),
+            OsString::from_vec(vec![0xff]),
+        ];
+
+        assert!(!is_legacy_meeting_command(&argv));
     }
 }

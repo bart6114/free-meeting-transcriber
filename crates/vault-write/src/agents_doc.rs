@@ -43,14 +43,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn generated_guidance_prefers_typed_meeting_interfaces() {
+    fn generated_guidance_prefers_typed_session_interfaces() {
         let content = agents_doc_content();
 
         for tool in ["list_meetings", "get_meeting", "get_meeting_transcript"] {
             assert!(content.contains(tool));
         }
 
-        assert!(content.contains("fmtr --json meetings list"));
+        assert!(content.contains("fmtr --json sessions list"));
         assert!(!content.contains("--base ."));
         assert!(content.contains("--vault-path ABSOLUTE_VAULT_DIR"));
         assert!(content.contains("Do not use `find`,"));

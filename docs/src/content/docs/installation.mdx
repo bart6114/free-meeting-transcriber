@@ -70,15 +70,15 @@ Open the desktop app at least once before using the CLI. By default, `fmtr` look
 You can override the path for one command:
 
 ```bash
-fmtr --vault-path /path/to/vault --json meetings list
+fmtr --vault-path /path/to/vault --json sessions list
 ```
 
 Or set it in the environment:
 
 ```bash
-FMTR_VAULT_PATH=/path/to/vault fmtr --json meetings list
+FMTR_VAULT_PATH=/path/to/vault fmtr --json sessions list
 ```
 
 `--base /path/to/vault` is an older equivalent, but `--vault-path` is clearer and takes precedence when both are present.
 
-The CLI reads and writes the vault: `fmtr meetings new`, `fmtr import`, and `fmtr meetings note --set` create and edit meeting data in the same format the desktop app writes, and `fmtr transcribe` replaces a meeting's transcript. The MCP server stays read-only. See the [CLI reference](/reference/cli) for every command.
+The CLI reads and writes the vault: `fmtr sessions new`, `fmtr import`, and `fmtr sessions note --set` create and edit meeting data in the same format the desktop app writes, and `fmtr transcribe` replaces a meeting's transcript. The MCP server stays read-only. See the [CLI reference](/reference/cli) for every command.

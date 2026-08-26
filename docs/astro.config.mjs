@@ -14,7 +14,7 @@ export default defineConfig({
     starlight({
       title: "Free Meeting Transcriber",
       description:
-        "Local meeting transcription and plain Markdown notes, without accounts or subscriptions.",
+        "A local-first knowledge vault for notes, meetings, transcripts, and agent-created research.",
       logo: {
         light: "./src/assets/logo-light.svg",
         dark: "./src/assets/logo-dark.svg",
