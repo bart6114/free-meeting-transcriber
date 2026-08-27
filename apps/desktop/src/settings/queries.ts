@@ -196,11 +196,6 @@ function applySettingSideEffects(values: SettingValues): void {
       .setMicActiveThreshold(values.mic_active_threshold)
       .catch(console.error);
   }
-  if (values.telemetry_consent !== undefined) {
-    void analyticsCommands
-      .setDisabled(!values.telemetry_consent)
-      .catch(console.error);
-  }
   if (values.show_app_in_dock !== undefined) {
     void windowsCommands
       .setShowAppInDock(values.show_app_in_dock)

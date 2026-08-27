@@ -11,7 +11,7 @@
 I wanted a meeting notetaker that did a few things well: transcribe locally,
 keep my notes as ordinary Markdown files, and stay out of the way. I couldn't
 find one without accounts, subscriptions, or a cloud service in the middle, so
-I built this fork of [anarlog](https://github.com/fastrepl/anarlog).
+I built Loofah on [anarlog](https://github.com/fastrepl/anarlog).
 
 <p align="center">
   <a href="docs/public/screenshots/loofah-primary.png">

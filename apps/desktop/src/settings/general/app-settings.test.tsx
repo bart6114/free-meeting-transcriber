@@ -19,7 +19,6 @@ function renderAppSettings({ floatingBar = true } = {}) {
         floatingBar={setting(floatingBar)}
         showAppInDock={setting()}
         showTrayIcon={setting()}
-        telemetryConsent={setting()}
         audioRetention={{ value: "forever", onChange: vi.fn() }}
       />,
     ),
@@ -41,5 +40,11 @@ describe("AppSettingsView", () => {
     renderAppSettings({ floatingBar: false });
 
     expect(screen.getByText("Show floating bar")).toBeTruthy();
+  });
+
+  it("does not expose a usage data setting", () => {
+    renderAppSettings();
+
+    expect(screen.queryByText("Share usage data")).toBeNull();
   });
 });

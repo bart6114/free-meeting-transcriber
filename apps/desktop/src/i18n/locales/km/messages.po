@@ -1211,10 +1211,6 @@ msgstr ""
 msgid "Select..."
 msgstr ""
 
-#: src/settings/general/app-settings.tsx
-msgid "Send anonymous usage analytics to help improve Loofah."
-msgstr ""
-
 #: src/templates/auto-form.tsx
 msgid "Session details"
 msgstr ""
@@ -1240,10 +1236,6 @@ msgstr ""
 #: src/sidebar/settings.tsx
 msgid "Settings"
 msgstr ""
-
-#: src/settings/general/app-settings.tsx
-msgid "Share usage data"
-msgstr "ចែករំលែកទិន្នន័យការប្រើប្រាស់"
 
 #: src/settings/general/app-settings.tsx
 msgid "Show app in Dock"
