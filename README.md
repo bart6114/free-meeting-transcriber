@@ -13,6 +13,12 @@ keep my notes as ordinary Markdown files, and stay out of the way. I couldn't
 find one without accounts, subscriptions, or a cloud service in the middle, so
 I built this fork of [anarlog](https://github.com/fastrepl/anarlog).
 
+<p align="center">
+  <a href="docs/public/screenshots/loofah-primary.png">
+    <img src="docs/public/screenshots/loofah-primary.png" alt="Loofah showing a meeting brief, notes, and recent sessions in a local vault" />
+  </a>
+</p>
+
 There is no backend, account, billing, telemetry, or premium tier. Your notes
 live on your computer and remain usable without this app. If you want AI-generated
 summaries, connect your own LLM—OpenAI, Anthropic, Gemini, OpenRouter, Ollama,
