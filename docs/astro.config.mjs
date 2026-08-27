@@ -18,7 +18,7 @@ export default defineConfig({
       logo: {
         src: "../apps/desktop/src-tauri/icons/src/loofah-mark-1024.png",
       },
-      favicon: "/favicon.svg",
+      favicon: "/favicon.ico",
       customCss: ["./src/styles/custom.css"],
       plugins: [
         starlightLinksValidator(),
