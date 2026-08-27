@@ -114,7 +114,7 @@ function CliSection({
   isInstalling: boolean;
   onInstall: () => void;
 }) {
-  const commandName = status?.commandName ?? "loofah";
+  const commandName = status?.commandName ?? "loof";
   const canInstall =
     status?.supported === true &&
     status.state !== "resource_missing" &&
@@ -131,7 +131,7 @@ function CliSection({
               <TerminalIcon className="size-5" />
             </div>
             <div className="min-w-0">
-              <h3 className="font-medium">loofah CLI</h3>
+              <h3 className="font-medium">loof CLI</h3>
               <p className="text-muted-foreground mt-1 text-sm leading-5">
                 Browse notes, summaries, transcripts, and recurring meetings
                 from the command line. The MCP server is included.
@@ -256,7 +256,7 @@ function McpSection({ status }: { status: EmbeddedCliStatus | undefined }) {
   const isInstalled = status?.state === "installed";
   const command = isInstalled
     ? status.installPath
-    : (status?.commandName ?? "loofah");
+    : (status?.commandName ?? "loof");
   const configuration = buildMcpConfiguration(command);
 
   const copyConfiguration = async () => {
@@ -282,7 +282,7 @@ function McpSection({ status }: { status: EmbeddedCliStatus | undefined }) {
               <Code2Icon className="size-5" />
             </div>
             <div>
-              <h3 className="font-medium">loofah MCP server</h3>
+              <h3 className="font-medium">Loofah MCP server</h3>
               <p className="text-muted-foreground mt-1 text-sm leading-5">
                 Add read-only local meeting context to agents that support MCP.
               </p>

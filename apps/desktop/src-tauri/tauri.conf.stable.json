@@ -15,6 +15,6 @@
   },
   "bundle": {
     "createUpdaterArtifacts": true,
-    "externalBin": ["binaries/check-permissions", "binaries/loofah"]
+    "externalBin": ["binaries/check-permissions", "binaries/loof"]
   }
 }

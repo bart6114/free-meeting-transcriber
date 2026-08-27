@@ -5,7 +5,7 @@
 Run the local stdio server with:
 
 ```bash
-loofah mcp
+loof mcp
 ```
 
 A generic client configuration is:
@@ -14,7 +14,7 @@ A generic client configuration is:
 {
   "mcpServers": {
     "loofah": {
-      "command": "loofah",
+      "command": "loof",
       "args": ["mcp"]
     }
   }
@@ -37,7 +37,7 @@ Or install from source:
 git clone https://github.com/bart6114/loofah.git
 cd loofah
 cargo install --locked --path apps/cli
-loofah --version
+loof --version
 ```
 
 Run the Loofah desktop app at least once so its local vault exists. Homebrew and Windows binary distribution are planned but not yet available.

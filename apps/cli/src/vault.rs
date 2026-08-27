@@ -39,11 +39,11 @@ fn resolve_default_path(data_dir: &Path) -> PathBuf {
 
 fn resolve_default_path_for_command(data_dir: &Path, command_name: Option<&OsStr>) -> PathBuf {
     let (current, legacy) = match command_name.and_then(OsStr::to_str) {
-        Some("loofah-dev" | "fmtr-dev") => (
+        Some("loof-dev" | "loofah-dev" | "fmtr-dev") => (
             data_dir.join("io.loofah.dev"),
             data_dir.join("org.freemeetingtranscriber.dev"),
         ),
-        Some("loofah-staging" | "fmtr-staging") => (
+        Some("loof-staging" | "loofah-staging" | "fmtr-staging") => (
             data_dir.join("io.loofah.staging"),
             data_dir.join("org.freemeetingtranscriber.staging"),
         ),
@@ -85,7 +85,7 @@ mod tests {
     fn default_path_targets_the_app_data_vault() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loof"))),
             dir.path().join("loofah")
         );
     }
@@ -97,7 +97,7 @@ mod tests {
         std::fs::create_dir_all(&legacy).unwrap();
 
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loof"))),
             legacy
         );
     }
@@ -106,11 +106,11 @@ mod tests {
     fn channel_commands_target_their_channel_vault() {
         let dir = tempfile::tempdir().unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah-dev"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loof-dev"))),
             dir.path().join("io.loofah.dev")
         );
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah-staging"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loof-staging"))),
             dir.path().join("io.loofah.staging")
         );
         assert_eq!(
@@ -132,7 +132,7 @@ mod tests {
         .unwrap();
 
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loof"))),
             vault
         );
     }
@@ -148,13 +148,13 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loof"))),
             base
         );
 
         std::fs::write(base.join("global.json"), "{ invalid").unwrap();
         assert_eq!(
-            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loofah"))),
+            resolve_default_path_for_command(dir.path(), Some(OsStr::new("loof"))),
             base
         );
     }

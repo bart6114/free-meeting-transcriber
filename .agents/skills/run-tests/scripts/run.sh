@@ -149,35 +149,34 @@ run_rust() {
 
 run_cli() {
   run_step "agent-access tests" cargo test --locked -p agent-access
-  run_step "CLI tests" cargo test --locked -p loofah-cli
+  run_step "CLI tests" cargo test --locked -p loof-cli
   run_step "TipTap tests" cargo test --locked -p tiptap
   run_step "CLI clippy" cargo clippy --locked \
     -p agent-access \
-    -p loofah-cli \
+    -p loof-cli \
     -p tiptap \
     --all-targets \
     --no-deps \
     -- \
     -D warnings
-  run_step "release CLI build" cargo build --locked --release -p loofah-cli
+  run_step "release CLI build" cargo build --locked --release -p loof-cli
 
-  run_step "CLI help" target/release/loofah --help
-  run_step "CLI version" target/release/loofah --version
-  run_step "legacy CLI version" target/release/fmtr --version
-  run_step "sessions help" target/release/loofah sessions --help
-  run_step "MCP help" target/release/loofah mcp --help
+  run_step "CLI help" target/release/loof --help
+  run_step "CLI version" target/release/loof --version
+  run_step "sessions help" target/release/loof sessions --help
+  run_step "MCP help" target/release/loof mcp --help
 
   run_tests_tmp="$(mktemp -d "${TMPDIR:-/tmp}/loofah-run-tests.XXXXXX")"
 
   local doctor_output
-  if doctor_output="$(target/release/loofah --json --vault-path "$run_tests_tmp/missing-vault" doctor)"; then
+  if doctor_output="$(target/release/loof --json --vault-path "$run_tests_tmp/missing-vault" doctor)"; then
     echo "doctor unexpectedly reported a missing vault as ready" >&2
     return 1
   fi
   grep -q '"ready": false' <<<"$doctor_output"
 
   local invalid_output
-  if invalid_output="$(target/release/loofah --json sessions list --limit 0 2>&1)"; then
+  if invalid_output="$(target/release/loof --json sessions list --limit 0 2>&1)"; then
     echo "invalid arguments unexpectedly succeeded" >&2
     return 1
   fi

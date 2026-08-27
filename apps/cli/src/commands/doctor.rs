@@ -79,7 +79,7 @@ fn inspect(args: &Args) -> Result<DoctorReport> {
 fn render(report: &DoctorReport) -> String {
     let status = |value| if value { "yes" } else { "no" };
     let mut lines = vec![
-        format!("Loofah CLI {}", report.cli_version),
+        format!("loof CLI {}", report.cli_version),
         format!("Ready: {}", status(report.ready)),
         format!("Vault: {}", report.vault.path.display()),
         format!("Exists: {}", status(report.vault.exists)),

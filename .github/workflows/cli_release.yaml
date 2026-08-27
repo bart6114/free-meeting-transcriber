@@ -65,7 +65,7 @@ jobs:
           ref: ${{ needs.resolve.outputs.tag }}
           persist-credentials: false
       - uses: ./.github/actions/rust_install
-      - run: cargo build --locked --release -p loofah-cli
+      - run: cargo build --locked --release -p loof-cli
       - env:
           TAG: ${{ needs.resolve.outputs.tag }}
           TRIPLE: ${{ matrix.triple }}
@@ -73,17 +73,16 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           test "$(jq -r .version package.json)" = "$version"
-          for bin in target/release/loofah target/release/fmtr; do
-            if [ "$(uname -s)" = "Darwin" ]; then
-              strip -x "$bin"
-              codesign -s - -f "$bin"
-            else
-              strip "$bin"
-            fi
-            "$bin" --version | grep -F "$version"
-          done
-          asset="loofah-${version}-${TRIPLE}.tar.gz"
-          COPYFILE_DISABLE=1 tar -czf "$asset" -C target/release loofah fmtr
+          bin=target/release/loof
+          if [ "$(uname -s)" = "Darwin" ]; then
+            strip -x "$bin"
+            codesign -s - -f "$bin"
+          else
+            strip "$bin"
+          fi
+          "$bin" --version | grep -F "$version"
+          asset="loof-${version}-${TRIPLE}.tar.gz"
+          COPYFILE_DISABLE=1 tar -czf "$asset" -C target/release loof
           if command -v sha256sum >/dev/null; then
             sha256sum "$asset" > "$asset.sha256"
           else
@@ -97,17 +96,8 @@ jobs:
           set -euo pipefail
           version="${TAG#v}"
           gh release upload "$TAG" \
-            "loofah-${version}-${TRIPLE}.tar.gz" \
-            "loofah-${version}-${TRIPLE}.tar.gz.sha256" \
-            --clobber
-          cp "loofah-${version}-${TRIPLE}.tar.gz" "fmtr-${version}-${TRIPLE}.tar.gz"
-          cp "loofah-${version}-${TRIPLE}.tar.gz.sha256" "fmtr-${version}-${TRIPLE}.tar.gz.sha256"
-          sed -i.bak "s/loofah-${version}-${TRIPLE}/fmtr-${version}-${TRIPLE}/" \
-            "fmtr-${version}-${TRIPLE}.tar.gz.sha256"
-          rm -f "fmtr-${version}-${TRIPLE}.tar.gz.sha256.bak"
-          gh release upload "$TAG" \
-            "fmtr-${version}-${TRIPLE}.tar.gz" \
-            "fmtr-${version}-${TRIPLE}.tar.gz.sha256" \
+            "loof-${version}-${TRIPLE}.tar.gz" \
+            "loof-${version}-${TRIPLE}.tar.gz.sha256" \
             --clobber
 
   publish-latest:
@@ -128,27 +118,24 @@ jobs:
               --title "Updater feed" \
               --notes "Rolling release holding latest.json for the in-app updater and stable-named copies of the latest artifacts. Do not delete."
           fi
-          feed_version="$(gh release download updater --pattern loofah-latest-version.txt -O - 2>/dev/null || gh release download updater --pattern fmtr-latest-version.txt -O - 2>/dev/null || echo "0.0.0")"
+          feed_version="$(gh release download updater --pattern loof-latest-version.txt -O - 2>/dev/null || gh release download updater --pattern loofah-latest-version.txt -O - 2>/dev/null || gh release download updater --pattern fmtr-latest-version.txt -O - 2>/dev/null || echo "0.0.0")"
           newest="$(printf '%s\n%s\n' "$feed_version" "$version" | sort -V | tail -n1)"
           if [ "$newest" != "$version" ]; then
             echo "CLI feed already at $feed_version; not downgrading to $version"
             exit 0
           fi
-          gh release download "$TAG" --pattern "loofah-${version}-*.tar.gz"
-          count="$(ls loofah-"${version}"-*.tar.gz | wc -l)"
+          gh release download "$TAG" --pattern "loof-${version}-*.tar.gz"
+          count="$(ls loof-"${version}"-*.tar.gz | wc -l)"
           test "$count" -eq 4
-          for asset in loofah-"${version}"-*.tar.gz; do
-            triple="${asset#loofah-"${version}"-}"
+          for asset in loof-"${version}"-*.tar.gz; do
+            triple="${asset#loof-"${version}"-}"
             triple="${triple%.tar.gz}"
-            latest="loofah-latest-${triple}.tar.gz"
+            latest="loof-latest-${triple}.tar.gz"
             mv "$asset" "$latest"
             sha256sum "$latest" > "$latest.sha256"
-            cp "$latest" "fmtr-latest-${triple}.tar.gz"
-            sha256sum "fmtr-latest-${triple}.tar.gz" > "fmtr-latest-${triple}.tar.gz.sha256"
           done
-          printf '%s\n' "$version" > loofah-latest-version.txt
-          printf '%s\n' "$version" > fmtr-latest-version.txt
-          gh release upload updater loofah-latest-* fmtr-latest-* --clobber
+          printf '%s\n' "$version" > loof-latest-version.txt
+          gh release upload updater loof-latest-* --clobber
 
   verify:
     needs: publish-latest
@@ -171,7 +158,7 @@ jobs:
             Linux/aarch64) triple=aarch64-unknown-linux-gnu ;;
             *) echo "unsupported verify host"; exit 1 ;;
           esac
-          asset="loofah-latest-${triple}.tar.gz"
+          asset="loof-latest-${triple}.tar.gz"
           base="https://github.com/$REPO/releases/download/updater"
           curl -fsSL --proto '=https' --tlsv1.2 -O "$base/$asset" -O "$base/$asset.sha256"
           if command -v sha256sum >/dev/null; then
@@ -180,10 +167,9 @@ jobs:
             shasum -a 256 -c "$asset.sha256"
           fi
           tar -xzf "$asset"
-          ./loofah --version
-          ./fmtr --version
+          ./loof --version
           if [ "$(uname -s)" = "Linux" ]; then
-            max="$(objdump -T loofah | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -n1)"
+            max="$(objdump -T loof | grep -oE 'GLIBC_[0-9.]+' | sort -uV | tail -n1)"
             echo "max glibc symbol: $max"
             test "$(printf '%s\n%s\n' "${max#GLIBC_}" 2.35 | sort -V | tail -n1)" = "2.35"
           fi

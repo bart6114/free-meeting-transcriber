@@ -3,7 +3,7 @@ title: "MCP for agents"
 description: "Connect an MCP client to the local knowledge vault over stdio."
 ---
 
-The MCP server is part of the `loofah` executable. It communicates through standard input and output. It does not open a network port or send vault data to a hosted service. It is read-only: to create sessions, edit notes, attach source artifacts, or import and transcribe audio, use the [CLI](/reference/cli).
+The MCP server is part of the `loof` executable. It communicates through standard input and output. It does not open a network port or send vault data to a hosted service. It is read-only: to create sessions, edit notes, attach source artifacts, or import and transcribe audio, use the [CLI](/reference/cli).
 
 The MCP tool names retain `meeting` for compatibility, but they can also return standalone knowledge sessions that have no recording or transcript.
 
@@ -13,14 +13,14 @@ The MCP tool names retain `meeting` for compatibility, but they can also return 
 {
   "mcpServers": {
     "loofah": {
-      "command": "loofah",
+      "command": "loof",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-Use the absolute path to `loofah` if the client cannot find it on `PATH`. Restart the client after changing its MCP configuration.
+Use the absolute path to `loof` if the client cannot find it on `PATH`. Restart the client after changing its MCP configuration.
 
 For a custom vault path:
 
@@ -28,7 +28,7 @@ For a custom vault path:
 {
   "mcpServers": {
     "loofah": {
-      "command": "loofah",
+      "command": "loof",
       "args": ["--vault-path", "/path/to/vault", "mcp"]
     }
   }

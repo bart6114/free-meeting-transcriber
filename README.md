@@ -47,7 +47,7 @@ transcribes on your Mac, then saves the notes as Markdown in your vault.
   model with Ollama or LM Studio.
 - **No account or tracking.** Install the app and use it. There is nothing to
   sign up for.
-- **CLI and MCP support.** The included `loofah` CLI and MCP server can give your
+- **CLI and MCP support.** The included `loof` CLI and MCP server can give your
   scripts and coding agents read-only access to meeting notes.
 
 ## Development
@@ -62,7 +62,7 @@ To run it locally:
 ```sh
 pnpm install
 pnpm -F @hypr/desktop tauri:dev   # run the desktop app
-cargo build -p loofah-cli            # build the loofah CLI
+cargo build -p loof-cli              # build the loof CLI
 ```
 
 See [AGENTS.md](./AGENTS.md) for development notes, including formatting,

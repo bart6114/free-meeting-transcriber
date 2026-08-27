@@ -62,30 +62,29 @@ jobs:
       - uses: ./.github/actions/rust_install
       - run: |
           cargo test --locked -p agent-access
-          cargo test --locked -p loofah-cli
+          cargo test --locked -p loof-cli
           cargo test --locked -p tiptap
       - run: |
           cargo clippy --locked \
             -p agent-access \
-            -p loofah-cli \
+            -p loof-cli \
             -p tiptap \
             --all-targets \
             --no-deps \
             -- \
             -D warnings
-      - run: cargo build --locked --release -p loofah-cli
+      - run: cargo build --locked --release -p loof-cli
       - run: |
-          target/release/loofah --help
-          target/release/loofah --version
-          target/release/fmtr --version
-          target/release/loofah meetings --help
-          target/release/loofah mcp --help
-          if doctor_output="$(target/release/loofah --json --vault-path "$RUNNER_TEMP/missing-vault" doctor)"; then
+          target/release/loof --help
+          target/release/loof --version
+          target/release/loof meetings --help
+          target/release/loof mcp --help
+          if doctor_output="$(target/release/loof --json --vault-path "$RUNNER_TEMP/missing-vault" doctor)"; then
             echo "doctor unexpectedly reported a missing vault as ready"
             exit 1
           fi
           grep -q '"ready": false' <<<"$doctor_output"
-          if invalid_output="$(target/release/loofah --json meetings list --limit 0 2>&1)"; then
+          if invalid_output="$(target/release/loof --json meetings list --limit 0 2>&1)"; then
             echo "invalid arguments unexpectedly succeeded"
             exit 1
           fi

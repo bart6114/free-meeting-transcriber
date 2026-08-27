@@ -3,7 +3,7 @@ title: "MCP reference"
 description: "Tools, resources, limits, and transport details exposed by Loofah MCP."
 ---
 
-Run the server with `loofah mcp`. It uses the MCP `2024-11-05` protocol over stdio. Every tool is read-only, non-destructive, idempotent, and local-only.
+Run the server with `loof mcp`. It uses the MCP `2024-11-05` protocol over stdio. Every tool is read-only, non-destructive, idempotent, and local-only.
 
 ## Tools
 
@@ -43,7 +43,7 @@ Accepts required string `meeting_id`. Returns meeting metadata (including its no
 | --- | --- | --- | --- |
 | `meeting_id` | string | required | A returned Loofah meeting ID. |
 
-Returns `meeting_id` and `text`. The text uses one `[HH:MM:SS] Speaker: ...` line per speaker turn, timed from the start of the meeting. Speaker names come from the people registry, and unknown voices fall back to `Speaker N`. Word-level detail, including IDs, timestamps, and channels, is available through `loofah sessions export --format json`.
+Returns `meeting_id` and `text`. The text uses one `[HH:MM:SS] Speaker: ...` line per speaker turn, timed from the start of the meeting. Speaker names come from the people registry, and unknown voices fall back to `Speaker N`. Word-level detail, including IDs, timestamps, and channels, is available through `loof sessions export --format json`.
 
 ## Resources
 

@@ -4,7 +4,7 @@ Status: implemented (2026-08-09) — all three phases landed on this branch
 
 ## Goal
 
-Let the `fmtr` CLI create and modify vault data — new notes/memos, audio imports,
+Let the `loof` CLI create and modify vault data — new notes/memos, audio imports,
 and headless transcription — by reusing the desktop app's write path instead of
 duplicating it. Today the CLI is strictly read-only (`doctor`, `meetings
 list/search/get/note/transcript/export`, `mcp`); all writes live in
@@ -71,9 +71,9 @@ full `SessionMeta` (`id`, `title`, `created_at` = now, empty `tags`), then
 Commands, on top of `SessionStore` (the CLI already has a multi-threaded tokio
 runtime, so the async store API is fine):
 
-- `fmtr meetings new --title <t> [--note <file|->]` — create a session and write the
+- `loof meetings new --title <t> [--note <file|->]` — create a session and write the
   note body (stdin or file).
-- `fmtr meetings note <id> --set <file|->` (or `--append`) — edit an existing note.
+- `loof meetings note <id> --set <file|->` (or `--append`) — edit an existing note.
 
 Follow the existing CLI architecture (`apps/cli/src/commands/`, lightest structure
 that fits — these are one-shot commands, no reducer/effect split needed). Respect
@@ -81,7 +81,7 @@ that fits — these are one-shot commands, no reducer/effect split needed). Resp
 
 Contract upkeep (enforced by tests in `apps/cli/src/cli.rs` — the docs-coverage
 check and the `cli_contract` insta snapshot): every new command and flag must be
-added to `docs/reference/cli.mdx` and `skills/fmtr/references/cli.md`, and the
+added to `docs/reference/cli.mdx` and `skills/loofah/references/cli.md`, and the
 snapshot regenerated.
 
 MCP stays read-only (it advertises itself as read-only); revisit separately if
@@ -89,7 +89,7 @@ write tools are ever wanted there.
 
 ## Phase 3 — CLI: audio import + headless transcription
 
-### 3.1 Import — `fmtr import <audio-file> [--title <t>]`
+### 3.1 Import — `loof import <audio-file> [--title <t>]`
 
 Create a session (as in Phase 2), then land the audio. Two constraints found in the
 audit shape this:
@@ -105,7 +105,7 @@ So the CLI import is: normalize via `hypr-audio-norm` (tauri-free) into
 `sessions/<id>/audio.mp3`, matching the desktop byte-for-byte. A running desktop
 picks the session up via `vault_watch`.
 
-### 3.2 Transcribe — `fmtr import --transcribe` / `fmtr transcribe <id>`
+### 3.2 Transcribe — `loof import --transcribe` / `loof transcribe <id>`
 
 The batch engine is already factored for headless use: `crates/listener2-core`'s
 `run_batch(Arc<dyn BatchRuntime>, BatchParams) -> BatchRunOutput` has no Tauri
@@ -134,11 +134,11 @@ Work items:
    unsupported platform → clear error message, non-zero exit. Do not attempt
    model downloads in v1.
 4. Binary size: this pulls the STT stack (incl. the Swift/CoreML bridge) into
-   `fmtr`. Accept it, or feature-gate transcription if it becomes a problem.
+   `loof`. Accept it, or feature-gate transcription if it becomes a problem.
 
 ### Round trip
 
-`fmtr import meeting.m4a --transcribe` → normalized audio + transcript in the
+`loof import meeting.m4a --transcribe` → normalized audio + transcript in the
 vault → running desktop indexes it via `vault_watch` → user opens the session and
 triggers a summary in the app.
 
@@ -150,7 +150,7 @@ triggers a summary in the app.
   lives in the TypeScript frontend (`apps/desktop/src/services/enhancer/`,
   `.../ai-task/task-configs/enhance-*.ts`). Only the prompt templates
   (`crates/template-app`, tauri-free) and the enhanced-doc write path are Rust.
-  A headless `fmtr enhance` would mean building a Rust LLM client layer
+  A headless `loof enhance` would mean building a Rust LLM client layer
   (provider config + keychain API keys + HTTP/streaming) and porting all the TS
   post-processing — a separate project if ever wanted. Consequence: CLI-imported
   sessions do not auto-summarize (auto-enhance triggers are in-app TS); the user

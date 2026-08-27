@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::{SessionStore, StoreError, WriteGuard, paths, validate_doc_id, validate_session_id};
 
 // The `enhanced/<id>.md` schema (type, frontmatter parse/render) is shared with the
-// read-only vault consumers (loofah CLI/MCP) and lives in `hypr-vault-read`.
+// read-only vault consumers (loof CLI/MCP) and lives in `hypr-vault-read`.
 pub use hypr_vault_read::{ENHANCED_KINDS, EnhancedDoc};
 
 /// Partial update for an existing enhanced doc: `None` means "leave as-is". The `expected_*`

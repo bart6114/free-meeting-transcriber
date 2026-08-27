@@ -177,7 +177,7 @@ Items that require macOS and/or the real vault; commands to be filled in as phas
   artifact is a readable file under `sessions/<id>/`.
 - [ ] Delete an enhanced doc and a transcript → confirm the prior content is
   recoverable from `.trash/<date>/`.
-- [ ] `fmtr --vault-path <vault> doctor` and `fmtr meetings list` against the
+- [ ] `loof --vault-path <vault> doctor` and `loof meetings list` against the
   real vault (the CLI no longer takes `--db-path`).
 
 ### Scope decision needing sign-off
@@ -192,7 +192,7 @@ Items that require macOS and/or the real vault; commands to be filled in as phas
 - **D-2 tasks.json**: sessions/<id>/tasks.json + vault-level file for non-session sources; task-storage.ts (raw subscribe :119, 16-col upsert :299-356) is the SOLE consumer; action_items feeds no search trigger → CUT STRAIGHT TO FILES, no dual-write. CLI action-items read ports in D-5.
 - **D-3 enhanced docs**: deterministic per-doc files + doc metadata sidecar (document files are frontmatter-free by design — mod.rs:136-176 strips); retarget enhancer/storage.ts (ensureSummaryDocument :11-72, expectedRowsAffected :36/:88, title CAS :143), updateEnhancedNoteContent/deleteEnhancedNote (queries.ts:322/:358); DELETE the enhance-success.ts:156-179 shadow-row tombstone hack; deletion = file removal. DUAL-WRITE REQUIRED (session_documents read by FE + search).
 - **D-4 templates**: vault templates/<id>.json; store commands list/get/upsert/delete; re-seed 17 bundled defaults when templates/ missing (replaces repair_missing_core_tables seeding); port templates/queries.ts off drizzle (kills BOTH drizzle live sites + useDrizzleLiveQuery in db/index.ts:8) → CUT STRAIGHT TO FILES, tanstack-query invalidation until E.
-- **D-5 CLI retarget (LAST — after D-1/2/3 formats freeze)**: fmtr reads vault files not app.db; --base becomes vault dir, --db-path replaced by --vault-path (D8); update agents-content.md, docs/reference/cli.mdx, skills/fmtr, insta cli_contract snapshot (doc-parity tests apps/cli/src/cli.rs:190-264 enforce all three). Reads live in crates/db-app/src/session_ops.rs (NOT agent-access; agent-access/src/lib.rs wraps).
+- **D-5 CLI retarget (LAST — after D-1/2/3 formats freeze)**: loof reads vault files not app.db; --base becomes vault dir, --db-path replaced by --vault-path (D8); update agents-content.md, docs/reference/cli.mdx, skills/loofah, insta cli_contract snapshot (doc-parity tests apps/cli/src/cli.rs:190-264 enforce all three). Reads live in crates/db-app/src/session_ops.rs (NOT agent-access; agent-access/src/lib.rs wraps).
 - Search projection stays SQL-fed (9 triggers + drain) through ALL of Phase D — sessions/session_documents/transcripts upserts must survive until Phase F.
 - Phase E porting list = 14 subscription sites (16 today − 2 settings dying in C3): session/queries.ts:134,186,204,225,248,277; sidebar/timeline/queries.ts:15; meeting-float/hooks.ts:35 (raw); shared/owner-user.ts:17; stt/queries.ts:76,94; task-storage.ts:119 (raw, dies in D-2); templates/queries.ts:125,142 (die in D-4). ~24 non-reactive execute sites (CAS at content-mutations.ts:102/163, enhancer/storage.ts:36/88/143); transcript supersede stt/queries.ts:150-157 (E-6).
 

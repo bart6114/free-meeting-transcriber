@@ -154,7 +154,7 @@ The change is broader than replacing `paths::session_dir(id)`. The flat ID-based
 
 `crates/vault-read/src/enhanced.rs`, `transcript.rs`, and `tasks.rs` also resolve artifacts from the logical ID as though it were the physical directory name.
 
-`crates/agent-access/src/lib.rs` and `search.rs` use those APIs for CLI and MCP reads. They also compute `updated_at` using ID-derived relative paths. Fixing only desktop writes would therefore make sessions disappear from `fmtr`, MCP, search, export, and doctor commands.
+`crates/agent-access/src/lib.rs` and `search.rs` use those APIs for CLI and MCP reads. They also compute `updated_at` using ID-derived relative paths. Fixing only desktop writes would therefore make sessions disappear from `loof`, MCP, search, export, and doctor commands.
 
 ### Desktop write store and in-memory index
 
@@ -402,8 +402,8 @@ Acceptance criterion: no production code outside the centralized layout modules 
    - onboarding welcome note;
    - audio import;
    - calendar/detection flow;
-   - `fmtr meetings new`;
-   - `fmtr import`.
+   - `loof meetings new`;
+   - `loof import`.
 5. Add end-to-end assertions that returned IDs remain full UUIDs even though the physical folder is readable.
 
 Acceptance criterion: every newly created session is immediately usable through desktop, CLI, MCP, recording, transcription, attachments, delete/undo, and Finder reveal.
@@ -563,7 +563,7 @@ Verify:
 After each Rust phase:
 
 ```sh
-cargo test -p vault-read -p vault-write -p fs-sync-core -p listener-core -p fmtr-cli
+cargo test -p vault-read -p vault-write -p fs-sync-core -p listener-core -p loof-cli
 cargo check
 ```
 
@@ -585,7 +585,7 @@ Also perform a manual round trip with a copied vault:
 2. Run migration.
 3. Open and edit the note.
 4. Record, stop, and transcribe.
-5. Run `fmtr meetings get <full-id>` and MCP lookup.
+5. Run `loof meetings get <full-id>` and MCP lookup.
 6. Reveal in Finder.
 7. Delete and undo.
 8. Restart and rebuild the index.

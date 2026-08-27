@@ -355,9 +355,8 @@ pub async fn main() {
                 }
             }
 
-            // Keeps an already-installed `~/.local/bin/fmtr` symlink pointed at
-            // this app bundle so app updates carry the CLI along; no-op when the
-            // user never installed the CLI.
+            // Migrates or refreshes an app-managed CLI symlink so app updates
+            // carry `loof` along; no-op when the user never installed the CLI.
             {
                 let app_handle = app_handle.clone();
                 tauri::async_runtime::spawn(async move {

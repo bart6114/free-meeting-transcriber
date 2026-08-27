@@ -33,13 +33,13 @@ import {
 describe("buildMcpConfiguration", () => {
   it("uses the exact installed CLI path", () => {
     const configuration = JSON.parse(
-      buildMcpConfiguration("/Users/test/.local/bin/loofah"),
+      buildMcpConfiguration("/Users/test/.local/bin/loof"),
     );
 
     expect(configuration).toEqual({
       mcpServers: {
         loofah: {
-          command: "/Users/test/.local/bin/loofah",
+          command: "/Users/test/.local/bin/loof",
           args: ["mcp"],
         },
       },
@@ -52,12 +52,12 @@ describe("getCliInstallNotification", () => {
     expect(
       getCliInstallNotification({
         supported: true,
-        commandName: "loofah",
-        installPath: "/Users/test/.local/bin/loofah",
+        commandName: "loof",
+        installPath: "/Users/test/.local/bin/loof",
         state: "installed",
         details: "Installed.",
       }),
-    ).toEqual({ type: "success", message: "loofah is ready to use" });
+    ).toEqual({ type: "success", message: "loof is ready to use" });
   });
 
   it.each(["resource_missing", "unsupported"] as const)(
@@ -66,8 +66,8 @@ describe("getCliInstallNotification", () => {
       expect(
         getCliInstallNotification({
           supported: false,
-          commandName: "loofah",
-          installPath: "/Users/test/.local/bin/loofah",
+          commandName: "loof",
+          installPath: "/Users/test/.local/bin/loof",
           state,
           details: "The CLI is unavailable in this build.",
         }),
@@ -96,11 +96,11 @@ describe("SettingsDevelopers", () => {
       status: "ok",
       data: {
         supported: true,
-        commandName: "loofah",
-        installPath: "/Users/test/.local/bin/loofah",
+        commandName: "loof",
+        installPath: "/Users/test/.local/bin/loof",
         state: "installed",
         details:
-          "Installed at /Users/test/.local/bin/loofah and managed by Loofah.",
+          "Installed at /Users/test/.local/bin/loof and managed by Loofah.",
       },
     });
 
@@ -115,7 +115,7 @@ describe("SettingsDevelopers", () => {
 
     expect(await screen.findByText("Reinstall")).toBeTruthy();
     expect(
-      screen.getAllByText(/\/Users\/test\/\.local\/bin\/loofah/).length,
+      screen.getAllByText(/\/Users\/test\/\.local\/bin\/loof/).length,
     ).toBeGreaterThan(0);
   });
 
@@ -124,8 +124,8 @@ describe("SettingsDevelopers", () => {
       status: "ok",
       data: {
         supported: false,
-        commandName: "loofah-dev",
-        installPath: "/Users/test/.local/bin/loofah-dev",
+        commandName: "loof-dev",
+        installPath: "/Users/test/.local/bin/loof-dev",
         state: "unsupported",
         details: "Bundled CLI installation is currently available on macOS.",
       },
@@ -143,7 +143,7 @@ describe("SettingsDevelopers", () => {
     const copyButton = await screen.findByRole("button", { name: "Copy" });
     expect(copyButton.hasAttribute("disabled")).toBe(true);
     expect(
-      screen.queryByText(/\/Users\/test\/\.local\/bin\/loofah-dev/),
+      screen.queryByText(/\/Users\/test\/\.local\/bin\/loof-dev/),
     ).toBeNull();
   });
 });

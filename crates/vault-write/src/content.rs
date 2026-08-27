@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::locations::DeletedSession;
 use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
 
-// The `_meta.json` schema is shared with the read-only vault consumers (loofah CLI/MCP);
+// The `_meta.json` schema is shared with the read-only vault consumers (loof CLI/MCP);
 // the type lives in `hypr-vault-read` so both sides parse the same shape.
 pub use hypr_vault_read::SessionMeta;
 
@@ -38,7 +38,7 @@ impl SessionStore {
     }
 
     /// `write_meta` for a session id the caller just generated (a fresh random
-    /// UUID, as `loofah meetings new`/`import` mint): identical writes and naming
+    /// UUID, as `loof sessions new`/`import` mint): identical writes and naming
     /// policy, but resolving where the meta lands costs an O(1) legacy-path
     /// probe instead of the full-vault discovery scan a cold location catalog
     /// would otherwise pay. Never call this with an id that may already have a

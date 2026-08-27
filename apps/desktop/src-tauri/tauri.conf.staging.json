@@ -11,7 +11,7 @@
     }
   },
   "bundle": {
-    "externalBin": ["binaries/check-permissions", "binaries/loofah"],
+    "externalBin": ["binaries/check-permissions", "binaries/loof"],
     "icon": [
       "icons/stable/32x32.png",
       "icons/stable/128x128.png",

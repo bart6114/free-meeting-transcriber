@@ -23,7 +23,7 @@
 - Use active voice and second person.
 - Keep headings and sentences concise.
 - Put the result before implementation detail.
-- Use `Loofah` for the product and `loofah` for the executable.
+- Use `Loofah` for the product and `loof` for the executable.
 - Use root-relative links between docs pages (e.g. `/quickstart`).
 - Use Starlight components: `:::note` / `:::caution` asides, and `Steps`,
   `CardGrid`, `LinkCard` from `@astrojs/starlight/components`.

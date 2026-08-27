@@ -21,7 +21,7 @@ Choose **New Note** and start writing. You do not need to record audio or add a 
 Agents can create the same kind of note through the CLI. This makes it practical to bring in material from any tool the agent is authorized and able to read: the agent turns the useful result into Markdown, records its authorship, and creates a session in the vault.
 
 ```bash
-loofah --json sessions new \
+loof --json sessions new \
   --title "Research: local speech models" \
   --note research.md \
   --tag research \
@@ -32,7 +32,7 @@ loofah --json sessions new \
 The CLI does not connect to or scrape those source tools itself. The agent supplies the Markdown through a file or stdin. If the original deck, report, or other artifact should travel with the note, the agent can add it with `sessions attach`.
 
 :::note
-You can also edit the memo from the terminal: `loofah sessions note ID --set FILE` replaces it, and `--append` adds to it. See the [CLI reference](/reference/cli).
+You can also edit the memo from the terminal: `loof sessions note ID --set FILE` replaces it, and `--append` adds to it. See the [CLI reference](/reference/cli).
 :::
 
 ## Change the summary format

@@ -39,11 +39,7 @@ pub(crate) fn prepare_binaries() -> Result<()> {
 
     println!("prepare-binaries: binaries/char-chrome-native-host-{triple}{ext}");
 
-    cmd!(
-        sh,
-        "{cargo} build --release --target {triple} -p loofah-cli"
-    )
-    .run()?;
+    cmd!(sh, "{cargo} build --release --target {triple} -p loof-cli").run()?;
 
     fs::create_dir_all(&embedded_cli_dir).context("create resources/cli/")?;
 
@@ -51,11 +47,11 @@ pub(crate) fn prepare_binaries() -> Result<()> {
         .join("target")
         .join(&triple)
         .join("release")
-        .join(format!("loofah{ext}"));
-    let dst = embedded_cli_dir.join(format!("loofah-{triple}{ext}"));
+        .join(format!("loof{ext}"));
+    let dst = embedded_cli_dir.join(format!("loof-{triple}{ext}"));
     fs::copy(&src, &dst).with_context(|| format!("copy {} -> {}", src.display(), dst.display()))?;
 
-    println!("prepare-binaries: resources/cli/loofah-{triple}{ext}");
+    println!("prepare-binaries: resources/cli/loof-{triple}{ext}");
     Ok(())
 }
 

@@ -37,8 +37,8 @@ The CLI is intentionally source-agnostic. If an agent is authorized to read a do
 For example, after researching a topic or extracting the important findings from a deck, an agent can run:
 
 ```bash
-loofah --json sessions new --title "Research: customer onboarding" --note findings.md --tag research --author claude-code
-loofah --json sessions attach SESSION_ID onboarding-research.pdf
+loof --json sessions new --title "Research: customer onboarding" --note findings.md --tag research --author claude-code
+loof --json sessions attach SESSION_ID onboarding-research.pdf
 ```
 
 This keeps the synthesized note searchable while preserving the source artifact beside it. The agent must still follow the source tool's permissions and should only write when the user asks it to.

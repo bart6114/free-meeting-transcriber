@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Installer for the loofah CLI (https://loofah.io).
+# Installer for the loof CLI (https://loofah.io).
 #
 #   curl -fsSL https://loofah.io/install.sh | bash
 #
 # Downloads the latest release binary for this platform, verifies its
-# checksum, and installs it to ~/.local/bin/loofah (override with
+# checksum, and installs it to ~/.local/bin/loof (override with
 # LOOFAH_INSTALL_DIR; FMTR_INSTALL_DIR remains supported). Re-run to upgrade.
-# Uninstall with: rm ~/.local/bin/loofah ~/.local/bin/fmtr
+# Uninstall with: rm ~/.local/bin/loof
 
 set -euo pipefail
 
@@ -79,8 +79,8 @@ main() {
   tmp="$(mktemp -d)"
   trap 'rm -rf "$tmp"' EXIT
 
-  local asset="loofah-latest-${triple}.tar.gz"
-  echo "Downloading loofah for ${triple}..."
+  local asset="loof-latest-${triple}.tar.gz"
+  echo "Downloading loof for ${triple}..."
   local file
   for file in "$asset" "$asset.sha256"; do
     if ! curl -fsSL --proto '=https' --tlsv1.2 -o "$tmp/$file" "$base/$file"; then
@@ -101,11 +101,9 @@ main() {
 
   tar -xzf "$tmp/$asset" -C "$tmp"
   mkdir -p "$install_dir"
-  install -m 755 "$tmp/loofah" "$install_dir/loofah"
-  install -m 755 "$tmp/loofah" "$install_dir/fmtr"
+  install -m 755 "$tmp/loof" "$install_dir/loof"
 
-  echo "Installed $("$install_dir/loofah" --version) to $install_dir/loofah"
-  echo "Compatibility alias installed at $install_dir/fmtr"
+  echo "Installed $("$install_dir/loof" --version) to $install_dir/loof"
 
   case ":$PATH:" in
     *":$install_dir:"*) ;;
@@ -113,7 +111,7 @@ main() {
   esac
 
   echo
-  echo "Run 'loofah --help' to get started."
+  echo "Run 'loof --help' to get started."
 }
 
 main "$@"

@@ -23,7 +23,7 @@ expression: canonicalize_json(contract)
       "required": false
     }
   ],
-  "name": "loofah",
+  "name": "loof",
   "options": [
     {
       "flags": "-h, --help",
@@ -41,7 +41,7 @@ expression: canonicalize_json(contract)
   "subcommands": [
     {
       "about": "Check the local CLI and vault access, restoring the vault's AGENTS.md if stale",
-      "name": "loofah doctor",
+      "name": "loof doctor",
       "options": [
         {
           "flags": "-h, --help",
@@ -50,11 +50,11 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "loofah doctor [-h]"
+      "synopsis": "loof doctor [-h]"
     },
     {
       "about": "Browse, create, edit, and export sessions",
-      "name": "loofah sessions",
+      "name": "loof sessions",
       "options": [
         {
           "flags": "-h, --help",
@@ -66,7 +66,7 @@ expression: canonicalize_json(contract)
       "subcommands": [
         {
           "about": "List meetings, optionally filtered by text or tags",
-          "name": "loofah sessions list",
+          "name": "loof sessions list",
           "options": [
             {
               "flags": "-q, --query",
@@ -110,7 +110,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions list [-q] [--limit] [--offset] [--tag] [--untagged] [-h]"
+          "synopsis": "loof sessions list [-q] [--limit] [--offset] [--tag] [--untagged] [-h]"
         },
         {
           "about": "Search across meeting titles, notes, summaries, and transcripts",
@@ -121,7 +121,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "name": "loofah sessions search",
+          "name": "loof sessions search",
           "options": [
             {
               "flags": "--speaker",
@@ -166,7 +166,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions search [--speaker] [--kind] [--limit] [--offset] [-h] [query]"
+          "synopsis": "loof sessions search [--speaker] [--kind] [--limit] [--offset] [-h] [query]"
         },
         {
           "about": "Show meeting metadata, notes, summaries, and action items",
@@ -176,7 +176,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "loofah sessions get",
+          "name": "loof sessions get",
           "options": [
             {
               "flags": "-h, --help",
@@ -185,11 +185,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions get [-h] <id>"
+          "synopsis": "loof sessions get [-h] <id>"
         },
         {
           "about": "Create a meeting note and print its id",
-          "name": "loofah sessions new",
+          "name": "loof sessions new",
           "options": [
             {
               "flags": "--title",
@@ -254,7 +254,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [--skill] [-h]"
+          "synopsis": "loof sessions new <--title> [--note] [--created-at] [--started-at] [--ended-at] [--tag] [--author] [--skill] [-h]"
         },
         {
           "about": "Show the note or generated summaries for a meeting, or edit the note",
@@ -264,7 +264,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "loofah sessions note",
+          "name": "loof sessions note",
           "options": [
             {
               "default": "note",
@@ -299,7 +299,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions note [--kind] [--set] [--append] [-h] <id>"
+          "synopsis": "loof sessions note [--kind] [--set] [--append] [-h] <id>"
         },
         {
           "about": "Show the full speaker-labeled meeting transcript",
@@ -309,7 +309,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "loofah sessions transcript",
+          "name": "loof sessions transcript",
           "options": [
             {
               "flags": "-h, --help",
@@ -318,11 +318,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions transcript [-h] <id>"
+          "synopsis": "loof sessions transcript [-h] <id>"
         },
         {
           "about": "Add or remove tags on a meeting",
-          "name": "loofah sessions tag",
+          "name": "loof sessions tag",
           "options": [
             {
               "flags": "-h, --help",
@@ -344,7 +344,7 @@ expression: canonicalize_json(contract)
                   "required": true
                 }
               ],
-              "name": "loofah sessions tag add",
+              "name": "loof sessions tag add",
               "options": [
                 {
                   "flags": "-h, --help",
@@ -353,7 +353,7 @@ expression: canonicalize_json(contract)
                   "required": false
                 }
               ],
-              "synopsis": "loofah sessions tag add [-h] <id> <tags>"
+              "synopsis": "loof sessions tag add [-h] <id> <tags>"
             },
             {
               "about": "Remove tags from a meeting; the tag registry keeps the names",
@@ -367,7 +367,7 @@ expression: canonicalize_json(contract)
                   "required": true
                 }
               ],
-              "name": "loofah sessions tag remove",
+              "name": "loof sessions tag remove",
               "options": [
                 {
                   "flags": "-h, --help",
@@ -376,10 +376,10 @@ expression: canonicalize_json(contract)
                   "required": false
                 }
               ],
-              "synopsis": "loofah sessions tag remove [-h] <id> <tags>"
+              "synopsis": "loof sessions tag remove [-h] <id> <tags>"
             }
           ],
-          "synopsis": "loofah sessions tag [-h] <command>"
+          "synopsis": "loof sessions tag [-h] <command>"
         },
         {
           "about": "Print the absolute path of a meeting's session directory",
@@ -389,7 +389,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "loofah sessions path",
+          "name": "loof sessions path",
           "options": [
             {
               "flags": "-h, --help",
@@ -398,7 +398,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions path [-h] <id>"
+          "synopsis": "loof sessions path [-h] <id>"
         },
         {
           "about": "Store a file as a note attachment of a meeting and print its attachment id",
@@ -413,7 +413,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "loofah sessions attach",
+          "name": "loof sessions attach",
           "options": [
             {
               "flags": "--name",
@@ -429,7 +429,7 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions attach [--name] [-h] <file> <id>"
+          "synopsis": "loof sessions attach [--name] [-h] <file> <id>"
         },
         {
           "about": "Export a meeting to Markdown or JSON",
@@ -439,7 +439,7 @@ expression: canonicalize_json(contract)
               "required": true
             }
           ],
-          "name": "loofah sessions export",
+          "name": "loof sessions export",
           "options": [
             {
               "default": "markdown",
@@ -471,10 +471,10 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah sessions export [--format] [-o] [--force] [-h] <id>"
+          "synopsis": "loof sessions export [--format] [-o] [--force] [-h] <id>"
         }
       ],
-      "synopsis": "loofah sessions [-h] <command>"
+      "synopsis": "loof sessions [-h] <command>"
     },
     {
       "about": "Import an audio file into a new or existing meeting and print its id",
@@ -485,7 +485,7 @@ expression: canonicalize_json(contract)
           "required": true
         }
       ],
-      "name": "loofah import",
+      "name": "loof import",
       "options": [
         {
           "flags": "--title",
@@ -549,7 +549,7 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "loofah import [--title] [--into] [--transcribe] [--created-at] [--started-at] [--ended-at] [--author] [--skill] [-h] <file>"
+      "synopsis": "loof import [--title] [--into] [--transcribe] [--created-at] [--started-at] [--ended-at] [--author] [--skill] [-h] <file>"
     },
     {
       "about": "Transcribe a meeting's audio with the configured on-device model",
@@ -560,7 +560,7 @@ expression: canonicalize_json(contract)
           "required": true
         }
       ],
-      "name": "loofah transcribe",
+      "name": "loof transcribe",
       "options": [
         {
           "flags": "-h, --help",
@@ -569,11 +569,11 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "loofah transcribe [-h] <id>"
+      "synopsis": "loof transcribe [-h] <id>"
     },
     {
       "about": "Run the read-only Loofah MCP server over stdio",
-      "name": "loofah mcp",
+      "name": "loof mcp",
       "options": [
         {
           "flags": "-h, --help",
@@ -582,11 +582,11 @@ expression: canonicalize_json(contract)
           "required": false
         }
       ],
-      "synopsis": "loofah mcp [-h]"
+      "synopsis": "loof mcp [-h]"
     },
     {
       "about": "Browse the vault's tag registry",
-      "name": "loofah tags",
+      "name": "loof tags",
       "options": [
         {
           "flags": "-h, --help",
@@ -598,7 +598,7 @@ expression: canonicalize_json(contract)
       "subcommands": [
         {
           "about": "List every tag registered in the vault",
-          "name": "loofah tags list",
+          "name": "loof tags list",
           "options": [
             {
               "flags": "-h, --help",
@@ -607,11 +607,11 @@ expression: canonicalize_json(contract)
               "required": false
             }
           ],
-          "synopsis": "loofah tags list [-h]"
+          "synopsis": "loof tags list [-h]"
         }
       ],
-      "synopsis": "loofah tags [-h] <command>"
+      "synopsis": "loof tags [-h] <command>"
     }
   ],
-  "synopsis": "loofah [--base] [--vault-path] [--json] [-h] [-V] <command>"
+  "synopsis": "loof [--base] [--vault-path] [--json] [-h] [-V] <command>"
 }

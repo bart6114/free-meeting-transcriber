@@ -436,7 +436,7 @@ Each step should be a reviewable commit, but partial completion is not the inten
 Run after Rust changes:
 
 ```sh
-cargo test -p vault-read -p vault-write -p fs-sync-core -p tauri-plugin-fs-sync -p listener-core -p tauri-plugin-transcription -p fmtr-cli
+cargo test -p vault-read -p vault-write -p fs-sync-core -p tauri-plugin-fs-sync -p listener-core -p tauri-plugin-transcription -p loof-cli
 cargo test -p desktop --lib
 cargo check
 ```

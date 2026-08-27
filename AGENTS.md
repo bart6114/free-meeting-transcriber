@@ -14,6 +14,7 @@ Inside `sessions/<id>/` the app owns a fixed set of names (canonical list: `crat
 - Typecheck (TS): `pnpm -r typecheck`
 - Typecheck (Rust): `cargo check`
 - Desktop dev: `pnpm -F @hypr/desktop tauri:dev`
+- CLI executable: `loof` (Cargo package: `loof-cli`)
 - Docs site: `docs/` (Astro Starlight; published at https://loofah.io via Cloudflare Workers static assets)
 
 ## Shared cargo target cache

@@ -5,7 +5,7 @@ use std::{
 
 use clap::Parser;
 use clap::error::ErrorKind;
-use loofah_cli::Args;
+use loof_cli::Args;
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -13,7 +13,7 @@ async fn main() -> ExitCode {
     let json = argv.iter().any(|arg| arg == "--json");
     if should_warn_about_legacy_command(&argv) {
         eprintln!(
-            "warning: `fmtr meetings` is deprecated and will be removed; use `fmtr sessions` instead"
+            "warning: `loof meetings` is deprecated and will be removed; use `loof sessions` instead"
         );
     }
     let args = match Args::try_parse_from(argv) {
@@ -30,7 +30,7 @@ async fn main() -> ExitCode {
                 eprintln!(
                     "{}",
                     serde_json::to_string_pretty(&serde_json::json!({
-                        "schema_version": loofah_cli::JSON_SCHEMA_VERSION,
+                        "schema_version": loof_cli::JSON_SCHEMA_VERSION,
                         "error": {
                             "code": "invalid_arguments",
                             "message": error.to_string(),
@@ -44,7 +44,7 @@ async fn main() -> ExitCode {
         }
     };
 
-    match loofah_cli::run(args).await {
+    match loof_cli::run(args).await {
         Ok(code) => ExitCode::from(code),
         Err(error) => {
             if json {
@@ -101,7 +101,7 @@ mod tests {
     #[test]
     fn detects_legacy_command_after_global_options() {
         assert!(is_legacy_meeting_command(&argv(&[
-            "fmtr",
+            "loof",
             "--vault-path",
             "/tmp/vault",
             "--json",
@@ -109,19 +109,19 @@ mod tests {
             "list",
         ])));
         assert!(is_legacy_meeting_command(&argv(&[
-            "fmtr",
+            "loof",
             "--base=/tmp/vault",
             "meetings",
             "list",
         ])));
         assert!(!is_legacy_meeting_command(&argv(&[
-            "fmtr", "sessions", "list",
+            "loof", "sessions", "list",
         ])));
         assert!(!should_warn_about_legacy_command(&argv(&[
-            "fmtr", "--json", "meetings", "list",
+            "loof", "--json", "meetings", "list",
         ])));
         assert!(should_warn_about_legacy_command(&argv(&[
-            "fmtr", "meetings", "list",
+            "loof", "meetings", "list",
         ])));
     }
 
@@ -131,7 +131,7 @@ mod tests {
         use std::os::unix::ffi::OsStringExt;
 
         let argv = vec![
-            OsString::from("fmtr"),
+            OsString::from("loof"),
             OsString::from("import"),
             OsString::from_vec(vec![0xff]),
         ];
