@@ -44,6 +44,25 @@ User-specified, or the latest release:
 gh release view --json tagName --jq .tagName
 ```
 
+### Major-version confirmation gate
+
+Before triggering `desktop-release`, compare the target version with the version
+currently published in the updater feed:
+
+```bash
+target_version="${tag#v}"
+shipped_version="$(gh release download updater --pattern latest.json -O - | jq -r .version)"
+printf 'shipped=%s target=%s\n' "$shipped_version" "$target_version"
+```
+
+If the target's major component is greater than the shipped version's major
+component, stop and manually inspect the commits that selected the major bump.
+Tell the user the exact version transition and triggering commit(s), then ask for
+explicit confirmation that they intend to ship that major version. A general
+request to run a release is not sufficient confirmation of an unexpected major
+bump. Do not trigger the workflow until the user explicitly acknowledges the
+major increment.
+
 ## 3. Release notes are generated automatically
 
 The `desktop-release` workflow runs a `changelog` job before the build: Claude
