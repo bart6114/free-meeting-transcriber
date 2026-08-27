@@ -13,6 +13,7 @@ import {
   type EnhancedDoc,
   type SessionMetaPatch,
   type SessionRecord as StoreSessionRecord,
+  type TagSuggestionState,
 } from "~/types/tauri.gen";
 
 export type SessionRecord = {
@@ -24,6 +25,7 @@ export type SessionRecord = {
   raw_md: string;
   tags: string[];
   author: string | null;
+  tag_suggestions: TagSuggestionState | null;
 };
 
 // Note content ("raw_md") is intentionally excluded: it's written exclusively via
@@ -459,6 +461,7 @@ function mapSessionRecord(record: StoreSessionRecord): SessionRecord {
     raw_md: rawMd,
     tags: record.meta.tags,
     author: record.meta.author ?? null,
+    tag_suggestions: record.meta.tag_suggestions ?? null,
   };
 }
 

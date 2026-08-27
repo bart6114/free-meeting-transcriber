@@ -66,6 +66,7 @@ pub(crate) async fn create_session(
         ended_at: options.ended_at,
         created_at,
         tags: options.tags,
+        tag_suggestions: None,
         tracking_id: None,
         folder: None,
         author: options.author,

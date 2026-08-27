@@ -130,6 +130,30 @@ async sessionUpdateMeta(sessionId: string, patch: SessionMetaPatch) : Promise<Re
     else return { status: "error", error: e  as any };
 }
 },
+async sessionQueueTagSuggestions(sessionId: string) : Promise<Result<null, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_queue_tag_suggestions", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionAcceptTagSuggestion(sessionId: string, name: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_accept_tag_suggestion", { sessionId, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async sessionDismissTagSuggestion(sessionId: string, name: string) : Promise<Result<boolean, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("session_dismiss_tag_suggestion", { sessionId, name }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async sessionWriteNote(sessionId: string, markdown: string) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_write_note", { sessionId, markdown }) };
@@ -595,7 +619,7 @@ export type SessionListEntry = { meta: SessionMeta; has_transcript_words: boolea
  * subscribers (timeline, summaries, tags, float, audio retention) consume.
  */
 export type SessionListHeader = { id: string; title: string; created_at: string; folder: string | null; tags: string[]; author: string | null; has_transcript_words: boolean }
-export type SessionMeta = { id: string; title: string; started_at: string | null; ended_at: string | null; created_at: string; tags: string[]; 
+export type SessionMeta = { id: string; title: string; started_at: string | null; ended_at: string | null; created_at: string; tags: string[]; tag_suggestions?: TagSuggestionState | null;
 /**
  * Marker for app-created special sessions (today only the onboarding welcome
  * note) so they can be found again across restarts. Pre-removal builds carried
@@ -638,6 +662,9 @@ export type StartupStatus = { revision: number; vaultPath: string; isCloudStorag
  * `tags.json` disappears.
  */
 export type TagItem = { id: string; name?: string }
+export type TagSuggestionItem = { name: string; confidence: number }
+export type TagSuggestionState = { source_hash: string; algorithm_version: number; status: TagSuggestionStatus; items: TagSuggestionItem[]; dismissed: string[] }
+export type TagSuggestionStatus = "pending" | "complete"
 /**
  * What the frontend sends on a write: source coordinates come from the command arguments,
  * timestamps and `assignee` are managed store-side (preserved from the existing entry when

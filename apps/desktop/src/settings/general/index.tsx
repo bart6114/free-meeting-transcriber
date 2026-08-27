@@ -29,6 +29,7 @@ const SETTINGS_FORM_KEYS = [
   "autostart",
   "auto_stop_meetings",
   "floating_bar_enabled",
+  "auto_accept_related_tags",
   "show_app_in_dock",
   "show_tray_icon",
   "notification_detect",
@@ -48,6 +49,7 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
       autostart: settingsValue.autostart,
       auto_stop_meetings: settingsValue.auto_stop_meetings,
       floating_bar_enabled: settingsValue.floating_bar_enabled,
+      auto_accept_related_tags: settingsValue.auto_accept_related_tags,
       show_app_in_dock: settingsValue.show_app_in_dock,
       show_tray_icon: settingsValue.show_tray_icon,
       notification_detect: settingsValue.notification_detect,
@@ -82,6 +84,7 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
         autostart: normalizedValue.autostart,
         auto_stop_meetings: normalizedValue.auto_stop_meetings,
         floating_bar_enabled: normalizedValue.floating_bar_enabled,
+        auto_accept_related_tags: normalizedValue.auto_accept_related_tags,
         show_app_in_dock: normalizedValue.show_app_in_dock,
         show_tray_icon: normalizedValue.show_tray_icon,
         notification_detect: normalizedValue.notification_detect,
@@ -152,52 +155,74 @@ function SettingsAppContent({
               {(autoStopMeetingsField) => (
                 <form.Field name="floating_bar_enabled">
                   {(floatingBarEnabledField) => (
-                    <form.Field name="show_app_in_dock">
-                      {(showAppInDockField) => (
-                        <form.Field name="show_tray_icon">
-                          {(showTrayIconField) => (
-                            <form.Field name="telemetry_consent">
-                              {(telemetryConsentField) => (
-                                <AppSettingsView
-                                  autostart={{
-                                    value: autostartField.state.value,
-                                    onChange: (val) =>
-                                      autostartField.handleChange(val),
-                                  }}
-                                  autoStopMeetings={{
-                                    value: autoStopMeetingsField.state.value,
-                                    onChange: (val) =>
-                                      autoStopMeetingsField.handleChange(val),
-                                  }}
-                                  floatingBar={{
-                                    value: floatingBarEnabledField.state.value,
-                                    onChange: (val) =>
-                                      floatingBarEnabledField.handleChange(val),
-                                  }}
-                                  showAppInDock={{
-                                    value: showAppInDockField.state.value,
-                                    onChange: (val) =>
-                                      showAppInDockField.handleChange(val),
-                                  }}
-                                  showTrayIcon={{
-                                    value: showTrayIconField.state.value,
-                                    onChange: (val) =>
-                                      showTrayIconField.handleChange(val),
-                                  }}
-                                  telemetryConsent={{
-                                    value: telemetryConsentField.state.value,
-                                    onChange: (val) =>
-                                      telemetryConsentField.handleChange(val),
-                                  }}
-                                  audioRetention={{
-                                    value: audioRetention,
-                                    onChange: (val) =>
-                                      setSettingValues({
-                                        audio_retention: val,
-                                        save_recordings: val !== "none",
-                                      }),
-                                  }}
-                                />
+                    <form.Field name="auto_accept_related_tags">
+                      {(autoAcceptRelatedTagsField) => (
+                        <form.Field name="show_app_in_dock">
+                          {(showAppInDockField) => (
+                            <form.Field name="show_tray_icon">
+                              {(showTrayIconField) => (
+                                <form.Field name="telemetry_consent">
+                                  {(telemetryConsentField) => (
+                                    <AppSettingsView
+                                      autostart={{
+                                        value: autostartField.state.value,
+                                        onChange: (val) =>
+                                          autostartField.handleChange(val),
+                                      }}
+                                      autoStopMeetings={{
+                                        value:
+                                          autoStopMeetingsField.state.value,
+                                        onChange: (val) =>
+                                          autoStopMeetingsField.handleChange(
+                                            val,
+                                          ),
+                                      }}
+                                      floatingBar={{
+                                        value:
+                                          floatingBarEnabledField.state.value,
+                                        onChange: (val) =>
+                                          floatingBarEnabledField.handleChange(
+                                            val,
+                                          ),
+                                      }}
+                                      autoAcceptRelatedTags={{
+                                        value:
+                                          autoAcceptRelatedTagsField.state
+                                            .value,
+                                        onChange: (val) =>
+                                          autoAcceptRelatedTagsField.handleChange(
+                                            val,
+                                          ),
+                                      }}
+                                      showAppInDock={{
+                                        value: showAppInDockField.state.value,
+                                        onChange: (val) =>
+                                          showAppInDockField.handleChange(val),
+                                      }}
+                                      showTrayIcon={{
+                                        value: showTrayIconField.state.value,
+                                        onChange: (val) =>
+                                          showTrayIconField.handleChange(val),
+                                      }}
+                                      telemetryConsent={{
+                                        value:
+                                          telemetryConsentField.state.value,
+                                        onChange: (val) =>
+                                          telemetryConsentField.handleChange(
+                                            val,
+                                          ),
+                                      }}
+                                      audioRetention={{
+                                        value: audioRetention,
+                                        onChange: (val) =>
+                                          setSettingValues({
+                                            audio_retention: val,
+                                            save_recordings: val !== "none",
+                                          }),
+                                      }}
+                                    />
+                                  )}
+                                </form.Field>
                               )}
                             </form.Field>
                           )}

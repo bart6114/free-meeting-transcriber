@@ -144,7 +144,7 @@ name: string;
  * Short identifier. GitHub: "owner/repo", Linear: team key (e.g., "ENG").
  */
 key: string | null; url: string | null }
-export type CreateReminderInput = { title: string; list_id: string | null; notes: string | null; url: string | null; priority: ReminderPriority | null; due_date: DateComponents | null; start_date: DateComponents | null }
+export type CreateReminderInput = { title: string; list_id: string | null; notes: string | null; url: string | null; priority: ReminderPriority | null; due_date: DateComponents | null; start_date: DateComponents | null; alarms: Alarm[] | null; recurrence_rules: RecurrenceRule[] | null; is_completed: boolean | null; completion_date: string | null }
 export type DateComponents = { date: string | null; time: string | null; time_zone: string | null }
 export type GeoLocation = { latitude: number; longitude: number }
 export type GitHubIssueState = "Open" | "Closed" | "Merged"

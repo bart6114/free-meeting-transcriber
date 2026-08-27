@@ -20,7 +20,7 @@ pub use layout::{
     classify_session_dir, discover_sessions, discover_sessions_with_progress, find_session,
     find_session_and_scan, has_session_boundary,
 };
-pub use meta::SessionMeta;
+pub use meta::{SessionMeta, TagSuggestionItem, TagSuggestionState, TagSuggestionStatus};
 pub use people::{Person, read_people};
 pub use reserved::{
     SESSION_OWNED_DIRS, SESSION_OWNED_FILES, SESSION_PEAKS_FILE, SESSION_TRANSIENT_FILES,

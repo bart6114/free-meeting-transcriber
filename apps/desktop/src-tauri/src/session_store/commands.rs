@@ -9,6 +9,7 @@ use super::{
     SessionMeta, SessionMetaPatch, SessionRecord, SessionStore, TagItem, TaskInput, TaskItem,
     TemplateInput, TemplateItem, TranscriptDelta, VaultStats,
 };
+use crate::related_tags::RelatedTagQueue;
 
 /// Every command below is a thin wrapper: fetch the managed store, call the matching
 /// `SessionStore` method, map `StoreError` to `String` for the IPC boundary. `SessionStore` is
@@ -49,6 +50,39 @@ pub async fn session_update_meta<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn session_accept_tag_suggestion<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+    name: String,
+) -> Result<bool, String> {
+    let store = store(&app)?;
+    let accepted = store
+        .accept_tag_suggestion(&session_id, &name)
+        .await
+        .map_err(|error| error.to_string())?;
+    if accepted {
+        if let Err(error) = store.ensure_tag(&name).await {
+            tracing::warn!(tag = %name, %error, "related tags: registry sync failed");
+        }
+    }
+    Ok(accepted)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn session_dismiss_tag_suggestion<R: tauri::Runtime>(
+    app: AppHandle<R>,
+    session_id: String,
+    name: String,
+) -> Result<bool, String> {
+    store(&app)?
+        .dismiss_tag_suggestion(&session_id, &name)
+        .await
+        .map_err(|error| error.to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn session_write_note<R: tauri::Runtime>(
     app: AppHandle<R>,
     session_id: String,
@@ -57,7 +91,11 @@ pub async fn session_write_note<R: tauri::Runtime>(
     store(&app)?
         .write_note(&session_id, &markdown)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if let Some(queue) = app.try_state::<RelatedTagQueue>() {
+        queue.note_changed(session_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -78,10 +116,15 @@ pub async fn session_write_enhanced_doc<R: tauri::Runtime>(
     app: AppHandle<R>,
     doc: EnhancedDoc,
 ) -> Result<(), String> {
+    let session_id = doc.session_id.clone();
     store(&app)?
         .write_enhanced_doc(&doc)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if let Some(queue) = app.try_state::<RelatedTagQueue>() {
+        queue.enqueue(session_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -95,7 +138,11 @@ pub async fn session_update_enhanced_doc<R: tauri::Runtime>(
     store(&app)?
         .update_enhanced_doc(&session_id, &doc_id, patch)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if let Some(queue) = app.try_state::<RelatedTagQueue>() {
+        queue.enqueue(session_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -108,7 +155,11 @@ pub async fn session_delete_enhanced_doc<R: tauri::Runtime>(
     store(&app)?
         .delete_enhanced_doc(&session_id, &doc_id)
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    if let Some(queue) = app.try_state::<RelatedTagQueue>() {
+        queue.enqueue(session_id);
+    }
+    Ok(())
 }
 
 #[tauri::command]
@@ -553,4 +604,49 @@ pub async fn session_delete_audio<R: tauri::Runtime>(
         .delete_audio(&session_id, &filename)
         .await
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn meta(id: &str) -> SessionMeta {
+        SessionMeta {
+            id: id.to_string(),
+            title: "Note".to_string(),
+            started_at: None,
+            ended_at: None,
+            created_at: "2026-08-27T00:00:00Z".to_string(),
+            tags: Vec::new(),
+            tag_suggestions: None,
+            tracking_id: None,
+            folder: None,
+            author: None,
+            skill: None,
+            extra: Default::default(),
+        }
+    }
+
+    #[tokio::test]
+    async fn writing_a_note_schedules_debounced_related_tag_analysis() {
+        let vault = tempfile::tempdir().unwrap();
+        let store = Arc::new(super::super::new_test_store(vault.path().to_path_buf()).await);
+        store.write_meta(&meta("s1")).await.unwrap();
+        let queue = RelatedTagQueue::new_test();
+        let app = tauri::test::mock_builder()
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap();
+        app.manage(store);
+        app.manage(queue.clone());
+
+        session_write_note(
+            app.handle().clone(),
+            "s1".to_string(),
+            "Atlas rollout note".to_string(),
+        )
+        .await
+        .unwrap();
+
+        assert!(queue.has_debounced_change("s1"));
+    }
 }

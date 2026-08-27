@@ -33,6 +33,7 @@ import {
   getTranscriptionLanguages,
 } from "~/stt/capabilities";
 import { softDeleteTranscript } from "~/stt/queries";
+import { queueTagSuggestions } from "~/tags/suggestions";
 import { commands } from "~/types/tauri.gen";
 
 export function getPostCaptureAction(
@@ -170,6 +171,9 @@ export function useStartListening(sessionId: string) {
 
       const hasTranscriptEvidence =
         hadTranscriptBeforeStart || transcriptId !== null || batchCompleted;
+      if (!batchCompleted && transcriptId !== null) {
+        await queueTagSuggestions(sessionId);
+      }
       if (postCaptureAction !== "none" || hasTranscriptEvidence) {
         const shouldRegenerateExistingSummary =
           hadTranscriptBeforeStart && (transcriptId !== null || batchCompleted);
