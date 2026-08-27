@@ -65,6 +65,7 @@ export default defineConfig({
             "agents/vault",
             "agents/cli",
             "agents/mcp",
+            "agents/connect-clients",
             "agents/skills",
           ],
         },
