@@ -343,6 +343,10 @@ describe("ClassicMainBody", () => {
     expect(sidebarContent?.className).toContain(
       "transition-[opacity,transform]",
     );
+    expect(sidebarContent?.className).toContain(
+      "w-[var(--left-sidebar-content-width)]",
+    );
+    expect(sidebarContent?.className).toContain("[contain:layout]");
     expect(sidebarContent?.getAttribute("aria-hidden")).toBe("false");
     expect(sidebarChrome).toBeNull();
     expect(sidebarTimelineHeader).toBeTruthy();
@@ -353,17 +357,23 @@ describe("ClassicMainBody", () => {
     expect(bodyRoot?.getAttribute("style")).toContain(
       "--left-sidebar-panel-size: 13.75",
     );
+    expect(
+      bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+    ).toBe("220px");
 
     act(() => {
-      mocks.onPanelLayout?.([24, 76]);
+      mocks.onPanelLayout?.([18, 82]);
     });
 
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-size")).toBe(
-      "24",
+      "18",
     );
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width")).toBe(
-      "24%",
+      "18%",
     );
+    expect(
+      bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+    ).toBe("288px");
   });
 
   it.each([
@@ -406,8 +416,13 @@ describe("ClassicMainBody", () => {
     const sidebarChrome = document.querySelector<HTMLElement>(
       "[data-left-sidebar-chrome]",
     );
+    const sidebarContent = document.querySelector<HTMLElement>(
+      "[data-left-sidebar-panel-content]",
+    );
     expect(sidebarChrome?.style.width).toBe("220px");
     expect(sidebarChrome?.style.maxWidth).toBe("220px");
+    expect(sidebarContent?.className).toContain("w-full");
+    expect(sidebarContent?.className).not.toContain("[contain:layout]");
 
     const bodyRoot = screen.getByTestId("panel-group").parentElement;
     act(() => {
@@ -462,6 +477,9 @@ describe("ClassicMainBody", () => {
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width"),
       ).toBe("22%");
+      expect(
+        bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+      ).toBe("220px");
 
       act(() => {
         mocks.onPanelLayout?.([12.5, 87.5]);
@@ -491,6 +509,9 @@ describe("ClassicMainBody", () => {
       expect(
         bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width"),
       ).toBe("27.5%");
+      expect(
+        bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+      ).toBe("220px");
     } finally {
       requestAnimationFrame.mockRestore();
       cancelAnimationFrame.mockRestore();
@@ -580,6 +601,9 @@ describe("ClassicMainBody", () => {
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width")).toBe(
       "18%",
     );
+    expect(
+      bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+    ).toBe("288px");
     expect(mocks.tabContentRenderCount).toBe(renderCountAfterDragStart);
 
     act(() => {
@@ -668,6 +692,9 @@ describe("ClassicMainBody", () => {
     expect(bodyRoot?.style.getPropertyValue("--left-sidebar-panel-width")).toBe(
       "13.75%",
     );
+    expect(
+      bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+    ).toBe("220px");
   });
 
   it("keeps the note content panel at least 500px wide", () => {
@@ -723,6 +750,15 @@ describe("ClassicMainBody", () => {
     );
     expect(sidebarContent?.className).toContain("-translate-x-3");
     expect(sidebarContent?.className).toContain("opacity-0");
+    expect(sidebarContent?.className).toContain(
+      "w-[var(--left-sidebar-content-width)]",
+    );
+    expect(sidebarContent?.className).toContain("[contain:layout]");
+    expect(
+      screen
+        .getByTestId("panel-group")
+        .parentElement?.style.getPropertyValue("--left-sidebar-content-width"),
+    ).toBe("220px");
     expect(
       document.querySelector("[data-sidebar-timeline-header]"),
     ).toBeTruthy();
@@ -746,6 +782,45 @@ describe("ClassicMainBody", () => {
     rerender(<ClassicMainBody />);
 
     expect(screen.getByTestId("classic-main-sidebar")).toBe(mountedSidebar);
+  });
+
+  it("restores a custom timeline width before reopening after a window resize", () => {
+    let bodyWidth = 1600;
+    const getBoundingClientRect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        if (this.querySelector("[data-testid='panel-group']")) {
+          return rectWithWidth(bodyWidth);
+        }
+
+        return rectWithWidth(0);
+      });
+
+    try {
+      const { rerender } = render(<ClassicMainBody />);
+      const bodyRoot = screen.getByTestId("panel-group").parentElement;
+
+      act(() => {
+        mocks.onPanelLayout?.([18, 82]);
+      });
+
+      mocks.leftsidebar.expanded = false;
+      rerender(<ClassicMainBody />);
+
+      expect(
+        bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+      ).toBe("288px");
+
+      bodyWidth = 1200;
+      fireEvent.click(screen.getByRole("button", { name: "Show sidebar" }));
+
+      expect(mocks.leftSidebarPanelHandle.resize).toHaveBeenCalledWith(18);
+      expect(
+        bodyRoot?.style.getPropertyValue("--left-sidebar-content-width"),
+      ).toBe("220px");
+    } finally {
+      getBoundingClientRect.mockRestore();
+    }
   });
 
   it("keeps layout transitions disabled when resize is interrupted by collapse", () => {
