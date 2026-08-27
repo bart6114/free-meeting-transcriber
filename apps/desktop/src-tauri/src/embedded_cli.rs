@@ -130,7 +130,7 @@ pub fn install<R: tauri::Runtime, T: tauri::Manager<R>>(
 /// Re-points a previously installed CLI symlink at the current app bundle.
 /// Runs at startup so the command on PATH follows app updates and moves,
 /// and so old command names and pre-symlink installs migrate to `loof`.
-/// Never installs for users who haven't opted in via Settings -> Developers.
+/// Never installs for users who haven't opted in via Settings -> Agents.
 pub fn sync_installed<R: tauri::Runtime, T: tauri::Manager<R>>(manager: &T) {
     #[cfg(not(target_os = "macos"))]
     {
