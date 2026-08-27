@@ -19,6 +19,7 @@ fn meta(id: &str, title: &str) -> SessionMeta {
         ended_at: None,
         created_at: "2026-07-24T00:00:00Z".to_string(),
         tags: vec![],
+        tag_suggestions: None,
         tracking_id: None,
         folder: None,
         author: None,

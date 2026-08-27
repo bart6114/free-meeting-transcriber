@@ -69,6 +69,11 @@ export const SETTING_DEFINITIONS = {
     path: ["general", "audio_retention"],
     default: "forever" as string,
   },
+  auto_accept_related_tags: {
+    type: "boolean",
+    path: ["general", "auto_accept_related_tags"],
+    default: false as boolean,
+  },
   notification_detect: {
     type: "boolean",
     path: ["notification", "detect"],

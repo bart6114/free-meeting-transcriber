@@ -1,5 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
-import { XIcon } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { CheckIcon, XIcon } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -13,6 +14,7 @@ import { cn } from "@hypr/utils";
 import { useSession, useUpdateSession } from "~/session/queries";
 import { normalizeTagNames } from "~/tags/normalize";
 import { ensureTag, useInUseTags, useTags } from "~/tags/queries";
+import { commands } from "~/types/tauri.gen";
 
 export function SessionTags({
   sessionId,
@@ -22,7 +24,8 @@ export function SessionTags({
   className?: string;
 }) {
   const { t } = useLingui();
-  const savedTags = useSession(sessionId)?.tags ?? EMPTY_TAGS;
+  const session = useSession(sessionId);
+  const savedTags = session?.tags ?? EMPTY_TAGS;
   const updateSession = useUpdateSession(sessionId);
   // Shown between a commit and the index re-emitting, so chips never flash the
   // pre-edit set. Cleared once the live value catches up (or the write fails).
@@ -35,6 +38,10 @@ export function SessionTags({
   }, [pendingTags, savedTags]);
 
   const tags = pendingTags ?? savedTags;
+  const suggestedTags =
+    session?.tag_suggestions?.items.filter(
+      (suggestion) => !tags.includes(suggestion.name),
+    ) ?? EMPTY_SUGGESTIONS;
 
   const commit = (nextTags: string[]) => {
     const sorted = [...new Set(nextTags)].sort();
@@ -86,8 +93,78 @@ export function SessionTags({
           </button>
         </span>
       ))}
+      {suggestedTags.map((suggestion) => (
+        <SuggestedTag
+          key={suggestion.name}
+          sessionId={sessionId}
+          name={suggestion.name}
+        />
+      ))}
       <TagAddControl attachedTags={tags} onAdd={addTag} />
     </div>
+  );
+}
+
+function SuggestedTag({
+  sessionId,
+  name,
+}: {
+  sessionId: string;
+  name: string;
+}) {
+  const { t } = useLingui();
+  const accept = useMutation({
+    mutationFn: async () => {
+      const result = await commands.sessionAcceptTagSuggestion(sessionId, name);
+      if (result.status === "error") throw new Error(result.error);
+    },
+    onError: (error) => {
+      console.error("[session-tags] failed to accept suggestion", error);
+      sonnerToast.error(t`Could not update tags.`);
+    },
+  });
+  const dismiss = useMutation({
+    mutationFn: async () => {
+      const result = await commands.sessionDismissTagSuggestion(
+        sessionId,
+        name,
+      );
+      if (result.status === "error") throw new Error(result.error);
+    },
+    onError: (error) => {
+      console.error("[session-tags] failed to dismiss suggestion", error);
+      sonnerToast.error(t`Could not update tags.`);
+    },
+  });
+  const pending = accept.isPending || dismiss.isPending;
+
+  return (
+    <span
+      className={cn([
+        "flex items-center gap-1 rounded-full border border-dashed",
+        "border-muted-foreground/40 text-muted-foreground py-0.5 pr-1 pl-2 text-xs font-medium",
+      ])}
+    >
+      #{name}
+      <button
+        type="button"
+        disabled={pending}
+        aria-label={t`Accept suggested tag ${name}`}
+        onClick={() => accept.mutate()}
+        className="hover:text-foreground rounded-full opacity-70 disabled:opacity-30"
+      >
+        <CheckIcon size={12} />
+      </button>
+      <button
+        type="button"
+        disabled={pending}
+        aria-label={t`Dismiss suggested tag ${name}`}
+        onClick={() => dismiss.mutate()}
+        className="hover:text-foreground rounded-full opacity-70 disabled:opacity-30"
+      >
+        <XIcon size={12} />
+      </button>
+    </span>
   );
 }
 
@@ -236,3 +313,4 @@ function tagsEqual(a: string[], b: string[]): boolean {
 }
 
 const EMPTY_TAGS: string[] = [];
+const EMPTY_SUGGESTIONS: { name: string; confidence: number }[] = [];

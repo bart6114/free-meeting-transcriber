@@ -5,6 +5,30 @@ use serde::{Deserialize, Serialize};
 use crate::{Error, Result, layout, paths, strip_leading_frontmatter};
 
 #[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TagSuggestionStatus {
+    Pending,
+    Complete,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
+pub struct TagSuggestionItem {
+    pub name: String,
+    pub confidence: f32,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
+pub struct TagSuggestionState {
+    #[serde(alias = "transcript_hash")]
+    pub source_hash: String,
+    pub algorithm_version: u32,
+    pub status: TagSuggestionStatus,
+    pub items: Vec<TagSuggestionItem>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub dismissed: Vec<String>,
+}
+
+#[derive(Serialize, Deserialize, specta::Type, Clone, Debug, PartialEq)]
 pub struct SessionMeta {
     pub id: String,
     pub title: String,
@@ -12,6 +36,8 @@ pub struct SessionMeta {
     pub ended_at: Option<String>,
     pub created_at: String,
     pub tags: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tag_suggestions: Option<TagSuggestionState>,
     /// Marker for app-created special sessions (today only the onboarding welcome
     /// note) so they can be found again across restarts. Pre-removal builds carried
     /// this inside the retired calendar-event envelope, which now round-trips
@@ -165,6 +191,24 @@ mod tests {
 
         assert_eq!(round_tripped["speakers"], raw["speakers"]);
         assert_eq!(round_tripped["some_future_field"], raw["some_future_field"]);
+    }
+
+    #[test]
+    fn tag_suggestions_migrate_transcript_hash_to_combined_source_hash() {
+        let state: TagSuggestionState = serde_json::from_value(serde_json::json!({
+            "transcript_hash": "legacy-hash",
+            "algorithm_version": 1,
+            "status": "complete",
+            "items": [],
+        }))
+        .unwrap();
+
+        assert_eq!(state.source_hash, "legacy-hash");
+        assert!(state.dismissed.is_empty());
+        let serialized = serde_json::to_value(state).unwrap();
+        assert_eq!(serialized["source_hash"], "legacy-hash");
+        assert!(serialized.get("transcript_hash").is_none());
+        assert!(serialized.get("dismissed").is_none());
     }
 
     /// `author` and `skill` are typed fields (absent = the vault owner wrote the

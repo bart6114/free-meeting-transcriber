@@ -24,7 +24,9 @@ pub mod templates;
 pub mod transcript;
 
 pub use attachments::SavedAttachment;
-pub use content::{SessionMeta, SessionMetaPatch};
+pub use content::{
+    SessionMeta, SessionMetaPatch, TagSuggestionItem, TagSuggestionState, TagSuggestionStatus,
+};
 pub use enhanced::{EnhancedDoc, EnhancedDocPatch};
 pub use index::{IndexChanged, IndexEntity, SessionListEntry, SessionListHeader, SessionRecord};
 pub use people::PersonItem;

@@ -82,6 +82,10 @@ msgstr ""
 msgid "About Loofah"
 msgstr ""
 
+#: src/session/components/session-tags.tsx
+msgid "Accept suggested tag {name}"
+msgstr ""
+
 #: src/templates/template-icon-picker.tsx
 msgid "Activity"
 msgstr ""
@@ -159,6 +163,10 @@ msgstr "Εφαρμογή"
 msgid "Appearance"
 msgstr ""
 
+#: src/settings/general/app-settings.tsx
+msgid "Apply only high-confidence tags from similar session content."
+msgstr ""
+
 #: src/task/resource-view.tsx
 msgid "Assignees:"
 msgstr ""
@@ -177,6 +185,10 @@ msgstr ""
 
 #: src/templates/auto-form.tsx
 msgid "Auto summary prompt"
+msgstr ""
+
+#: src/settings/general/app-settings.tsx
+msgid "Automatically apply related tags"
 msgstr ""
 
 #: src/settings/general/notification.tsx
@@ -400,6 +412,10 @@ msgstr ""
 
 #: src/settings/dictionary/index.tsx
 msgid "Dictionary"
+msgstr ""
+
+#: src/session/components/session-tags.tsx
+msgid "Dismiss suggested tag {name}"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx

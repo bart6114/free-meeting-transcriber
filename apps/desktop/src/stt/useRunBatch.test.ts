@@ -19,6 +19,7 @@ const {
   deleteProcessedAudioForRetentionMock,
   createTranscriptMock,
   appendTranscriptWordsAndHintsMock,
+  queueTagSuggestionsMock,
   idMock,
 } = vi.hoisted(() => ({
   startTranscriptionMock: vi.fn(),
@@ -31,6 +32,7 @@ const {
   deleteProcessedAudioForRetentionMock: vi.fn(),
   createTranscriptMock: vi.fn(),
   appendTranscriptWordsAndHintsMock: vi.fn(),
+  queueTagSuggestionsMock: vi.fn(),
   idMock: vi.fn(),
 }));
 
@@ -108,6 +110,10 @@ vi.mock("~/stt/queries", () => ({
   createTranscript: createTranscriptMock,
 }));
 
+vi.mock("~/tags/suggestions", () => ({
+  queueTagSuggestions: queueTagSuggestionsMock,
+}));
+
 describe("getBatchProvider", () => {
   test("maps local soniqo models to the soniqo batch provider", () => {
     expect(getBatchProvider("fmtr", "soniqo-parakeet-batch")).toBe("soniqo");
@@ -171,6 +177,7 @@ describe("useRunBatch", () => {
     idMock.mockImplementation(() => `generated-${++nextId}`);
     createTranscriptMock.mockResolvedValue(undefined);
     appendTranscriptWordsAndHintsMock.mockResolvedValue(undefined);
+    queueTagSuggestionsMock.mockResolvedValue(undefined);
     deleteProcessedAudioForRetentionMock.mockResolvedValue(undefined);
     isSupportedLanguagesBatchMock.mockResolvedValue(true);
     useListenerMock.mockImplementation((selector) =>
@@ -227,6 +234,7 @@ describe("useRunBatch", () => {
     await act(async () => await run);
 
     expect(createTranscriptMock).toHaveBeenCalledTimes(1);
+    expect(queueTagSuggestionsMock).toHaveBeenCalledWith("session-1");
     expect(deleteProcessedAudioForRetentionMock).toHaveBeenCalledTimes(1);
     expect(
       appendTranscriptWordsAndHintsMock.mock.invocationCallOrder[0],

@@ -21,6 +21,7 @@ import {
 } from "~/stt/capabilities";
 import { appendTranscriptWordsAndHints, createTranscript } from "~/stt/queries";
 import type { SpeakerHintWithId, WordWithId } from "~/stt/types";
+import { queueTagSuggestions } from "~/tags/suggestions";
 
 type RunOptions = {
   handlePersist?: BatchPersistCallback;
@@ -321,6 +322,8 @@ export const useRunBatch = (sessionId: string) => {
       }
 
       if (transcriptWriteError) throw transcriptWriteError;
+
+      await queueTagSuggestions(sessionId);
 
       await deleteProcessedAudioForRetention(audioRetention, sessionId);
     },

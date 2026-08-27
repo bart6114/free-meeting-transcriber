@@ -29,9 +29,9 @@ use tauri_plugin_tantivy::{
 use crate::session_store::{IndexEntity, SessionStore};
 
 // Increment when the vault-index-to-Tantivy document shape changes so existing
-// indexes are rebuilt. 4 -> 5: the projection's content source moved from SQLite
-// to the in-memory vault index, so one full rebuild re-derives every document.
-const PROJECTION_VERSION: i64 = 5;
+// indexes are rebuilt. 6 -> 7 broadens related-tag candidate retrieval from
+// transcript-only text to transcript, summary, and note content.
+const PROJECTION_VERSION: i64 = 7;
 const BATCH_SIZE: usize = 8;
 const RETRY_INTERVAL: Duration = Duration::from_secs(5);
 /// Must match the tantivy plugin's `CollectionConfig.path` for the default
@@ -307,15 +307,25 @@ async fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
     });
 
     let mut content_parts = Vec::with_capacity(1 + enhanced_docs.len() + transcripts.len());
+    let mut related_parts = Vec::with_capacity(2 + enhanced_docs.len());
     if let Some(note) = &record.note_markdown {
-        content_parts.push(extract_plain_text(note));
+        let note = extract_plain_text(note);
+        content_parts.push(note.clone());
+        related_parts.push(note);
     }
-    content_parts.extend(
-        enhanced_docs
-            .iter()
-            .map(|doc| extract_plain_text(&doc.markdown)),
-    );
-    content_parts.extend(transcripts.iter().map(flatten_transcript_words));
+    let enhanced_parts: Vec<String> = enhanced_docs
+        .iter()
+        .map(|doc| extract_plain_text(&doc.markdown))
+        .collect();
+    content_parts.extend(enhanced_parts.iter().cloned());
+    related_parts.extend(enhanced_parts);
+    let transcript_parts: Vec<String> = transcripts.iter().map(flatten_transcript_words).collect();
+    let transcript_content = merge_content(transcript_parts.iter().map(String::as_str));
+    if !transcript_content.is_empty() {
+        content_parts.push(transcript_content.clone());
+        related_parts.push(transcript_content);
+    }
+    let related_content = merge_content(related_parts.iter().map(String::as_str));
 
     IndexAction::Upsert(SearchDocument {
         id: id.to_string(),
@@ -323,6 +333,7 @@ async fn build_session_document(store: &SessionStore, id: &str) -> IndexAction {
         language: None,
         title: fallback_title(&record.meta.title, "Untitled"),
         content: merge_content(content_parts.iter().map(String::as_str)),
+        related_content: (!related_content.is_empty()).then_some(related_content),
         created_at: to_epoch_ms(&Value::String(record.meta.created_at.clone())),
         facets: Vec::new(),
     })
@@ -394,7 +405,7 @@ fn merge_content<'a>(parts: impl IntoIterator<Item = &'a str>) -> String {
         .join(" ")
 }
 
-fn extract_plain_text(value: &str) -> String {
+pub(crate) fn extract_plain_text(value: &str) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() || !trimmed.starts_with('{') {
         return trimmed.to_string();
@@ -548,6 +559,7 @@ mod tests {
             ended_at: None,
             created_at: "2026-07-24T00:00:00Z".to_string(),
             tags: vec![],
+            tag_suggestions: None,
             tracking_id: None,
             folder: None,
             author: None,

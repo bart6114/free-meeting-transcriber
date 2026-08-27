@@ -20,6 +20,7 @@ interface AppSettingsViewProps {
   autostart: SettingItem;
   autoStopMeetings: SettingItem;
   floatingBar: SettingItem;
+  autoAcceptRelatedTags: SettingItem;
   showAppInDock: SettingItem;
   showTrayIcon: SettingItem;
   telemetryConsent: SettingItem;
@@ -33,6 +34,7 @@ export function AppSettingsView({
   autostart,
   autoStopMeetings,
   floatingBar,
+  autoAcceptRelatedTags,
   showAppInDock,
   showTrayIcon,
   telemetryConsent,
@@ -102,6 +104,16 @@ export function AppSettingsView({
             }
             checked={floatingBar.value}
             onChange={floatingBar.onChange}
+          />
+          <SettingRow
+            title={<Trans>Automatically apply related tags</Trans>}
+            description={
+              <Trans>
+                Apply only high-confidence tags from similar session content.
+              </Trans>
+            }
+            checked={autoAcceptRelatedTags.value}
+            onChange={autoAcceptRelatedTags.onChange}
           />
           <AudioRetentionRow
             value={audioRetention.value}
