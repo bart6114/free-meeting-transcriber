@@ -84,11 +84,6 @@ export const SETTING_DEFINITIONS = {
     path: ["notification", "respect_dnd"],
     default: false as boolean,
   },
-  telemetry_consent: {
-    type: "boolean",
-    path: ["general", "telemetry_consent"],
-    default: true as boolean,
-  },
   cloud_sync_enabled: {
     type: "boolean",
     path: ["general", "cloud_sync_enabled"],

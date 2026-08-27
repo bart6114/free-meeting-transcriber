@@ -1,0 +1,110 @@
+---
+title: "Connect Loofah to Claude, Codex, or Hermes"
+description: "Use Loofah's read-only MCP server with Claude Desktop, Claude Code, Codex, or Hermes."
+---
+
+Loofah's MCP server lets an agent search and read your local meeting notes. It cannot create sessions, edit notes, or change the vault.
+
+Install the [`loofah` CLI](/installation) first, then check that it can find your vault:
+
+```bash
+loofah doctor
+```
+
+Every client starts the same local command: `loofah mcp`.
+
+## Claude Desktop on macOS
+
+Open **Claude > Settings > Developer > Edit Config**. Claude Desktop stores this configuration at `~/Library/Application Support/Claude/claude_desktop_config.json` on macOS.[4]
+
+Add Loofah to the existing `mcpServers` object:
+
+```json
+{
+  "mcpServers": {
+    "loofah": {
+      "command": "/Users/you/.local/bin/loofah",
+      "args": ["mcp"]
+    }
+  }
+}
+```
+
+Replace `/Users/you` with your home directory. Use the full path because desktop apps may not inherit the same `PATH` as your terminal. Save the file, quit Claude Desktop completely, and open it again.[4]
+
+## Claude Code
+
+Claude Code accepts local stdio servers through `claude mcp add`. The `--` separates Claude's options from the command it should run.[1]
+
+```bash
+claude mcp add --transport stdio loofah -- loofah mcp
+claude mcp list
+```
+
+Use `--scope user` before `loofah` if you want the connection in every project rather than the current project.
+
+## Codex
+
+Codex CLI and the Codex IDE extension share MCP configuration. Add Loofah once from a terminal:[2]
+
+```bash
+codex mcp add loofah -- loofah mcp
+codex mcp list
+```
+
+Inside the Codex terminal interface, `/mcp` shows the active servers.[2]
+
+## Hermes
+
+Hermes stores stdio MCP servers through its `mcp` command. Add Loofah, then test the connection:[3]
+
+```bash
+hermes mcp add loofah --command loofah --args mcp
+hermes mcp test loofah
+```
+
+Start a fresh Hermes session after adding the server. In an existing session, run `/reload-mcp`.[3]
+
+## Use a different vault
+
+If your vault is not in Loofah's configured default location, put `--vault-path` before `mcp`. For example:
+
+```bash
+loofah --vault-path /path/to/vault mcp
+```
+
+Apply the same argument order in a client command. In Claude Code, that becomes:
+
+```bash
+claude mcp add --transport stdio loofah -- loofah --vault-path /path/to/vault mcp
+```
+
+For JSON configuration, use:
+
+```json
+{
+  "command": "/absolute/path/to/loofah",
+  "args": ["--vault-path", "/path/to/vault", "mcp"]
+}
+```
+
+## Check the connection
+
+Try one of these prompts after the client loads Loofah:
+
+- "List my five most recent meeting notes."
+- "Search my meeting notes for decisions about onboarding."
+
+The server communicates over stdio and opens no network port. Its tools are read-only. Your MCP client and the model behind it may still receive the note content returned by those tools, so check that client's data policy before using it with sensitive meetings. See [Data, privacy, and retention](/data-and-privacy) for Loofah's own data boundaries.
+
+For tool names and parameters, read the [MCP reference](/reference/mcp). If the server fails to start, use the [error reference](/reference/errors).
+
+## Sources
+
+[1] [Claude Code: Connect Claude Code to tools via MCP](https://code.claude.com/docs/en/mcp)
+
+[2] [OpenAI Codex: Model Context Protocol](https://developers.openai.com/codex/mcp)
+
+[3] [Hermes Agent: Use MCP with Hermes](https://hermes-agent.nousresearch.com/docs/guides/use-mcp-with-hermes/)
+
+[4] [Model Context Protocol: Connect to local MCP servers](https://modelcontextprotocol.io/docs/2026-07-28/develop/connect-local-servers)

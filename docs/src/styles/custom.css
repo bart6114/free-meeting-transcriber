@@ -124,6 +124,10 @@ body:has(.download-cta) h1#_top {
   font-size: var(--sl-text-xl);
 }
 
+.homepage-screenshot {
+  border-radius: 1rem;
+}
+
 /* Release notes listing (/changelog) */
 .release-entry {
   padding-top: 1rem;

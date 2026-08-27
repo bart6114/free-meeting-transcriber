@@ -23,7 +23,6 @@ interface AppSettingsViewProps {
   autoAcceptRelatedTags: SettingItem;
   showAppInDock: SettingItem;
   showTrayIcon: SettingItem;
-  telemetryConsent: SettingItem;
   audioRetention: {
     value: string;
     onChange: (value: string) => void;
@@ -37,7 +36,6 @@ export function AppSettingsView({
   autoAcceptRelatedTags,
   showAppInDock,
   showTrayIcon,
-  telemetryConsent,
   audioRetention,
 }: AppSettingsViewProps) {
   return (
@@ -51,16 +49,6 @@ export function AppSettingsView({
             }
             checked={autostart.value}
             onChange={autostart.onChange}
-          />
-          <SettingRow
-            title={<Trans>Share usage data</Trans>}
-            description={
-              <Trans>
-                Send anonymous usage analytics to help improve Loofah.
-              </Trans>
-            }
-            checked={telemetryConsent.value}
-            onChange={telemetryConsent.onChange}
           />
           <SettingRow
             title={<Trans>Show app in Dock</Trans>}

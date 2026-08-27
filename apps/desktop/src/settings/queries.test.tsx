@@ -54,7 +54,6 @@ function appConfig(overrides: Record<string, unknown> = {}) {
     audio_retention: "forever",
     notification_detect: true,
     respect_dnd: false,
-    telemetry_consent: true,
     cloud_sync_enabled: true,
     ai_language: "en",
     spoken_languages: [],

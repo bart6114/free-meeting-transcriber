@@ -249,7 +249,7 @@ something blabla2
         let summary = r###"
 # Notepad Overview
 
-This is an AI-powered notepad designed for private meetings with complete on-device processing. No data leaves your computer, with optional telemetry.
+This is an AI-powered notepad designed for private meetings with complete on-device processing. No data leaves your computer. Loofah does not send usage analytics or telemetry.
 
 # How It Works
 
