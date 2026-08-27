@@ -1,4 +1,4 @@
-import { Fragment, memo, useMemo } from "react";
+import { Fragment, memo } from "react";
 
 import { cn } from "@hypr/utils";
 
@@ -17,21 +17,17 @@ interface WordSpanProps {
 }
 
 export const WordSpan = memo(function WordSpan(props: WordSpanProps) {
-  const content = useHighlightedContent(
+  const content = getHighlightedContent(
     props.word,
     props.displayText,
     props.highlightSegments,
     props.isActiveMatch ?? false,
   );
   const canSeek = props.audioExists && isTranscriptWordSeekable(props.word);
-  const className = useMemo(
-    () =>
-      cn([
-        canSeek && "hover:bg-accent/60 cursor-pointer",
-        !props.word.is_final && ["opacity-60", "italic"],
-      ]),
-    [canSeek, props.word.is_final],
-  );
+  const className = cn([
+    canSeek && "hover:bg-accent/60 cursor-pointer",
+    !props.word.is_final && ["opacity-60", "italic"],
+  ]);
 
   return (
     <span
@@ -44,30 +40,28 @@ export const WordSpan = memo(function WordSpan(props: WordSpanProps) {
   );
 });
 
-function useHighlightedContent(
+function getHighlightedContent(
   word: SegmentWord,
   displayText: string,
   segments: HighlightSegment[] | undefined,
   isActive: boolean,
 ) {
-  return useMemo(() => {
-    if (!segments) {
-      return displayText;
-    }
+  if (!segments) {
+    return displayText;
+  }
 
-    const baseKey = word.id ?? word.text ?? "word";
+  const baseKey = word.id ?? word.text ?? "word";
 
-    return segments.map((segment, index) =>
-      segment.isMatch ? (
-        <span
-          key={`${baseKey}-match-${index}`}
-          className={isActive ? "bg-brand/60" : "bg-brand/25"}
-        >
-          {segment.text}
-        </span>
-      ) : (
-        <Fragment key={`${baseKey}-text-${index}`}>{segment.text}</Fragment>
-      ),
-    );
-  }, [displayText, isActive, segments, word.id, word.text]);
+  return segments.map((segment, index) =>
+    segment.isMatch ? (
+      <span
+        key={`${baseKey}-match-${index}`}
+        className={isActive ? "bg-brand/60" : "bg-brand/25"}
+      >
+        {segment.text}
+      </span>
+    ) : (
+      <Fragment key={`${baseKey}-text-${index}`}>{segment.text}</Fragment>
+    ),
+  );
 }

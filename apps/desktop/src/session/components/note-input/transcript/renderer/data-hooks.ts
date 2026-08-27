@@ -4,26 +4,27 @@ import { useMemo } from "react";
 import { TRANSCRIPT_RENDER_CACHE_TIME_MS } from "../cache";
 import { useTranscriptRenderData } from "../render-request-hooks";
 
+import type { Person } from "~/people/queries";
 import {
   getMaxSpeakerNumberForParticipants,
   type Segment,
 } from "~/stt/live-segment";
-import { useSessionTranscripts, useTranscript } from "~/stt/queries";
+import type { TranscriptRecord } from "~/stt/queries";
 import {
   getRenderTranscriptRequestKey,
   renderRequestHasDiarizedChannel,
   renderTranscriptSegments,
 } from "~/stt/render-transcript";
 
-export function useRenderedTranscriptSegments(transcriptId: string): Segment[] {
-  return useRenderedTranscriptData(transcriptId).segments;
-}
-
-export function useRenderedTranscriptData(transcriptId: string): {
+export function useRenderedTranscriptData(
+  transcriptId: string,
+  transcript: TranscriptRecord | null,
+  people: readonly Person[],
+): {
   maxSpeakerNumber?: number;
   segments: Segment[];
 } {
-  const { request } = useTranscriptRenderData(transcriptId);
+  const { request } = useTranscriptRenderData(transcript, people);
   const requestKey = useMemo(
     () => getRenderTranscriptRequestKey(request),
     [request],
@@ -65,10 +66,10 @@ export function useRenderedTranscriptData(transcriptId: string): {
   return { maxSpeakerNumber, segments: data };
 }
 
-export function useTranscriptOffset(transcriptId: string): number {
-  const transcript = useTranscript(transcriptId);
-  const transcripts = useSessionTranscripts(transcript?.sessionId ?? "");
-
+export function useTranscriptOffset(
+  transcript: TranscriptRecord | null,
+  transcripts: readonly TranscriptRecord[],
+): number {
   return useMemo(() => {
     if (!transcript) {
       return 0;

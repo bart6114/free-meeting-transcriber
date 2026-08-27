@@ -2,12 +2,8 @@ import { useMemo } from "react";
 
 import type { RenderTranscriptRequest } from "@hypr/plugin-transcription";
 
-import { usePeople } from "~/people/queries";
-import {
-  type TranscriptRecord,
-  useSessionTranscripts,
-  useTranscript,
-} from "~/stt/queries";
+import { type Person, usePeople } from "~/people/queries";
+import { type TranscriptRecord, useSessionTranscripts } from "~/stt/queries";
 import {
   buildRenderTranscriptRequestFromRows,
   type TranscriptRow,
@@ -18,17 +14,19 @@ export type TranscriptRowWithId = {
   row: TranscriptRow;
 };
 
-export function useTranscriptRenderData(transcriptId: string): {
+export function useTranscriptRenderData(
+  transcript: TranscriptRecord | null,
+  people: readonly Person[],
+): {
   request: RenderTranscriptRequest | null;
   transcriptRows: TranscriptRowWithId[];
 } {
-  const transcript = useTranscript(transcriptId);
   const transcripts = useMemo(
     () => (transcript ? [transcript] : emptyTranscripts),
     [transcript],
   );
 
-  return useRenderData(transcripts);
+  return useRenderData(transcripts, people);
 }
 
 export function useSessionTranscriptRenderData(sessionId: string): {
@@ -36,16 +34,19 @@ export function useSessionTranscriptRenderData(sessionId: string): {
   transcriptRows: TranscriptRowWithId[];
 } {
   const transcripts = useSessionTranscripts(sessionId);
+  const people = usePeople();
 
-  return useRenderData(transcripts);
+  return useRenderData(transcripts, people);
 }
 
-function useRenderData(transcripts: readonly TranscriptRecord[]): {
+function useRenderData(
+  transcripts: readonly TranscriptRecord[],
+  people: readonly Person[],
+): {
   request: RenderTranscriptRequest | null;
   transcriptRows: TranscriptRowWithId[];
 } {
   const selfHumanId = transcripts[0]?.ownerUserId;
-  const people = usePeople();
 
   const transcriptRows = useMemo(() => {
     return transcripts.map((transcript) => ({

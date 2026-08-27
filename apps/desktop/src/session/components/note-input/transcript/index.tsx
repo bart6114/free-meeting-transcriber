@@ -1,5 +1,7 @@
 import type { RefObject } from "react";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+import { Spinner } from "@hypr/ui/components/ui/spinner";
 
 import { useRegenerateTranscript } from "./actions";
 import { TranscriptViewer } from "./renderer";
@@ -9,19 +11,41 @@ import { TranscriptListeningState } from "./screens/listening";
 import { useTranscriptScreen } from "./state";
 
 import { useListener } from "~/stt/contexts";
+import type { TranscriptRecord } from "~/stt/queries";
 import { useUploadFile } from "~/stt/useUploadFile";
 
 export function Transcript({
   sessionId,
+  transcripts,
   scrollRef,
 }: {
   sessionId: string;
+  transcripts: readonly TranscriptRecord[];
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
-  const screen = useTranscriptScreen({ sessionId });
+  const screen = useTranscriptScreen({ sessionId, transcripts });
   const { uploadAudio, uploadTranscript } = useUploadFile(sessionId);
   const regenerateTranscript = useRegenerateTranscript(sessionId);
   const stopTranscription = useListener((state) => state.stopTranscription);
+  const [viewerReady, setViewerReady] = useState(false);
+  useEffect(() => {
+    if (screen.kind !== "ready") {
+      setViewerReady(false);
+      return;
+    }
+
+    let renderFrame: number | undefined;
+    const loadingFrame = requestAnimationFrame(() => {
+      renderFrame = requestAnimationFrame(() => setViewerReady(true));
+    });
+
+    return () => {
+      cancelAnimationFrame(loadingFrame);
+      if (renderFrame !== undefined) {
+        cancelAnimationFrame(renderFrame);
+      }
+    };
+  }, [screen.kind]);
   const handleStopTranscription = useCallback(() => {
     void stopTranscription(sessionId);
   }, [sessionId, stopTranscription]);
@@ -57,14 +81,27 @@ export function Transcript({
           onUploadTranscript={uploadTranscript}
         />
       )}
-      {screen.kind === "ready" && (
+      {screen.kind === "ready" && !viewerReady && <TranscriptLoadingState />}
+      {screen.kind === "ready" && viewerReady && (
         <TranscriptViewer
-          transcriptIds={screen.transcriptIds}
+          transcripts={screen.transcripts}
           liveSegments={screen.liveSegments}
           currentActive={screen.currentActive}
           scrollRef={scrollRef}
         />
       )}
+    </div>
+  );
+}
+
+function TranscriptLoadingState() {
+  return (
+    <div
+      role="status"
+      className="text-muted-foreground flex h-full items-center justify-center gap-2 text-sm"
+    >
+      <Spinner size={18} />
+      <span>Loading transcript...</span>
     </div>
   );
 }

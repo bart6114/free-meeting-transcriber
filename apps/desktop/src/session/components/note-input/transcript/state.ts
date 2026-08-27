@@ -4,7 +4,7 @@ import { useAudioPlayer } from "~/audio-player";
 import { getLiveCaptureUiMode } from "~/store/zustand/listener/general-shared";
 import { useListener } from "~/stt/contexts";
 import type { Segment } from "~/stt/live-segment";
-import { useSessionTranscripts } from "~/stt/queries";
+import type { TranscriptRecord } from "~/stt/queries";
 
 type ListeningStatus = "listening" | "finalizing";
 type BatchPhase = "importing" | "transcribing";
@@ -32,15 +32,17 @@ export type TranscriptScreen =
     }
   | {
       kind: "ready";
-      transcriptIds: string[];
+      transcripts: readonly TranscriptRecord[];
       liveSegments: Segment[];
       currentActive: boolean;
     };
 
 export function useTranscriptScreen({
   sessionId,
+  transcripts,
 }: {
   sessionId: string;
+  transcripts: readonly TranscriptRecord[];
 }): TranscriptScreen {
   const sessionMode = useListener((state) => state.getSessionMode(sessionId));
   const batchError = useListener(
@@ -50,8 +52,8 @@ export function useTranscriptScreen({
   const live = useListener((state) => state.live);
   const { audioExists } = useAudioPlayer();
 
-  const { transcriptIds, liveSegments, hasTranscriptWords } =
-    useTranscriptContent(sessionId);
+  const { liveSegments, hasTranscriptWords } =
+    useTranscriptContent(transcripts);
 
   const currentActive =
     sessionMode === "active" || sessionMode === "finalizing";
@@ -93,18 +95,16 @@ export function useTranscriptScreen({
 
   return {
     kind: "ready",
-    transcriptIds,
+    transcripts,
     liveSegments,
     currentActive,
   };
 }
 
-function useTranscriptContent(sessionId: string) {
-  const transcripts = useSessionTranscripts(sessionId);
+function useTranscriptContent(transcripts: readonly TranscriptRecord[]) {
   const liveSegments = useListener((state) => state.liveSegments);
 
   return {
-    transcriptIds: transcripts.map((transcript) => transcript.id),
     liveSegments,
     hasTranscriptWords: transcripts.some(
       (transcript) => transcript.words.length > 0,

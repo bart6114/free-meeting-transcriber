@@ -14,13 +14,22 @@ import {
   segmentsShallowEqual,
   useStableSegments,
 } from "./segment-hooks";
+import {
+  buildChannelAssignmentStates,
+  EMPTY_CHANNEL_ASSIGNMENT_STATE,
+} from "./speaker-assign";
 
+import type { Person } from "~/people/queries";
 import {
   mergeRenderedAndLiveSegments,
+  SegmentKeyUtils,
   type Segment,
   type SegmentWord,
 } from "~/stt/live-segment";
-import { useTranscriptLabelContext } from "~/stt/queries";
+import {
+  createTranscriptLabelContext,
+  type TranscriptRecord,
+} from "~/stt/queries";
 import { SpeakerLabelManager } from "~/stt/segment/shared";
 import { isTranscriptWordSeekable } from "~/stt/timing";
 
@@ -29,6 +38,10 @@ export function RenderTranscript({
   isLastTranscript,
   shouldScrollToEnd,
   transcriptId,
+  transcript,
+  transcripts,
+  people,
+  recording,
   liveSegments,
   currentMs,
   seek,
@@ -39,6 +52,10 @@ export function RenderTranscript({
   isLastTranscript: boolean;
   shouldScrollToEnd: boolean;
   transcriptId: string;
+  transcript: TranscriptRecord | null;
+  transcripts: readonly TranscriptRecord[];
+  people: readonly Person[];
+  recording: boolean;
   liveSegments: Segment[];
   currentMs: number;
   seek: (sec: number) => void;
@@ -46,13 +63,13 @@ export function RenderTranscript({
   audioExists: boolean;
 }) {
   const { maxSpeakerNumber, segments: storedSegments } =
-    useRenderedTranscriptData(transcriptId);
+    useRenderedTranscriptData(transcriptId, transcript, people);
   const mergedSegments = useMemo(
     () => mergeRenderedAndLiveSegments(storedSegments, liveSegments),
     [liveSegments, storedSegments],
   );
   const segments = useStableSegments(mergedSegments);
-  const offsetMs = useTranscriptOffset(transcriptId);
+  const offsetMs = useTranscriptOffset(transcript, transcripts);
 
   if (segments.length === 0) {
     return null;
@@ -70,6 +87,9 @@ export function RenderTranscript({
       startPlayback={startPlayback}
       audioExists={audioExists}
       maxSpeakerNumber={maxSpeakerNumber}
+      transcript={transcript}
+      people={people}
+      recording={recording}
     />
   );
 }
@@ -86,6 +106,9 @@ const SegmentsList = memo(
     startPlayback,
     audioExists,
     maxSpeakerNumber,
+    transcript,
+    people,
+    recording,
   }: {
     segments: Segment[];
     scrollElement: HTMLDivElement | null;
@@ -97,8 +120,18 @@ const SegmentsList = memo(
     startPlayback: () => void;
     audioExists: boolean;
     maxSpeakerNumber?: number;
+    transcript: TranscriptRecord | null;
+    people: readonly Person[];
+    recording: boolean;
   }) => {
-    const labelContext = useTranscriptLabelContext(transcriptId);
+    const labelContext = useMemo(
+      () => createTranscriptLabelContext(transcript, people),
+      [people, transcript],
+    );
+    const channelAssignmentStates = useMemo(
+      () => buildChannelAssignmentStates(transcript),
+      [transcript],
+    );
     const search = useSearch();
     const speakerLabelManager = useMemo(() => {
       return labelContext
@@ -157,13 +190,26 @@ const SegmentsList = memo(
         {segments.map((segment, index) => (
           <div
             key={createSegmentKey(segment, transcriptId, index)}
-            className={cn([index > 0 && "pt-4"])}
+            className={cn([
+              index > 0 && "pt-4",
+              "[contain-intrinsic-size:auto_96px] [content-visibility:auto]",
+            ])}
           >
             <SegmentRenderer
               segment={segment}
               offsetMs={offsetMs}
               transcriptId={transcriptId}
-              speakerLabelManager={speakerLabelManager}
+              speakerLabel={SegmentKeyUtils.renderLabel(
+                segment.key,
+                labelContext,
+                speakerLabelManager,
+              )}
+              people={people}
+              channelAssignmentState={
+                channelAssignmentStates.get(segment.key.channel) ??
+                EMPTY_CHANNEL_ASSIGNMENT_STATE
+              }
+              recording={recording}
               currentMs={currentMs}
               seekAndPlay={seekAndPlay}
               audioExists={audioExists}
@@ -183,6 +229,9 @@ const SegmentsList = memo(
       prevProps.currentMs === nextProps.currentMs &&
       prevProps.audioExists === nextProps.audioExists &&
       prevProps.maxSpeakerNumber === nextProps.maxSpeakerNumber &&
+      prevProps.transcript === nextProps.transcript &&
+      prevProps.people === nextProps.people &&
+      prevProps.recording === nextProps.recording &&
       prevProps.seek === nextProps.seek &&
       prevProps.startPlayback === nextProps.startPlayback &&
       segmentsShallowEqual(prevProps.segments, nextProps.segments)

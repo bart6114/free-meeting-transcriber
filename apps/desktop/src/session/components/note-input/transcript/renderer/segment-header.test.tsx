@@ -5,36 +5,22 @@ import { SegmentHeader } from "./segment-header";
 
 import type { Segment } from "~/stt/live-segment";
 
-const labelState = vi.hoisted(() => ({
-  names: {} as Record<string, string>,
-  participantIds: [] as string[],
-  selfId: undefined as string | undefined,
-}));
-
 vi.mock("./speaker-assign", () => ({
-  SpeakerRenameControl: ({ label }: { label: string }) => (
-    <button type="button">{label}</button>
+  SpeakerRenameControl: ({
+    label,
+    disabled,
+  }: {
+    label: string;
+    disabled: boolean;
+  }) => (
+    <button type="button" disabled={disabled}>
+      {label}
+    </button>
   ),
-}));
-
-vi.mock("~/stt/queries", () => ({
-  useTranscriptLabelContext: () => ({
-    getSelfHumanId: () => labelState.selfId,
-    getHumanName: (humanId: string) => labelState.names[humanId],
-    getParticipantHumanIds: () => labelState.participantIds,
-  }),
-  useTranscript: () => null,
-}));
-
-vi.mock("~/stt/contexts", () => ({
-  useListener: () => false,
 }));
 
 beforeEach(() => {
   cleanup();
-  labelState.names = {};
-  labelState.participantIds = [];
-  labelState.selfId = undefined;
 });
 
 describe("SegmentHeader", () => {
@@ -43,6 +29,10 @@ describe("SegmentHeader", () => {
       <SegmentHeader
         transcriptId="transcript-1"
         segment={createRemoteSegment(2)}
+        label="Speaker 3"
+        people={[]}
+        channelAssignmentState={emptyAssignmentState()}
+        recording={false}
       />,
     );
 
@@ -50,43 +40,58 @@ describe("SegmentHeader", () => {
     expect(screen.queryByText("00:12 - 00:18")).toBeNull();
   });
 
-  it("labels remote live segments as the unique other participant", () => {
-    labelState.selfId = "self";
-    labelState.participantIds = ["self", "remote"];
-    labelState.names = { self: "John", remote: "Artem" };
-
+  it("renders the label resolved by the transcript renderer", () => {
     render(
       <SegmentHeader
         transcriptId="transcript-1"
         segment={createRemoteSegment(0)}
+        label="Artem"
+        people={[]}
+        channelAssignmentState={emptyAssignmentState()}
+        recording={false}
       />,
     );
 
     expect(screen.getByRole("button", { name: "Artem" })).toBeTruthy();
   });
 
-  it("updates cached remote labels when session participants change", () => {
-    labelState.selfId = "self";
-    labelState.participantIds = ["self", "remote"];
-    labelState.names = { self: "John", remote: "Artem" };
+  it("updates labels and disables renaming while recording", () => {
     const segment = createRemoteSegment(0);
     const { rerender } = render(
-      <SegmentHeader transcriptId="transcript-1" segment={segment} />,
+      <SegmentHeader
+        transcriptId="transcript-1"
+        segment={segment}
+        label="Artem"
+        people={[]}
+        channelAssignmentState={emptyAssignmentState()}
+        recording={false}
+      />,
     );
 
     expect(screen.getByRole("button", { name: "Artem" })).toBeTruthy();
 
-    labelState.participantIds = ["self", "remote", "remote-2"];
-    labelState.names = {
-      self: "John",
-      remote: "Artem",
-      "remote-2": "Taylor",
-    };
-    rerender(<SegmentHeader transcriptId="transcript-1" segment={segment} />);
+    rerender(
+      <SegmentHeader
+        transcriptId="transcript-1"
+        segment={segment}
+        label="Speaker 1"
+        people={[]}
+        channelAssignmentState={emptyAssignmentState()}
+        recording
+      />,
+    );
 
-    expect(screen.getByRole("button", { name: "Speaker 1" })).toBeTruthy();
+    const button = screen.getByRole("button", { name: "Speaker 1" });
+    expect((button as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+function emptyAssignmentState() {
+  return {
+    anchorWordIdBySpeakerIndex: new Map<number, string>(),
+    channelHasAssignment: false,
+  };
+}
 
 function createRemoteSegment(speakerIndex: number): Segment {
   return {

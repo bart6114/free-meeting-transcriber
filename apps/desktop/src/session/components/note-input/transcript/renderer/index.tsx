@@ -21,21 +21,24 @@ import {
 
 import { useAudioPlayer } from "~/audio-player";
 import { useAudioTime } from "~/audio-player/provider";
+import { usePeople } from "~/people/queries";
 import type { Segment } from "~/stt/live-segment";
+import type { TranscriptRecord } from "~/stt/queries";
 
 const LIVE_TRANSCRIPT_PLACEHOLDER_ID = "__live-transcript__";
 
 export function TranscriptViewer({
-  transcriptIds,
+  transcripts,
   liveSegments,
   currentActive,
   scrollRef,
 }: {
-  transcriptIds: string[];
+  transcripts: readonly TranscriptRecord[];
   liveSegments: Segment[];
   currentActive: boolean;
   scrollRef: RefObject<HTMLDivElement | null>;
 }) {
+  const people = usePeople();
   const containerRef = useRef<HTMLDivElement>(null);
   const [scrollElement, setScrollElement] = useState<HTMLDivElement | null>(
     null,
@@ -91,14 +94,14 @@ export function TranscriptViewer({
   const shouldScrollLastTranscriptToEnd = currentActive && isNearBottom;
   useAutoScroll(
     containerRef,
-    [transcriptIds, liveSegments, shouldAutoScroll],
+    [transcripts, liveSegments, shouldAutoScroll],
     shouldAutoScroll,
   );
-  const visibleTranscriptIds =
-    transcriptIds.length > 0
-      ? transcriptIds
+  const visibleTranscripts: Array<TranscriptRecord | null> =
+    transcripts.length > 0
+      ? [...transcripts]
       : liveSegments.length > 0
-        ? [LIVE_TRANSCRIPT_PLACEHOLDER_ID]
+        ? [null]
         : [];
 
   const handleSelectionAction = (action: string, selectedText: string) => {
@@ -119,26 +122,33 @@ export function TranscriptViewer({
           "pb-[calc(4rem+env(safe-area-inset-bottom))]",
         ])}
       >
-        {visibleTranscriptIds.map((transcriptId, index) => (
-          <div key={transcriptId} className="flex flex-col gap-8">
-            <RenderTranscript
-              scrollElement={scrollElement}
-              isLastTranscript={index === visibleTranscriptIds.length - 1}
-              shouldScrollToEnd={shouldScrollLastTranscriptToEnd}
-              transcriptId={transcriptId}
-              liveSegments={
-                index === visibleTranscriptIds.length - 1 && currentActive
-                  ? liveSegments
-                  : []
-              }
-              currentMs={deferredCurrentMs}
-              seek={seek}
-              startPlayback={start}
-              audioExists={audioExists}
-            />
-            {index < visibleTranscriptIds.length - 1 && <TranscriptSeparator />}
-          </div>
-        ))}
+        {visibleTranscripts.map((transcript, index) => {
+          const transcriptId = transcript?.id ?? LIVE_TRANSCRIPT_PLACEHOLDER_ID;
+          return (
+            <div key={transcriptId} className="flex flex-col gap-8">
+              <RenderTranscript
+                scrollElement={scrollElement}
+                isLastTranscript={index === visibleTranscripts.length - 1}
+                shouldScrollToEnd={shouldScrollLastTranscriptToEnd}
+                transcriptId={transcriptId}
+                transcript={transcript}
+                transcripts={transcripts}
+                people={people}
+                recording={currentActive}
+                liveSegments={
+                  index === visibleTranscripts.length - 1 && currentActive
+                    ? liveSegments
+                    : []
+                }
+                currentMs={deferredCurrentMs}
+                seek={seek}
+                startPlayback={start}
+                audioExists={audioExists}
+              />
+              {index < visibleTranscripts.length - 1 && <TranscriptSeparator />}
+            </div>
+          );
+        })}
 
         <SelectionMenu
           containerRef={containerRef}

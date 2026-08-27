@@ -4,7 +4,6 @@ import {
   type ReactNode,
   type UIEventHandler,
   useCallback,
-  useDeferredValue,
   useEffect,
   useImperativeHandle,
   useRef,
@@ -25,7 +24,7 @@ import { MemoImageStrip } from "~/session/components/memo-image-strip";
 import { SessionAuthorBadge } from "~/session/components/session-author-badge";
 import { SessionDate } from "~/session/components/session-date";
 import {
-  SessionPeople,
+  SessionPeopleFromTranscripts,
   useSessionPeopleTitleTrailer,
 } from "~/session/components/session-people";
 import { SessionTags } from "~/session/components/session-tags";
@@ -36,6 +35,7 @@ import type { SessionMode } from "~/store/zustand/listener/general";
 import { type Tab, useTabs } from "~/store/zustand/tabs";
 import { type EditorView as TabEditorView } from "~/store/zustand/tabs/schema";
 import { useListener } from "~/stt/contexts";
+import { useSessionTranscripts } from "~/stt/queries";
 
 export interface NoteInputHandle {
   focus: () => void;
@@ -157,12 +157,8 @@ const NoteInputContent = forwardRef<
   ) => {
     const internalEditorRef = useRef<NoteEditorRef>(null);
     const sessionId = tab.id;
-    const deferredCurrentTab = useDeferredValue(currentTab);
-    const renderedCurrentTab = editorTabs.some((editorTab) =>
-      isSameEditorView(editorTab, deferredCurrentTab),
-    )
-      ? deferredCurrentTab
-      : currentTab;
+    const renderedCurrentTab = currentTab;
+    const transcripts = useSessionTranscripts(sessionId);
 
     const isMeetingInProgress =
       sessionMode === "active" ||
@@ -345,7 +341,7 @@ const NoteInputContent = forwardRef<
     );
 
     const peopleTrailer = useSessionPeopleTitleTrailer(
-      sessionId,
+      transcripts,
       <>
         <SessionAuthorBadge sessionId={sessionId} className="mt-1 mb-3" />
         <SessionTags sessionId={sessionId} className="mt-1 mb-3" />
@@ -429,12 +425,19 @@ const NoteInputContent = forwardRef<
                   <TitleInput tab={tab} />
                   {/* mt-2 = the editor title's 0.25rem margin-bottom plus the
                       trailer row's mt-1, so the title→pills gap matches. */}
-                  <SessionPeople sessionId={sessionId} className="mt-2" />
+                  <SessionPeopleFromTranscripts
+                    transcripts={transcripts}
+                    className="mt-2"
+                  />
                   <SessionAuthorBadge sessionId={sessionId} className="mt-2" />
                   <SessionTags sessionId={sessionId} className="mt-2" />
                 </div>
                 <div className="min-h-0 flex-1">
-                  <Transcript sessionId={sessionId} scrollRef={scrollRef} />
+                  <Transcript
+                    sessionId={sessionId}
+                    transcripts={transcripts}
+                    scrollRef={scrollRef}
+                  />
                 </div>
               </div>
             )}

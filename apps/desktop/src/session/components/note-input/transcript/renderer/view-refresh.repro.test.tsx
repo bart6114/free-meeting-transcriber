@@ -1,6 +1,5 @@
 // Integration repro for the speaker-assignment view-refresh bug: exercises the
-// real chain useIndexQuery -> useTranscript -> useTranscriptRenderData ->
-// useRenderedTranscriptData, mocking only the Tauri IPC boundary.
+// render request and segment cache after the parent transcript record changes.
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -9,31 +8,10 @@ import { describe, expect, it, vi } from "vitest";
 import { useRenderedTranscriptData } from "./data-hooks";
 
 const mocks = vi.hoisted(() => {
-  const listeners: Array<(event: { payload: unknown }) => void> = [];
   return {
-    listeners,
-    transcriptGet: vi.fn(),
     renderTranscriptSegments: vi.fn(),
   };
 });
-
-vi.mock("~/types/tauri.gen", () => ({
-  commands: {
-    transcriptGet: mocks.transcriptGet,
-  },
-  events: {
-    indexChanged: {
-      listen: (callback: (event: { payload: unknown }) => void) => {
-        mocks.listeners.push(callback);
-        return Promise.resolve(() => {});
-      },
-    },
-  },
-}));
-
-vi.mock("~/people/queries", () => ({
-  usePeople: () => [{ id: "alice", name: "Alice" }],
-}));
 
 vi.mock("@hypr/plugin-transcription", () => ({
   commands: {
@@ -56,12 +34,11 @@ function providerHint(wordId: string, speakerIndex: number) {
 
 const baseTranscript = {
   id: "t1",
-  user_id: "self",
-  session_id: "s1",
-  started_at: 0,
-  ended_at: null,
+  ownerUserId: "self",
+  sessionId: "s1",
+  startedAt: 0,
   words: [word("w1", 0), word("w2", 200), word("w3", 400), word("w4", 600)],
-  speaker_hints: [
+  speakerHints: [
     providerHint("w1", 0),
     providerHint("w2", 0),
     providerHint("w3", 1),
@@ -71,11 +48,6 @@ const baseTranscript = {
 
 describe("speaker assignment view refresh", () => {
   it("re-renders segments after an assignment lands in the index", async () => {
-    mocks.transcriptGet.mockResolvedValue({
-      status: "ok",
-      data: baseTranscript,
-    });
-
     // Fake renderer: one segment per (channel, speaker_index), echoing any
     // channel_speaker assignment into the segment key like the Rust one does.
     mocks.renderTranscriptSegments.mockImplementation(
@@ -139,9 +111,11 @@ describe("speaker assignment view refresh", () => {
       <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     );
 
-    const { result } = renderHook(() => useRenderedTranscriptData("t1"), {
-      wrapper,
-    });
+    const people = [{ id: "alice", name: "Alice" }];
+    const { result, rerender } = renderHook(
+      ({ transcript }) => useRenderedTranscriptData("t1", transcript, people),
+      { wrapper, initialProps: { transcript: baseTranscript } },
+    );
 
     await waitFor(() => {
       expect(result.current.segments).toHaveLength(2);
@@ -151,14 +125,12 @@ describe("speaker assignment view refresh", () => {
       null,
     ]);
 
-    // The assign command wrote label hints for both indexes and notified the
-    // index with the session id.
-    mocks.transcriptGet.mockResolvedValue({
-      status: "ok",
-      data: {
+    // The parent query delivered a new record containing both assignments.
+    rerender({
+      transcript: {
         ...baseTranscript,
-        speaker_hints: [
-          ...baseTranscript.speaker_hints,
+        speakerHints: [
+          ...baseTranscript.speakerHints,
           {
             id: "w1:speaker_label",
             word_id: "w1",
@@ -174,9 +146,6 @@ describe("speaker assignment view refresh", () => {
         ],
       },
     });
-    for (const listener of mocks.listeners) {
-      listener({ payload: { entity: "transcripts", ids: ["s1"] } });
-    }
 
     await waitFor(() => {
       expect(

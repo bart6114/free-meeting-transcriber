@@ -9,9 +9,19 @@ import {
 } from "@hypr/ui/components/ui/popover";
 import { cn } from "@hypr/utils";
 
-import { ensurePerson, type Person, usePeople } from "~/people/queries";
+import { ensurePerson, type Person } from "~/people/queries";
 import type { Segment } from "~/stt/live-segment";
-import { assignTranscriptSpeaker, useTranscript } from "~/stt/queries";
+import { assignTranscriptSpeaker, type TranscriptRecord } from "~/stt/queries";
+
+export type ChannelAssignmentState = {
+  anchorWordIdBySpeakerIndex: Map<number, string>;
+  channelHasAssignment: boolean;
+};
+
+export const EMPTY_CHANNEL_ASSIGNMENT_STATE: ChannelAssignmentState = {
+  anchorWordIdBySpeakerIndex: new Map(),
+  channelHasAssignment: false,
+};
 
 export function SpeakerRenameControl({
   segment,
@@ -21,6 +31,8 @@ export function SpeakerRenameControl({
   className,
   disabled,
   onAssigned,
+  people = [],
+  channelAssignmentState = EMPTY_CHANNEL_ASSIGNMENT_STATE,
 }: {
   segment: Segment;
   transcriptId: string;
@@ -29,6 +41,8 @@ export function SpeakerRenameControl({
   className?: string;
   disabled?: boolean;
   onAssigned?: (speakerLabel: string) => void;
+  people?: readonly Person[];
+  channelAssignmentState?: ChannelAssignmentState;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(label);
@@ -47,9 +61,8 @@ export function SpeakerRenameControl({
   const commitSettledRef = useRef(true);
   const labelRef = useRef(label);
   labelRef.current = label;
-  const people = usePeople();
   const { anchorWordIdBySpeakerIndex, channelHasAssignment } =
-    useChannelAssignmentState(transcriptId, segment);
+    channelAssignmentState;
   // A first assignment on a diarized channel most likely names the whole side
   // (one person per channel is the common case); once any assignment exists,
   // renames target only the clicked cluster.
@@ -377,66 +390,82 @@ export function getAssignmentAnchorWordId(
   return typeof word?.id === "string" ? word.id : undefined;
 }
 
-// Reads the stored transcript to learn, for the clicked segment's channel:
-// one anchor word per distinct diarized speaker index, and whether any
-// speaker_label assignment already exists on the channel.
-function useChannelAssignmentState(transcriptId: string, segment: Segment) {
-  const transcript = useTranscript(transcriptId);
-  const channel = segment.key.channel;
+export function buildChannelAssignmentStates(
+  transcript: TranscriptRecord | null,
+): Map<Segment["key"]["channel"], ChannelAssignmentState> {
+  const states = new Map<Segment["key"]["channel"], ChannelAssignmentState>([
+    ["DirectMic", createChannelAssignmentState()],
+    ["RemoteParty", createChannelAssignmentState()],
+    ["MixedCapture", createChannelAssignmentState()],
+  ]);
+  const channelByWordId = new Map<string, number>();
+  for (const word of transcript?.words ?? []) {
+    if (typeof word.id === "string" && word.id) {
+      channelByWordId.set(
+        word.id,
+        typeof word.channel === "number" ? word.channel : 0,
+      );
+    }
+  }
 
-  return useMemo(() => {
-    const channelNumber =
-      channel === "DirectMic" ? 0 : channel === "RemoteParty" ? 1 : 2;
-    const channelByWordId = new Map<string, number>();
-    for (const word of transcript?.words ?? []) {
-      if (typeof word.id === "string" && word.id) {
-        channelByWordId.set(
-          word.id,
-          typeof word.channel === "number" ? word.channel : 0,
-        );
-      }
+  const indexByWordId = new Map<string, number>();
+  for (const hint of transcript?.speakerHints ?? []) {
+    if (
+      hint.type !== "provider_speaker_index" ||
+      typeof hint.word_id !== "string"
+    ) {
+      continue;
     }
 
-    const hints = transcript?.speakerHints ?? [];
-    const indexByWordId = new Map<string, number>();
-    for (const hint of hints) {
-      if (
-        hint.type !== "provider_speaker_index" ||
-        typeof hint.word_id !== "string"
-      ) {
-        continue;
-      }
-
-      const value = parseProviderSpeakerHintValue(hint.value);
-      if (!value) {
-        continue;
-      }
-
-      indexByWordId.set(hint.word_id, value.speaker_index);
-      if (typeof value.channel === "number") {
-        channelByWordId.set(hint.word_id, value.channel);
-      }
+    const value = parseProviderSpeakerHintValue(hint.value);
+    if (!value) {
+      continue;
     }
 
-    const anchorWordIdBySpeakerIndex = new Map<number, string>();
-    for (const [wordId, speakerIndex] of indexByWordId) {
-      if (
-        channelByWordId.get(wordId) === channelNumber &&
-        !anchorWordIdBySpeakerIndex.has(speakerIndex)
-      ) {
-        anchorWordIdBySpeakerIndex.set(speakerIndex, wordId);
-      }
+    indexByWordId.set(hint.word_id, value.speaker_index);
+    if (typeof value.channel === "number") {
+      channelByWordId.set(hint.word_id, value.channel);
     }
+  }
 
-    const channelHasAssignment = hints.some(
-      (hint) =>
-        hint.type === "speaker_label" &&
-        typeof hint.word_id === "string" &&
-        channelByWordId.get(hint.word_id) === channelNumber,
-    );
+  for (const [wordId, speakerIndex] of indexByWordId) {
+    const channel = channelName(channelByWordId.get(wordId));
+    if (!channel) continue;
+    const state = states.get(channel);
+    if (state && !state.anchorWordIdBySpeakerIndex.has(speakerIndex)) {
+      state.anchorWordIdBySpeakerIndex.set(speakerIndex, wordId);
+    }
+  }
 
-    return { anchorWordIdBySpeakerIndex, channelHasAssignment };
-  }, [channel, transcript]);
+  for (const hint of transcript?.speakerHints ?? []) {
+    if (hint.type !== "speaker_label" || typeof hint.word_id !== "string") {
+      continue;
+    }
+    const channel = channelName(channelByWordId.get(hint.word_id));
+    if (!channel) continue;
+    const state = states.get(channel);
+    if (state) {
+      state.channelHasAssignment = true;
+    }
+  }
+
+  return states;
+}
+
+function createChannelAssignmentState(): ChannelAssignmentState {
+  return {
+    anchorWordIdBySpeakerIndex: new Map(),
+    channelHasAssignment: false,
+  };
+}
+
+function channelName(
+  channel: number | undefined,
+): Segment["key"]["channel"] | undefined {
+  if (channel === 0) return "DirectMic";
+  if (channel === 1) return "RemoteParty";
+  if (channel === 2) return "MixedCapture";
+  return undefined;
 }
 
 function parseProviderSpeakerHintValue(

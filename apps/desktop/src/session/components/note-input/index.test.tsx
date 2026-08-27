@@ -106,7 +106,7 @@ vi.mock("~/session/components/session-author-badge", () => ({
 }));
 
 vi.mock("~/session/components/session-people", () => ({
-  SessionPeople: () => <div data-testid="session-people" />,
+  SessionPeopleFromTranscripts: () => <div data-testid="session-people" />,
   useSessionPeopleTitleTrailer: () => ({
     element: document.createElement("div"),
     portal: null,
@@ -149,6 +149,10 @@ vi.mock("~/stt/contexts", () => ({
     selector({
       getSessionMode: () => hoisted.sessionMode,
     }),
+}));
+
+vi.mock("~/stt/queries", () => ({
+  useSessionTranscripts: () => [],
 }));
 
 vi.mock("react-hotkeys-hook", () => ({
@@ -297,6 +301,8 @@ describe("NoteInput tab selection", () => {
     );
 
     expect(screen.getByTestId("current-tab").textContent).toBe("transcript");
+    expect(screen.getByTestId("transcript")).not.toBeNull();
+    expect(screen.queryByTestId("raw-editor")).toBeNull();
   });
 
   it("shows an editable session title in the transcript view", () => {

@@ -46,7 +46,7 @@ describe("useRenderedTranscriptData", () => {
   });
 
   it("keeps rendered transcript data cached across short tab remounts", () => {
-    renderHook(() => useRenderedTranscriptData("transcript-1"));
+    renderHook(() => useRenderedTranscriptData("transcript-1", null, []));
 
     expect(mocks.useQuery).toHaveBeenCalledWith(
       expect.objectContaining({

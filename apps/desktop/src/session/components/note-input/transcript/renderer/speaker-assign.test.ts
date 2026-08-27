@@ -9,31 +9,24 @@ import { createElement } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
+  buildChannelAssignmentStates,
   getAssignmentAnchorWordId,
   SpeakerRenameControl,
 } from "./speaker-assign";
 
 import type { Segment } from "~/stt/live-segment";
+import type { TranscriptRecord } from "~/stt/queries";
 
-const {
-  assignTranscriptSpeakerMock,
-  ensurePersonMock,
-  usePeopleMock,
-  useTranscriptMock,
-} = vi.hoisted(() => ({
+const { assignTranscriptSpeakerMock, ensurePersonMock } = vi.hoisted(() => ({
   assignTranscriptSpeakerMock: vi.fn(),
   ensurePersonMock: vi.fn(),
-  usePeopleMock: vi.fn(),
-  useTranscriptMock: vi.fn(),
 }));
 
 vi.mock("~/stt/queries", () => ({
   assignTranscriptSpeaker: assignTranscriptSpeakerMock,
-  useTranscript: useTranscriptMock,
 }));
 
 vi.mock("~/people/queries", () => ({
-  usePeople: usePeopleMock,
   ensurePerson: ensurePersonMock,
 }));
 
@@ -48,8 +41,6 @@ beforeEach(() => {
       .replace(/[^a-z0-9]+/g, "_"),
     name: name.trim(),
   }));
-  usePeopleMock.mockReturnValue([]);
-  useTranscriptMock.mockReturnValue(null);
 });
 
 function remoteSegment(): Segment {
@@ -75,6 +66,84 @@ function remoteSegment(): Segment {
     ],
   } as Segment;
 }
+
+describe("buildChannelAssignmentStates", () => {
+  it("builds all channel state in one pass while preserving hint overrides", () => {
+    const transcript: TranscriptRecord = {
+      id: "transcript-1",
+      ownerUserId: "self",
+      sessionId: "session-1",
+      startedAt: 0,
+      words: [
+        { id: "word-1", text: "one", start_ms: 0, end_ms: 1, channel: 1 },
+        { id: "word-2", text: "two", start_ms: 1, end_ms: 2, channel: 1 },
+        { id: "word-3", text: "three", start_ms: 2, end_ms: 3, channel: 0 },
+      ],
+      speakerHints: [
+        {
+          word_id: "word-1",
+          type: "provider_speaker_index",
+          value: JSON.stringify({ channel: 2, speaker_index: 4 }),
+        },
+        {
+          word_id: "word-2",
+          type: "provider_speaker_index",
+          value: { channel: 1, speaker_index: 3 },
+        },
+        {
+          word_id: "word-3",
+          type: "provider_speaker_index",
+          value: "malformed",
+        },
+        { word_id: "word-2", type: "speaker_label", value: "alice" },
+        { word_id: "missing", type: "speaker_label", value: "ignored" },
+      ],
+    };
+
+    const states = buildChannelAssignmentStates(transcript);
+
+    expect([...states.get("MixedCapture")!.anchorWordIdBySpeakerIndex]).toEqual(
+      [[4, "word-1"]],
+    );
+    expect([...states.get("RemoteParty")!.anchorWordIdBySpeakerIndex]).toEqual([
+      [3, "word-2"],
+    ]);
+    expect(states.get("RemoteParty")!.channelHasAssignment).toBe(true);
+    expect(states.get("DirectMic")!.anchorWordIdBySpeakerIndex.size).toBe(0);
+    expect(states.get("DirectMic")!.channelHasAssignment).toBe(false);
+  });
+
+  it("keeps the first anchor for each speaker index on a channel", () => {
+    const transcript: TranscriptRecord = {
+      id: "transcript-1",
+      ownerUserId: "self",
+      sessionId: "session-1",
+      startedAt: 0,
+      words: [
+        { id: "word-1", text: "one", start_ms: 0, end_ms: 1, channel: 1 },
+        { id: "word-2", text: "two", start_ms: 1, end_ms: 2, channel: 1 },
+      ],
+      speakerHints: [
+        {
+          word_id: "word-1",
+          type: "provider_speaker_index",
+          value: { speaker_index: 2 },
+        },
+        {
+          word_id: "word-2",
+          type: "provider_speaker_index",
+          value: { speaker_index: 2 },
+        },
+      ],
+    };
+
+    expect(
+      buildChannelAssignmentStates(transcript)
+        .get("RemoteParty")
+        ?.anchorWordIdBySpeakerIndex.get(2),
+    ).toBe("word-1");
+  });
+});
 
 describe("SpeakerRenameControl", () => {
   it("renders the current label as a clickable pill", () => {
@@ -169,10 +238,10 @@ describe("SpeakerRenameControl", () => {
   });
 
   it("lists matching people and assigns the clicked person without ensure", async () => {
-    usePeopleMock.mockReturnValue([
+    const people = [
       { id: "bob_peters", name: "Bob Peters" },
       { id: "kim", name: "Kim" },
-    ]);
+    ];
     const onAssigned = vi.fn();
     render(
       createElement(SpeakerRenameControl, {
@@ -180,6 +249,7 @@ describe("SpeakerRenameControl", () => {
         transcriptId: "transcript-1",
         color: "red",
         label: "Speaker 2",
+        people,
         onAssigned,
       }),
     );
@@ -201,13 +271,14 @@ describe("SpeakerRenameControl", () => {
   });
 
   it("commits exactly once when a suggestion click races the blur save", async () => {
-    usePeopleMock.mockReturnValue([{ id: "bob_peters", name: "Bob Peters" }]);
+    const people = [{ id: "bob_peters", name: "Bob Peters" }];
     render(
       createElement(SpeakerRenameControl, {
         segment: remoteSegment(),
         transcriptId: "transcript-1",
         color: "red",
         label: "Speaker 2",
+        people,
       }),
     );
 
@@ -229,16 +300,17 @@ describe("SpeakerRenameControl", () => {
   });
 
   it("selects the highlighted suggestion with arrow keys and Enter", async () => {
-    usePeopleMock.mockReturnValue([
+    const people = [
       { id: "anna", name: "Anna" },
       { id: "bob_peters", name: "Bob Peters" },
-    ]);
+    ];
     render(
       createElement(SpeakerRenameControl, {
         segment: remoteSegment(),
         transcriptId: "transcript-1",
         color: "red",
         label: "Speaker 2",
+        people,
       }),
     );
 
@@ -326,7 +398,7 @@ describe("SpeakerRenameControl", () => {
   });
 
   it("shows the clicked person's name immediately while the assignment is pending", async () => {
-    usePeopleMock.mockReturnValue([{ id: "bob_peters", name: "Bob Peters" }]);
+    const people = [{ id: "bob_peters", name: "Bob Peters" }];
     assignTranscriptSpeakerMock.mockImplementation(() => new Promise(() => {}));
     render(
       createElement(SpeakerRenameControl, {
@@ -334,6 +406,7 @@ describe("SpeakerRenameControl", () => {
         transcriptId: "transcript-1",
         color: "red",
         label: "Speaker 2",
+        people,
       }),
     );
 
@@ -518,13 +591,15 @@ describe("SpeakerRenameControl on a diarized channel", () => {
   }
 
   it("assigns every speaker index on the channel when the checkbox is checked", async () => {
-    useTranscriptMock.mockReturnValue(diarizedTranscript(false));
+    const transcript = diarizedTranscript(false);
     render(
       createElement(SpeakerRenameControl, {
         segment: remoteSegment(),
         transcriptId: "transcript-1",
         color: "red",
         label: "Speaker 2",
+        channelAssignmentState:
+          buildChannelAssignmentStates(transcript).get("RemoteParty"),
       }),
     );
 
@@ -565,13 +640,15 @@ describe("SpeakerRenameControl on a diarized channel", () => {
   });
 
   it("defaults to assigning only the clicked cluster", async () => {
-    useTranscriptMock.mockReturnValue(diarizedTranscript(false));
+    const transcript = diarizedTranscript(false);
     render(
       createElement(SpeakerRenameControl, {
         segment: remoteSegment(),
         transcriptId: "transcript-1",
         color: "red",
         label: "Speaker 2",
+        channelAssignmentState:
+          buildChannelAssignmentStates(transcript).get("RemoteParty"),
       }),
     );
 
@@ -599,13 +676,15 @@ describe("SpeakerRenameControl on a diarized channel", () => {
   });
 
   it("skips the channel-wide offer once the channel has an assignment", async () => {
-    useTranscriptMock.mockReturnValue(diarizedTranscript(true));
+    const transcript = diarizedTranscript(true);
     render(
       createElement(SpeakerRenameControl, {
         segment: remoteSegment(),
         transcriptId: "transcript-1",
         color: "red",
         label: "Speaker 2",
+        channelAssignmentState:
+          buildChannelAssignmentStates(transcript).get("RemoteParty"),
       }),
     );
 

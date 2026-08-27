@@ -4,11 +4,15 @@ import { createPortal } from "react-dom";
 import { cn } from "@hypr/utils";
 
 import { usePeople } from "~/people/queries";
-import { useSessionTranscripts } from "~/stt/queries";
+import { type TranscriptRecord, useSessionTranscripts } from "~/stt/queries";
 import { collectAssignedHumanIdsFromTranscriptRows } from "~/stt/render-transcript";
 
 export function useSessionPeopleNames(sessionId: string): string[] {
   const transcripts = useSessionTranscripts(sessionId);
+  return usePeopleNames(transcripts);
+}
+
+function usePeopleNames(transcripts: readonly TranscriptRecord[]): string[] {
   const people = usePeople();
 
   return useMemo(() => {
@@ -30,7 +34,27 @@ export function SessionPeople({
   className?: string;
 }) {
   const names = useSessionPeopleNames(sessionId);
+  return <PeoplePills names={names} className={className} />;
+}
 
+export function SessionPeopleFromTranscripts({
+  transcripts,
+  className,
+}: {
+  transcripts: readonly TranscriptRecord[];
+  className?: string;
+}) {
+  const names = usePeopleNames(transcripts);
+  return <PeoplePills names={names} className={className} />;
+}
+
+function PeoplePills({
+  names,
+  className,
+}: {
+  names: readonly string[];
+  className?: string;
+}) {
   if (names.length === 0) {
     return null;
   }
@@ -55,7 +79,7 @@ export function SessionPeople({
 /// `portal` anywhere in the React tree. The editor supports a single trailer
 /// element, so extra below-title content rides along via `trailing`.
 export function useSessionPeopleTitleTrailer(
-  sessionId: string,
+  transcripts: readonly TranscriptRecord[],
   trailing?: React.ReactNode,
 ): {
   element: HTMLElement;
@@ -71,7 +95,10 @@ export function useSessionPeopleTitleTrailer(
     element,
     portal: createPortal(
       <>
-        <SessionPeople sessionId={sessionId} className="mt-1 mb-3" />
+        <SessionPeopleFromTranscripts
+          transcripts={transcripts}
+          className="mt-1 mb-3"
+        />
         {trailing}
       </>,
       element,

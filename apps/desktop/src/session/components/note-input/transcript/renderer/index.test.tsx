@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TranscriptViewer } from "./index";
 
+import type { TranscriptRecord } from "~/stt/queries";
+
 const mocks = vi.hoisted(() => ({
   scrollToBottom: vi.fn(),
   scrollToTop: vi.fn(),
@@ -34,6 +36,10 @@ vi.mock("~/audio-player", () => ({
 
 vi.mock("~/audio-player/provider", () => ({
   useAudioTime: () => ({ current: 0 }),
+}));
+
+vi.mock("~/people/queries", () => ({
+  usePeople: () => [],
 }));
 
 vi.mock("./selection-menu", () => ({
@@ -70,6 +76,15 @@ vi.mock("./viewport-hooks", () => ({
 }));
 
 describe("TranscriptViewer", () => {
+  const transcript = {
+    id: "transcript-1",
+    ownerUserId: "self",
+    sessionId: "session-1",
+    startedAt: 0,
+    words: [],
+    speakerHints: [],
+  } satisfies TranscriptRecord;
+
   beforeEach(() => {
     cleanup();
     mocks.scrollToBottom.mockReset();
@@ -85,7 +100,7 @@ describe("TranscriptViewer", () => {
   it("does not pin inactive transcript sessions to the bottom on open", () => {
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive={false}
         scrollRef={createRef()}
@@ -102,7 +117,7 @@ describe("TranscriptViewer", () => {
   it("keeps active transcript sessions pinned to the bottom", () => {
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive
         scrollRef={createRef()}
@@ -122,7 +137,7 @@ describe("TranscriptViewer", () => {
 
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive
         scrollRef={createRef()}
@@ -139,7 +154,7 @@ describe("TranscriptViewer", () => {
   it("renders live segments before a transcript row exists", () => {
     render(
       <TranscriptViewer
-        transcriptIds={[]}
+        transcripts={[]}
         liveSegments={[
           {
             end_ms: 1000,
@@ -165,7 +180,7 @@ describe("TranscriptViewer", () => {
   it("does not show scroll controls when the transcript cannot scroll", () => {
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive
         scrollRef={createRef()}
@@ -185,7 +200,7 @@ describe("TranscriptViewer", () => {
 
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive
         scrollRef={createRef()}
@@ -220,7 +235,7 @@ describe("TranscriptViewer", () => {
 
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive
         scrollRef={createRef()}
@@ -241,7 +256,7 @@ describe("TranscriptViewer", () => {
 
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive={false}
         scrollRef={createRef()}
@@ -267,7 +282,7 @@ describe("TranscriptViewer", () => {
 
     render(
       <TranscriptViewer
-        transcriptIds={["transcript-1"]}
+        transcripts={[transcript]}
         liveSegments={[]}
         currentActive={false}
         scrollRef={createRef()}

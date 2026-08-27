@@ -4,15 +4,19 @@ import { cn } from "@hypr/utils";
 
 import { SegmentHeader } from "./segment-header";
 import {
+  type ChannelAssignmentState,
+  EMPTY_CHANNEL_ASSIGNMENT_STATE,
+} from "./speaker-assign";
+import {
   getActiveLineIndex,
   groupWordsIntoLines,
   type HighlightSegment,
 } from "./utils";
 import { WordSpan } from "./word-span";
 
+import type { Person } from "~/people/queries";
 import { createHighlightSegments } from "~/session/components/note-input/search/matching";
 import type { Segment, SegmentWord } from "~/stt/live-segment";
-import { SpeakerLabelManager } from "~/stt/live-segment";
 
 export type TranscriptSearchRenderState = {
   query: string;
@@ -27,6 +31,8 @@ export const EMPTY_TRANSCRIPT_SEARCH: TranscriptSearchRenderState = {
   caseSensitive: false,
   wholeWord: false,
 };
+
+const EMPTY_PEOPLE: readonly Person[] = [];
 
 function getSegmentTimeRange(
   segment: Segment,
@@ -45,7 +51,10 @@ export const SegmentRenderer = memo(
     segment,
     offsetMs,
     transcriptId,
-    speakerLabelManager,
+    speakerLabel = "Speaker",
+    people = EMPTY_PEOPLE,
+    channelAssignmentState = EMPTY_CHANNEL_ASSIGNMENT_STATE,
+    recording = false,
     currentMs,
     seekAndPlay,
     audioExists,
@@ -54,7 +63,10 @@ export const SegmentRenderer = memo(
     segment: Segment;
     offsetMs: number;
     transcriptId: string;
-    speakerLabelManager?: SpeakerLabelManager;
+    speakerLabel?: string;
+    people?: readonly Person[];
+    channelAssignmentState?: ChannelAssignmentState;
+    recording?: boolean;
     currentMs: number;
     seekAndPlay: (word: SegmentWord) => void;
     audioExists: boolean;
@@ -90,7 +102,10 @@ export const SegmentRenderer = memo(
         <SegmentHeader
           segment={segment}
           transcriptId={transcriptId}
-          speakerLabelManager={speakerLabelManager}
+          label={speakerLabel}
+          people={people}
+          channelAssignmentState={channelAssignmentState}
+          recording={recording}
         />
 
         <div
@@ -147,7 +162,10 @@ export const SegmentRenderer = memo(
       prev.segment !== next.segment ||
       prev.offsetMs !== next.offsetMs ||
       prev.transcriptId !== next.transcriptId ||
-      prev.speakerLabelManager !== next.speakerLabelManager ||
+      prev.speakerLabel !== next.speakerLabel ||
+      prev.people !== next.people ||
+      prev.channelAssignmentState !== next.channelAssignmentState ||
+      prev.recording !== next.recording ||
       prev.audioExists !== next.audioExists ||
       prev.seekAndPlay !== next.seekAndPlay
     ) {

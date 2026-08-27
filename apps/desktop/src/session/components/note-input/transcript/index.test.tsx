@@ -1,27 +1,20 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import { createRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Transcript } from "./index";
 
-const {
-  useListenerMock,
-  useAudioPlayerMock,
-  useSessionTranscriptsMock,
-  regenerateTranscriptMock,
-} = vi.hoisted(() => ({
-  useListenerMock: vi.fn(),
-  useAudioPlayerMock: vi.fn(),
-  useSessionTranscriptsMock: vi.fn(),
-  regenerateTranscriptMock: vi.fn(),
-}));
+import type { TranscriptRecord } from "~/stt/queries";
+
+const { useListenerMock, useAudioPlayerMock, regenerateTranscriptMock } =
+  vi.hoisted(() => ({
+    useListenerMock: vi.fn(),
+    useAudioPlayerMock: vi.fn(),
+    regenerateTranscriptMock: vi.fn(),
+  }));
 
 vi.mock("./actions", () => ({
   useRegenerateTranscript: () => regenerateTranscriptMock,
-}));
-
-vi.mock("~/stt/queries", () => ({
-  useSessionTranscripts: useSessionTranscriptsMock,
 }));
 
 vi.mock("~/stt/contexts", () => ({
@@ -64,7 +57,6 @@ vi.mock("~/stt/pending-upload", () => ({
 
 describe("Transcript", () => {
   const sessionId = "session-1";
-  const transcriptId = "transcript-1";
 
   let listenerState: {
     getSessionMode: (id: string) => "inactive" | "active" | "finalizing";
@@ -78,14 +70,25 @@ describe("Transcript", () => {
     partialWordsByChannel: Record<number, unknown[]>;
     partialHintsByChannel: Record<number, unknown[]>;
   };
-  let transcripts: Array<{ id: string; words: unknown[] }>;
+  let transcripts: TranscriptRecord[];
+  let animationFrames: FrameRequestCallback[];
 
   afterEach(() => {
     cleanup();
+    vi.unstubAllGlobals();
   });
 
   beforeEach(() => {
-    transcripts = [{ id: transcriptId, words: [] }];
+    animationFrames = [];
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        animationFrames.push(callback);
+        return animationFrames.length;
+      }),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+    transcripts = [makeTranscript([])];
 
     listenerState = {
       getSessionMode: () => "active",
@@ -100,7 +103,6 @@ describe("Transcript", () => {
       partialHintsByChannel: {},
     };
 
-    useSessionTranscriptsMock.mockImplementation(() => transcripts);
     useListenerMock.mockImplementation((selector) => selector(listenerState));
     useAudioPlayerMock.mockReturnValue({ audioExists: false });
   });
@@ -108,18 +110,37 @@ describe("Transcript", () => {
   it("switches to transcript viewer after transcript words persist", () => {
     const scrollRef = createRef<HTMLDivElement>();
     const view = render(
-      <Transcript sessionId={sessionId} scrollRef={scrollRef} />,
+      <Transcript
+        sessionId={sessionId}
+        transcripts={transcripts}
+        scrollRef={scrollRef}
+      />,
     );
 
     expect(screen.getByTestId("listening-state").textContent).toBe("listening");
 
     transcripts = [
-      { id: transcriptId, words: [{ id: "word-1", text: " Hello" }] },
+      makeTranscript([
+        { id: "word-1", text: " Hello", start_ms: 0, end_ms: 1, channel: 0 },
+      ]),
     ];
 
-    view.rerender(<Transcript sessionId={sessionId} scrollRef={scrollRef} />);
+    view.rerender(
+      <Transcript
+        sessionId={sessionId}
+        transcripts={transcripts}
+        scrollRef={scrollRef}
+      />,
+    );
 
-    expect(screen.queryByTestId("transcript-viewer")).not.toBeNull();
+    expect(screen.getByText("Loading transcript...")).not.toBeNull();
+    expect(screen.queryByTestId("transcript-viewer")).toBeNull();
+
+    flushAnimationFrame(animationFrames);
+    expect(screen.queryByTestId("transcript-viewer")).toBeNull();
+
+    flushAnimationFrame(animationFrames);
+    expect(screen.getByTestId("transcript-viewer")).not.toBeNull();
   });
 
   it("keeps existing transcript content unobstructed while finalizing", () => {
@@ -128,12 +149,22 @@ describe("Transcript", () => {
       getSessionMode: () => "finalizing",
     };
     transcripts = [
-      { id: transcriptId, words: [{ id: "word-1", text: " Hello" }] },
+      makeTranscript([
+        { id: "word-1", text: " Hello", start_ms: 0, end_ms: 1, channel: 0 },
+      ]),
     ];
 
-    render(<Transcript sessionId={sessionId} scrollRef={createRef()} />);
+    render(
+      <Transcript
+        sessionId={sessionId}
+        transcripts={transcripts}
+        scrollRef={createRef()}
+      />,
+    );
 
     expect(screen.queryByText("Finalizing transcript...")).toBeNull();
+    flushAnimationFrame(animationFrames);
+    flushAnimationFrame(animationFrames);
     expect(screen.getByTestId("transcript-viewer")).not.toBeNull();
   });
 
@@ -147,9 +178,35 @@ describe("Transcript", () => {
       },
     };
 
-    render(<Transcript sessionId={sessionId} scrollRef={createRef()} />);
+    render(
+      <Transcript
+        sessionId={sessionId}
+        transcripts={transcripts}
+        scrollRef={createRef()}
+      />,
+    );
 
     expect(screen.queryByTestId("listening-state")).toBeNull();
     expect(screen.getByTestId("batch-state")).not.toBeNull();
   });
 });
+
+function makeTranscript(words: TranscriptRecord["words"]): TranscriptRecord {
+  return {
+    id: "transcript-1",
+    ownerUserId: "self",
+    sessionId: "session-1",
+    startedAt: 0,
+    words,
+    speakerHints: [],
+  };
+}
+
+function flushAnimationFrame(animationFrames: FrameRequestCallback[]) {
+  const callbacks = animationFrames.splice(0);
+  act(() => {
+    for (const callback of callbacks) {
+      callback(performance.now());
+    }
+  });
+}

@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 
-import { usePeople } from "~/people/queries";
+import { type Person, usePeople } from "~/people/queries";
 import { useIndexQuery } from "~/shared/index-query";
 import { DEFAULT_USER_ID } from "~/shared/utils";
 import { enqueueDatabaseWrite } from "~/shared/write-queue";
@@ -90,31 +90,30 @@ export function useTranscriptLabelContext(
 ): RenderLabelContext | undefined {
   const transcript = useTranscript(transcriptId);
   const people = usePeople();
-  const assignedSpeakerLabels = useMemo(
-    () =>
-      transcript
-        ? collectAssignedHumanIdsFromTranscriptRows([
-            { speaker_hints: transcript.speakerHints },
-          ])
-        : EMPTY_IDS,
-    [transcript],
+  return useMemo(
+    () => createTranscriptLabelContext(transcript, people),
+    [people, transcript],
   );
+}
 
-  return useMemo(() => {
-    if (!transcript) return undefined;
+export function createTranscriptLabelContext(
+  transcript: TranscriptRecord | null,
+  people: readonly Person[],
+): RenderLabelContext | undefined {
+  if (!transcript) return undefined;
 
-    // People registry first; a hint value with no registry entry (legacy hints,
-    // deleted people.json) still renders as itself rather than "Speaker N".
-    const nameById = new Map(people.map((person) => [person.id, person.name]));
-    const labels = new Set(assignedSpeakerLabels);
-    return {
-      getSelfHumanId: () => transcript.ownerUserId || undefined,
-      getHumanName: (speakerLabel) =>
-        nameById.get(speakerLabel) ??
-        (labels.has(speakerLabel) ? speakerLabel : undefined),
-      getParticipantHumanIds: () => EMPTY_IDS,
-    };
-  }, [assignedSpeakerLabels, people, transcript]);
+  const assignedSpeakerLabels = collectAssignedHumanIdsFromTranscriptRows([
+    { speaker_hints: transcript.speakerHints },
+  ]);
+  const nameById = new Map(people.map((person) => [person.id, person.name]));
+  const labels = new Set(assignedSpeakerLabels);
+  return {
+    getSelfHumanId: () => transcript.ownerUserId || undefined,
+    getHumanName: (speakerLabel) =>
+      nameById.get(speakerLabel) ??
+      (labels.has(speakerLabel) ? speakerLabel : undefined),
+    getParticipantHumanIds: () => EMPTY_IDS,
+  };
 }
 
 // `source`/`provider`/`model`/`language` are accepted for caller compatibility but not yet
