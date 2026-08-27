@@ -39,7 +39,7 @@ export default defineConfig({
       sidebar: [
         {
           label: "Getting started",
-          items: [{ label: "Loofah", link: "/" }, "quickstart"],
+          items: [{ label: "Loofah", link: "/" }, "background", "quickstart"],
         },
         {
           label: "Using Loofah",
@@ -48,6 +48,7 @@ export default defineConfig({
             "automatic-capture",
             "import-recordings",
             "notes",
+            "syncing",
             "customize-summaries",
             "languages",
           ],

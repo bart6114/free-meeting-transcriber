@@ -1,9 +1,11 @@
 ---
 title: "Loofah"
-description: "A local-first knowledge vault for notes, meetings, transcripts, and agent-created research."
+description: "A free, local-first Mac app for notes, meeting transcription, and agent-assisted research."
 ---
 
 import { CardGrid, LinkCard } from "@astrojs/starlight/components";
+
+Loofah is a free, local-first Mac app for notes and meeting transcription. It records your microphone and system audio without sending a bot into the call, transcribes on your Mac, and saves your notes as ordinary Markdown files on your local filesystem wherever possible.
 
 <div class="download-cta">
   <a href="https://github.com/bart6114/loofah/releases/download/updater/Loofah_latest_aarch64.dmg">
@@ -19,9 +21,9 @@ import { CardGrid, LinkCard } from "@astrojs/starlight/components";
 
 Loofah started as the meeting notetaker I wanted: local transcription, ordinary files, and no service getting between me and my notes. It has since become the place where I keep more of my working knowledge.
 
-A session can start as a recorded meeting, an imported recording or transcript, a note you write, or Markdown an agent creates from another tool. That means research, project context, decisions, and useful material from elsewhere can live beside meeting notes in one searchable vault. Agents can create sessions, add to notes, tag them, and attach source files through the CLI without editing vault internals.
+A session can begin with a recording, an imported transcript, something you type, or Markdown an agent saves through the CLI. Keep meeting notes, standalone notes, project context, and research in one searchable vault. Agents can add to notes, tag them, and attach source files without poking around in the vault internals.
 
-The app still records your microphone and system audio without sending a bot into the call. It’s [free as in beer 🍺](https://en.wikipedia.org/wiki/Gratis_versus_libre): there is no account, subscription, cloud backend, or telemetry. Your vault stays on your Mac and remains useful outside the app. If you want generated summaries, connect your own hosted provider or a local model.
+There is no account, subscription, cloud backend, or telemetry. Your vault stays on your Mac and remains useful without Loofah. Generated summaries are optional; connect your own hosted provider or run a local model.
 
 <CardGrid>
   <LinkCard title="Try your first meeting" href="/quickstart" description="Install the app, download a transcription model, and make a short test recording." />
@@ -40,6 +42,8 @@ The app still records your microphone and system audio without sending a bot int
 </CardGrid>
 
 [See all common questions →](/help)
+
+[Why I built Loofah →](/background)
 
 ## A meeting workflow
 

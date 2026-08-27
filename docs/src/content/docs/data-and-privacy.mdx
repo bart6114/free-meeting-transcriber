@@ -9,6 +9,8 @@ Loofah has no account or cloud backend. Its vault on your Mac is the source of t
 
 The app stores notes, transcripts, attachments, settings, retained recordings, people, and templates as files in the vault. The default vault is in the app's data directory. You can change its location under **Settings → App → Storage**.
 
+To use the same vault on another Mac, move it into a supported local sync folder. See [Sync your notes](/syncing).
+
 You can inspect and edit the vault with other tools. The app watches for external changes and refreshes its in-memory index. If the app is about to overwrite a version it did not write, it first moves that version into the vault's `.trash/` folder.
 
 Downloaded transcription and speaker-detection models are also local, but they are managed separately from meeting files.

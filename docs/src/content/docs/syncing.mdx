@@ -1,0 +1,62 @@
+---
+title: "Sync your notes"
+description: "Keep your Loofah vault in sync across Macs with the file-sync tool you already use."
+---
+
+import { Steps } from "@astrojs/starlight/components";
+
+Loofah does not have its own sync service. It does not need one: the vault is a folder on your Mac, so you can put it inside Google Drive, iCloud Drive, Dropbox, OneDrive, Syncthing, or another tool that keeps local folders in sync.
+
+Sync the entire vault, not only the Markdown files. Loofah also needs the metadata and transcript files stored beside each note. Recordings and attachments will sync too, so check the available space on every Mac.
+
+## Set up sync
+
+<Steps>
+
+1. **Install your sync tool**
+
+   Let it create its usual folder in Finder, then create an empty `Loofah` folder inside it.
+
+2. **Keep the folder on your Mac**
+
+   Do not leave the vault as online-only placeholders. Loofah scans the folder when it starts and needs the files to be available locally.
+
+3. **Move the vault**
+
+   In Loofah, open **Settings → App → Storage**, click **Change**, and select the empty `Loofah` folder. Choose **Move my vault here**. The app restarts after the move.
+
+4. **Wait for the first upload**
+
+   Check your sync tool before opening the vault on another Mac. Large recordings can take a while.
+
+5. **Connect another Mac**
+
+   Install the same sync tool, download the complete vault, then use **Settings → App → Storage → Change** in Loofah and select the existing vault. Choose **Switch** when prompted.
+
+</Steps>
+
+## Choose a sync tool
+
+| Tool | Good fit | What to configure |
+| --- | --- | --- |
+| [Google Drive](https://support.google.com/drive/answer/13401938) | You already use Google Drive or want the same vault on several computers. | Prefer **Mirror files**. If you use streaming, mark the entire vault available offline. |
+| [iCloud Drive](https://support.apple.com/guide/mac-help/mchl1a02d711/mac) | All your computers are Macs signed in to the same Apple Account. | Put the vault in iCloud Drive, then Control-click it in Finder and choose **Keep Downloaded**. |
+| [Dropbox](https://help.dropbox.com/sync/access-files-offline) | You already use Dropbox across your devices. | Put the vault in Dropbox, then right-click it and choose **Make available offline**. |
+| [OneDrive](https://support.microsoft.com/en-us/onedrive/save-disk-space-with-onedrive-files-on-demand-for-mac) | Your files already live in a Microsoft account or work tenant. | Put the vault in OneDrive, then choose **Always keep on this device** in Finder. |
+| [Syncthing](https://docs.syncthing.net/users/syncing.html) | You want direct device-to-device sync without storing the vault with a cloud provider. | Share the vault as a **Send & Receive** folder. Both devices need to come online to exchange changes. Consider enabling [file versioning](https://docs.syncthing.net/users/versioning.html). |
+
+Google Drive, iCloud Drive, Dropbox, and OneDrive can all leave files in the cloud to save disk space. Pinning the vault locally avoids a half-downloaded vault and lets Loofah keep working offline.
+
+Syncthing is different: it sends files directly between your devices. It also creates conflict copies when the same file changes on two devices, instead of trying to merge the contents.
+
+## Avoid sync conflicts
+
+- Finish syncing before you move to another Mac.
+- Do not edit the same note on two Macs at the same time. Sync tools move whole files and cannot merge two versions of `notes.md` or `_meta.json` for Loofah.
+- Do not point two sync tools at the same vault. They can race each other and create duplicate or conflicting files.
+- Keep Loofah updated on every Mac that opens the vault.
+- Keep a separate backup. Sync usually propagates accidental changes and deletions to every device.
+
+If Loofah pauses on **Opening your vault**, check whether your sync tool is still downloading files. It will continue automatically when the vault becomes available.
+
+Retained audio is usually the largest part of a synced vault. You can shorten or disable audio retention under **Settings → App → Meetings** without removing the notes or transcript. See [Audio retention](/data-and-privacy#audio-retention).
