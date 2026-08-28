@@ -95,7 +95,7 @@ jobs:
       - uses: ./.github/actions/rust_install
         with:
           platform: macos
-          cache-targets: "false"
+          cache-targets: "true"
           sccache: "true"
       - run: echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
       - name: Prepare notarization key

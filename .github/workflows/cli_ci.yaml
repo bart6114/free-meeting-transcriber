@@ -61,7 +61,7 @@ jobs:
           node-version: "22"
       - uses: ./.github/actions/rust_install
         with:
-          cache-targets: "false"
+          cache-targets: "true"
           sccache: "true"
       - run: |
           cargo test --locked -p agent-access

@@ -87,7 +87,7 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/rust_install
         with:
-          cache-targets: "false"
+          cache-targets: "true"
           sccache: "true"
       - run: cargo build --locked --release -p loof-cli
       - env:
