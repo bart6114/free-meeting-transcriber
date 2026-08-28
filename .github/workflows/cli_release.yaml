@@ -26,6 +26,8 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      matrix: ${{ steps.tag.outputs.matrix }}
+      build_required: ${{ steps.tag.outputs.build_required }}
     steps:
       - id: tag
         env:
@@ -39,23 +41,42 @@ jobs:
           else
             tag="$(gh release view --json tagName --jq .tagName)"
           fi
-          echo "Building $tag"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          version="${tag#v}"
+          assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          matrix='[]'
+          build_required=false
+          for target in \
+            "aarch64-apple-darwin|macos-latest" \
+            "x86_64-apple-darwin|macos-15-intel" \
+            "x86_64-unknown-linux-gnu|ubuntu-22.04" \
+            "aarch64-unknown-linux-gnu|ubuntu-22.04-arm"; do
+            triple="${target%%|*}"
+            runner="${target#*|}"
+            asset="loof-${version}-${triple}.tar.gz"
+            if grep -Fxq "$asset" <<< "$assets" && grep -Fxq "$asset.sha256" <<< "$assets"; then
+              echo "Reusing existing $asset"
+              continue
+            fi
+            echo "Missing CLI asset: $asset"
+            build_required=true
+            matrix="$(jq -cn \
+              --argjson include "$matrix" \
+              --arg triple "$triple" \
+              --arg runner "$runner" \
+              '$include + [{triple: $triple, runner: $runner}]')"
+          done
+          {
+            echo "tag=$tag"
+            echo "build_required=$build_required"
+            echo "matrix=$(jq -cn --argjson include "$matrix" '{include: $include}')"
+          } >> "$GITHUB_OUTPUT"
 
   build:
     needs: resolve
+    if: needs.resolve.outputs.build_required == 'true'
     strategy:
       fail-fast: false
-      matrix:
-        include:
-          - triple: aarch64-apple-darwin
-            runner: macos-latest
-          - triple: x86_64-apple-darwin
-            runner: macos-15-intel
-          - triple: x86_64-unknown-linux-gnu
-            runner: ubuntu-22.04
-          - triple: aarch64-unknown-linux-gnu
-            runner: ubuntu-22.04-arm
+      matrix: ${{ fromJSON(needs.resolve.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
     permissions:
       contents: write
@@ -65,6 +86,9 @@ jobs:
           ref: ${{ needs.resolve.outputs.tag }}
           persist-credentials: false
       - uses: ./.github/actions/rust_install
+        with:
+          cache-targets: "false"
+          sccache: "true"
       - run: cargo build --locked --release -p loof-cli
       - env:
           TAG: ${{ needs.resolve.outputs.tag }}
@@ -102,6 +126,12 @@ jobs:
 
   publish-latest:
     needs: [resolve, build]
+    if: >-
+      ${{
+        always() &&
+        needs.resolve.result == 'success' &&
+        (needs.build.result == 'success' || needs.build.result == 'skipped')
+      }}
     runs-on: ubuntu-latest
     permissions:
       contents: write

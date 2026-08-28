@@ -21,6 +21,7 @@ jobs:
       contents: read
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
+      build_macos: ${{ steps.tag.outputs.build_macos }}
     steps:
       - name: Resolve release tag
         id: tag
@@ -36,7 +37,28 @@ jobs:
             tag="$(gh release view --json tagName --jq .tagName)"
           fi
           echo "Building $tag"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          version="${tag#v}"
+          assets="$(gh release view "$tag" --json assets --jq '.assets[].name')"
+          build_macos=false
+          for asset in \
+            "Loofah_${version}_aarch64.dmg" \
+            "Loofah_${version}_aarch64.dmg.sha256" \
+            "Loofah_${version}_aarch64.app.tar.gz" \
+            "Loofah_${version}_aarch64.app.tar.gz.sig" \
+            "FreeMeetingTranscriber_${version}_aarch64.dmg" \
+            "FreeMeetingTranscriber_${version}_aarch64.dmg.sha256" \
+            "FreeMeetingTranscriber_${version}_aarch64.app.tar.gz" \
+            "FreeMeetingTranscriber_${version}_aarch64.app.tar.gz.sig" \
+            latest.json; do
+            if ! grep -Fxq "$asset" <<< "$assets"; then
+              echo "Missing desktop asset: $asset"
+              build_macos=true
+            fi
+          done
+          {
+            echo "tag=$tag"
+            echo "build_macos=$build_macos"
+          } >> "$GITHUB_OUTPUT"
 
   changelog:
     needs: resolve
@@ -51,6 +73,7 @@ jobs:
 
   macos:
     needs: [resolve, changelog]
+    if: needs.resolve.outputs.build_macos == 'true'
     runs-on: macos-latest
     permissions:
       contents: write
@@ -72,6 +95,8 @@ jobs:
       - uses: ./.github/actions/rust_install
         with:
           platform: macos
+          cache-targets: "false"
+          sccache: "true"
       - run: echo "SDKROOT=$(xcrun --sdk macosx --show-sdk-path)" >> $GITHUB_ENV
       - name: Prepare notarization key
         env:
@@ -90,6 +115,21 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+      - name: Prepare Apple Silicon CLI release asset
+        env:
+          TAG: ${{ needs.resolve.outputs.tag }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          cli_dir="$RUNNER_TEMP/cli-release"
+          bin="target/release/loof"
+          asset="loof-${version}-aarch64-apple-darwin.tar.gz"
+          mkdir -p "$cli_dir"
+          strip -x "$bin"
+          codesign -s - -f "$bin"
+          "$bin" --version | grep -F "$version"
+          COPYFILE_DISABLE=1 tar -czf "$cli_dir/$asset" -C target/release loof
+          (cd "$cli_dir" && shasum -a 256 "$asset" > "$asset.sha256")
       - name: Checksum
         env:
           TAG: ${{ needs.resolve.outputs.tag }}
@@ -132,19 +172,33 @@ jobs:
           set -euo pipefail
           bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
           macos_dir="apps/desktop/src-tauri/target/release/bundle/macos"
+          cli_dir="$RUNNER_TEMP/cli-release"
           gh release upload "$TAG" \
             "$bundle_dir"/*.dmg "$bundle_dir"/*.sha256 \
             "$macos_dir"/*.app.tar.gz "$macos_dir"/*.app.tar.gz.sig "$macos_dir/latest.json" \
+            "$cli_dir"/*.tar.gz "$cli_dir"/*.sha256 \
             --clobber
+  publish-desktop-updater:
+    needs: [resolve, changelog, macos]
+    if: >-
+      ${{
+        always() &&
+        needs.resolve.result == 'success' &&
+        needs.changelog.result == 'success' &&
+        (needs.macos.result == 'success' || needs.macos.result == 'skipped')
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
       - name: Publish updater feed
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.resolve.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
-          macos_dir="apps/desktop/src-tauri/target/release/bundle/macos"
-          bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
           if ! gh release view updater >/dev/null 2>&1; then
             gh release create updater --prerelease \
               --title "Updater feed" \
@@ -156,16 +210,27 @@ jobs:
             echo "Feed already at $feed_version; not downgrading to $version"
             exit 0
           fi
-          cp "$bundle_dir/Loofah_${version}_aarch64.dmg" "$bundle_dir/Loofah_latest_aarch64.dmg"
-          cp "$bundle_dir/Loofah_${version}_aarch64.dmg" "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg"
+          release_dir="$RUNNER_TEMP/release"
+          mkdir -p "$release_dir"
+          gh release download "$TAG" --pattern latest.json --dir "$release_dir"
+          gh release download "$TAG" --pattern "Loofah_${version}_aarch64.dmg" --dir "$release_dir"
+          cp "$release_dir/Loofah_${version}_aarch64.dmg" "$release_dir/Loofah_latest_aarch64.dmg"
+          cp "$release_dir/Loofah_${version}_aarch64.dmg" "$release_dir/FreeMeetingTranscriber_latest_aarch64.dmg"
           gh release upload updater \
-            "$macos_dir/latest.json" \
-            "$bundle_dir/Loofah_latest_aarch64.dmg" \
-            "$bundle_dir/FreeMeetingTranscriber_latest_aarch64.dmg" \
+            "$release_dir/latest.json" \
+            "$release_dir/Loofah_latest_aarch64.dmg" \
+            "$release_dir/FreeMeetingTranscriber_latest_aarch64.dmg" \
             --clobber
 
   cli:
-    needs: [resolve, macos]
+    needs: [resolve, changelog, macos]
+    if: >-
+      ${{
+        always() &&
+        needs.resolve.result == 'success' &&
+        needs.changelog.result == 'success' &&
+        (needs.macos.result == 'success' || needs.macos.result == 'skipped')
+      }}
     permissions:
       contents: write
     uses: ./.github/workflows/cli_release.yaml

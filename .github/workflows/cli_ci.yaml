@@ -60,6 +60,9 @@ jobs:
         with:
           node-version: "22"
       - uses: ./.github/actions/rust_install
+        with:
+          cache-targets: "false"
+          sccache: "true"
       - run: |
           cargo test --locked -p agent-access
           cargo test --locked -p loof-cli
