@@ -1,21 +1,45 @@
 ---
 title: "Languages"
-description: "Set the language for summaries and the languages spoken in meetings."
+description: "Configure the languages spoken in meetings and check which transcription models support them."
 ---
 
-Loofah keeps summary language and spoken languages as separate settings.
+Tell Loofah which languages you expect **before you record or import audio**. The configured languages determine whether Loofah can transcribe the audio and whether the transcript can appear live.
+
+## Configure your languages
+
+1. Open **Settings → App → Language & Region**.
+2. Set **Main language** to the language you usually speak. It is always included for transcription and is also used for summaries, chats, and generated titles.
+3. Under **Additional spoken languages**, add every other language that may be spoken in your meetings.
+4. Open **Settings → Transcription** and choose a downloaded model that supports the complete selection.
+
+If you do not add a spoken language, Loofah does not use it when checking model support or deciding between live and after-recording transcription. Changing these settings does not re-transcribe existing meetings.
+
+## Supported transcription languages
+
+The bundled models have different language coverage:
+
+| Model | Transcript timing | Supported languages |
+| --- | --- | --- |
+| **Soniqo Parakeet Streaming** | Live | English |
+| **Soniqo Parakeet Batch** | After recording | Bulgarian, Croatian, Czech, Danish, Dutch, English, Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese, Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish, and Ukrainian |
+
+The streaming model is based on NVIDIA's [Parakeet Realtime EOU 120M](https://huggingface.co/nvidia/parakeet_realtime_eou_120m-v1), which supports only English. The batch model is based on [Parakeet TDT 0.6B v3](https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3), which supports the 25 European languages listed above.
+
+If **Soniqo Parakeet Streaming** is selected and every configured language is English, the transcript appears during the meeting. If you configure one or more of the other supported languages, Loofah automatically records first and uses the batch model after you stop.
+
+**Language & Region** includes more languages than the current transcription models support because the main language also controls generated responses. If any configured spoken language is outside the list above, the current bundled models cannot reliably transcribe the complete language selection. **Settings → Transcription** shows a warning when the selected model does not support it.
 
 ## Set the main language
 
 Open **Settings → App → Language & Region** and choose **Main language**.
 
-This language is used for generated summaries and titles. It is also included in the list passed to transcription. Changing it does not translate an existing transcript. Regenerate a summary if you want an older meeting summarized in the new language.
+This language is used for generated summaries, chats, and titles. Changing it does not translate an existing transcript. Regenerate a summary if you want an older meeting summarized in the new language.
 
 ## Add spoken languages
 
 Use **Additional spoken languages** when people may switch languages during a meeting. The app passes the full selection to the transcription model.
 
-Language support depends on the downloaded model. The live streaming model supports English. When your selected languages are not supported live, the app records first and transcribes after you stop. The model picker warns you when a model cannot handle the selected languages.
+Only add languages that are actually likely to be spoken. Every selected language must be supported by the model, and adding a non-English language changes the streaming model from live to after-recording transcription.
 
 ## Names and specialist terms
 

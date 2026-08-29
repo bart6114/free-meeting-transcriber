@@ -35,7 +35,7 @@ Hits are ordered by meeting recency and carry `meeting_id`, `kind`, and a `snipp
 
 ### `get_meeting`
 
-Accepts required string `meeting_id`. Returns meeting metadata (including its normalized `tags`, its `author` — `null` for the vault owner's own notes — and its `skill`, `null` unless a skill produced the note), the canonical note, summaries, and action items. Transcript words are intentionally separate.
+Accepts required string `meeting_id`. Returns meeting metadata, including its normalized `tags`, its `author` (`null` for the vault owner's own notes), and its `skill` (`null` unless a skill produced the note), plus the canonical note, summaries, and action items. Transcript words are intentionally separate.
 
 ### `get_meeting_transcript`
 

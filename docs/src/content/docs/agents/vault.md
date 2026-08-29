@@ -3,7 +3,7 @@ title: "Vault guide for agents"
 description: "The standing AGENTS.md every vault carries: what Loofah is, how the vault is structured, and how to work with it."
 ---
 
-Loofah is a local-first knowledge and note-taking app that began with meeting transcription. Its **vault** can hold recorded meetings, standalone notes, imported material, and work an agent creates from other authorized sources. The vault is a plain folder of Markdown and JSON files and the only source of truth — there is no database or cloud copy. A copy of this page is kept at the vault root as `AGENTS.md`. Full, current documentation lives at https://loofah.io/ — machine-readable indexes at https://loofah.io/llms.txt and https://loofah.io/llms-full.txt.
+Loofah is a local-first knowledge and note-taking app that began with meeting transcription. Its **vault** can hold recorded meetings, standalone notes, imported material, and work an agent creates from other authorized sources. The vault is a plain folder of Markdown and JSON files and the only source of truth. There is no database or cloud copy. A copy of this page is kept at the vault root as `AGENTS.md`. Full, current documentation lives at https://loofah.io/, with machine-readable indexes at https://loofah.io/llms.txt and https://loofah.io/llms-full.txt.
 
 ## Vault structure
 
@@ -50,7 +50,7 @@ Rules for agents:
   flag when no skill was involved.
 - Write your own notes as **new** sessions with `--author` set. When asked to
   edit an existing note, never add, change, or remove its `author` or `skill`
-  — editing the owner's note does not make it yours.
+  Editing the owner's note does not make it yours.
 
 ## Reading session data
 

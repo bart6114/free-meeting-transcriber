@@ -22,25 +22,25 @@ Earlier releases installed `loofah` and `fmtr`. Re-run the installer to add `loo
 Supported platforms:
 
 - macOS on Apple Silicon and Intel
-- Linux on x86_64 and arm64 (glibc 2.35 or newer — Ubuntu 22.04, Debian 12, RHEL 9, or later; musl-based distributions such as Alpine are not supported)
+- Linux on x86_64 and arm64 (glibc 2.35 or newer, such as Ubuntu 22.04, Debian 12, RHEL 9, or later; musl-based distributions such as Alpine are not supported)
 
 :::note
 On-device transcription (`loof transcribe`) runs only on Apple Silicon Macs. Every other command and the MCP server work on all supported platforms.
 :::
 
-If the install directory is not on `PATH`, the script adds it to your shell profile (`~/.zshrc`, `~/.bashrc`/`~/.bash_profile`, or fish's `config.fish`) — restart your shell afterwards. If your shell still cannot find `loof`, add it manually:
+If the install directory is not on `PATH`, the script adds it to your shell profile (`~/.zshrc`, `~/.bashrc`/`~/.bash_profile`, or fish's `config.fish`). Restart your shell afterwards. If your shell still cannot find `loof`, add it manually:
 
 ```bash
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
 :::caution
-Tarballs downloaded from the GitHub releases page with a browser are not notarized, so macOS Gatekeeper blocks them. Use the install script instead — it is the supported download path.
+Tarballs downloaded from the GitHub releases page with a browser are not notarized, so macOS Gatekeeper blocks them. Use the install script instead because it is the supported download path.
 :::
 
 ## Install it from the desktop app
 
-On macOS, open **Settings → Agents** and click **Install**. The app installs the bundled command at `~/.local/bin/loof` — the same path the install script uses, so whichever ran last wins. Both ship the same binary.
+On macOS, open **Settings → Agents** and click **Install**. The app installs the bundled command at `~/.local/bin/loof`, the same path the install script uses, so whichever ran last wins. Both ship the same binary.
 
 :::note
 The app uses `loof-dev` and `loof-staging` for development and staging builds, so those channels do not overwrite the stable command.

@@ -1,0 +1,54 @@
+---
+import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
+import squircleIcon from "../../../apps/desktop/src-tauri/icons/src/loofah-squircle-1024.png";
+---
+
+<StarlightPage
+  frontmatter={{
+    title: "Loofah",
+    description:
+      "A free, local-first Mac app for notes, meeting transcription, and agent-assisted research.",
+    template: "splash",
+    editUrl: false,
+    lastUpdated: false,
+    prev: false,
+    next: false,
+  }}
+>
+  <div class="home-hero not-content">
+    <div class="home-hero__content">
+      <div class="home-hero__brand">
+        <img src={squircleIcon.src} alt="" width="42" height="42" />
+        <span>Loofah</span>
+      </div>
+      <p class="home-hero__eyebrow">A local first knowledge vault</p>
+      <h1>
+        Turn conversations into <span>knowledge you own.</span>
+      </h1>
+      <p class="home-hero__lead">
+        Record meetings, write notes, and let agents help without surrendering
+        your files.
+      </p>
+      <div class="home-hero__actions">
+        <a
+          class="home-hero__download"
+          href="https://github.com/bart6114/loofah/releases/download/updater/Loofah_latest_aarch64.dmg"
+        >
+          <span>
+            <strong>Download for macOS</strong>
+            <small>Apple Silicon · Signed &amp; notarized</small>
+          </span>
+          <span aria-hidden="true">↓</span>
+        </a>
+        <a class="home-hero__secondary" href="/loofah">
+          Read more <span aria-hidden="true">→</span>
+        </a>
+      </div>
+      <ul class="home-hero__details" aria-label="Loofah highlights">
+        <li>On-device transcription</li>
+        <li>Plain Markdown vault</li>
+        <li>No account or telemetry</li>
+      </ul>
+    </div>
+  </div>
+</StarlightPage>

@@ -16,11 +16,13 @@ Transcription is on-device only. Download a model from **Settings → Transcript
 
 A model marked **Live** can show text during a meeting. The streaming model supports English. If your language selection is not supported live, the app falls back to transcription after the recording. Models marked **After recording** always wait until you stop.
 
+Configure the languages spoken in your meetings under **Settings → App → Language & Region**. See [Languages](/languages) for setup instructions and the supported language list for each bundled model.
+
 A downloaded on-device Soniqo model also powers transcription from the terminal: `loof transcribe MEETING_ID` uses it without opening the app. The CLI never downloads models itself, so complete the download here first. See the [CLI reference](/reference/cli).
 
 ## Speaker detection
 
-Recordings that are transcribed after the fact — imported files and models marked **After recording** — also get automatic speaker detection: the transcript separates who said what, and you can name each speaker by clicking their label. Live transcription does not separate speakers.
+Recordings that are transcribed after the fact, including imported files and models marked **After recording**, also get automatic speaker detection: the transcript separates who said what, and you can name each speaker by clicking their label. Live transcription does not separate speakers.
 
 Speaker detection runs on your Mac and is included with on-device transcription. Its small model downloads automatically the first time it is needed; the **Speaker detection** row in **Settings → Transcription** shows its status and offers a **Retry** if the download failed.
 

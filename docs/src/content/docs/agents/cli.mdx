@@ -56,12 +56,12 @@ loof --json transcribe SESSION_ID
 
 `sessions note --set` replaces the note body and `--append` extends it; both also accept `-` for stdin. `sessions attach` stores a source artifact beside the note. `import` creates a session from an audio file, and `--transcribe` chains on-device transcription. `transcribe` replaces the session's existing transcript, so run it only when the user wants that.
 
-**Always pass `--author <your-agent-name>` when creating a session** (`sessions new`, `import`) — it marks the note as not written by the vault owner, and the app surfaces that. Use one stable name, such as `claude-code`. When a reusable skill produced the result, also pass `--skill <skill-name>`. Write your own notes as new sessions; when editing an existing note, never change its authorship.
+**Always pass `--author <your-agent-name>` when creating a session** (`sessions new`, `import`). It marks the note as not written by the vault owner, and the app surfaces that. Use one stable name, such as `claude-code`. When a reusable skill produced the result, also pass `--skill <skill-name>`. Write your own notes as new sessions; when editing an existing note, never change its authorship.
 
 Only store content when the user asks. Respect the permissions and privacy boundary of the source tool, and do not send vault content elsewhere merely to re-import it.
 
 :::note
-On-device transcription requires macOS on Apple Silicon and the on-device Soniqo model configured in the desktop app. The CLI never downloads models — open the desktop app once to download it.
+On-device transcription requires macOS on Apple Silicon and the on-device Soniqo model configured in the desktop app. The CLI never downloads models, so open the desktop app once to download it.
 :::
 
 ## Export only when asked

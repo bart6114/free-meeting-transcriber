@@ -18,12 +18,12 @@ export default defineConfig({
       logo: {
         src: "../apps/desktop/src-tauri/icons/src/loofah-mark-1024.png",
       },
-      favicon: "/favicon.ico",
+      favicon: "/favicon.png",
       customCss: ["./src/styles/custom.css"],
       plugins: [
         starlightLinksValidator(),
         starlightLlmsTxt({
-          promote: ["index*", "agents/**", "reference/**", "installation"],
+          promote: ["loofah", "agents/**", "reference/**", "installation"],
         }),
       ],
       social: [
@@ -39,7 +39,7 @@ export default defineConfig({
       sidebar: [
         {
           label: "Getting started",
-          items: [{ label: "Loofah", link: "/" }, "background", "quickstart"],
+          items: ["loofah", "background", "quickstart"],
         },
         {
           label: "Using Loofah",
