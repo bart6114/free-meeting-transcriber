@@ -1,7 +1,7 @@
 import type { EditorView } from "prosemirror-view";
 import { forwardRef } from "react";
 
-import type { NoteEditorRef } from "@hypr/editor/note";
+import type { FileHandlerConfig, NoteEditorRef } from "@hypr/editor/note";
 
 import { ConfigError } from "./config-error";
 import { EnhancedEditor } from "./editor";
@@ -21,6 +21,7 @@ export const Enhanced = forwardRef<
     sessionId: string;
     sessionTitle: string;
     enhancedNoteId: string;
+    fileHandlerConfig?: FileHandlerConfig;
     onNavigateToTitle?: (pixelWidth?: number) => void;
     onViewReady?: (view: EditorView) => void;
     onViewDisposed?: (view: EditorView) => void;
@@ -32,6 +33,7 @@ export const Enhanced = forwardRef<
       sessionId,
       sessionTitle,
       enhancedNoteId,
+      fileHandlerConfig,
       onNavigateToTitle,
       onViewReady,
       onViewDisposed,
@@ -97,6 +99,7 @@ export const Enhanced = forwardRef<
         sessionId={sessionId}
         sessionTitle={sessionTitle}
         enhancedNoteId={enhancedNoteId}
+        fileHandlerConfig={fileHandlerConfig}
         content={enhancedNote.content}
         onNavigateToTitle={onNavigateToTitle}
         onViewReady={onViewReady}

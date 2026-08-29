@@ -14,6 +14,8 @@ import type { NoteEditorRef } from "@hypr/editor/note";
 import { cn } from "@hypr/utils";
 
 import { Enhanced } from "./enhanced";
+import { FileDropTarget } from "./file-drop-target";
+import { useNoteFileHandlerConfig } from "./file-handler";
 import { Header, useEditorTabs } from "./header";
 import { RawEditor } from "./raw";
 import { SearchBar } from "./search/bar";
@@ -158,7 +160,17 @@ const NoteInputContent = forwardRef<
     const internalEditorRef = useRef<NoteEditorRef>(null);
     const sessionId = tab.id;
     const renderedCurrentTab = currentTab;
+    const renderedCurrentTabKey =
+      renderedCurrentTab.type === "enhanced"
+        ? `enhanced:${renderedCurrentTab.id}`
+        : renderedCurrentTab.type;
     const transcripts = useSessionTranscripts(sessionId);
+    const {
+      fileDragKind,
+      fileDropTargetProps,
+      fileHandlerConfig,
+      resetFileDrag,
+    } = useNoteFileHandlerConfig(sessionId, internalEditorRef);
 
     const isMeetingInProgress =
       sessionMode === "active" ||
@@ -266,6 +278,10 @@ const NoteInputContent = forwardRef<
     const isEditableTab =
       renderedCurrentTab.type === "enhanced" ||
       renderedCurrentTab.type === "raw";
+
+    useEffect(() => {
+      resetFileDrag();
+    }, [renderedCurrentTabKey, resetFileDrag]);
 
     useEffect(() => {
       search?.close();
@@ -377,7 +393,11 @@ const NoteInputContent = forwardRef<
 
         {topAudioPlayer && <div className="px-3 pt-1.5">{topAudioPlayer}</div>}
 
-        <div className="relative flex-1 overflow-hidden">
+        <div
+          {...(isEditableTab ? fileDropTargetProps : {})}
+          className="relative flex-1 overflow-hidden"
+        >
+          <FileDropTarget kind={isEditableTab ? fileDragKind : null} />
           <div
             ref={scrollRef}
             onMouseDown={handleContainerMouseDown}
@@ -402,6 +422,7 @@ const NoteInputContent = forwardRef<
                 sessionId={sessionId}
                 sessionTitle={sessionTitle}
                 enhancedNoteId={renderedCurrentTab.id}
+                fileHandlerConfig={fileHandlerConfig}
                 onNavigateToTitle={onNavigateToTitle}
                 titleTrailerElement={peopleTrailer.element}
               />
@@ -412,6 +433,7 @@ const NoteInputContent = forwardRef<
                 sessionId={sessionId}
                 rawMd={rawMd}
                 sessionTitle={sessionTitle}
+                fileHandlerConfig={fileHandlerConfig}
                 onNavigateToTitle={onNavigateToTitle}
                 titleTrailerElement={peopleTrailer.element}
               />

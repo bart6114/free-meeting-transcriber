@@ -3,6 +3,7 @@ import { forwardRef, useCallback, useMemo, useRef } from "react";
 
 import { json2md, parseJsonContent } from "@hypr/editor/markdown";
 import {
+  type FileHandlerConfig,
   NoteEditor,
   type JSONContent,
   type NoteEditorRef,
@@ -11,9 +12,6 @@ import {
 import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 import { cn } from "@hypr/utils";
-
-import { AudioDropTarget } from "./audio-drop-target";
-import { useNoteFileHandlerConfig } from "./file-handler";
 
 import { AppLinkView } from "~/editor-bridge/app-link-view";
 import { useMentionConfig } from "~/editor-bridge/mention-config";
@@ -42,6 +40,7 @@ export const RawEditor = forwardRef<
     onNavigateToTitle?: (pixelWidth?: number) => void;
     syncTasks?: boolean;
     showFormatToolbar?: boolean;
+    fileHandlerConfig?: FileHandlerConfig;
     onViewReady?: (view: EditorView) => void;
     onViewDisposed?: (view: EditorView) => void;
     titleTrailerElement?: HTMLElement;
@@ -56,6 +55,7 @@ export const RawEditor = forwardRef<
       onNavigateToTitle,
       syncTasks = true,
       showFormatToolbar = true,
+      fileHandlerConfig,
       onViewReady,
       onViewDisposed,
       titleTrailerElement,
@@ -64,8 +64,6 @@ export const RawEditor = forwardRef<
   ) => {
     const updateSession = useUpdateSession(sessionId);
     const resolveAttachment = useAttachmentResolver(sessionId);
-    const { audioDropTargetProps, fileHandlerConfig, isAudioDragActive } =
-      useNoteFileHandlerConfig(sessionId);
     const initialContent = useMemo<JSONContent>(
       () => ensureFirstLineTitle(parseJsonContent(rawMd), sessionTitle),
       [rawMd, sessionTitle],
@@ -131,33 +129,28 @@ export const RawEditor = forwardRef<
 
     const mentionConfig = useMentionConfig();
     return (
-      <AudioDropTarget
-        targetProps={audioDropTargetProps}
-        isActive={isAudioDragActive}
-      >
-        <NoteEditor
-          ref={ref}
-          className={cn(["session-note-editor", className])}
-          key={`session-${sessionId}-raw`}
-          initialContent={initialContent}
-          resolveAttachment={resolveAttachment}
-          handleChange={handleChange}
-          placeholderComponent={documentTitlePlaceholder}
-          mentionConfig={mentionConfig}
-          sessionMentionDropConfig={sessionMentionDropConfig}
-          onNavigateToTitle={onNavigateToTitle}
-          onLinkOpen={openEditorLink}
-          fileHandlerConfig={fileHandlerConfig}
-          taskSource={
-            syncTasks ? { type: "session_raw_note", id: sessionId } : undefined
-          }
-          extraNodeViews={extraNodeViews}
-          showFormatToolbar={showFormatToolbar}
-          onViewReady={onViewReady}
-          onViewDisposed={onViewDisposed}
-          titleTrailerElement={titleTrailerElement}
-        />
-      </AudioDropTarget>
+      <NoteEditor
+        ref={ref}
+        className={cn(["session-note-editor", className])}
+        key={`session-${sessionId}-raw`}
+        initialContent={initialContent}
+        resolveAttachment={resolveAttachment}
+        handleChange={handleChange}
+        placeholderComponent={documentTitlePlaceholder}
+        mentionConfig={mentionConfig}
+        sessionMentionDropConfig={sessionMentionDropConfig}
+        onNavigateToTitle={onNavigateToTitle}
+        onLinkOpen={openEditorLink}
+        fileHandlerConfig={fileHandlerConfig}
+        taskSource={
+          syncTasks ? { type: "session_raw_note", id: sessionId } : undefined
+        }
+        extraNodeViews={extraNodeViews}
+        showFormatToolbar={showFormatToolbar}
+        onViewReady={onViewReady}
+        onViewDisposed={onViewDisposed}
+        titleTrailerElement={titleTrailerElement}
+      />
     );
   },
 );

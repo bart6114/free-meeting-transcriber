@@ -14,6 +14,7 @@ const hoisted = vi.hoisted(() => ({
   flushPendingChanges: vi.fn(),
   onBeforeTabChange: vi.fn(),
   rawEditorProps: [] as Record<string, unknown>[],
+  resetFileDrag: vi.fn(),
   sessionMode: "inactive",
   updateSessionTabState: vi.fn(),
 }));
@@ -64,6 +65,15 @@ vi.mock("./header", () => ({
     </div>
   ),
   useEditorTabs: () => hoisted.editorTabs,
+}));
+
+vi.mock("./file-handler", () => ({
+  useNoteFileHandlerConfig: () => ({
+    fileDragKind: null,
+    fileDropTargetProps: {},
+    fileHandlerConfig: {},
+    resetFileDrag: hoisted.resetFileDrag,
+  }),
 }));
 
 vi.mock("./raw", async () => {
@@ -230,6 +240,7 @@ describe("NoteInput tab selection", () => {
     hoisted.flushPendingChanges.mockClear();
     hoisted.onBeforeTabChange.mockClear();
     hoisted.rawEditorProps = [];
+    hoisted.resetFileDrag.mockClear();
     hoisted.sessionMode = "inactive";
     hoisted.updateSessionTabState.mockClear();
   });

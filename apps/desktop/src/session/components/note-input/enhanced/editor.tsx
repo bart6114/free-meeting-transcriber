@@ -3,14 +3,12 @@ import { forwardRef, memo, useCallback, useMemo } from "react";
 
 import { parseJsonContent } from "@hypr/editor/markdown";
 import {
+  type FileHandlerConfig,
   NoteEditor,
   type JSONContent,
   type NoteEditorRef,
   normalizePortableAttachmentUrls,
 } from "@hypr/editor/note";
-
-import { AudioDropTarget } from "../audio-drop-target";
-import { useNoteFileHandlerConfig } from "../file-handler";
 
 import { AppLinkView } from "~/editor-bridge/app-link-view";
 import { useMentionConfig } from "~/editor-bridge/mention-config";
@@ -36,6 +34,7 @@ const EnhancedEditorInner = forwardRef<
     enhancedNoteId: string;
     content: string;
     contentOverride?: JSONContent;
+    fileHandlerConfig?: FileHandlerConfig;
     onNavigateToTitle?: (pixelWidth?: number) => void;
     onViewReady?: (view: EditorView) => void;
     onViewDisposed?: (view: EditorView) => void;
@@ -49,6 +48,7 @@ const EnhancedEditorInner = forwardRef<
       enhancedNoteId,
       content,
       contentOverride,
+      fileHandlerConfig,
       onNavigateToTitle,
       onViewReady,
       onViewDisposed,
@@ -56,8 +56,6 @@ const EnhancedEditorInner = forwardRef<
     },
     ref,
   ) => {
-    const { audioDropTargetProps, fileHandlerConfig, isAudioDragActive } =
-      useNoteFileHandlerConfig(sessionId);
     const resolveAttachment = useAttachmentResolver(sessionId);
     const updateContent = useUpdateEnhancedNoteContent(
       enhancedNoteId,
@@ -97,38 +95,32 @@ const EnhancedEditorInner = forwardRef<
     const mentionConfig = useMentionConfig();
 
     return (
-      <AudioDropTarget
-        className="h-full"
-        targetProps={audioDropTargetProps}
-        isActive={isAudioDragActive}
-      >
-        <div className="relative h-full">
-          <NoteEditor
-            ref={ref}
-            className="session-note-editor enhanced-summary-editor"
-            key={editorKey}
-            initialContent={initialContent}
-            resolveAttachment={resolveAttachment}
-            handleChange={persistChanges ? handleChange : undefined}
-            placeholderComponent={documentTitlePlaceholder}
-            mentionConfig={mentionConfig}
-            sessionMentionDropConfig={sessionMentionDropConfig}
-            onNavigateToTitle={onNavigateToTitle}
-            onLinkOpen={openEditorLink}
-            fileHandlerConfig={fileHandlerConfig}
-            taskSource={
-              persistChanges
-                ? { type: "enhanced_note", id: enhancedNoteId }
-                : undefined
-            }
-            extraNodeViews={extraNodeViews}
-            onViewReady={onViewReady}
-            onViewDisposed={onViewDisposed}
-            syncContentWhenFocused={!persistChanges}
-            titleTrailerElement={titleTrailerElement}
-          />
-        </div>
-      </AudioDropTarget>
+      <div className="relative h-full">
+        <NoteEditor
+          ref={ref}
+          className="session-note-editor enhanced-summary-editor"
+          key={editorKey}
+          initialContent={initialContent}
+          resolveAttachment={resolveAttachment}
+          handleChange={persistChanges ? handleChange : undefined}
+          placeholderComponent={documentTitlePlaceholder}
+          mentionConfig={mentionConfig}
+          sessionMentionDropConfig={sessionMentionDropConfig}
+          onNavigateToTitle={onNavigateToTitle}
+          onLinkOpen={openEditorLink}
+          fileHandlerConfig={fileHandlerConfig}
+          taskSource={
+            persistChanges
+              ? { type: "enhanced_note", id: enhancedNoteId }
+              : undefined
+          }
+          extraNodeViews={extraNodeViews}
+          onViewReady={onViewReady}
+          onViewDisposed={onViewDisposed}
+          syncContentWhenFocused={!persistChanges}
+          titleTrailerElement={titleTrailerElement}
+        />
+      </div>
     );
   },
 );

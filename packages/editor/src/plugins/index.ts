@@ -21,7 +21,11 @@ export {
   parseYouTubeUrl,
   resolveYouTubeClipUrl,
 } from "./clip-paste";
-export { type FileHandlerConfig, fileHandlerPlugin } from "./file-handler";
+export {
+  type FileHandlerConfig,
+  fileHandlerPlugin,
+  handleFileDrop,
+} from "./file-handler";
 export { findHashtags, hashtagPlugin, hashtagPluginKey } from "./hashtag";
 export {
   ensureImageTrailingParagraphs,

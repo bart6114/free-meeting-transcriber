@@ -58,6 +58,7 @@ import {
   docChangeListenerPlugin,
   ensureImageTrailingParagraphs,
   fileHandlerPlugin,
+  handleFileDrop,
   getSearchState,
   hashtagPlugin,
   imageTrailingParagraphPlugin,
@@ -104,6 +105,7 @@ import {
 } from "./trailing-empty-line-click";
 
 export type { MentionConfig, FileHandlerConfig, PlaceholderFunction };
+export { handleFileDrop };
 export {
   normalizePortableAttachmentUrls,
   parsePortableAttachmentSrc,
