@@ -1,13 +1,17 @@
 ---
 import StarlightPage from "@astrojs/starlight/components/StarlightPage.astro";
 import squircleIcon from "../../../apps/desktop/src-tauri/icons/src/loofah-squircle-1024.png";
+
+const githubUrl = "https://github.com/bart6114/loofah";
+const downloadUrl =
+  "https://github.com/bart6114/loofah/releases/download/updater/Loofah_latest_aarch64.dmg";
 ---
 
 <StarlightPage
   frontmatter={{
-    title: "Loofah",
+    title: "Free & open-source meeting notes",
     description:
-      "A free, local-first Mac app for notes, meeting transcription, and agent-assisted research.",
+      "A free and open-source Mac app for local meeting transcription and notes. MIT licensed, with no account or subscription.",
     template: "splash",
     editUrl: false,
     lastUpdated: false,
@@ -15,40 +19,75 @@ import squircleIcon from "../../../apps/desktop/src-tauri/icons/src/loofah-squir
     next: false,
   }}
 >
-  <div class="home-hero not-content">
-    <div class="home-hero__content">
-      <div class="home-hero__brand">
-        <img src={squircleIcon.src} alt="" width="42" height="42" />
-        <span>Loofah</span>
-      </div>
-      <p class="home-hero__eyebrow">A local first knowledge vault</p>
-      <h1>
-        Turn conversations into <span>knowledge you own.</span>
-      </h1>
-      <p class="home-hero__lead">
-        Record meetings, write notes, and let agents help without surrendering
-        your files.
-      </p>
-      <div class="home-hero__actions">
-        <a
-          class="home-hero__download"
-          href="https://github.com/bart6114/loofah/releases/download/updater/Loofah_latest_aarch64.dmg"
-        >
-          <span>
-            <strong>Download for macOS</strong>
-            <small>Apple Silicon · Signed &amp; notarized</small>
-          </span>
-          <span aria-hidden="true">↓</span>
+  <div class="home-page not-content">
+    <main class="home-hero">
+      <div class="home-hero__copy">
+        <a class="home-hero__brand" href={githubUrl}>
+          <img src={squircleIcon.src} alt="" width="40" height="40" />
+          <span>Loofah</span>
+          <span class="home-hero__license">MIT</span>
         </a>
-        <a class="home-hero__secondary" href="/loofah">
-          Read more <span aria-hidden="true">→</span>
+
+        <p class="home-hero__eyebrow">
+          <span>Free and open source</span>
+          <span aria-hidden="true">·</span>
+          <span>Built in public</span>
+        </p>
+        <h1>Meeting notes that are <span>actually yours.</span></h1>
+        <p class="home-hero__lead">
+          Record and transcribe meetings on your Mac. Loofah keeps everything
+          in ordinary files you control—with no account, subscription, or
+          telemetry.
+        </p>
+
+        <div class="home-hero__actions">
+          <a class="home-hero__download" href={downloadUrl}>
+            <span>
+              <strong>Download free for macOS</strong>
+              <small>Apple Silicon · Signed &amp; notarized</small>
+            </span>
+            <span aria-hidden="true">↓</span>
+          </a>
+          <a class="home-hero__start" href="/quickstart">
+            <span>
+              <strong>Get started</strong>
+              <small>Install and record your first meeting</small>
+            </span>
+            <span aria-hidden="true">→</span>
+          </a>
+        </div>
+
+        <a class="home-hero__source" href={githubUrl}>
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              fill="currentColor"
+              d="M12 .7a11.5 11.5 0 0 0-3.64 22.4c.58.1.79-.25.79-.56v-2.23c-3.22.7-3.9-1.37-3.9-1.37-.52-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.78 2.72 1.27 3.38.97.1-.75.4-1.27.74-1.56-2.57-.3-5.27-1.29-5.27-5.69 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.16 1.18A11 11 0 0 1 12 6.1a11 11 0 0 1 2.88.39c2.19-1.49 3.15-1.18 3.15-1.18.64 1.59.24 2.76.12 3.05.74.81 1.18 1.83 1.18 3.09 0 4.42-2.71 5.39-5.29 5.68.42.36.79 1.06.79 2.14v3.27c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .7Z"
+            ></path>
+          </svg>
+          View source on GitHub <span aria-hidden="true">↗</span>
         </a>
+
+        <ul class="home-hero__proof" aria-label="Loofah promises">
+          <li><strong>$0</strong><span>Free forever</span></li>
+          <li><strong>MIT</strong><span>Permissive license</span></li>
+          <li><strong>Local</strong><span>On-device transcription</span></li>
+          <li><strong>Yours</strong><span>Plain Markdown files</span></li>
+        </ul>
       </div>
-      <ul class="home-hero__details" aria-label="Loofah highlights">
-        <li>On-device transcription</li>
-        <li>Plain Markdown vault</li>
-        <li>No account or telemetry</li>
-      </ul>
-    </div>
+
+      <figure class="home-hero__product">
+        <div class="home-hero__product-bar">
+          <span>Loofah on macOS</span>
+          <span>no cloud required</span>
+        </div>
+        <img
+          src="/screenshots/loofah-primary.png"
+          alt="Loofah showing a meeting brief, notes, and sessions stored in a local vault"
+        />
+        <figcaption>
+          Your recordings, transcripts, and notes stay on your Mac.
+        </figcaption>
+      </figure>
+    </main>
   </div>
 </StarlightPage>
