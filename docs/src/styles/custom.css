@@ -160,7 +160,7 @@ body:has(.home-page) main footer {
 
 .home-hero {
   display: grid;
-  min-height: calc(100svh - var(--sl-nav-height));
+  min-height: 100svh;
   align-items: center;
   grid-template-columns: minmax(0, 0.92fr) minmax(25rem, 1.08fr);
   gap: clamp(2.5rem, 6vw, 7rem);
