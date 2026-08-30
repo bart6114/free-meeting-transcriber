@@ -132,6 +132,10 @@ body:has(.home-page) .page > .header {
   display: none;
 }
 
+body:has(.home-page) {
+  background: #f6f4ec;
+}
+
 body:has(.home-page) .main-frame {
   padding-top: 0;
 }
@@ -421,6 +425,10 @@ body:has(.home-page) main footer {
 
 :root[data-theme="dark"] .home-page {
   color: #eef6f0;
+  background: #15251d;
+}
+
+:root[data-theme="dark"] body:has(.home-page) {
   background: #15251d;
 }
 
