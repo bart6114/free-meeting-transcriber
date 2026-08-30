@@ -22,20 +22,26 @@ msgstr "(default)"
 msgid "{0} AI summaries"
 msgstr "{0} AI summaries"
 
+#. placeholder {0}: formatCount( series.reduce((total, year) => total + year.sessions, 0), )
+#. placeholder {1}: series.length
+#: src/main/about-dialog.tsx
+msgid "{0} notes across {1} years"
+msgstr "{0} notes across {1} years"
+
 #. placeholder {0}: issue.user?.login
 #: src/task/resource-view.tsx
 msgid "{0} opened on"
 msgstr "{0} opened on"
 
-#. placeholder {0}: formatCount(stats.tags)
-#: src/main/about-dialog.tsx
-msgid "{0} tags"
-msgstr "{0} tags"
-
 #. placeholder {0}: formatCount(stats.tasks_done)
 #: src/main/about-dialog.tsx
 msgid "{0} tasks completed"
 msgstr "{0} tasks completed"
+
+#. placeholder {0}: formatCount(stats.transcript_words)
+#: src/main/about-dialog.tsx
+msgid "{0} words transcribed"
+msgstr "{0} words transcribed"
 
 #. placeholder {0}: formatLanguageList(unsupportedLanguages)
 #: src/settings/ai/stt/select.tsx
@@ -657,10 +663,6 @@ msgstr "In {minutes}m {seconds}s"
 msgid "In {totalSeconds}s"
 msgstr "In {totalSeconds}s"
 
-#: src/main/about-dialog.tsx
-msgid "In meetings"
-msgstr "In meetings"
-
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Include"
 msgstr "Include"
@@ -796,6 +798,10 @@ msgstr "Meeting"
 msgid "Meeting notes"
 msgstr "Meeting notes"
 
+#: src/main/about-dialog.tsx
+msgid "Meeting recordings"
+msgstr "Meeting recordings"
+
 #: src/settings/general/app-settings.tsx
 msgid "Meetings"
 msgstr "Meetings"
@@ -930,8 +936,16 @@ msgid "Note breadcrumb"
 msgstr "Note breadcrumb"
 
 #: src/main/about-dialog.tsx
+msgid "notes"
+msgstr "notes"
+
+#: src/main/about-dialog.tsx
 msgid "Notes"
 msgstr "Notes"
+
+#: src/main/about-dialog.tsx
+msgid "Notes over time"
+msgstr "Notes over time"
 
 #: src/settings/general/index.tsx
 #: src/sidebar/settings.tsx
@@ -992,6 +1006,11 @@ msgstr "Override the timezone used for the sidebar timeline"
 #: src/templates/auto-form.tsx
 msgid "Participants"
 msgstr "Participants"
+
+#. placeholder {0}: peak.year
+#: src/main/about-dialog.tsx
+msgid "Peak: {0}"
+msgstr "Peak: {0}"
 
 #: src/settings/todo/permission.tsx
 msgid "permission panel."
@@ -1406,6 +1425,10 @@ msgstr "System audio enabled"
 msgid "Tag name"
 msgstr "Tag name"
 
+#: src/main/about-dialog.tsx
+msgid "Tags"
+msgstr "Tags"
+
 #: src/templates/details.tsx
 #: src/templates/template-form.tsx
 msgid "Template actions"
@@ -1553,10 +1576,6 @@ msgstr "What's new in {version}?"
 #: src/onboarding/index.tsx
 msgid "Where your notes and recordings are stored"
 msgstr "Where your notes and recordings are stored"
-
-#: src/main/about-dialog.tsx
-msgid "Words transcribed"
-msgstr "Words transcribed"
 
 #: src/sidebar/timeline/item.tsx
 msgid "Written by {author}"

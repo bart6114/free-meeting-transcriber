@@ -177,7 +177,11 @@ function VaultSection({
     stats.tasks_done > 0 && (
       <Trans key="tasks">{formatCount(stats.tasks_done)} tasks completed</Trans>
     ),
-    stats.tags > 0 && <Trans key="tags">{formatCount(stats.tags)} tags</Trans>,
+    stats.transcript_words > 0 && (
+      <Trans key="words">
+        {formatCount(stats.transcript_words)} words transcribed
+      </Trans>
+    ),
     stats.recording_bytes > 0 && (
       <span key="bytes">{formatBytes(stats.recording_bytes)}</span>
     ),
@@ -205,13 +209,10 @@ function VaultSection({
           value={formatCount(stats.recordings)}
           label={<Trans>Recordings</Trans>}
         />
-        <StatTile
-          value={formatCount(stats.transcript_words)}
-          label={<Trans>Words transcribed</Trans>}
-        />
+        <StatTile value={formatCount(stats.tags)} label={<Trans>Tags</Trans>} />
         <StatTile
           value={formatDuration(stats.duration_seconds)}
-          label={<Trans>In meetings</Trans>}
+          label={<Trans>Meeting recordings</Trans>}
         />
       </div>
 
@@ -226,7 +227,7 @@ function VaultSection({
         </p>
       )}
 
-      {stats.years.length > 1 && <YearBars years={stats.years} />}
+      {stats.years.length > 1 && <YearChart years={stats.years} />}
     </div>
   );
 }
@@ -240,31 +241,94 @@ function StatTile({ value, label }: { value: string; label: React.ReactNode }) {
   );
 }
 
-function YearBars({ years }: { years: VaultStats["years"] }) {
-  const max = Math.max(...years.map((year) => year.sessions), 1);
+function YearChart({ years }: { years: VaultStats["years"] }) {
+  const firstYear = years[0].year;
+  const lastYear = years[years.length - 1].year;
+  const byYear = new Map(years.map((year) => [year.year, year]));
+  const series = Array.from(
+    { length: lastYear - firstYear + 1 },
+    (_, index) =>
+      byYear.get(firstYear + index) ?? {
+        year: firstYear + index,
+        sessions: 0,
+        recordings: 0,
+        transcript_words: 0,
+        enhanced_docs: 0,
+        duration_seconds: 0,
+      },
+  );
+  const max = Math.max(...series.map((year) => year.sessions), 1);
+  const [activeYear, setActiveYear] = useState(lastYear);
+  const active =
+    series.find((year) => year.year === activeYear) ??
+    series[series.length - 1];
+  const peak = series.reduce((highest, year) =>
+    year.sessions > highest.sessions ? year : highest,
+  );
+  const ticks = [0, 1 / 3, 2 / 3, 1]
+    .map((position) => series[Math.round((series.length - 1) * position)].year)
+    .filter((year, index, all) => all.indexOf(year) === index);
+  const gap = series.length > 48 ? 0 : series.length > 24 ? 1 : 4;
 
   return (
-    <div className="flex flex-col gap-1.5">
-      {years.map((year) => (
-        <div key={year.year} className="flex items-center gap-2.5">
-          <span className="text-muted-foreground w-8 shrink-0 font-mono text-[11px]">
-            {year.year}
-          </span>
-          <div className="h-4 flex-1">
-            <div
-              className="bg-primary/80 h-full min-w-1 rounded-[4px]"
-              style={{ width: `${Math.max((year.sessions / max) * 100, 2)}%` }}
-            />
-          </div>
-          <span className="text-muted-foreground shrink-0 text-right text-[11px] tabular-nums">
-            {formatCount(year.sessions)}
-            <span className="opacity-60">
-              {" "}
-              · {formatDuration(year.duration_seconds)}
-            </span>
-          </span>
-        </div>
-      ))}
+    <div className="flex flex-col">
+      <div className="flex items-baseline justify-between">
+        <span className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">
+          <Trans>Notes over time</Trans>
+        </span>
+        <span className="text-muted-foreground text-[11px] tabular-nums">
+          {active.year} · {formatCount(active.sessions)} <Trans>notes</Trans>
+        </span>
+      </div>
+
+      <div
+        className="border-border/60 mt-3 grid h-24 items-end border-b"
+        style={{
+          gridTemplateColumns: `repeat(${series.length}, minmax(0, 1fr))`,
+          gap,
+        }}
+        onMouseLeave={() => setActiveYear(lastYear)}
+      >
+        {series.map((year) => (
+          <div
+            key={year.year}
+            role="img"
+            tabIndex={0}
+            aria-label={`${year.year}: ${formatCount(year.sessions)} notes`}
+            title={`${year.year} · ${formatCount(year.sessions)} notes`}
+            className="bg-primary/60 hover:bg-primary focus-visible:bg-primary w-full rounded-t-[3px] transition-colors outline-none"
+            style={{
+              height:
+                year.sessions === 0
+                  ? 0
+                  : `${Math.max((year.sessions / max) * 100, 2)}%`,
+            }}
+            onMouseEnter={() => setActiveYear(year.year)}
+            onFocus={() => setActiveYear(year.year)}
+          />
+        ))}
+      </div>
+
+      <div className="text-muted-foreground mt-1.5 flex justify-between font-mono text-[10px]">
+        {ticks.map((year) => (
+          <span key={year}>{year}</span>
+        ))}
+      </div>
+
+      <div className="text-muted-foreground mt-3 flex justify-between text-[11px]">
+        <span>
+          <Trans>
+            {formatCount(
+              series.reduce((total, year) => total + year.sessions, 0),
+            )}
+            {" notes across "}
+            {series.length} years
+          </Trans>
+        </span>
+        <span>
+          <Trans>Peak: {peak.year}</Trans>
+        </span>
+      </div>
     </div>
   );
 }

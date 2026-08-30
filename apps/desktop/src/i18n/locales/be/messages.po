@@ -22,19 +22,25 @@ msgstr ""
 msgid "{0} AI summaries"
 msgstr ""
 
+#. placeholder {0}: formatCount( series.reduce((total, year) => total + year.sessions, 0), )
+#. placeholder {1}: series.length
+#: src/main/about-dialog.tsx
+msgid "{0} notes across {1} years"
+msgstr ""
+
 #. placeholder {0}: issue.user?.login
 #: src/task/resource-view.tsx
 msgid "{0} opened on"
 msgstr ""
 
-#. placeholder {0}: formatCount(stats.tags)
-#: src/main/about-dialog.tsx
-msgid "{0} tags"
-msgstr ""
-
 #. placeholder {0}: formatCount(stats.tasks_done)
 #: src/main/about-dialog.tsx
 msgid "{0} tasks completed"
+msgstr ""
+
+#. placeholder {0}: formatCount(stats.transcript_words)
+#: src/main/about-dialog.tsx
+msgid "{0} words transcribed"
 msgstr ""
 
 #. placeholder {0}: formatLanguageList(unsupportedLanguages)
@@ -657,10 +663,6 @@ msgstr ""
 msgid "In {totalSeconds}s"
 msgstr ""
 
-#: src/main/about-dialog.tsx
-msgid "In meetings"
-msgstr ""
-
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Include"
 msgstr ""
@@ -794,6 +796,10 @@ msgstr ""
 
 #: src/templates/auto-form.tsx
 msgid "Meeting notes"
+msgstr ""
+
+#: src/main/about-dialog.tsx
+msgid "Meeting recordings"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
@@ -930,7 +936,15 @@ msgid "Note breadcrumb"
 msgstr ""
 
 #: src/main/about-dialog.tsx
+msgid "notes"
+msgstr ""
+
+#: src/main/about-dialog.tsx
 msgid "Notes"
+msgstr ""
+
+#: src/main/about-dialog.tsx
+msgid "Notes over time"
 msgstr ""
 
 #: src/settings/general/index.tsx
@@ -991,6 +1005,11 @@ msgstr ""
 #: src/session/components/outer-header/overflow/export-modal.tsx
 #: src/templates/auto-form.tsx
 msgid "Participants"
+msgstr ""
+
+#. placeholder {0}: peak.year
+#: src/main/about-dialog.tsx
+msgid "Peak: {0}"
 msgstr ""
 
 #: src/settings/todo/permission.tsx
@@ -1406,6 +1425,10 @@ msgstr ""
 msgid "Tag name"
 msgstr ""
 
+#: src/main/about-dialog.tsx
+msgid "Tags"
+msgstr ""
+
 #: src/templates/details.tsx
 #: src/templates/template-form.tsx
 msgid "Template actions"
@@ -1552,10 +1575,6 @@ msgstr ""
 
 #: src/onboarding/index.tsx
 msgid "Where your notes and recordings are stored"
-msgstr ""
-
-#: src/main/about-dialog.tsx
-msgid "Words transcribed"
 msgstr ""
 
 #: src/sidebar/timeline/item.tsx
