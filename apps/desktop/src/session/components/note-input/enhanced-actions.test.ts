@@ -7,10 +7,6 @@ const mocks = vi.hoisted(() => ({
   toastError: vi.fn(),
 }));
 
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: { event: vi.fn() },
-}));
-
 vi.mock("@hypr/ui/components/ui/toast", () => ({
   sonnerToast: { error: mocks.toastError },
 }));

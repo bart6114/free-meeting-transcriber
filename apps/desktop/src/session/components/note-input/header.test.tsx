@@ -116,12 +116,6 @@ vi.mock("@hypr/editor/markdown", () => ({
   parseJsonContent: () => ({}),
 }));
 
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: {
-    event: vi.fn(),
-  },
-}));
-
 vi.mock("@hypr/ui/components/ui/spinner", () => ({
   Spinner: () => <span data-testid="view-spinner" />,
 }));

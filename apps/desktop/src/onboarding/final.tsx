@@ -4,7 +4,6 @@ import { Trans } from "@lingui/react/macro";
 import { Loader2Icon } from "lucide-react";
 import { useRef, useState } from "react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as openerCommands } from "@hypr/plugin-opener2";
 
 import { OnboardingButton } from "./shared";
@@ -127,9 +126,6 @@ export async function finishOnboarding(
     throw new Error(result.error);
   }
   await new Promise((resolve) => setTimeout(resolve, 100));
-  void analyticsCommands
-    .event({ event: "onboarding_completed" })
-    .catch(console.error);
   setPendingWelcomeSession(welcomeSessionId);
   if (await flushAutomaticRelaunch()) {
     return;

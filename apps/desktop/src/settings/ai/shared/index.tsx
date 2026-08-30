@@ -6,7 +6,6 @@ import { ExternalLink } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { Streamdown } from "streamdown";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import type { AIProvider } from "@hypr/store";
 import { aiProviderSchema } from "@hypr/store";
 import {
@@ -29,10 +28,8 @@ import {
   getProviderSelectionBlockers,
   getRequiredConfigFields,
   type ProviderRequirement,
-  requiresEntitlement,
 } from "./eligibility";
 
-import { useBillingAccess } from "~/auth/billing-context";
 import {
   isKeychainAccessError,
   repairKeychainAccess,
@@ -75,28 +72,6 @@ export function AppProviderIcon() {
   );
 }
 
-export function ProviderBrandImage({
-  src,
-  alt,
-  className,
-}: {
-  src: string;
-  alt: string;
-  className?: string;
-}) {
-  return (
-    <img
-      src={src}
-      alt={alt}
-      data-slot="provider-brand-icon"
-      className={cn([
-        "object-contain object-center [filter:var(--provider-brand-filter)]",
-        className,
-      ])}
-    />
-  );
-}
-
 export function ProviderIconSlot({ children }: { children: ReactNode }) {
   return (
     <span
@@ -122,7 +97,6 @@ function useIsProviderReady(
   providerType: ProviderType,
   providers: readonly ProviderConfig[],
 ) {
-  const billing = useBillingAccess();
   const configuredProviders = useAiProviders(providerType);
   const providerDef = providers.find((p) => p.id === providerId);
   const config = configuredProviders[providerRowId(providerType, providerId)];
@@ -133,7 +107,7 @@ function useIsProviderReady(
     !!providerDef &&
     getProviderSelectionBlockers(providerDef.requirements, {
       isAuthenticated: true,
-      isPaid: billing.isPaid,
+      isPaid: true,
       config: { base_url: baseUrl, api_key: apiKey },
     }).length === 0;
   const checkAvailability = providerDef?.checkAvailability;
@@ -169,14 +143,12 @@ export function NonHyprProviderCard({
   providerContext?: ReactNode;
 }) {
   const { t } = useLingui();
-  const billing = useBillingAccess();
   const [provider, providerMutation] = useProvider(providerType, config.id);
   const [hasUnresolvedKeychainError, setHasUnresolvedKeychainError] =
     useState(false);
   const [isKeychainRecoveryInProgress, setIsKeychainRecoveryInProgress] =
     useState(false);
-  const locked =
-    requiresEntitlement(config.requirements, "pro") && !billing.isPaid;
+  const locked = false;
   const isReady = useIsProviderReady(config.id, providerType, providers);
 
   const requiredFields = getRequiredConfigFields(config.requirements);
@@ -195,16 +167,6 @@ export function NonHyprProviderCard({
       }
 
       setHasUnresolvedKeychainError(false);
-
-      void analyticsCommands.event({
-        event: "ai_provider_configured",
-        provider: value.type,
-      });
-      void analyticsCommands.setProperties({
-        set: {
-          has_configured_ai: true,
-        },
-      });
     },
     defaultValues:
       provider ??

@@ -3,14 +3,12 @@ const COMMANDS: &[&str] = &[
     "request_full_access",
     "list_todo_lists",
     "fetch_todos",
-    "read_path",
     "create_todo",
     "complete_todo",
     "delete_todo",
-    "linear_list_teams",
-    "linear_list_tickets",
     "github_issue_state",
     "github_issue_detail",
+    "github_issue_comments",
 ];
 
 fn main() {

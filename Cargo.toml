@@ -174,38 +174,22 @@ tauri-plugin-store = "2.4"
 tauri-plugin-updater = "2.10"
 tauri-plugin-window-state = "2.4"
 
-tauri-plugin-agent = { path = "plugins/agent" }
-tauri-plugin-analytics = { path = "plugins/analytics" }
-tauri-plugin-audio-priority = { path = "plugins/audio-priority" }
-tauri-plugin-bedrock = { path = "plugins/bedrock" }
 tauri-plugin-deeplink2 = { path = "plugins/deeplink2" }
 tauri-plugin-detect = { path = "plugins/detect" }
-tauri-plugin-dictation = { path = "plugins/dictation" }
 tauri-plugin-dock = { path = "plugins/dock" }
 tauri-plugin-export = { path = "plugins/export" }
 tauri-plugin-fs-sync = { path = "plugins/fs-sync" }
 tauri-plugin-fs2 = { path = "plugins/fs2" }
-tauri-plugin-git = { path = "plugins/git" }
 tauri-plugin-hooks = { path = "plugins/hooks" }
 tauri-plugin-icon = { path = "plugins/icon" }
-tauri-plugin-importer = { path = "plugins/importer" }
-tauri-plugin-js = { path = "plugins/js" }
-tauri-plugin-local-llm = { path = "plugins/local-llm" }
 tauri-plugin-local-stt = { path = "plugins/local-stt" }
-tauri-plugin-messenger = { path = "plugins/messenger" }
 tauri-plugin-misc = { path = "plugins/misc" }
-tauri-plugin-network = { path = "plugins/network" }
 tauri-plugin-notification = { path = "plugins/notification" }
 tauri-plugin-notify = { path = "plugins/notify" }
 tauri-plugin-opener2 = { path = "plugins/opener2" }
-tauri-plugin-overlay = { path = "plugins/overlay" }
-tauri-plugin-path2 = { path = "plugins/path2" }
 tauri-plugin-permissions = { path = "plugins/permissions" }
 tauri-plugin-relay = { path = "plugins/relay" }
-tauri-plugin-screen = { path = "plugins/screen" }
 tauri-plugin-settings = { path = "plugins/settings" }
-tauri-plugin-sfx = { path = "plugins/sfx" }
-tauri-plugin-shortcut = { path = "plugins/shortcut" }
 tauri-plugin-sidecar2 = { path = "plugins/sidecar2" }
 tauri-plugin-store2 = { path = "plugins/store2" }
 tauri-plugin-tantivy = { path = "plugins/tantivy" }
@@ -215,7 +199,6 @@ tauri-plugin-tracing = { path = "plugins/tracing" }
 tauri-plugin-transcription = { path = "plugins/transcription" }
 tauri-plugin-tray = { path = "plugins/tray", package = "tauri-plugin-hypr-tray" }
 tauri-plugin-updater2 = { path = "plugins/updater2" }
-tauri-plugin-webhook = { path = "plugins/webhook" }
 tauri-plugin-windows = { path = "plugins/windows" }
 
 async-stream = "0.3.6"

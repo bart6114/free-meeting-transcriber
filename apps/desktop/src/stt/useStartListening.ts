@@ -1,6 +1,5 @@
 import { useCallback, useRef } from "react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
 import { useListener } from "./contexts";
@@ -261,16 +260,6 @@ export function useStartListening(sessionId: string) {
     }
 
     setLeftSidebarExpanded(false);
-
-    void analyticsCommands.event({
-      event: "session_started",
-      ...(conn
-        ? {
-            stt_provider: conn.provider,
-            stt_model: conn.model,
-          }
-        : {}),
-    });
   }, [
     aiLanguage,
     audioRetention,

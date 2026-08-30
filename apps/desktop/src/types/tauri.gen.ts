@@ -38,9 +38,6 @@ async setDismissedToasts(v: string[]) : Promise<Result<null, string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async getEnv(key: string) : Promise<string> {
-    return await TAURI_INVOKE("get_env", { key });
-},
 async showDevtool() : Promise<boolean> {
     return await TAURI_INVOKE("show_devtool");
 },
@@ -386,14 +383,6 @@ async sessionGet(sessionId: string) : Promise<Result<SessionRecord | null, strin
     else return { status: "error", error: e  as any };
 }
 },
-async sessionList() : Promise<Result<SessionListEntry[], string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("session_list") };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async sessionListHeaders() : Promise<Result<SessionListHeader[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("session_list_headers") };
@@ -608,12 +597,6 @@ ghost_sessions: string[]; errors: string[] }
  * pending rename is about to move.
  */
 export type RecordingMetaSettled = { sessionId: string; succeeded: boolean }
-/**
- * One `session_list` entry: full meta plus the derived flags list consumers need
- * (timeline grouping wants `event`/`folder` off the meta; audio retention wants
- * `has_transcript_words` without a per-session round-trip).
- */
-export type SessionListEntry = { meta: SessionMeta; has_transcript_words: boolean }
 /**
  * The slim `session_list_headers` row -- exactly what the always-mounted list
  * subscribers (timeline, summaries, tags, float, audio retention) consume.

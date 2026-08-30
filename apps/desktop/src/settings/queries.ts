@@ -1,7 +1,6 @@
 import { disable, enable } from "@tauri-apps/plugin-autostart";
 import { useCallback } from "react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { commands as detectCommands } from "@hypr/plugin-detect";
 import { commands as localSttCommands } from "@hypr/plugin-local-stt";
 import type { JsonValue } from "@hypr/plugin-settings";
@@ -212,15 +211,6 @@ function applySettingSideEffects(values: SettingValues): void {
   ) {
     void syncLocalSttServer().catch(console.error);
   }
-  if (
-    values.spoken_languages !== undefined ||
-    values.current_stt_provider !== undefined ||
-    values.current_stt_model !== undefined ||
-    values.current_llm_provider !== undefined ||
-    values.current_llm_model !== undefined
-  ) {
-    void syncAnalyticsSettingProperties().catch(console.error);
-  }
 }
 
 async function syncLocalSttServer(): Promise<void> {
@@ -238,19 +228,6 @@ async function syncLocalSttServer(): Promise<void> {
   } else {
     await localSttCommands.stopServer(null);
   }
-}
-
-async function syncAnalyticsSettingProperties(): Promise<void> {
-  const { values } = await getStoredSettingValues();
-  await analyticsCommands.setProperties({
-    set: {
-      spoken_languages: parseStringArray(values.spoken_languages ?? "[]"),
-      current_stt_provider: values.current_stt_provider ?? null,
-      current_stt_model: values.current_stt_model ?? null,
-      current_llm_provider: values.current_llm_provider ?? null,
-      current_llm_model: values.current_llm_model ?? null,
-    },
-  });
 }
 
 function parseStringArray(value: string): string[] {

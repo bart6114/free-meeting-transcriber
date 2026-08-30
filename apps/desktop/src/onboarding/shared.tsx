@@ -1,12 +1,5 @@
 import { Trans, useLingui } from "@lingui/react/macro";
-import {
-  CheckCircle2Icon,
-  CheckIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  Loader2Icon,
-  XCircleIcon,
-} from "lucide-react";
+import { CheckIcon, ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { type ReactNode, useEffect, useRef } from "react";
 
@@ -159,32 +152,5 @@ export function OnboardingButton({
         className,
       ])}
     />
-  );
-}
-
-export function StepRow({
-  status,
-  label,
-}: {
-  status: "done" | "active" | "failed";
-  label: ReactNode;
-}) {
-  return (
-    <div className="flex items-center gap-2 text-sm">
-      {status === "done" && <CheckCircle2Icon className="text-brand size-4" />}
-      {status === "active" && (
-        <Loader2Icon className="text-muted-foreground size-4 animate-spin" />
-      )}
-      {status === "failed" && (
-        <XCircleIcon className="text-destructive size-4" />
-      )}
-      <span
-        className={
-          status === "failed" ? "text-destructive" : "text-muted-foreground"
-        }
-      >
-        {label}
-      </span>
-    </div>
   );
 }

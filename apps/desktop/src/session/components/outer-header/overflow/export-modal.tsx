@@ -6,7 +6,6 @@ import { createPortal } from "react-dom";
 
 import { json2md } from "@hypr/editor/markdown";
 import { toPortableAttachmentSrc } from "@hypr/editor/note";
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import {
   commands as exportCommands,
   type ExportAttachment,
@@ -387,13 +386,6 @@ export function ExportModal({
     },
     onSuccess: (path) => {
       if (path) {
-        void analyticsCommands.event({
-          event: "session_exported",
-          format,
-          include_note: includeNote,
-          include_summary: includeSummary,
-          include_transcript: includeTranscript,
-        });
         void openerCommands.revealItemInDir(path);
       }
       onOpenChange(false);

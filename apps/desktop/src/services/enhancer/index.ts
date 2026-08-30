@@ -1,7 +1,5 @@
 import type { LanguageModel } from "ai";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
-
 import { type EnhanceEligibilitySkipCode, getEligibility } from "./eligibility";
 import {
   type EnhancerNote,
@@ -50,7 +48,6 @@ type EnhancerDeps = {
     getState: () => Pick<TasksActions, "generate" | "getState" | "reset">;
   };
   getModel: () => LanguageModel | null;
-  getLLMConn: () => { providerId?: string; modelId?: string } | null;
   getSelectedTemplateId: () => string | undefined;
 };
 
@@ -293,8 +290,7 @@ export class EnhancerService {
   }
 
   async enhance(sessionId: string, opts?: EnhanceOpts): Promise<EnhanceResult> {
-    const { aiTaskStore, getModel, getLLMConn, getSelectedTemplateId } =
-      this.deps;
+    const { aiTaskStore, getModel, getSelectedTemplateId } = this.deps;
 
     const model = getModel();
     if (!model) return { type: "no_model" };
@@ -342,19 +338,6 @@ export class EnhancerService {
     if (existingTask?.status === "success" && hasSummaryContent(note.content)) {
       return { type: "already_active", noteId: note.id };
     }
-
-    const llmConn = getLLMConn();
-    void analyticsCommands
-      .event({
-        event: "note_enhanced",
-        is_auto: opts?.isAuto ?? false,
-        llm_provider: llmConn?.providerId,
-        llm_model: llmConn?.modelId,
-        template_id: templateId,
-      })
-      .catch((error: unknown) => {
-        console.error("[enhancer] failed to record analytics", error);
-      });
 
     void aiTaskStore.getState().generate(enhanceTaskId, {
       model,

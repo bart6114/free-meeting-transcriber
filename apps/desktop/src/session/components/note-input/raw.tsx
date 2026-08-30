@@ -1,5 +1,5 @@
 import type { EditorView } from "prosemirror-view";
-import { forwardRef, useCallback, useMemo, useRef } from "react";
+import { forwardRef, useCallback, useMemo } from "react";
 
 import { json2md, parseJsonContent } from "@hypr/editor/markdown";
 import {
@@ -9,7 +9,6 @@ import {
   type NoteEditorRef,
   normalizePortableAttachmentUrls,
 } from "@hypr/editor/note";
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 import { cn } from "@hypr/utils";
 
@@ -93,20 +92,6 @@ export const RawEditor = forwardRef<
       [rawMd, sessionId, updateSession],
     );
 
-    const hasTrackedWriteRef = useRef(false);
-    const trackedSessionIdRef = useRef(sessionId);
-    if (trackedSessionIdRef.current !== sessionId) {
-      trackedSessionIdRef.current = sessionId;
-      hasTrackedWriteRef.current = false;
-    }
-
-    const hasNonEmptyText = useCallback(
-      (node?: JSONContent): boolean =>
-        !!node?.text?.trim() ||
-        !!node?.content?.some((child: JSONContent) => hasNonEmptyText(child)),
-      [],
-    );
-
     const handleChange = useCallback(
       (input: JSONContent) => {
         void persistChange(input).catch((error) => {
@@ -115,16 +100,8 @@ export const RawEditor = forwardRef<
             id: `note-save-failed:${sessionId}`,
           });
         });
-
-        if (!hasTrackedWriteRef.current) {
-          const hasContent = hasNonEmptyText(input);
-          if (hasContent) {
-            hasTrackedWriteRef.current = true;
-            void trackNoteEdited();
-          }
-        }
       },
-      [persistChange, hasNonEmptyText, sessionId],
+      [persistChange, sessionId],
     );
 
     const mentionConfig = useMentionConfig();
@@ -154,14 +131,3 @@ export const RawEditor = forwardRef<
     );
   },
 );
-
-async function trackNoteEdited() {
-  try {
-    await analyticsCommands.event({
-      event: "note_edited",
-      has_content: true,
-    });
-  } catch (error) {
-    console.error("[raw-editor] failed to record note analytics", error);
-  }
-}

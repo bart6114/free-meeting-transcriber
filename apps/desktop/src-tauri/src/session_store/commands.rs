@@ -5,9 +5,9 @@ use tauri::{AppHandle, Manager};
 use hypr_fs_format::TranscriptWithData;
 
 use super::{
-    EnhancedDoc, EnhancedDocPatch, PersonItem, RebuildReport, SessionListEntry, SessionListHeader,
-    SessionMeta, SessionMetaPatch, SessionRecord, SessionStore, TagItem, TaskInput, TaskItem,
-    TemplateInput, TemplateItem, TranscriptDelta, VaultStats,
+    EnhancedDoc, EnhancedDocPatch, PersonItem, RebuildReport, SessionListHeader, SessionMeta,
+    SessionMetaPatch, SessionRecord, SessionStore, TagItem, TaskInput, TaskItem, TemplateInput,
+    TemplateItem, TranscriptDelta, VaultStats,
 };
 use crate::related_tags::RelatedTagQueue;
 
@@ -420,14 +420,6 @@ pub async fn session_get<R: tauri::Runtime>(
     session_id: String,
 ) -> Result<Option<SessionRecord>, String> {
     Ok(store(&app)?.session_get(&session_id))
-}
-
-#[tauri::command]
-#[specta::specta]
-pub async fn session_list<R: tauri::Runtime>(
-    app: AppHandle<R>,
-) -> Result<Vec<SessionListEntry>, String> {
-    Ok(store(&app)?.session_list())
 }
 
 #[tauri::command]

@@ -5,6 +5,7 @@ mod embedded_cli;
 mod ext;
 mod identifier_migration;
 mod legacy_db;
+mod legacy_llm;
 mod recording_meta;
 mod related_tags;
 mod search_index;
@@ -190,14 +191,7 @@ pub async fn main() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_opener2::init())
         .plugin(tauri_plugin_dialog::init())
-        .plugin(tauri_plugin_tracing::init())
-        .plugin(tauri_plugin_analytics::init())
-        .plugin(tauri_plugin_bedrock::init());
-
-    #[cfg(target_os = "macos")]
-    {
-        builder = builder.plugin(tauri_plugin_importer::init());
-    }
+        .plugin(tauri_plugin_tracing::init());
 
     builder = builder
         .plugin(tauri_plugin_todo::init())
@@ -212,10 +206,8 @@ pub async fn main() {
         .plugin(tauri_plugin_fs_sync::init())
         .plugin(tauri_plugin_fs2::init())
         .plugin(tauri_plugin_os::init())
-        .plugin(tauri_plugin_path2::init())
         .plugin(tauri_plugin_export::init())
         .plugin(tauri_plugin_process::init())
-        .plugin(tauri_plugin_messenger::init())
         .plugin(tauri_plugin_misc::init())
         .plugin(tauri_plugin_template::init())
         .plugin(tauri_plugin_http::init())
@@ -227,24 +219,17 @@ pub async fn main() {
                 start_on_webview_ready: false,
             },
         ))
-        .plugin(tauri_plugin_overlay::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_store2::init())
         .plugin(tauri_plugin_updater2::init())
         .plugin(tauri_plugin_tray::init())
         .plugin(tauri_plugin_settings::init())
-        .plugin(tauri_plugin_sfx::init())
-        .plugin(tauri_plugin_shortcut::init())
-        .plugin(tauri_plugin_dictation::init())
         .plugin(tauri_plugin_windows::init())
-        .plugin(tauri_plugin_js::init())
         .plugin(identifier_migration::plugin(&context.config().identifier))
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_transcription::init())
         .plugin(tauri_plugin_tantivy::init())
-        .plugin(tauri_plugin_audio_priority::init())
-        .plugin(tauri_plugin_local_llm::init())
         .plugin(tauri_plugin_local_stt::init(
             tauri_plugin_local_stt::InitOptions {
                 parent_supervisor: root_supervisor_ctx
@@ -280,6 +265,12 @@ pub async fn main() {
             let app_handle = app.handle().clone();
 
             autostart::migrate(&app_handle);
+
+            {
+                use tauri_plugin_settings::SettingsPluginExt;
+                let global_base = app_handle.settings().global_base()?;
+                legacy_llm::migrate_legacy_gguf_files(global_base.as_std_path());
+            }
 
             specta_builder.mount_events(&app_handle);
 
@@ -350,13 +341,6 @@ pub async fn main() {
 
             if let (Some(ctx), Some(handle)) = (&root_supervisor_ctx, root_supervisor_handle) {
                 supervisor::monitor_supervisor(handle, ctx.is_exiting.clone(), app_handle.clone());
-            }
-
-            {
-                use tauri_plugin_local_llm::LocalLlmPluginExt;
-                if false {
-                    app_handle.local_llm().start_server();
-                }
             }
 
             // Migrates or refreshes an app-managed CLI symlink so app updates
@@ -531,7 +515,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::set_onboarding_needed::<tauri::Wry>,
             commands::get_dismissed_toasts::<tauri::Wry>,
             commands::set_dismissed_toasts::<tauri::Wry>,
-            commands::get_env::<tauri::Wry>,
             commands::show_devtool::<tauri::Wry>,
             commands::complete_app_exit::<tauri::Wry>,
             commands::get_pinned_tabs::<tauri::Wry>,
@@ -576,7 +559,6 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             session_store::commands::session_list_audio::<tauri::Wry>,
             session_store::commands::session_delete_audio::<tauri::Wry>,
             session_store::commands::session_get::<tauri::Wry>,
-            session_store::commands::session_list::<tauri::Wry>,
             session_store::commands::session_list_headers::<tauri::Wry>,
             session_store::commands::vault_stats::<tauri::Wry>,
             session_store::commands::session_ids::<tauri::Wry>,

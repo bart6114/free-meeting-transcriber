@@ -4,16 +4,10 @@ pub enum Error {
     AppleTodo(#[from] hypr_apple_todo::Error),
     #[error("unsupported platform")]
     UnsupportedPlatform,
-    #[error("invalid read path: {0}")]
-    InvalidReadPath(String),
-    #[error("auth error: {0}")]
-    Auth(String),
     #[error("api error: {0}")]
     Api(String),
     #[error(transparent)]
     Http(#[from] reqwest::Error),
-    #[error(transparent)]
-    InvalidHeader(#[from] reqwest::header::InvalidHeaderValue),
 }
 
 impl serde::Serialize for Error {

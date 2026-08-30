@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
 import { useAITaskTask } from "~/ai/hooks";
@@ -20,7 +19,7 @@ export function useEnhancedNoteActions({
   enhancedNoteId: string | null;
   sessionId: string;
 }) {
-  const model = useLanguageModel("enhance");
+  const model = useLanguageModel();
   const taskId = enhancedNoteId
     ? createTaskId(enhancedNoteId, "enhance")
     : null;
@@ -50,11 +49,6 @@ export function useEnhancedNoteActions({
         });
         return;
       }
-
-      void analyticsCommands.event({
-        event: "note_enhanced",
-        is_auto: false,
-      });
 
       await enhanceTask.start({
         model,

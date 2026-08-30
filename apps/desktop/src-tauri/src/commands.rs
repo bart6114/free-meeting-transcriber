@@ -40,12 +40,6 @@ pub async fn set_dismissed_toasts<R: tauri::Runtime>(
     app.set_dismissed_toasts(v)
 }
 
-#[tauri::command]
-#[specta::specta]
-pub async fn get_env<R: tauri::Runtime>(_app: tauri::AppHandle<R>, key: String) -> String {
-    std::env::var(&key).unwrap_or_default()
-}
-
 fn should_show_devtool(identifier: &str) -> bool {
     cfg!(any(
         debug_assertions,

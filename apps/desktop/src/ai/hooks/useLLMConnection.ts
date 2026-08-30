@@ -8,7 +8,6 @@ import { fetch as tauriFetch } from "@tauri-apps/plugin-http";
 import { extractReasoningMiddleware, wrapLanguageModel } from "ai";
 import { useMemo } from "react";
 
-import type { CharTask } from "@hypr/api-client";
 import type { AIProviderStorage } from "@hypr/store";
 
 import { type ProviderId, PROVIDERS } from "~/settings/ai/llm/shared";
@@ -42,11 +41,7 @@ type LLMConnectionResult = {
   status: LLMConnectionStatus;
 };
 
-// `_task` is unused now that createLanguageModel no longer varies by task
-// (the hosted per-task tracing fetch it fed was removed in Task 7); kept as
-// a parameter since ~11 call sites already pass "chat"/"title"/"enhance"
-// and a future provider may need task-scoped routing again.
-export const useLanguageModel = (_task?: CharTask): LanguageModelV3 | null => {
+export const useLanguageModel = (): LanguageModelV3 | null => {
   const { conn } = useLLMConnection();
 
   return useMemo(() => {

@@ -1,9 +1,7 @@
 import { Trans } from "@lingui/react/macro";
 import { useQueryClient } from "@tanstack/react-query";
-import { platform } from "@tauri-apps/plugin-os";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { cn } from "@hypr/utils";
 
 import {
@@ -80,8 +78,6 @@ function OnboardingScreenContent({
 }) {
   const queryClient = useQueryClient();
   const [currentStep, setCurrentStep] = useState(getInitialStep);
-  const currentPlatform = platform();
-
   const goNext = useCallback(() => {
     const next = getNextStep(currentStep);
     if (next) setCurrentStep(next);
@@ -91,14 +87,6 @@ function OnboardingScreenContent({
     const prev = getPrevStep(currentStep);
     if (prev) setCurrentStep(prev);
   }, [currentStep]);
-
-  useEffect(() => {
-    void analyticsCommands.event({
-      event: "onboarding_step_viewed",
-      step: currentStep,
-      platform: currentPlatform,
-    });
-  }, [currentPlatform, currentStep]);
 
   const handleFinish = useCallback(
     (sessionId: string) => {

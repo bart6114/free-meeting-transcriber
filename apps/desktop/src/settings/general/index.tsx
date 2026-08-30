@@ -2,8 +2,6 @@ import { Trans } from "@lingui/react/macro";
 import { useForm } from "@tanstack/react-form";
 import { Loader2Icon } from "lucide-react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
-
 import { AppSettingsView } from "./app-settings";
 import {
   CORE_TRANSCRIPTION_LANGUAGE_CODES,
@@ -88,16 +86,6 @@ function useSettingsForm(storedSettings: StoredSettingValues) {
         notification_detect: normalizedValue.notification_detect,
         ai_language: normalizedValue.ai_language,
         spoken_languages: JSON.stringify(normalizedValue.spoken_languages),
-      });
-
-      void analyticsCommands.event({
-        event: "settings_changed",
-        autostart: normalizedValue.autostart,
-        auto_stop_meetings: normalizedValue.auto_stop_meetings,
-        floating_bar_enabled: normalizedValue.floating_bar_enabled,
-        show_app_in_dock: normalizedValue.show_app_in_dock,
-        show_tray_icon: normalizedValue.show_tray_icon,
-        notification_detect: normalizedValue.notification_detect,
       });
     },
   });

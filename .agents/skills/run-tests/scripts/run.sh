@@ -45,10 +45,7 @@ readonly rust_excludes=(
   device-monitor
   local-llm-core
   local-stt-server
-  tauri-plugin-analytics
   tauri-plugin-apple-calendar
-  tauri-plugin-audio-priority
-  tauri-plugin-bedrock
   tauri-plugin-db2
   tauri-plugin-deeplink2
   tauri-plugin-detect
@@ -57,24 +54,16 @@ readonly rust_excludes=(
   tauri-plugin-fs2
   tauri-plugin-hooks
   tauri-plugin-icon
-  tauri-plugin-importer
-  tauri-plugin-js
   tauri-plugin-listener
   tauri-plugin-listener2
-  tauri-plugin-local-llm
   tauri-plugin-local-stt
   tauri-plugin-misc
-  tauri-plugin-network
   tauri-plugin-notification
   tauri-plugin-notify
   tauri-plugin-opener2
-  tauri-plugin-overlay
-  tauri-plugin-path2
   tauri-plugin-pdf
   tauri-plugin-permissions
-  tauri-plugin-screen
   tauri-plugin-settings
-  tauri-plugin-sfx
   tauri-plugin-sidecar2
   tauri-plugin-store2
   tauri-plugin-tantivy
@@ -82,7 +71,6 @@ readonly rust_excludes=(
   tauri-plugin-tracing
   tauri-plugin-tray
   tauri-plugin-updater2
-  tauri-plugin-webhook
   tauri-plugin-windows
   db3
   activity-capture-macos
