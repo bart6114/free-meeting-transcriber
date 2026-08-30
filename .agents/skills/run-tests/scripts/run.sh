@@ -7,12 +7,8 @@ cd "$repo_root"
 
 readonly rust_excludes=(
   desktop
-  control-tauri
-  ai
   email
-  lago
   mac
-  notch
   notification-macos
   notification-macos2
   tcc
@@ -24,44 +20,31 @@ readonly rust_excludes=(
   whisper
   whisper-local
   whisper-local-model
-  vad2
   vad
-  vvad
   vad-masking
-  vad-chunking
   onnx
   pyannote-local
-  llama
-  tools
-  docs
   bundle
   host
   intercept
   frontmatter
-  openstatus
   audio
   audio-device
   transcribe-whisper-local
   device-monitor
   local-llm-core
   local-stt-server
-  tauri-plugin-apple-calendar
-  tauri-plugin-db2
   tauri-plugin-deeplink2
   tauri-plugin-detect
-  tauri-plugin-fs-db
   tauri-plugin-fs-sync
   tauri-plugin-fs2
   tauri-plugin-hooks
   tauri-plugin-icon
-  tauri-plugin-listener
-  tauri-plugin-listener2
   tauri-plugin-local-stt
   tauri-plugin-misc
   tauri-plugin-notification
   tauri-plugin-notify
   tauri-plugin-opener2
-  tauri-plugin-pdf
   tauri-plugin-permissions
   tauri-plugin-settings
   tauri-plugin-sidecar2
@@ -69,12 +52,8 @@ readonly rust_excludes=(
   tauri-plugin-tantivy
   tauri-plugin-template
   tauri-plugin-tracing
-  tauri-plugin-tray
   tauri-plugin-updater2
   tauri-plugin-windows
-  db3
-  activity-capture-macos
-  tauri-plugin-activity-capture
 )
 
 run_tests_tmp=""

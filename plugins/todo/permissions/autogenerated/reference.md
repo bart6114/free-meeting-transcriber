@@ -13,7 +13,6 @@ Default permissions for the plugin
 - `allow-delete-todo`
 - `allow-github-issue-state`
 - `allow-github-issue-detail`
-- `allow-github-issue-comments`
 
 ## Permission Table
 

@@ -15,7 +15,7 @@ npx @tauri-apps/cli plugin new NAME \
 
 Decide `NAME` from the user request, then run the generator.
 
-Follow the style and conventions used in `plugins/analytics`:
+Follow the style and conventions used in `plugins/misc`:
 
 - remove generated `rollup.config.js`
 - remove generated `README.md`
