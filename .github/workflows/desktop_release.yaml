@@ -113,6 +113,26 @@ jobs:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+      - name: Find DMG
+        id: dmg
+        run: |
+          set -euo pipefail
+          bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
+          shopt -s nullglob
+          dmgs=("$bundle_dir"/*.dmg)
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "::error::Expected exactly one DMG in $bundle_dir, found ${#dmgs[@]}"
+            exit 1
+          fi
+          echo "path=${dmgs[0]}" >> "$GITHUB_OUTPUT"
+      - name: Notarize DMG
+        uses: ./.github/actions/macos_notarize_dmg
+        with:
+          dmg-path: ${{ steps.dmg.outputs.path }}
+          signing-identity: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          api-key-path: ${{ runner.temp }}/AuthKey.p8
+          api-key-id: ${{ secrets.APPLE_API_KEY }}
+          api-issuer: ${{ secrets.APPLE_API_ISSUER }}
       - name: Prepare Apple Silicon CLI release asset
         env:
           TAG: ${{ needs.resolve.outputs.tag }}
@@ -130,14 +150,14 @@ jobs:
           (cd "$cli_dir" && shasum -a 256 "$asset" > "$asset.sha256")
       - name: Checksum
         env:
+          DMG_PATH: ${{ steps.dmg.outputs.path }}
           TAG: ${{ needs.resolve.outputs.tag }}
         run: |
           set -euo pipefail
           version="${TAG#v}"
           bundle_dir="apps/desktop/src-tauri/target/release/bundle/dmg"
-          dmg="$(ls "$bundle_dir"/*.dmg | head -n1)"
           asset="Loofah_${version}_aarch64.dmg"
-          mv "$dmg" "$bundle_dir/$asset"
+          mv "$DMG_PATH" "$bundle_dir/$asset"
           (cd "$bundle_dir" && shasum -a 256 "$asset" > "$asset.sha256")
           cp "$bundle_dir/$asset" "$bundle_dir/FreeMeetingTranscriber_${version}_aarch64.dmg"
           (cd "$bundle_dir" && shasum -a 256 "FreeMeetingTranscriber_${version}_aarch64.dmg" > "FreeMeetingTranscriber_${version}_aarch64.dmg.sha256")
