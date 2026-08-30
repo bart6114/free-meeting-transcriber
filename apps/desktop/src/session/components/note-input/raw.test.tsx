@@ -31,12 +31,6 @@ vi.mock("@hypr/editor/note", () => ({
   },
 }));
 
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: {
-    event: vi.fn(),
-  },
-}));
-
 vi.mock("@hypr/ui/components/ui/toast", () => ({
   sonnerToast: { error: hoisted.sonnerToastError },
 }));

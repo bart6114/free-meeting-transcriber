@@ -8,12 +8,9 @@ Default permissions for the plugin
 - `allow-request-full-access`
 - `allow-list-todo-lists`
 - `allow-fetch-todos`
-- `allow-read-path`
 - `allow-create-todo`
 - `allow-complete-todo`
 - `allow-delete-todo`
-- `allow-linear-list-teams`
-- `allow-linear-list-tickets`
 - `allow-github-issue-state`
 - `allow-github-issue-detail`
 
@@ -159,6 +156,32 @@ Denies the fetch_todos command without any pre-configured scope.
 <tr>
 <td>
 
+`todo:allow-github-issue-comments`
+
+</td>
+<td>
+
+Enables the github_issue_comments command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`todo:deny-github-issue-comments`
+
+</td>
+<td>
+
+Denies the github_issue_comments command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
 `todo:allow-github-issue-detail`
 
 </td>
@@ -211,58 +234,6 @@ Denies the github_issue_state command without any pre-configured scope.
 <tr>
 <td>
 
-`todo:allow-linear-list-teams`
-
-</td>
-<td>
-
-Enables the linear_list_teams command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`todo:deny-linear-list-teams`
-
-</td>
-<td>
-
-Denies the linear_list_teams command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`todo:allow-linear-list-tickets`
-
-</td>
-<td>
-
-Enables the linear_list_tickets command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`todo:deny-linear-list-tickets`
-
-</td>
-<td>
-
-Denies the linear_list_tickets command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
 `todo:allow-list-todo-lists`
 
 </td>
@@ -308,32 +279,6 @@ Enables the ping command without any pre-configured scope.
 <td>
 
 Denies the ping command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`todo:allow-read-path`
-
-</td>
-<td>
-
-Enables the read_path command without any pre-configured scope.
-
-</td>
-</tr>
-
-<tr>
-<td>
-
-`todo:deny-read-path`
-
-</td>
-<td>
-
-Denies the read_path command without any pre-configured scope.
 
 </td>
 </tr>

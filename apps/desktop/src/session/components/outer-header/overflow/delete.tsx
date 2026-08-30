@@ -1,53 +1,12 @@
 import { Trans } from "@lingui/react/macro";
-import { Loader2Icon, TrashIcon } from "lucide-react";
+import { TrashIcon } from "lucide-react";
 import { useCallback } from "react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import { DropdownMenuItem } from "@hypr/ui/components/ui/dropdown-menu";
 import { cn } from "@hypr/utils";
 
-import { useAudioPlayer } from "~/audio-player";
 import { useDeleteSession } from "~/session/hooks/useDeleteSession";
 import { useSessionSummary } from "~/session/queries";
-import { useListener } from "~/stt/contexts";
-
-export function DeleteRecording({ sessionId }: { sessionId: string }) {
-  const { deleteRecording, isDeletingRecording } = useAudioPlayer();
-  const mode = useListener((state) => state.getSessionMode(sessionId));
-  const isDisabled =
-    isDeletingRecording ||
-    mode === "active" ||
-    mode === "finalizing" ||
-    mode === "running_batch";
-
-  const handleDeleteRecording = useCallback(() => {
-    void deleteRecording();
-  }, [deleteRecording]);
-
-  return (
-    <DropdownMenuItem
-      onClick={handleDeleteRecording}
-      disabled={isDisabled}
-      className={cn([
-        "text-destructive cursor-pointer",
-        "hover:bg-destructive/10 hover:text-destructive",
-      ])}
-    >
-      {isDeletingRecording ? (
-        <Loader2Icon className="animate-spin" />
-      ) : (
-        <TrashIcon />
-      )}
-      <span>
-        {isDeletingRecording ? (
-          <Trans>Deleting...</Trans>
-        ) : (
-          <Trans>Delete recording</Trans>
-        )}
-      </span>
-    </DropdownMenuItem>
-  );
-}
 
 export function DeleteNote({ sessionId }: { sessionId: string }) {
   const deleteSession = useDeleteSession();
@@ -55,11 +14,6 @@ export function DeleteNote({ sessionId }: { sessionId: string }) {
 
   const handleDeleteNote = useCallback(() => {
     deleteSession(sessionId, { title });
-
-    void analyticsCommands.event({
-      event: "session_deleted",
-      includes_recording: true,
-    });
   }, [sessionId, deleteSession, title]);
 
   return (

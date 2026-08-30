@@ -1,7 +1,7 @@
 import { useRouteContext } from "@tanstack/react-router";
 import { useCallback, useEffect, useRef } from "react";
 
-import { useLanguageModel, useLLMConnection } from "~/ai/hooks";
+import { useLanguageModel } from "~/ai/hooks";
 import { takePendingWelcomeSession } from "~/onboarding/welcome-note";
 import { initEnhancerService } from "~/services/enhancer";
 import { useConfigValue } from "~/shared/config";
@@ -44,14 +44,11 @@ function EnhancerInit() {
     from: "__root__",
   });
 
-  const model = useLanguageModel("enhance");
-  const { conn: llmConn } = useLLMConnection();
+  const model = useLanguageModel();
   const selectedTemplateId = useConfigValue("selected_template_id");
 
   const modelRef = useRef(model);
   modelRef.current = model;
-  const llmConnRef = useRef(llmConn);
-  llmConnRef.current = llmConn;
   const templateIdRef = useRef(selectedTemplateId);
   templateIdRef.current = selectedTemplateId;
 
@@ -61,7 +58,6 @@ function EnhancerInit() {
     const service = initEnhancerService({
       aiTaskStore,
       getModel: () => modelRef.current,
-      getLLMConn: () => llmConnRef.current,
       getSelectedTemplateId: () => templateIdRef.current || undefined,
     });
 

@@ -130,15 +130,6 @@ vi.mock("@lingui/react", () => ({
   }),
 }));
 
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: {
-    event: vi.fn().mockResolvedValue({ status: "ok", data: null }),
-    setProperties: vi.fn().mockResolvedValue({ status: "ok", data: null }),
-    setDisabled: vi.fn().mockResolvedValue({ status: "ok", data: null }),
-    isDisabled: vi.fn().mockResolvedValue({ status: "ok", data: false }),
-  },
-}));
-
 vi.mock("./types/tauri.gen", () => ({
   commands: {
     getOnboardingNeeded: vi
@@ -155,7 +146,6 @@ vi.mock("./types/tauri.gen", () => ({
       .mockResolvedValue({ status: "ok", data: null }),
     // Vault index read commands (Phase E): empty-index defaults.
     sessionGet: vi.fn().mockResolvedValue({ status: "ok", data: null }),
-    sessionList: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
     sessionListHeaders: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
     sessionIds: vi.fn().mockResolvedValue({ status: "ok", data: [] }),
     sessionIsEmpty: vi.fn().mockResolvedValue({ status: "ok", data: true }),

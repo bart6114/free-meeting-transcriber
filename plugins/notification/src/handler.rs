@@ -1,4 +1,3 @@
-use tauri_plugin_analytics::{AnalyticsPayload, AnalyticsPluginExt};
 use tauri_plugin_windows::WindowsPluginExt;
 use tauri_specta::Event;
 
@@ -15,9 +14,6 @@ pub fn init(app: tauri::AppHandle<tauri::Wry>) {
                 source: ctx.source,
             }
             .emit(&app);
-
-            app.analytics()
-                .event_fire_and_forget(AnalyticsPayload::builder("collapsed_confirm").build());
         });
     }
 
@@ -31,9 +27,6 @@ pub fn init(app: tauri::AppHandle<tauri::Wry>) {
                 source: ctx.source,
             }
             .emit(&app);
-
-            app.analytics()
-                .event_fire_and_forget(AnalyticsPayload::builder("expanded_accept").build());
         });
     }
 
@@ -45,9 +38,6 @@ pub fn init(app: tauri::AppHandle<tauri::Wry>) {
                 source: ctx.source,
             }
             .emit(&app);
-
-            app.analytics()
-                .event_fire_and_forget(AnalyticsPayload::builder("dismiss").build());
         });
     }
 
@@ -59,9 +49,6 @@ pub fn init(app: tauri::AppHandle<tauri::Wry>) {
                 source: ctx.source,
             }
             .emit(&app);
-
-            app.analytics()
-                .event_fire_and_forget(AnalyticsPayload::builder("collapsed_timeout").build());
         });
     }
 
@@ -76,9 +63,6 @@ pub fn init(app: tauri::AppHandle<tauri::Wry>) {
                 selected_index,
             }
             .emit(&app);
-
-            app.analytics()
-                .event_fire_and_forget(AnalyticsPayload::builder("option_selected").build());
         });
     }
 
@@ -90,9 +74,6 @@ pub fn init(app: tauri::AppHandle<tauri::Wry>) {
                 source: ctx.source,
             }
             .emit(&app);
-
-            app.analytics()
-                .event_fire_and_forget(AnalyticsPayload::builder("footer_action").build());
         });
     }
 }

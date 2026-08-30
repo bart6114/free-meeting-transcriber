@@ -7,12 +7,8 @@ cd "$repo_root"
 
 readonly rust_excludes=(
   desktop
-  control-tauri
-  ai
   email
-  lago
   mac
-  notch
   notification-macos
   notification-macos2
   tcc
@@ -24,69 +20,40 @@ readonly rust_excludes=(
   whisper
   whisper-local
   whisper-local-model
-  vad2
   vad
-  vvad
   vad-masking
-  vad-chunking
   onnx
   pyannote-local
-  llama
-  tools
-  docs
   bundle
   host
   intercept
   frontmatter
-  openstatus
   audio
   audio-device
   transcribe-whisper-local
   device-monitor
   local-llm-core
   local-stt-server
-  tauri-plugin-analytics
-  tauri-plugin-apple-calendar
-  tauri-plugin-audio-priority
-  tauri-plugin-bedrock
-  tauri-plugin-db2
   tauri-plugin-deeplink2
   tauri-plugin-detect
-  tauri-plugin-fs-db
   tauri-plugin-fs-sync
   tauri-plugin-fs2
   tauri-plugin-hooks
   tauri-plugin-icon
-  tauri-plugin-importer
-  tauri-plugin-js
-  tauri-plugin-listener
-  tauri-plugin-listener2
-  tauri-plugin-local-llm
   tauri-plugin-local-stt
   tauri-plugin-misc
-  tauri-plugin-network
   tauri-plugin-notification
   tauri-plugin-notify
   tauri-plugin-opener2
-  tauri-plugin-overlay
-  tauri-plugin-path2
-  tauri-plugin-pdf
   tauri-plugin-permissions
-  tauri-plugin-screen
   tauri-plugin-settings
-  tauri-plugin-sfx
   tauri-plugin-sidecar2
   tauri-plugin-store2
   tauri-plugin-tantivy
   tauri-plugin-template
   tauri-plugin-tracing
-  tauri-plugin-tray
   tauri-plugin-updater2
-  tauri-plugin-webhook
   tauri-plugin-windows
-  db3
-  activity-capture-macos
-  tauri-plugin-activity-capture
 )
 
 run_tests_tmp=""

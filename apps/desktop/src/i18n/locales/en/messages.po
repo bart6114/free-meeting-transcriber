@@ -313,10 +313,6 @@ msgstr "commented on"
 msgid "comments"
 msgstr "comments"
 
-#: src/session/components/floating/options-menu.tsx
-msgid "Configure"
-msgstr "Configure"
-
 #: src/settings/ai/llm/configure.tsx
 msgid "Configure Providers"
 msgstr "Configure Providers"
@@ -396,17 +392,9 @@ msgstr "Delete model"
 msgid "Delete Note"
 msgstr "Delete Note"
 
-#: src/session/components/outer-header/overflow/delete.tsx
-msgid "Delete recording"
-msgstr "Delete recording"
-
 #: src/sidebar/timeline/index.tsx
 msgid "Delete Selected ({sessionCount})"
 msgstr "Delete Selected ({sessionCount})"
-
-#: src/session/components/outer-header/overflow/delete.tsx
-msgid "Deleting..."
-msgstr "Deleting..."
 
 #: src/templates/template-form.tsx
 msgid "Describe the template purpose..."
@@ -832,10 +820,6 @@ msgstr "Microphone detection"
 msgid "Model being used"
 msgstr "Model being used"
 
-#: src/session/components/floating/options-menu.tsx
-msgid "More options"
-msgstr "More options"
-
 #: src/templates/sections-editor.tsx
 msgid "Move down"
 msgstr "Move down"
@@ -930,10 +914,6 @@ msgstr "Not downloaded"
 #: src/session/components/outer-header/overflow/export-modal.tsx
 msgid "Note"
 msgstr "Note"
-
-#: src/session/components/title-breadcrumb.tsx
-msgid "Note breadcrumb"
-msgstr "Note breadcrumb"
 
 #: src/main/about-dialog.tsx
 msgid "notes"
@@ -1530,12 +1510,10 @@ msgstr "Unlock your login Keychain in the macOS prompt. Loofah will retry saving
 msgid "Untitled"
 msgstr "Untitled"
 
-#: src/session/components/floating/options-menu.tsx
 #: src/session/components/outer-header/overflow/index.tsx
 msgid "Upload audio"
 msgstr "Upload audio"
 
-#: src/session/components/floating/options-menu.tsx
 #: src/session/components/outer-header/overflow/index.tsx
 msgid "Upload transcript"
 msgstr "Upload transcript"

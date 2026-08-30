@@ -4,20 +4,12 @@ const mocks = vi.hoisted(() => ({
   getConfig: vi.fn(),
   setConfigValues: vi.fn(),
   getPreferredLanguages: vi.fn(),
-  setProperties: vi.fn(async () => undefined),
 }));
 
 vi.mock("@hypr/plugin-settings", () => ({
   commands: {
     getConfig: mocks.getConfig,
     setConfigValues: mocks.setConfigValues,
-  },
-}));
-
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: {
-    setDisabled: vi.fn(async () => undefined),
-    setProperties: mocks.setProperties,
   },
 }));
 

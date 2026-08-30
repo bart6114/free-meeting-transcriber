@@ -5,21 +5,6 @@ import { enqueueSessionAudioOperation } from "./audio-operations";
 import { enqueueDatabaseWrite } from "~/shared/write-queue";
 import { commands } from "~/types/tauri.gen";
 
-// Graceful no-op: `session_attachments`/`attachment_local_state` were
-// dropped in Task 4 (cloudsync/e2ee/workspaces/sharing removal). Note
-// attachments (as opposed to recording audio, see catalogLocalSessionAudio
-// below) have no file-canonical home yet — deferred past Task 9. The
-// uploaded file itself is already saved by the caller (fs-sync) before this
-// is called — only the DB-side bookkeeping is skipped here.
-export async function catalogLocalNoteAttachment(_input: {
-  sessionId: string;
-  attachmentId: string;
-  filename: string;
-  contentType: string;
-  sizeBytes: number;
-  sha256: string;
-}): Promise<void> {}
-
 // Settles a just-finished recording at the canonical `<session dir>/audio.<ext>` via the
 // session store, and returns where it ended up — the store may relocate it, so callers
 // holding the capture backend's path must re-point at this one.
@@ -72,9 +57,6 @@ async function deleteSessionAudioWithMode(
       if (!canDelete()) {
         return false;
       }
-      if (deleteMetadata) {
-        await tombstoneSessionAudioMetadata(sessionId);
-      }
       const deletedLocalFile = await deleteSessionAudioFile(sessionId);
       return deleteMetadata || deletedLocalFile;
     }),
@@ -92,7 +74,6 @@ async function deleteSessionAudioFile(sessionId: string): Promise<boolean> {
     throw new Error(flatResult.error);
   }
   const folderDeleted = await deleteSessionAudioFolder(sessionId);
-  await markSessionAudioAvailability(sessionId, "absent");
   return flatResult.data || folderDeleted;
 }
 
@@ -111,31 +92,6 @@ async function deleteSessionAudioFolder(sessionId: string): Promise<boolean> {
     }
   }
   return true;
-}
-
-// Graceful no-op: `attachment_local_state` was dropped in Task 4
-// (cloudsync/e2ee/workspaces/sharing removal). Local-availability
-// bookkeeping gets rewired to `sessions/<id>/audio/` on disk in Task 9
-// (Session store scaffold) of the filesystem-first-sessions plan. The
-// on-disk file deletion this accompanies (`deleteSessionAudioFile`) is
-// unaffected — only this DB-side bookkeeping is skipped.
-async function markSessionAudioAvailability(
-  _sessionId: string,
-  _availability: "present" | "absent",
-): Promise<void> {}
-
-// See markSessionAudioAvailability above — `session_attachments` was
-// likewise dropped in Task 4; the on-disk file deletion this accompanies is
-// unaffected.
-async function tombstoneSessionAudioMetadata(
-  _sessionId: string,
-): Promise<void> {}
-
-export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (byte) =>
-    byte.toString(16).padStart(2, "0"),
-  ).join("");
 }
 
 function requireText(

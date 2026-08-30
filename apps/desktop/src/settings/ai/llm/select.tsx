@@ -21,7 +21,6 @@ import {
 } from "./selection";
 import { type Provider, PROVIDERS } from "./shared";
 
-import { useBillingAccess } from "~/auth/billing-context";
 import { providerRowId, ProviderIconSlot } from "~/settings/ai/shared";
 import { getProviderSelectionBlockers } from "~/settings/ai/shared/eligibility";
 import { listAnthropicModels } from "~/settings/ai/shared/list-anthropic";
@@ -485,7 +484,6 @@ function useConfiguredMapping(): {
   providers: Record<string, ProviderStatus>;
   isReady: boolean;
 } {
-  const billing = useBillingAccess();
   const { providers: configuredProviders, isReady } =
     useAiProvidersState("llm");
 
@@ -501,12 +499,12 @@ function useConfiguredMapping(): {
             // Accounts/auth were removed (Phase 1): there is no session left
             // to gate on, so this always reads as eligible now.
             isAuthenticated: true,
-            isPaid: billing.isPaid,
+            isPaid: true,
           }),
         ];
       }),
     ) as Record<string, ProviderStatus>;
-  }, [configuredProviders, billing]);
+  }, [configuredProviders]);
 
   return { providers: mapping, isReady };
 }

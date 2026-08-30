@@ -236,13 +236,6 @@ impl AppWindow {
             };
             let _ = app.set_activation_policy(policy);
         }
-
-        if matches!(self, Self::Main) {
-            use tauri_plugin_analytics::{AnalyticsPayload, AnalyticsPluginExt};
-
-            let e = AnalyticsPayload::builder("show_main_window").build();
-            app.analytics().event_fire_and_forget(e);
-        }
     }
 
     fn try_show_existing(

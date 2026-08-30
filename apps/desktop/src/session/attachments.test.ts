@@ -31,12 +31,10 @@ vi.mock("~/shared/write-queue", () => ({
 }));
 
 import {
-  catalogLocalNoteAttachment,
   catalogLocalSessionAudio,
   cleanupDeletedSessionAudio,
   deleteLocalSessionAudio,
   deleteSessionAudio,
-  sha256Hex,
 } from "./attachments";
 
 describe("attachment catalog", () => {
@@ -58,33 +56,6 @@ describe("attachment catalog", () => {
     });
     mocks.sessionListAudio.mockResolvedValue({ status: "ok", data: [] });
     mocks.sessionDeleteAudio.mockResolvedValue({ status: "ok", data: null });
-  });
-
-  // catalogLocalNoteAttachment is a graceful no-op pending a file-canonical
-  // home for note attachments (deferred past Task 9) — session_attachments/
-  // attachment_local_state were dropped in Task 4. See the comment above its
-  // definition in attachments.ts.
-  it("resolves without touching the database", async () => {
-    await expect(
-      catalogLocalNoteAttachment({
-        sessionId: "session-1",
-        attachmentId: "diagram 1.png",
-        filename: "diagram.png",
-        contentType: "image/png",
-        sizeBytes: 42,
-        sha256: "a".repeat(64),
-      }),
-    ).resolves.toBeUndefined();
-
-    expect(mocks.enqueueDatabaseWrite).not.toHaveBeenCalled();
-  });
-
-  it("computes a stable lowercase SHA-256 checksum", async () => {
-    const bytes = new TextEncoder().encode("hello").buffer;
-
-    await expect(sha256Hex(bytes)).resolves.toBe(
-      "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824",
-    );
   });
 
   // REGRESSION: this used to discard the store's return value, so callers kept using the
@@ -111,11 +82,6 @@ describe("attachment catalog", () => {
     ).rejects.toThrow("disk full");
   });
 
-  // markSessionAudioAvailability/tombstoneSessionAudioMetadata are a
-  // graceful no-op — attachment_local_state/session_attachments were
-  // dropped in Task 4. The on-disk file deletion they accompany (both the
-  // legacy flat layout and the store-owned audio/ folder) keeps working
-  // unchanged. See the comments above their definitions in attachments.ts.
   it("deletes local audio bytes from both the flat and store-owned locations", async () => {
     mocks.sessionListAudio.mockResolvedValue({
       status: "ok",

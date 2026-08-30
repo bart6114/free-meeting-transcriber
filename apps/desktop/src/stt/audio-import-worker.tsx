@@ -2,7 +2,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useEffect } from "react";
 
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 import {
   commands as fsSyncCommands,
   events as fsSyncEvents,
@@ -145,10 +144,6 @@ function ItemPipeline({
         (percentage) => updateBatchProgress(sessionId, percentage),
       );
 
-      void analyticsCommands.event({
-        event: "file_uploaded",
-        file_type: "audio",
-      });
       void queryClient.invalidateQueries({
         queryKey: ["audio", sessionId],
       });

@@ -4,17 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { EnhancerService } from ".";
 
 const mocks = vi.hoisted(() => ({
-  analyticsEvent: vi.fn().mockResolvedValue(undefined),
   loadSessionContentSnapshot: vi.fn(),
   ensureSummaryDocument: vi.fn(),
   replaceSummaryDocumentTemplate: vi.fn().mockResolvedValue(undefined),
   updateSummaryDocumentTitleIfCurrent: vi.fn().mockResolvedValue(undefined),
   getTemplateById: vi.fn().mockResolvedValue(null),
   listenerSubscribe: vi.fn(),
-}));
-
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: { event: mocks.analyticsEvent },
 }));
 
 vi.mock("~/session/content-queries", () => ({
@@ -121,7 +116,6 @@ function createDeps(
   return {
     aiTaskStore: createMockAITaskStore().store,
     getModel: () => ({}) as LanguageModel,
-    getLLMConn: () => ({ providerId: "test", modelId: "test-model" }),
     getSelectedTemplateId: () => undefined,
     ...overrides,
   };

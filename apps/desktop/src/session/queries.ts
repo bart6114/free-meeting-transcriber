@@ -1,7 +1,6 @@
 import { useCallback } from "react";
 
 import { json2md, md2json } from "@hypr/editor/markdown";
-import { commands as analyticsCommands } from "@hypr/plugin-analytics";
 
 import { waitForPendingSoftDelete } from "~/session/pending-soft-deletes";
 import { useIndexQuery } from "~/shared/index-query";
@@ -367,7 +366,6 @@ export async function createSession(
     }
   }
 
-  trackNoteCreated();
   return sessionId;
 }
 
@@ -484,18 +482,4 @@ function mapEnhancedDoc(doc: EnhancedDoc): EnhancedNoteRecord {
     templateId: doc.template_id,
     position: Number(doc.sort_order),
   };
-}
-
-function trackNoteCreated(): void {
-  void analyticsCommands
-    .eventFireAndForget({
-      event: "note_created",
-      has_event_id: false,
-    })
-    .catch((error) => {
-      console.error(
-        "[session] failed to record note creation analytics",
-        error,
-      );
-    });
 }

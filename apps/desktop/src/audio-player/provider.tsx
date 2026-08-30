@@ -14,7 +14,6 @@ import WaveSurfer from "wavesurfer.js";
 
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 
-import { useBillingAccess } from "~/auth/billing-context";
 import { isSessionAudioIdle } from "~/services/audio-retention";
 import { deleteSessionAudio } from "~/session/attachments";
 
@@ -149,7 +148,7 @@ export function AudioPlayerProvider({
   children: ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const { isPro } = useBillingAccess();
+  const isPro = true;
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [wavesurfer, setWavesurfer] = useState<WaveSurfer | null>(null);
   const [state, setState] = useState<AudioPlayerState>("stopped");

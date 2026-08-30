@@ -38,14 +38,6 @@ async fetchTodos(filter: ReminderFilter) : Promise<Result<Reminder[], string>> {
     else return { status: "error", error: e  as any };
 }
 },
-async readPath(path: string, limit: number | null, cursor: string | null) : Promise<Result<ReadPathResult, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:todo|read_path", { path, limit, cursor }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
 async createTodo(input: CreateReminderInput) : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:todo|create_todo", { input }) };
@@ -65,22 +57,6 @@ async completeTodo(target: ReminderIdentifierInput) : Promise<Result<null, strin
 async deleteTodo(target: ReminderIdentifierInput) : Promise<Result<null, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:todo|delete_todo", { target }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async linearListTeams(connectionId: string, limit: number | null, cursor: string | null) : Promise<Result<CollectionPage, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:todo|linear_list_teams", { connectionId, limit, cursor }) };
-} catch (e) {
-    if(e instanceof Error) throw e;
-    else return { status: "error", error: e  as any };
-}
-},
-async linearListTickets(connectionId: string, teamId: string, query: string | null, limit: number | null, cursor: string | null) : Promise<Result<TicketPage, string>> {
-    try {
-    return { status: "ok", data: await TAURI_INVOKE("plugin:todo|linear_list_tickets", { connectionId, teamId, query, limit, cursor }) };
 } catch (e) {
     if(e instanceof Error) throw e;
     else return { status: "error", error: e  as any };
@@ -134,16 +110,6 @@ export type CalendarColor = { red: number; green: number; blue: number; alpha: n
 export type CalendarSource = { identifier: string; title: string; source_type: CalendarSourceType }
 export type CalendarSourceType = "Local" | "Exchange" | "CalDav" | "MobileMe" | "Subscribed" | "Birthdays"
 export type CalendarType = "Local" | "CalDav" | "Exchange" | "Subscription" | "Birthday"
-export type CollectionPage = { items: CollectionRef[]; next_cursor: string | null }
-export type CollectionRef = { id: string; 
-/**
- * Display name. GitHub: "owner/repo", Linear: team name.
- */
-name: string; 
-/**
- * Short identifier. GitHub: "owner/repo", Linear: team key (e.g., "ENG").
- */
-key: string | null; url: string | null }
 export type CreateReminderInput = { title: string; list_id: string | null; notes: string | null; url: string | null; priority: ReminderPriority | null; due_date: DateComponents | null; start_date: DateComponents | null; alarms: Alarm[] | null; recurrence_rules: RecurrenceRule[] | null; is_completed: boolean | null; completion_date: string | null }
 export type DateComponents = { date: string | null; time: string | null; time_zone: string | null }
 export type GeoLocation = { latitude: number; longitude: number }
@@ -152,11 +118,7 @@ export type Issue = { id: number; number: number; title: string; body?: string |
 export type IssueComment = { id: number; body?: string | null; user?: User | null; created_at: string; updated_at: string; html_url: string }
 export type IssuePullRequest = { url?: string | null; html_url?: string | null; diff_url?: string | null; patch_url?: string | null; merged_at?: string | null }
 export type Label = { id: number; name: string; color?: string | null; description?: string | null }
-export type LabelRef = { id: string; name: string; color: string | null }
 export type Milestone = { id: number; number: number; title: string; description?: string | null; state: string }
-export type PersonRef = { id: string | null; name: string | null; email: string | null; avatar_url: string | null }
-export type PullRequestDetail = { is_draft: boolean; is_merged: boolean; source_branch: string | null; target_branch: string | null; merged_at: string | null; merged_by: PersonRef | null }
-export type ReadPathResult = { kind: "reminder_lists"; data: ReminderList[] } | { kind: "reminders"; data: Reminder[] } | { kind: "collections"; data: CollectionPage } | { kind: "tickets"; data: TicketPage }
 export type RecurrenceDayOfWeek = { weekday: Weekday; week_number: number | null }
 export type RecurrenceEnd = { Count: number } | { Until: string }
 export type RecurrenceFrequency = "Daily" | "Weekly" | "Monthly" | "Yearly"
@@ -169,44 +131,6 @@ export type ReminderList = { id: string; title: string; calendar_type: CalendarT
 export type ReminderListRef = { id: string; title: string }
 export type ReminderPriority = "None" | "High" | "Medium" | "Low"
 export type StructuredLocation = { title: string; geo: GeoLocation | null; radius: number | null }
-export type TicketKind = "issue" | "pull_request"
-export type TicketPage = { items: TicketSummary[]; next_cursor: string | null }
-export type TicketPriority = "urgent" | "high" | "medium" | "low" | "none"
-export type TicketProviderType = "github" | "linear"
-export type TicketState = "backlog" | "open" | "in_progress" | "done" | "closed"
-export type TicketSummary = { provider: TicketProviderType; kind: TicketKind; 
-/**
- * Provider-specific unique ID.
- */
-id: string; 
-/**
- * Numeric identifier (GitHub: number, Linear: number).
- */
-number: number | null; collection: CollectionRef; title: string; state: TicketState; 
-/**
- * Provider's original state string for display (e.g. "In Review", "merged").
- */
-state_detail: string | null; priority: TicketPriority | null; author: PersonRef | null; assignees: PersonRef[]; labels: LabelRef[]; url: string; 
-/**
- * ISO 8601.
- */
-created_at: string; 
-/**
- * ISO 8601.
- */
-updated_at: string; 
-/**
- * ISO 8601.
- */
-closed_at: string | null; 
-/**
- * Present only when kind == PullRequest.
- */
-pull_request: PullRequestDetail | null; 
-/**
- * Raw provider JSON for forward compatibility.
- */
-raw: string }
 export type TodoChangedEvent = null
 export type User = { id: number; login: string; avatar_url?: string | null; html_url: string }
 export type Weekday = "Sunday" | "Monday" | "Tuesday" | "Wednesday" | "Thursday" | "Friday" | "Saturday"

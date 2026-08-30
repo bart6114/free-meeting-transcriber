@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  analyticsEventFireAndForget: vi.fn(() => Promise.resolve()),
   sessionGet: vi.fn(
     (): Promise<
       | { status: "ok"; data: Record<string, unknown> | null }
@@ -49,10 +48,6 @@ const mocks = vi.hoisted(() => ({
     > => Promise.resolve({ status: "ok", data: null }),
   ),
   waitForPendingSoftDelete: vi.fn(() => Promise.resolve()),
-}));
-
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: { eventFireAndForget: mocks.analyticsEventFireAndForget },
 }));
 
 vi.mock("~/session/pending-soft-deletes", () => ({

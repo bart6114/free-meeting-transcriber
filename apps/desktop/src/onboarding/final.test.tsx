@@ -8,16 +8,11 @@ import {
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
-  analyticsEvent: vi.fn(),
   createSession: vi.fn(),
   flushAutomaticRelaunch: vi.fn(),
   getOrCreateWelcomeSession: vi.fn(),
   setOnboardingNeeded: vi.fn(),
   setPendingWelcomeSession: vi.fn(),
-}));
-
-vi.mock("@hypr/plugin-analytics", () => ({
-  commands: { event: mocks.analyticsEvent },
 }));
 
 vi.mock("@hypr/plugin-opener2", () => ({
@@ -45,7 +40,6 @@ import { FinalSection, finishOnboarding } from "./final";
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.analyticsEvent.mockResolvedValue(null);
   mocks.flushAutomaticRelaunch.mockResolvedValue(false);
   mocks.getOrCreateWelcomeSession.mockResolvedValue("welcome-session");
   mocks.setOnboardingNeeded.mockResolvedValue({ status: "ok", data: null });
