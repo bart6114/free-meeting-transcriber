@@ -6,7 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   invalidateQueries: vi.fn(),
   isHovering: false,
   nativeCallbacks: null as any,
+  nativeTargetRef: null as any,
   onFocusChanged: vi.fn(),
   openPath: vi.fn(),
   removeUpload: vi.fn(),
@@ -88,7 +89,8 @@ vi.mock("~/shared/hooks/useFileUpload", () => ({
 }));
 
 vi.mock("~/shared/hooks/useNativeFileDrop", () => ({
-  useNativeFileDrop: (_ref: unknown, callbacks: unknown) => {
+  useNativeFileDrop: (ref: unknown, callbacks: unknown) => {
+    mocks.nativeTargetRef = ref;
     mocks.nativeCallbacks = callbacks;
     return { isHovering: mocks.isHovering };
   },
@@ -209,6 +211,42 @@ describe("Attachments", () => {
     expect(metadata.closest("[data-allow-file-drop='true']")).toBe(dropTarget);
 
     expect(screen.getByText("Drop files to attach them")).toBeTruthy();
+  });
+
+  it("uses the outer session panel as the drop target when provided", () => {
+    function FullPanel() {
+      const dropTargetRef = useRef<HTMLDivElement>(null);
+      return (
+        <div
+          ref={dropTargetRef}
+          data-testid="attachment-panel"
+          data-allow-file-drop="true"
+        >
+          <div data-testid="attachment-tab-header">Tabs</div>
+          <Attachments sessionId="s1" dropTargetRef={dropTargetRef} />
+        </div>
+      );
+    }
+
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <FullPanel />
+      </QueryClientProvider>,
+    );
+
+    const panel = screen.getByTestId("attachment-panel");
+    expect(mocks.nativeTargetRef.current).toBe(panel);
+    expect(
+      screen
+        .getByTestId("attachment-tab-header")
+        .closest("[data-allow-file-drop='true']"),
+    ).toBe(panel);
   });
 
   it("renders pending and failed rows with retry and remove actions", () => {

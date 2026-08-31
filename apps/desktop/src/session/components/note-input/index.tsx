@@ -159,6 +159,7 @@ const NoteInputContent = forwardRef<
     ref,
   ) => {
     const internalEditorRef = useRef<NoteEditorRef>(null);
+    const attachmentsDropTargetRef = useRef<HTMLDivElement>(null);
     const sessionId = tab.id;
     const renderedCurrentTab = currentTab;
     const renderedCurrentTabKey =
@@ -374,7 +375,17 @@ const NoteInputContent = forwardRef<
     );
 
     return (
-      <div className="-mx-2 flex h-full flex-col">
+      <div
+        ref={
+          renderedCurrentTab.type === "attachments"
+            ? attachmentsDropTargetRef
+            : undefined
+        }
+        data-allow-file-drop={
+          renderedCurrentTab.type === "attachments" ? "true" : undefined
+        }
+        className="relative -mx-2 flex h-full flex-col"
+      >
         {!hideHeader && (
           <div className="relative px-2">
             <Header
@@ -467,7 +478,10 @@ const NoteInputContent = forwardRef<
               </div>
             )}
             {renderedCurrentTab.type === "attachments" && (
-              <Attachments sessionId={sessionId}>
+              <Attachments
+                sessionId={sessionId}
+                dropTargetRef={attachmentsDropTargetRef}
+              >
                 <div className="mb-4">
                   <div className="mb-0.5">
                     <SessionDate sessionId={sessionId} />

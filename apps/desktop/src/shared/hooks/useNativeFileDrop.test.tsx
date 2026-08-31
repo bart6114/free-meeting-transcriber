@@ -8,9 +8,6 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({ scaleFactor: vi.fn().mockResolvedValue(2) }),
-}));
 vi.mock("@tauri-apps/api/webview", () => ({
   getCurrentWebview: () => ({
     onDragDropEvent: vi.fn(async (handler) => {
@@ -22,7 +19,7 @@ vi.mock("@tauri-apps/api/webview", () => ({
 
 import {
   isPointInsideElement,
-  physicalToLogicalPoint,
+  nativeDragPointToCssPoint,
   useNativeFileDrop,
 } from "./useNativeFileDrop";
 
@@ -34,8 +31,8 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("useNativeFileDrop", () => {
-  it("converts physical coordinates and hit-tests the target", () => {
-    expect(physicalToLogicalPoint({ x: 80, y: 40 }, 2)).toEqual({
+  it("uses native macOS points as CSS coordinates and hit-tests the target", () => {
+    expect(nativeDragPointToCssPoint({ x: 40, y: 20 })).toEqual({
       x: 40,
       y: 20,
     });
@@ -87,7 +84,10 @@ describe("useNativeFileDrop", () => {
       });
     });
     expect(onDrop).toHaveBeenCalledOnce();
-    expect(onDrop).toHaveBeenCalledWith(["/two", "/one"], { x: 50, y: 50 });
+    expect(onDrop).toHaveBeenCalledWith(["/two", "/one"], {
+      x: 100,
+      y: 100,
+    });
     expect(view.getByTestId("hover").textContent).toBe("no");
 
     view.unmount();

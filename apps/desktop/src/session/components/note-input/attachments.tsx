@@ -15,7 +15,15 @@ import {
   RotateCcwIcon,
   Trash2Icon,
 } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
 
 import {
   type AttachmentInfo,
@@ -85,16 +93,19 @@ const ARCHIVE_EXTENSIONS = new Set(["7z", "bz2", "gz", "rar", "tar", "zip"]);
 export function Attachments({
   sessionId,
   children,
+  dropTargetRef,
 }: {
   sessionId: string;
   children?: ReactNode;
+  dropTargetRef?: RefObject<HTMLDivElement | null>;
 }) {
   const { t } = useLingui();
   const queryClient = useQueryClient();
   const attachmentsQuery = useSessionAttachments(sessionId);
   const uploadFile = useFileUpload(sessionId);
   const uploadStates = useFileUploadStates(sessionId);
-  const targetRef = useRef<HTMLDivElement>(null);
+  const localTargetRef = useRef<HTMLDivElement>(null);
+  const targetRef = dropTargetRef ?? localTargetRef;
   const [attachmentToDelete, setAttachmentToDelete] =
     useState<AttachmentInfo | null>(null);
 
@@ -248,13 +259,21 @@ export function Attachments({
     };
   }, [queryClient, sessionId]);
 
+  const dropOverlay = (
+    <div className="border-primary bg-background/85 pointer-events-none absolute inset-0 z-40 flex items-center justify-center rounded-lg border border-dashed backdrop-blur-[1px]">
+      <div className="border-primary text-foreground flex items-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm font-medium">
+        <PaperclipIcon className="size-4" />
+        {t`Drop files to attach them`}
+      </div>
+    </div>
+  );
+
   return (
     <div
-      ref={targetRef}
-      data-allow-file-drop="true"
+      ref={dropTargetRef ? undefined : localTargetRef}
+      data-allow-file-drop={dropTargetRef ? undefined : "true"}
       className={cn([
         "relative min-h-full rounded-lg border border-transparent pb-6 transition-colors",
-        isDraggingFiles && "border-primary bg-accent/50 border-dashed",
       ])}
     >
       {children}
@@ -359,14 +378,11 @@ export function Attachments({
         </div>
       )}
 
-      {isDraggingFiles ? (
-        <div className="bg-background/85 pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg backdrop-blur-[1px]">
-          <div className="border-primary text-foreground flex items-center gap-2 rounded-lg border border-dashed px-4 py-3 text-sm font-medium">
-            <PaperclipIcon className="size-4" />
-            {t`Drop files to attach them`}
-          </div>
-        </div>
-      ) : null}
+      {isDraggingFiles
+        ? dropTargetRef && targetRef.current
+          ? createPortal(dropOverlay, targetRef.current)
+          : dropOverlay
+        : null}
 
       <Dialog
         open={attachmentToDelete !== null}
