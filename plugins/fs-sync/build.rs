@@ -24,6 +24,7 @@ const COMMANDS: &[&str] = &[
     "chat_dir",
     "entity_dir",
     "attachment_save",
+    "attachment_dir",
     "attachment_list",
     "attachment_read",
     "attachment_remove",

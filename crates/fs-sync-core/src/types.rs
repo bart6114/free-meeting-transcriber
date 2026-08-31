@@ -57,6 +57,7 @@ pub struct AttachmentInfo {
     pub attachment_id: String,
     pub path: String,
     pub extension: String,
+    pub size: u64,
     pub modified_at: String,
 }
 

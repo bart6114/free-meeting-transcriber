@@ -465,6 +465,31 @@ describe("Header", () => {
     expect(memoTab.className).not.toContain("bg-foreground/10");
   });
 
+  it("renders attachments as an icon-only view and navigates to it", () => {
+    const handleTabChange = vi.fn();
+
+    render(
+      <Header
+        sessionId="session-1"
+        editorTabs={[{ type: "raw" }, { type: "attachments" }]}
+        currentTab={{ type: "attachments" }}
+        handleTabChange={handleTabChange}
+      />,
+    );
+
+    const attachmentsTab = screen.getByRole("button", {
+      name: "Attachments",
+    });
+    expect(attachmentsTab.getAttribute("aria-current")).toBe("page");
+    expect(attachmentsTab.getAttribute("title")).toBe("Attachments");
+    expect(attachmentsTab.querySelector("span")?.className).toContain(
+      "sr-only",
+    );
+
+    fireEvent.click(attachmentsTab);
+    expect(handleTabChange).toHaveBeenCalledWith({ type: "attachments" });
+  });
+
   it("can switch from transcript back to memo or summary tabs", () => {
     const editorTabs: EditorView[] = [
       { type: "enhanced", id: "note-1" },
@@ -1030,6 +1055,7 @@ describe("Header", () => {
       { type: "enhanced", id: "note-1" },
       { type: "raw" },
       { type: "transcript" },
+      { type: "attachments" },
     ]);
   });
 
@@ -1042,6 +1068,7 @@ describe("Header", () => {
       { type: "enhanced", id: "note-1" },
       { type: "raw" },
       { type: "transcript" },
+      { type: "attachments" },
     ]);
   });
 
@@ -1058,6 +1085,7 @@ describe("Header", () => {
       { type: "enhanced", id: "note-1" },
       { type: "raw" },
       { type: "transcript" },
+      { type: "attachments" },
     ]);
   });
 
@@ -1075,6 +1103,7 @@ describe("Header", () => {
       { type: "enhanced", id: "note-1" },
       { type: "raw" },
       { type: "transcript" },
+      { type: "attachments" },
     ]);
   });
 
@@ -1088,6 +1117,7 @@ describe("Header", () => {
     expect(result.current).toEqual([
       { type: "enhanced", id: "note-1" },
       { type: "raw" },
+      { type: "attachments" },
     ]);
   });
 });

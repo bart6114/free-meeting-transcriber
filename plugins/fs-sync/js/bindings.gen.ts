@@ -206,6 +206,14 @@ async attachmentSave(sessionId: string, data: number[], filename: string) : Prom
     else return { status: "error", error: e  as any };
 }
 },
+async attachmentDir(sessionId: string) : Promise<Result<string, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("plugin:fs-sync|attachment_dir", { sessionId }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async attachmentList(sessionId: string) : Promise<Result<AttachmentInfo[], string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:fs-sync|attachment_list", { sessionId }) };
@@ -247,7 +255,7 @@ audioImportEvent: "plugin:fs-sync:audio-import-event"
 
 /** user-defined types **/
 
-export type AttachmentInfo = { attachmentId: string; path: string; extension: string; modifiedAt: string }
+export type AttachmentInfo = { attachmentId: string; path: string; extension: string; size: number; modifiedAt: string }
 export type AttachmentSaveResult = { path: string; attachmentId: string }
 export type AudioFileMetadata = { filename: string; contentType: string; sizeBytes: number; sha256: string }
 export type AudioImportEvent = { type: "audioImportStarted"; session_id: string } | { type: "audioImportProgress"; session_id: string; percentage: number } | { type: "audioImportCompleted"; session_id: string } | { type: "audioImportFailed"; session_id: string; error: string }
@@ -268,7 +276,7 @@ export type ParsedDocument = { frontmatter: Partial<{ [key in string]: JsonValue
 export type RenameFolderResult = { updates: FolderSessionUpdate[] }
 export type ScanResult = { files: Partial<{ [key in string]: string }>; dirs: string[] }
 export type SessionContentData = { sessionId: string; meta: SessionMetaData | null; rawMemoTiptapJson: JsonValue | null; rawMemoMarkdown: string | null; transcript: TranscriptJson | null; notes: SessionNoteData[] }
-export type SessionMetaData = { id: string; userId: string; createdAt: string | null; title: string | null; event: JsonValue | null; eventId: string | null; participants: SessionMetaParticipant[]; tags: string[] }
+export type SessionMetaData = { id: string; userId: string; createdAt: string | null; title: string | null; participants: SessionMetaParticipant[]; tags: string[] }
 export type SessionMetaParticipant = { id: string; userId: string; sessionId: string; humanId: string; source: string }
 export type SessionNoteData = { id: string; sessionId: string; templateId: string | null; position: number | null; title: string | null; tiptapJson: JsonValue; markdown: string | null }
 export type TranscriptJson = { transcripts?: TranscriptWithData[] }

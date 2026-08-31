@@ -26,6 +26,7 @@ permissions = [
     "allow-chat-dir",
     "allow-entity-dir",
     "allow-attachment-save",
+    "allow-attachment-dir",
     "allow-attachment-list",
     "allow-attachment-read",
     "allow-attachment-remove",

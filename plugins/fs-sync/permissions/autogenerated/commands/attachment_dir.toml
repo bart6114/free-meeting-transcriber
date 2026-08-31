@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-attachment-dir"
+description = "Enables the attachment_dir command without any pre-configured scope."
+commands.allow = ["attachment_dir"]
+
+[[permission]]
+identifier = "deny-attachment-dir"
+description = "Denies the attachment_dir command without any pre-configured scope."
+commands.deny = ["attachment_dir"]

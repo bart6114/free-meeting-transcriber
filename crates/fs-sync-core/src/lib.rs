@@ -252,6 +252,13 @@ impl FsSyncCore {
         })
     }
 
+    pub fn attachment_dir(&self, session_id: &str) -> Result<PathBuf> {
+        let session_dir = self.resolve_session_dir(session_id)?;
+        let attachments_dir = session_dir.join("attachments");
+        std::fs::create_dir_all(&attachments_dir)?;
+        Ok(attachments_dir)
+    }
+
     pub fn attachment_list(&self, session_id: &str) -> Result<Vec<AttachmentInfo>> {
         let session_dir = self.resolve_session_dir(session_id)?;
         let attachments_dir = session_dir.join("attachments");
@@ -266,13 +273,15 @@ impl FsSyncCore {
 
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-
             let filename = match path.file_name().and_then(|s| s.to_str()) {
-                Some(name) => name.to_string(),
+                Some(name) if !name.starts_with('.') => name.to_string(),
                 None => continue,
+                Some(_) => continue,
+            };
+
+            let metadata = match entry.metadata() {
+                Ok(metadata) if metadata.is_file() => metadata,
+                _ => continue,
             };
 
             let extension = path
@@ -281,9 +290,8 @@ impl FsSyncCore {
                 .unwrap_or("")
                 .to_string();
 
-            let modified_at = entry
-                .metadata()
-                .and_then(|m| m.modified())
+            let modified_at = metadata
+                .modified()
                 .map(|t| {
                     chrono::DateTime::<chrono::Utc>::from(t)
                         .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
@@ -294,6 +302,7 @@ impl FsSyncCore {
                 attachment_id: filename,
                 path: path.to_string_lossy().to_string(),
                 extension,
+                size: metadata.len(),
                 modified_at,
             });
         }
@@ -331,7 +340,11 @@ impl FsSyncCore {
             };
 
             if eq_nfc(filename, attachment_id) {
-                std::fs::remove_file(&path)?;
+                let vault_base = self
+                    .sessions_dir
+                    .parent()
+                    .ok_or_else(|| Error::Path("attachments_vault_base_missing".to_string()))?;
+                export::move_to_trash(vault_base, &path)?;
                 return Ok(());
             }
         }
@@ -847,6 +860,93 @@ mod tests {
         let bytes = core.attachment_read(UUID_1, "image.png").unwrap();
 
         assert_eq!(bytes, b"hello");
+    }
+
+    #[test]
+    fn attachment_dir_creates_and_returns_the_session_attachment_directory() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child(UUID_1)
+            .create_dir_all()
+            .unwrap();
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        let path = core.attachment_dir(UUID_1).unwrap();
+
+        assert_eq!(
+            path,
+            temp.path()
+                .join("sessions")
+                .join(UUID_1)
+                .join("attachments")
+        );
+        assert!(path.is_dir());
+    }
+
+    #[test]
+    fn attachment_list_reports_size_and_skips_hidden_files_and_directories() {
+        let temp = TempDir::new().unwrap();
+        let attachments = temp.child("sessions").child(UUID_1).child("attachments");
+        attachments.create_dir_all().unwrap();
+        attachments
+            .child("brief.txt")
+            .write_binary(b"hello")
+            .unwrap();
+        attachments
+            .child("no-extension")
+            .write_binary(b"1234567")
+            .unwrap();
+        attachments
+            .child(".DS_Store")
+            .write_binary(b"hidden")
+            .unwrap();
+        attachments.child("nested").create_dir_all().unwrap();
+        attachments
+            .child("nested")
+            .child("inside.pdf")
+            .write_binary(b"nested")
+            .unwrap();
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        let mut listed = core.attachment_list(UUID_1).unwrap();
+        listed.sort_by(|left, right| left.attachment_id.cmp(&right.attachment_id));
+
+        assert_eq!(listed.len(), 2);
+        assert_eq!(listed[0].attachment_id, "brief.txt");
+        assert_eq!(listed[0].extension, "txt");
+        assert_eq!(listed[0].size, 5);
+        assert_eq!(listed[1].attachment_id, "no-extension");
+        assert_eq!(listed[1].extension, "");
+        assert_eq!(listed[1].size, 7);
+    }
+
+    #[test]
+    fn attachment_remove_moves_the_file_to_vault_trash() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child(UUID_1)
+            .create_dir_all()
+            .unwrap();
+
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+        core.attachment_save(UUID_1, b"recoverable", "brief.txt")
+            .unwrap();
+
+        core.attachment_remove(UUID_1, "brief.txt").unwrap();
+
+        temp.child("sessions")
+            .child(UUID_1)
+            .child("attachments")
+            .child("brief.txt")
+            .assert(predicates::path::missing());
+        let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+        temp.child(".trash")
+            .child(date)
+            .child("sessions")
+            .child(UUID_1)
+            .child("attachments")
+            .child("brief.txt")
+            .assert(predicates::path::exists());
     }
 
     #[test]

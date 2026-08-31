@@ -13,6 +13,16 @@ msgstr ""
 "Language-Team: \n"
 "Plural-Forms: \n"
 
+#. placeholder {0}: attachment.attachmentId
+#: src/session/components/note-input/attachments.tsx
+msgid "“{0}” moved to Trash"
+msgstr ""
+
+#. placeholder {0}: attachmentToDelete.attachmentId
+#: src/session/components/note-input/attachments.tsx
+msgid "“{0}” will be moved to the vault Trash. Links to this file in notes or summaries may stop working."
+msgstr ""
+
 #: src/settings/general/notification.tsx
 msgid "(default)"
 msgstr ""
@@ -20,6 +30,11 @@ msgstr ""
 #. placeholder {0}: formatCount(stats.enhanced_docs)
 #: src/main/about-dialog.tsx
 msgid "{0} AI summaries"
+msgstr ""
+
+#. placeholder {0}: attachments.length
+#: src/session/components/note-input/attachments.tsx
+msgid "{0} files"
 msgstr ""
 
 #. placeholder {0}: formatCount( series.reduce((total, year) => total + year.sessions, 0), )
@@ -43,6 +58,10 @@ msgstr ""
 msgid "{0} words transcribed"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "{added} attachments added"
+msgstr ""
+
 #. placeholder {0}: formatLanguageList(unsupportedLanguages)
 #: src/settings/ai/stt/select.tsx
 msgid "{model} can't transcribe {0}. Try another model or change your spoken languages."
@@ -62,6 +81,10 @@ msgstr ""
 
 #: src/settings/general/app-settings.tsx
 msgid "1 day"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "1 file"
 msgstr ""
 
 #: src/settings/general/app-settings.tsx
@@ -92,6 +115,10 @@ msgstr ""
 msgid "Accept suggested tag {name}"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Actions"
+msgstr ""
+
 #: src/templates/template-icon-picker.tsx
 msgid "Activity"
 msgstr ""
@@ -102,6 +129,14 @@ msgstr ""
 
 #: src/session/components/note-input/enhanced/config-error.tsx
 msgid "Add API key"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Add attachments"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Add files here or drop them anywhere in this area."
 msgstr ""
 
 #: src/settings/general/spoken-languages.tsx
@@ -122,6 +157,10 @@ msgstr "Danışıq dili əlavə edin"
 
 #: src/session/components/note-input/enhanced/config-error.tsx
 msgid "Add your own LLM API key to generate a summary from this transcript."
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Adding…"
 msgstr ""
 
 #: src/settings/general/spoken-languages.tsx
@@ -177,6 +216,15 @@ msgstr ""
 msgid "Assignees:"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Attachment added"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+#: src/session/components/note-input/header.tsx
+msgid "Attachments"
+msgstr ""
+
 #: src/settings/general/permissions.tsx
 msgid "Audio"
 msgstr ""
@@ -226,6 +274,7 @@ msgstr ""
 msgid "Can transcribe while the meeting is happening."
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
 #: src/session/components/note-input/transcript/regenerate-confirm.tsx
 #: src/settings/general/storage/change-location.tsx
 msgid "Cancel"
@@ -345,6 +394,31 @@ msgstr ""
 msgid "Could not update tags."
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t add {failed} attachments"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t add 1 attachment"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t load attachments."
+msgstr ""
+
+#. placeholder {0}: attachment.attachmentId
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t open “{0}”"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t open attachments in Finder"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t remove attachment"
+msgstr ""
+
 #: src/templates/details.tsx
 msgid "Create template"
 msgstr ""
@@ -430,6 +504,10 @@ msgstr ""
 
 #: src/main/audio-import-dialog.tsx
 msgid "Drop audio files or a folder here"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Drop files to attach them"
 msgstr ""
 
 #: src/templates/details.tsx
@@ -832,8 +910,16 @@ msgstr ""
 msgid "Move my vault here"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Move to Trash"
+msgstr ""
+
 #: src/templates/sections-editor.tsx
 msgid "Move up"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Name"
 msgstr ""
 
 #: src/main/empty.tsx
@@ -846,6 +932,10 @@ msgstr ""
 
 #: src/settings/general/notification.tsx
 msgid "No apps found."
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "No attachments yet"
 msgstr ""
 
 #: src/changelog/index.tsx
@@ -943,6 +1033,11 @@ msgstr ""
 #: src/settings/todo/permission.tsx
 #: src/task/resource-view.tsx
 msgid "Open"
+msgstr ""
+
+#. placeholder {0}: attachment.attachmentId
+#: src/session/components/note-input/attachments.tsx
+msgid "Open {0}"
 msgstr ""
 
 #. placeholder {0}: permissionName.toLowerCase()
@@ -1061,12 +1156,29 @@ msgstr ""
 msgid "Reminders"
 msgstr ""
 
+#. placeholder {0}: attachment.attachmentId
+#: src/session/components/note-input/attachments.tsx
+msgid "Remove {0}"
+msgstr ""
+
 #: src/settings/dictionary/index.tsx
 msgid "Remove {term}"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Remove attachment"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Remove attachment?"
+msgstr ""
+
 #: src/session/components/session-tags.tsx
 msgid "Remove tag {tag}"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Removing…"
 msgstr ""
 
 #: src/sidebar/timeline/item.tsx
@@ -1264,6 +1376,7 @@ msgstr ""
 msgid "Show image in note"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
 #: src/settings/ai/stt/select.tsx
 #: src/sidebar/timeline/item.tsx
 msgid "Show in Finder"
@@ -1283,6 +1396,10 @@ msgstr ""
 
 #: src/main/about-dialog.tsx
 msgid "since {since}"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Size"
 msgstr ""
 
 #: src/onboarding/shared.tsx
@@ -1488,8 +1605,13 @@ msgstr ""
 msgid "Travel & Places"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
 #: src/shared/startup-boundary.tsx
 msgid "Try again"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Type"
 msgstr ""
 
 #: src/session/components/session-date.tsx

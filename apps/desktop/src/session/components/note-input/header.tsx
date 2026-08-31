@@ -4,6 +4,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   HeartIcon,
+  PaperclipIcon,
   PlusIcon,
   SearchIcon,
   XIcon,
@@ -89,6 +90,7 @@ function IconHeaderView({
   title,
   size = "tray",
   className,
+  iconOnly = false,
 }: {
   isActive: boolean;
   label: string;
@@ -99,6 +101,7 @@ function IconHeaderView({
   title?: string;
   size?: "tray" | "standalone";
   className?: string;
+  iconOnly?: boolean;
 }) {
   return (
     <button
@@ -126,13 +129,35 @@ function IconHeaderView({
       {icon}
       <span
         className={cn([
-          "min-w-0 truncate text-xs font-medium",
+          iconOnly ? "sr-only" : "min-w-0 truncate text-xs font-medium",
           hoverLabel ? "group-hover/header-view:hidden" : null,
         ])}
       >
         {label}
       </span>
     </button>
+  );
+}
+
+function HeaderViewAttachments({
+  isActive,
+  onClick,
+}: {
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const { t } = useLingui();
+
+  return (
+    <IconHeaderView
+      isActive={isActive}
+      label={t`Attachments`}
+      title={t`Attachments`}
+      icon={<PaperclipIcon className="size-3.5" />}
+      iconOnly
+      onClick={onClick}
+      className="w-7 px-0"
+    />
   );
 }
 
@@ -1366,6 +1391,16 @@ export function Header({
                 );
               }
 
+              if (view.type === "attachments") {
+                return (
+                  <HeaderViewAttachments
+                    key={view.type}
+                    isActive={currentTab.type === view.type}
+                    onClick={() => handleTabChange(view)}
+                  />
+                );
+              }
+
               return null;
             })}
           </div>
@@ -1411,6 +1446,7 @@ export function createEditorTabs({
     ...enhancedTabs,
     { type: "raw" },
     ...(canShowTranscript ? [{ type: "transcript" } as const] : []),
+    { type: "attachments" },
   ];
 }
 

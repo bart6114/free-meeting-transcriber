@@ -347,7 +347,7 @@ describe("computeCurrentNoteTab", () => {
       expect(result).toEqual({ type: "raw" });
     });
 
-    it("normalizes persisted attachments view to raw", () => {
+    it("respects persisted attachments view", () => {
       const result = computeCurrentNoteTab(
         { type: "attachments" },
         false,
@@ -355,7 +355,7 @@ describe("computeCurrentNoteTab", () => {
         false,
         null,
       );
-      expect(result).toEqual({ type: "raw" });
+      expect(result).toEqual({ type: "attachments" });
     });
 
     it("normalizes persisted enhanced view when no enhanced notes exist", () => {

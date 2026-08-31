@@ -29,6 +29,7 @@ Default permissions for the fs-sync plugin
 - `allow-chat-dir`
 - `allow-entity-dir`
 - `allow-attachment-save`
+- `allow-attachment-dir`
 - `allow-attachment-list`
 - `allow-attachment-read`
 - `allow-attachment-remove`
@@ -41,6 +42,32 @@ Default permissions for the fs-sync plugin
 <th>Description</th>
 </tr>
 
+
+<tr>
+<td>
+
+`fs-sync:allow-attachment-dir`
+
+</td>
+<td>
+
+Enables the attachment_dir command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-sync:deny-attachment-dir`
+
+</td>
+<td>
+
+Denies the attachment_dir command without any pre-configured scope.
+
+</td>
+</tr>
 
 <tr>
 <td>

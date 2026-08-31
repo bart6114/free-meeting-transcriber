@@ -13,6 +13,7 @@ import { useHotkeys } from "react-hotkeys-hook";
 import type { NoteEditorRef } from "@hypr/editor/note";
 import { cn } from "@hypr/utils";
 
+import { Attachments } from "./attachments";
 import { Enhanced } from "./enhanced";
 import { FileDropTarget } from "./file-drop-target";
 import { useNoteFileHandlerConfig } from "./file-handler";
@@ -462,6 +463,22 @@ const NoteInputContent = forwardRef<
                   />
                 </div>
               </div>
+            )}
+            {renderedCurrentTab.type === "attachments" && (
+              <Attachments sessionId={sessionId}>
+                <div className="mb-4">
+                  <div className="mb-0.5">
+                    <SessionDate sessionId={sessionId} />
+                  </div>
+                  <TitleInput tab={tab} />
+                  <SessionPeopleFromTranscripts
+                    transcripts={transcripts}
+                    className="mt-2"
+                  />
+                  <SessionAuthorBadge sessionId={sessionId} className="mt-2" />
+                  <SessionTags sessionId={sessionId} className="mt-2" />
+                </div>
+              </Attachments>
             )}
           </div>
         </div>

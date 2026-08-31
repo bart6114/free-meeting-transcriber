@@ -524,6 +524,20 @@ pub(crate) async fn attachment_save<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub(crate) async fn attachment_dir<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    session_id: String,
+) -> Result<String, String> {
+    spawn_blocking!({
+        app.fs_sync()
+            .attachment_dir(&session_id)
+            .map(|path| path.to_string_lossy().to_string())
+            .map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
 pub(crate) async fn attachment_list<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     session_id: String,

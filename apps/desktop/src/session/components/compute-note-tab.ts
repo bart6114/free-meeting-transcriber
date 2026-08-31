@@ -20,6 +20,9 @@ export function computeCurrentNoteTab(
     if (tabView?.type === "enhanced" && hasEnhancedNote(tabView.id)) {
       return tabView;
     }
+    if (tabView?.type === "attachments") {
+      return tabView;
+    }
     return { type: "raw" };
   }
 
@@ -35,6 +38,9 @@ export function computeCurrentNoteTab(
           : { type: "raw" };
     }
     if (tabView.type === "transcript" && canShowTranscript) {
+      return tabView;
+    }
+    if (tabView.type === "attachments") {
       return tabView;
     }
 
