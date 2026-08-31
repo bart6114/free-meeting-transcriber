@@ -252,6 +252,38 @@ impl FsSyncCore {
         })
     }
 
+    pub fn attachment_import_path(
+        &self,
+        session_id: &str,
+        source_path: &std::path::Path,
+    ) -> Result<AttachmentInfo> {
+        if !source_path.is_absolute() {
+            return Err(Error::Path("attachment_source_path_not_absolute".into()));
+        }
+
+        let metadata = std::fs::metadata(source_path)?;
+        if !metadata.is_file() {
+            return Err(Error::Path("attachment_source_not_file".into()));
+        }
+
+        let filename = source_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| Error::Path("attachment_source_filename_invalid".into()))?;
+        let safe_filename = sanitize_filename(filename)?;
+        let session_dir = self.resolve_session_dir(session_id)?;
+        let attachments_dir = session_dir.join("attachments");
+        std::fs::create_dir_all(&attachments_dir)?;
+
+        let mut source = std::fs::File::open(source_path)?;
+        let (file_path, final_filename) =
+            write_unique_file_with(&attachments_dir, &safe_filename, |destination| {
+                std::io::copy(&mut source, destination).map(|_| ())
+            })?;
+
+        attachment_info(file_path, final_filename)
+    }
+
     pub fn attachment_dir(&self, session_id: &str) -> Result<PathBuf> {
         let session_dir = self.resolve_session_dir(session_id)?;
         let attachments_dir = session_dir.join("attachments");
@@ -394,16 +426,32 @@ fn write_unique_file(
 ) -> Result<(PathBuf, String)> {
     use std::io::Write;
 
-    write_unique_file_with(dir, filename, data, |file, bytes| file.write_all(bytes))
+    write_unique_file_with(dir, filename, |file| file.write_all(data))
 }
 
 fn write_unique_file_with(
     dir: &std::path::Path,
     filename: &str,
-    data: &[u8],
-    mut write_data: impl FnMut(&mut std::fs::File, &[u8]) -> std::io::Result<()>,
+    mut write_data: impl FnMut(&mut std::fs::File) -> std::io::Result<()>,
 ) -> Result<(PathBuf, String)> {
     use std::fs::OpenOptions;
+    use std::io::Write;
+
+    let (temporary_path, mut temporary_file) = loop {
+        let path = dir.join(format!(".attachment-{}.tmp", uuid::Uuid::new_v4()));
+        match OpenOptions::new().write(true).create_new(true).open(&path) {
+            Ok(file) => break (path, file),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(error.into()),
+        }
+    };
+
+    if let Err(error) = write_data(&mut temporary_file).and_then(|_| temporary_file.flush()) {
+        drop(temporary_file);
+        remove_partial_attachment(&temporary_path);
+        return Err(error.into());
+    }
+    drop(temporary_file);
 
     let path = std::path::Path::new(filename);
     let stem = path
@@ -425,31 +473,53 @@ fn write_unique_file_with(
 
         let candidate_path = dir.join(&candidate_filename);
 
-        match OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&candidate_path)
-        {
-            Ok(mut file) => {
-                if let Err(error) = write_data(&mut file, data) {
-                    drop(file);
-                    if let Err(cleanup_error) = std::fs::remove_file(&candidate_path) {
-                        tracing::warn!(
-                            error = %cleanup_error,
-                            "Failed to remove partially written attachment"
-                        );
-                    }
-                    return Err(error.into());
-                }
+        match std::fs::hard_link(&temporary_path, &candidate_path) {
+            Ok(()) => {
+                remove_partial_attachment(&temporary_path);
                 return Ok((candidate_path, candidate_filename));
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
                 counter += 1;
                 continue;
             }
-            Err(e) => return Err(e.into()),
+            Err(e) => {
+                remove_partial_attachment(&temporary_path);
+                return Err(e.into());
+            }
         }
     }
+}
+
+fn remove_partial_attachment(path: &std::path::Path) {
+    if let Err(error) = std::fs::remove_file(path)
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        tracing::warn!(error = %error, "Failed to remove temporary attachment");
+    }
+}
+
+fn attachment_info(path: PathBuf, attachment_id: String) -> Result<AttachmentInfo> {
+    let metadata = std::fs::metadata(&path)?;
+    let extension = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or("")
+        .to_string();
+    let modified_at = metadata
+        .modified()
+        .map(|time| {
+            chrono::DateTime::<chrono::Utc>::from(time)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true)
+        })
+        .unwrap_or_default();
+
+    Ok(AttachmentInfo {
+        attachment_id,
+        path: path.to_string_lossy().to_string(),
+        extension,
+        size: metadata.len(),
+        modified_at,
+    })
 }
 
 #[cfg(test)]
@@ -826,24 +896,133 @@ mod tests {
         let attachments_dir = temp.path().join("attachments");
         std::fs::create_dir_all(&attachments_dir).unwrap();
 
-        let result =
-            write_unique_file_with(&attachments_dir, "file.txt", b"partial", |file, bytes| {
-                use std::io::Write;
+        let result = write_unique_file_with(&attachments_dir, "file.txt", |file| {
+            use std::io::Write;
 
-                file.write_all(&bytes[..3])?;
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::StorageFull,
-                    "disk full",
-                ))
-            });
+            file.write_all(b"par")?;
+            Err(std::io::Error::new(
+                std::io::ErrorKind::StorageFull,
+                "disk full",
+            ))
+        });
 
         assert!(matches!(
             result,
             Err(Error::Io(error)) if error.kind() == std::io::ErrorKind::StorageFull
         ));
         assert!(!attachments_dir.join("file.txt").exists());
+        assert!(
+            std::fs::read_dir(&attachments_dir)
+                .unwrap()
+                .next()
+                .is_none()
+        );
         let saved = write_unique_file(&attachments_dir, "file.txt", b"complete").unwrap();
         assert_eq!(saved.1, "file.txt");
+    }
+
+    #[test]
+    fn attachment_import_path_validates_and_copies_regular_files() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child(UUID_1)
+            .create_dir_all()
+            .unwrap();
+        let source = temp.child("Résumé 📎.txt");
+        source.write_str("native path").unwrap();
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        let imported = core.attachment_import_path(UUID_1, source.path()).unwrap();
+
+        assert_eq!(imported.attachment_id, "Résumé 📎.txt");
+        assert_eq!(imported.extension, "txt");
+        assert_eq!(imported.size, 11);
+        assert!(!imported.modified_at.is_empty());
+        assert_eq!(std::fs::read(imported.path).unwrap(), b"native path");
+    }
+
+    #[test]
+    fn attachment_import_path_rejects_relative_paths_and_directories() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child(UUID_1)
+            .create_dir_all()
+            .unwrap();
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        assert!(matches!(
+            core.attachment_import_path(UUID_1, std::path::Path::new("file.txt")),
+            Err(Error::Path(message)) if message == "attachment_source_path_not_absolute"
+        ));
+        assert!(matches!(
+            core.attachment_import_path(UUID_1, temp.path()),
+            Err(Error::Path(message)) if message == "attachment_source_not_file"
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn attachment_import_path_follows_symlinks_and_keeps_the_link_name() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child(UUID_1)
+            .create_dir_all()
+            .unwrap();
+        let source = temp.child("source.txt");
+        source.write_str("linked").unwrap();
+        let link = temp.path().join("alias.txt");
+        std::os::unix::fs::symlink(source.path(), &link).unwrap();
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        let imported = core.attachment_import_path(UUID_1, &link).unwrap();
+
+        assert_eq!(imported.attachment_id, "alias.txt");
+        assert_eq!(std::fs::read(imported.path).unwrap(), b"linked");
+    }
+
+    #[test]
+    fn attachment_import_path_deduplicates_names() {
+        let temp = TempDir::new().unwrap();
+        temp.child("sessions")
+            .child(UUID_1)
+            .create_dir_all()
+            .unwrap();
+        let source = temp.child("file.txt");
+        source.write_str("content").unwrap();
+        let core = FsSyncCore::new(temp.path().to_path_buf());
+
+        let first = core.attachment_import_path(UUID_1, source.path()).unwrap();
+        let second = core.attachment_import_path(UUID_1, source.path()).unwrap();
+
+        assert_eq!(first.attachment_id, "file.txt");
+        assert_eq!(second.attachment_id, "file 1.txt");
+    }
+
+    #[test]
+    fn atomic_attachment_writer_hides_partial_content() {
+        let temp = TempDir::new().unwrap();
+        let attachments_dir = temp.path().join("attachments");
+        std::fs::create_dir_all(&attachments_dir).unwrap();
+
+        write_unique_file_with(&attachments_dir, "file.txt", |file| {
+            use std::io::Write;
+            file.write_all(b"partial")?;
+            assert!(!attachments_dir.join("file.txt").exists());
+            Ok(())
+        })
+        .unwrap();
+
+        assert_eq!(
+            std::fs::read(attachments_dir.join("file.txt")).unwrap(),
+            b"partial"
+        );
+        assert!(std::fs::read_dir(&attachments_dir).unwrap().all(|entry| {
+            !entry
+                .unwrap()
+                .file_name()
+                .to_string_lossy()
+                .starts_with('.')
+        }));
     }
 
     #[test]

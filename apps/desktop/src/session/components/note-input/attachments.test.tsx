@@ -13,17 +13,24 @@ const mocks = vi.hoisted(() => ({
   attachmentDir: vi.fn(),
   attachmentRemove: vi.fn(),
   invalidateQueries: vi.fn(),
+  isHovering: false,
+  nativeCallbacks: null as any,
   onFocusChanged: vi.fn(),
   openPath: vi.fn(),
+  removeUpload: vi.fn(),
   refetch: vi.fn(),
+  selectFile: vi.fn(),
   toastError: vi.fn(),
   toastSuccess: vi.fn(),
   uploadFile: vi.fn(),
+  uploadStates: [] as any[],
 }));
 
 vi.mock("@tauri-apps/api/window", () => ({
   getCurrentWindow: () => ({ onFocusChanged: mocks.onFocusChanged }),
 }));
+
+vi.mock("@tauri-apps/plugin-dialog", () => ({ open: mocks.selectFile }));
 
 vi.mock("@hypr/plugin-fs-sync", () => ({
   commands: {
@@ -74,6 +81,17 @@ vi.mock("~/session/hooks/useAttachmentResolver", () => ({
 
 vi.mock("~/shared/hooks/useFileUpload", () => ({
   useFileUpload: () => mocks.uploadFile,
+  useFileUploadStates: () => ({
+    states: mocks.uploadStates,
+    remove: mocks.removeUpload,
+  }),
+}));
+
+vi.mock("~/shared/hooks/useNativeFileDrop", () => ({
+  useNativeFileDrop: (_ref: unknown, callbacks: unknown) => {
+    mocks.nativeCallbacks = callbacks;
+    return { isHovering: mocks.isHovering };
+  },
 }));
 
 import { Attachments, formatFileSize, formatFileType } from "./attachments";
@@ -93,6 +111,8 @@ function renderAttachments(children?: ReactNode) {
 describe("Attachments", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isHovering = false;
+    mocks.uploadStates = [];
     mocks.attachmentDir.mockResolvedValue({
       status: "ok",
       data: "/vault/sessions/s1/attachments",
@@ -100,6 +120,7 @@ describe("Attachments", () => {
     mocks.attachmentRemove.mockResolvedValue({ status: "ok", data: null });
     mocks.onFocusChanged.mockResolvedValue(() => {});
     mocks.openPath.mockResolvedValue({ status: "ok", data: null });
+    mocks.selectFile.mockResolvedValue([]);
     mocks.uploadFile.mockResolvedValue({
       attachmentId: "new.txt",
       path: "/vault/sessions/s1/attachments/new.txt",
@@ -145,28 +166,40 @@ describe("Attachments", () => {
     );
   });
 
-  it("adds selected and dropped files", async () => {
+  it("adds picker selections and native dropped paths", async () => {
     const { container } = renderAttachments();
-    const input = container.querySelector('input[type="file"]');
     const dropTarget = container.firstElementChild;
-    const selected = new File(["selected"], "selected.txt");
-    const dropped = new File(["dropped"], "dropped.csv");
 
     expect(dropTarget?.getAttribute("data-allow-file-drop")).toBe("true");
 
-    fireEvent.change(input!, { target: { files: [selected] } });
+    mocks.selectFile.mockResolvedValueOnce([
+      "/Users/me/selected.txt",
+      "/Users/me/second.csv",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Add attachments" }));
     await waitFor(() =>
-      expect(mocks.uploadFile).toHaveBeenCalledWith(selected),
+      expect(mocks.uploadFile).toHaveBeenCalledWith({
+        kind: "path",
+        path: "/Users/me/selected.txt",
+        name: "selected.txt",
+      }),
     );
 
-    const shouldRunBrowserDefault = fireEvent.drop(dropTarget!, {
-      dataTransfer: { files: [dropped], types: ["Files"] },
+    mocks.nativeCallbacks.onDrop(["/Users/me/dropped.csv"], {
+      x: 10,
+      y: 10,
     });
-    expect(shouldRunBrowserDefault).toBe(false);
-    await waitFor(() => expect(mocks.uploadFile).toHaveBeenCalledWith(dropped));
+    await waitFor(() =>
+      expect(mocks.uploadFile).toHaveBeenCalledWith({
+        kind: "path",
+        path: "/Users/me/dropped.csv",
+        name: "dropped.csv",
+      }),
+    );
   });
 
   it("uses the full attachment view for the drop target and visual hint", () => {
+    mocks.isHovering = true;
     const { container } = renderAttachments(
       <div data-testid="session-metadata">Session metadata</div>,
     );
@@ -175,10 +208,33 @@ describe("Attachments", () => {
 
     expect(metadata.closest("[data-allow-file-drop='true']")).toBe(dropTarget);
 
-    fireEvent.dragEnter(metadata, {
-      dataTransfer: { files: [], items: [], types: ["Files"] },
-    });
     expect(screen.getByText("Drop files to attach them")).toBeTruthy();
+  });
+
+  it("renders pending and failed rows with retry and remove actions", () => {
+    const pending = {
+      clientId: "pending-1",
+      candidate: { kind: "path", path: "/tmp/large.zip", name: "large.zip" },
+      status: "pending",
+      error: null,
+      submittedAt: 1,
+    };
+    const failed = {
+      clientId: "failed-1",
+      candidate: { kind: "path", path: "/tmp/bad.pdf", name: "bad.pdf" },
+      status: "error",
+      error: new Error("disk full"),
+      submittedAt: 2,
+    };
+    mocks.uploadStates = [pending, failed];
+    renderAttachments();
+
+    expect(screen.getByText("Copying…")).toBeTruthy();
+    expect(screen.getByText("Copy failed")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Retry bad.pdf" }));
+    expect(mocks.uploadFile).toHaveBeenCalledWith(failed.candidate, "failed-1");
+    fireEvent.click(screen.getByRole("button", { name: "Remove bad.pdf" }));
+    expect(mocks.removeUpload).toHaveBeenCalledWith("failed-1");
   });
 
   it("confirms removal before moving an attachment to trash", async () => {

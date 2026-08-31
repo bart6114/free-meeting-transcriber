@@ -29,6 +29,8 @@ Default permissions for the fs-sync plugin
 - `allow-chat-dir`
 - `allow-entity-dir`
 - `allow-attachment-save`
+- `allow-attachment-import-path`
+- `allow-audio-collect-import-sources`
 - `allow-attachment-dir`
 - `allow-attachment-list`
 - `allow-attachment-read`
@@ -65,6 +67,32 @@ Enables the attachment_dir command without any pre-configured scope.
 <td>
 
 Denies the attachment_dir command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-sync:allow-attachment-import-path`
+
+</td>
+<td>
+
+Enables the attachment_import_path command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-sync:deny-attachment-import-path`
+
+</td>
+<td>
+
+Denies the attachment_import_path command without any pre-configured scope.
 
 </td>
 </tr>
@@ -169,6 +197,32 @@ Enables the attachment_save command without any pre-configured scope.
 <td>
 
 Denies the attachment_save command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-sync:allow-audio-collect-import-sources`
+
+</td>
+<td>
+
+Enables the audio_collect_import_sources command without any pre-configured scope.
+
+</td>
+</tr>
+
+<tr>
+<td>
+
+`fs-sync:deny-audio-collect-import-sources`
+
+</td>
+<td>
+
+Denies the audio_collect_import_sources command without any pre-configured scope.
 
 </td>
 </tr>

@@ -1,24 +1,27 @@
-import { isTauri } from "@tauri-apps/api/core";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
-  type DragEvent,
-  type HTMLAttributes,
-  type RefObject,
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
+  type HTMLAttributes,
+  type RefObject,
 } from "react";
 
 import {
   type FileHandlerConfig,
-  handleFileDrop,
+  type FileUploadCandidate,
+  handleNativeFileDrop,
   type NoteEditorRef,
 } from "@hypr/editor/note";
 import { sonnerToast } from "@hypr/ui/components/ui/toast";
 
-import { useFileUpload } from "~/shared/hooks/useFileUpload";
+import {
+  useFileUpload,
+  useFileUploadStates,
+} from "~/shared/hooks/useFileUpload";
+import { useNativeFileDrop } from "~/shared/hooks/useNativeFileDrop";
 import { isAudioUploadFile, useUploadFile } from "~/stt/useUploadFile";
 
 export type NoteFileDragKind = "audio" | "files" | "mixed";
@@ -28,18 +31,17 @@ export function useNoteFileHandlerConfig(
   editorRef: RefObject<NoteEditorRef | null>,
 ) {
   const onFileUpload = useFileUpload(sessionId);
-  const { processAudioFile } = useUploadFile(sessionId);
+  const uploadStates = useFileUploadStates(sessionId);
+  const { processAudioFile, processAudioPath } = useUploadFile(sessionId);
   const [fileDragKind, setFileDragKind] = useState<NoteFileDragKind | null>(
     null,
   );
-  const fileDragDepthRef = useRef(0);
+  const fileDropTargetRef = useRef<HTMLDivElement>(null);
 
   const processAudioDrop = useCallback(
     (files: File[], items?: DataTransferItemList) => {
       const audioDrop = getAudioDrop(files, items);
-      if (!audioDrop) {
-        return null;
-      }
+      if (!audioDrop) return undefined;
 
       if (audioDrop.allowUnknownAudio) {
         processAudioFile(audioDrop.audioFile, {
@@ -54,28 +56,28 @@ export function useNoteFileHandlerConfig(
     [processAudioFile],
   );
 
-  const handleDrop = useCallback(
-    (files: File[], _pos?: number, items?: DataTransferItemList) => {
-      const result = processAudioDrop(files, items);
-      if (!result) {
-        return undefined;
-      }
+  const processNativeAudioDrop = useCallback(
+    (candidates: FileUploadCandidate[]) => {
+      const audioIndex = candidates.findIndex((candidate) =>
+        isAudioUploadFile({ name: candidate.name, type: "" }),
+      );
+      if (audioIndex === -1) return undefined;
 
-      return result.remainingFiles.length === 0 ? true : result;
+      const audio = candidates[audioIndex];
+      if (audio.kind === "path") processAudioPath(audio.path);
+      return {
+        remainingCandidates: candidates.filter(
+          (_, index) => index !== audioIndex,
+        ),
+      };
     },
-    [processAudioDrop],
-  );
-
-  const handlePaste = useCallback(
-    (files: File[], items?: DataTransferItemList) =>
-      handleDrop(files, undefined, items),
-    [handleDrop],
+    [processAudioPath],
   );
 
   const handleFileUploadError = useCallback(
-    (file: File, error: unknown) => {
+    (candidate: FileUploadCandidate, error: unknown) => {
       const detail = error instanceof Error ? `: ${error.message}` : "";
-      sonnerToast.error(`Couldn’t attach “${file.name}”${detail}`, {
+      sonnerToast.error(`Couldn’t attach “${candidate.name}”${detail}`, {
         id: `attachment-upload-failed:${sessionId}`,
       });
     },
@@ -86,146 +88,59 @@ export function useNoteFileHandlerConfig(
     () => ({
       onFileUpload,
       onFileUploadError: handleFileUploadError,
-      onDrop: handleDrop,
-      onPaste: handlePaste,
+      onFileUploadRemove: uploadStates.remove,
+      onDrop: (files, _pos, items) => processAudioDrop(files, items),
+      onNativeDrop: processNativeAudioDrop,
+      onPaste: processAudioDrop,
     }),
-    [handleDrop, handleFileUploadError, handlePaste, onFileUpload],
+    [
+      handleFileUploadError,
+      onFileUpload,
+      processAudioDrop,
+      processNativeAudioDrop,
+      uploadStates.remove,
+    ],
   );
 
-  const resetFileDrag = useCallback(() => {
-    fileDragDepthRef.current = 0;
-    setFileDragKind(null);
-  }, []);
-
+  const resetFileDrag = useCallback(() => setFileDragKind(null), []);
   useEffect(() => {
     resetFileDrag();
     return resetFileDrag;
   }, [resetFileDrag, sessionId]);
 
-  const prepareFileDragEvent = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      event.dataTransfer.dropEffect = "copy";
-      setFileDragKind(classifyFileDrag(event.dataTransfer));
-    },
-    [],
-  );
-
-  const handleDragEnterCapture = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      if (
-        !editorRef.current?.view ||
-        !hasExternalFileDrag(event.dataTransfer)
-      ) {
-        return;
-      }
-
-      if (fileDragDepthRef.current === 0) {
-        focusCurrentWindowForFileDrop();
-      }
-
-      fileDragDepthRef.current += 1;
-      prepareFileDragEvent(event);
-    },
-    [editorRef, prepareFileDragEvent],
-  );
-
-  const handleDragOverCapture = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      if (
-        !editorRef.current?.view ||
-        (fileDragDepthRef.current === 0 &&
-          !hasExternalFileDrag(event.dataTransfer))
-      ) {
-        return;
-      }
-
-      prepareFileDragEvent(event);
-    },
-    [editorRef, prepareFileDragEvent],
-  );
-
-  const handleDragLeaveCapture = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      if (
-        fileDragDepthRef.current === 0 &&
-        !hasExternalFileDrag(event.dataTransfer)
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-      event.stopPropagation();
-      fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1);
-      if (fileDragDepthRef.current === 0) {
-        setFileDragKind(null);
-      }
-    },
-    [],
-  );
-
-  const handleDropCapture = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      if (!hasExternalFileDrag(event.dataTransfer)) {
-        return;
-      }
-
+  useNativeFileDrop(fileDropTargetRef, {
+    onHoverPaths: (paths) => setFileDragKind(classifyNativePaths(paths)),
+    onHoverEnd: resetFileDrag,
+    onDrop: (paths, point) => {
       const view = editorRef.current?.view;
-      if (!view) {
-        resetFileDrag();
-        return;
-      }
-
-      const files = Array.from(event.dataTransfer.files ?? []);
-      event.preventDefault();
-      event.stopPropagation();
-      resetFileDrag();
-
-      if (files.length === 0) {
-        sonnerToast.error("Loofah couldn’t access the dropped files", {
-          id: `attachment-upload-failed:${sessionId}`,
-        });
-        return;
-      }
-
+      if (!view) return;
       const pos =
-        view.posAtCoords({
-          left: event.clientX,
-          top: event.clientY,
-        })?.pos ?? view.state.doc.content.size;
-      handleFileDrop(
+        view.posAtCoords({ left: point.x, top: point.y })?.pos ??
+        view.state.doc.content.size;
+      handleNativeFileDrop(
         view,
         fileHandlerConfig,
-        files,
+        paths.map((path) => ({
+          kind: "path",
+          path,
+          name: fileNameFromPath(path),
+          previewUrl: isImagePath(path) ? convertFileSrc(path) : undefined,
+        })),
         pos,
-        event.dataTransfer.items,
       );
     },
-    [editorRef, fileHandlerConfig, resetFileDrag, sessionId],
-  );
+  });
 
   const fileDropTargetProps = useMemo<HTMLAttributes<HTMLDivElement>>(
-    () => ({
-      onDragEnterCapture: handleDragEnterCapture,
-      onDragOverCapture: handleDragOverCapture,
-      onDragLeaveCapture: handleDragLeaveCapture,
-      onDropCapture: handleDropCapture,
-      onDragEndCapture: resetFileDrag,
-    }),
-    [
-      handleDragEnterCapture,
-      handleDragLeaveCapture,
-      handleDragOverCapture,
-      handleDropCapture,
-      resetFileDrag,
-    ],
+    () => ({}),
+    [],
   );
 
   return useMemo(
     () => ({
       fileDragKind,
       fileDropTargetProps,
+      fileDropTargetRef,
       fileHandlerConfig,
       resetFileDrag,
     }),
@@ -233,43 +148,12 @@ export function useNoteFileHandlerConfig(
   );
 }
 
-function hasExternalFileDrag(dataTransfer: DataTransfer) {
-  if (Array.from(dataTransfer.types ?? []).includes("Files")) {
-    return true;
-  }
-
-  if (
-    Array.from(dataTransfer.items ?? []).some((item) => item.kind === "file")
-  ) {
-    return true;
-  }
-
-  return Array.from(dataTransfer.files ?? []).length > 0;
-}
-
-function classifyFileDrag(dataTransfer: DataTransfer): NoteFileDragKind {
-  const items = Array.from(dataTransfer.items ?? []);
-  const files = Array.from(dataTransfer.files ?? []);
-  const fileItems = items.filter((item) => item.kind === "file");
-  const fileCount = fileItems.length || files.length;
-  const audioCount =
-    fileItems.length > 0
-      ? fileItems.filter((item, index) => {
-          if (item.type.startsWith("audio/")) {
-            return true;
-          }
-
-          const file = files[index] ?? item.getAsFile();
-          return file ? isAudioUploadFile(file) : false;
-        }).length
-      : files.filter(isAudioUploadFile).length;
-
-  if (fileCount === 1 && audioCount === 1) {
-    return "audio";
-  }
-  if (audioCount > 0) {
-    return "mixed";
-  }
+function classifyNativePaths(paths: string[]): NoteFileDragKind {
+  const audioCount = paths.filter((path) =>
+    isAudioUploadFile({ name: path, type: "" }),
+  ).length;
+  if (paths.length === 1 && audioCount === 1) return "audio";
+  if (audioCount > 0) return "mixed";
   return "files";
 }
 
@@ -280,9 +164,7 @@ function getAudioDrop(files: File[], items?: DataTransferItemList) {
   const audioFileIndex = files.findIndex((file, index) =>
     isAudioDropFile(file, dataTransferItems[index]),
   );
-  if (audioFileIndex === -1) {
-    return null;
-  }
+  if (audioFileIndex === -1) return null;
   const audioFile = files[audioFileIndex];
 
   return {
@@ -298,20 +180,10 @@ function isAudioDropFile(file: File, item?: DataTransferItem) {
   return isAudioUploadFile(file) || item?.type.startsWith("audio/") === true;
 }
 
-function focusCurrentWindowForFileDrop() {
-  if (!isTauri()) {
-    return;
-  }
-
-  void bringCurrentWindowToFront();
+function fileNameFromPath(path: string) {
+  return path.split("/").pop() ?? path;
 }
 
-async function bringCurrentWindowToFront() {
-  try {
-    const currentWindow = getCurrentWindow();
-    await currentWindow.show();
-    await currentWindow.setFocus();
-  } catch (error) {
-    console.error("Failed to focus window for file drop", error);
-  }
+function isImagePath(path: string) {
+  return /\.(gif|jpe?g|png|webp)$/i.test(path);
 }

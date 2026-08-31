@@ -359,6 +359,23 @@ export function useUploadFile(sessionId: string) {
     [applyDroppedAudioNoteDate, importWithProgress, runAudioImport, sessionId],
   );
 
+  const processAudioPath = useCallback(
+    (path: string) => {
+      if (!isAudioUploadFile({ name: path, type: "" })) return;
+      runAudioImport(
+        () =>
+          importWithProgress(() => fsSyncCommands.audioImport(sessionId, path)),
+        () => applyEstimatedAudioNoteDate(path),
+      );
+    },
+    [
+      applyEstimatedAudioNoteDate,
+      importWithProgress,
+      runAudioImport,
+      sessionId,
+    ],
+  );
+
   const selectAndUpload = useCallback(
     (kind: "audio" | "transcript") => {
       const filters =
@@ -404,7 +421,13 @@ export function useUploadFile(sessionId: string) {
     [selectAndUpload],
   );
 
-  return { uploadAudio, uploadTranscript, processFile, processAudioFile };
+  return {
+    uploadAudio,
+    uploadTranscript,
+    processFile,
+    processAudioFile,
+    processAudioPath,
+  };
 }
 
 function audioUploadFilePath(file: File) {

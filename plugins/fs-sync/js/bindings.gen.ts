@@ -206,6 +206,22 @@ async attachmentSave(sessionId: string, data: number[], filename: string) : Prom
     else return { status: "error", error: e  as any };
 }
 },
+async attachmentImportPath(sessionId: string, sourcePath: string) : Promise<Result<AttachmentInfo, string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("plugin:fs-sync|attachment_import_path", { sessionId, sourcePath }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
+async audioCollectImportSources(paths: string[]) : Promise<Result<AudioImportSourceInfo[], string>> {
+    try {
+    return { status: "ok", data: await TAURI_INVOKE("plugin:fs-sync|audio_collect_import_sources", { paths }) };
+} catch (e) {
+    if(e instanceof Error) throw e;
+    else return { status: "error", error: e  as any };
+}
+},
 async attachmentDir(sessionId: string) : Promise<Result<string, string>> {
     try {
     return { status: "ok", data: await TAURI_INVOKE("plugin:fs-sync|attachment_dir", { sessionId }) };
@@ -259,6 +275,7 @@ export type AttachmentInfo = { attachmentId: string; path: string; extension: st
 export type AttachmentSaveResult = { path: string; attachmentId: string }
 export type AudioFileMetadata = { filename: string; contentType: string; sizeBytes: number; sha256: string }
 export type AudioImportEvent = { type: "audioImportStarted"; session_id: string } | { type: "audioImportProgress"; session_id: string; percentage: number } | { type: "audioImportCompleted"; session_id: string } | { type: "audioImportFailed"; session_id: string; error: string }
+export type AudioImportSourceInfo = { path: string; name: string; size: number }
 /**
  * Per-channel waveform peaks precomputed for the audio player. Rendering from these skips
  * pulling the whole recording into the webview and decoding it there (seconds for an

@@ -32,7 +32,7 @@ msgstr "(default)"
 msgid "{0} AI summaries"
 msgstr "{0} AI summaries"
 
-#. placeholder {0}: attachments.length
+#. placeholder {0}: attachments.length + uploadStates.states.length
 #: src/session/components/note-input/attachments.tsx
 msgid "{0} files"
 msgstr "{0} files"
@@ -158,10 +158,6 @@ msgstr "Add spoken language"
 #: src/session/components/note-input/enhanced/config-error.tsx
 msgid "Add your own LLM API key to generate a summary from this transcript."
 msgstr "Add your own LLM API key to generate a summary from this transcript."
-
-#: src/session/components/note-input/attachments.tsx
-msgid "Adding…"
-msgstr "Adding…"
 
 #: src/settings/general/spoken-languages.tsx
 msgid "Additional spoken languages"
@@ -319,6 +315,10 @@ msgstr "Choose storage location"
 msgid "Choose template icon"
 msgstr "Choose template icon"
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Choosing…"
+msgstr "Choosing…"
+
 #: src/main/audio-import-dialog.tsx
 msgid "Clear"
 msgstr "Clear"
@@ -378,6 +378,10 @@ msgstr "Context always provided"
 msgid "Continue"
 msgstr "Continue"
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Copy failed"
+msgstr "Copy failed"
+
 #: src/settings/general/storage/change-location.tsx
 msgid "Copy my vault"
 msgstr "Copy my vault"
@@ -385,6 +389,10 @@ msgstr "Copy my vault"
 #: src/settings/general/storage/change-location.tsx
 msgid "Copy my vault here"
 msgstr "Copy my vault here"
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Copying…"
+msgstr "Copying…"
 
 #: src/sidebar/timeline/item.tsx
 msgid "Could not rename the folder"
@@ -401,6 +409,10 @@ msgstr "Couldn’t add {failed} attachments"
 #: src/session/components/note-input/attachments.tsx
 msgid "Couldn’t add 1 attachment"
 msgstr "Couldn’t add 1 attachment"
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t choose attachments"
+msgstr "Couldn’t choose attachments"
 
 #: src/session/components/note-input/attachments.tsx
 msgid "Couldn’t load attachments."
@@ -1156,7 +1168,12 @@ msgstr "Recordings"
 msgid "Reminders"
 msgstr "Reminders"
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Remove"
+msgstr "Remove"
+
 #. placeholder {0}: attachment.attachmentId
+#. placeholder {0}: upload.candidate.name
 #: src/session/components/note-input/attachments.tsx
 msgid "Remove {0}"
 msgstr "Remove {0}"
@@ -1248,10 +1265,16 @@ msgid "Resume listening"
 msgstr "Resume listening"
 
 #: src/main/audio-import-dialog.tsx
+#: src/session/components/note-input/attachments.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 #: src/settings/ai/stt/diarization-status.tsx
 msgid "Retry"
 msgstr "Retry"
+
+#. placeholder {0}: upload.candidate.name
+#: src/session/components/note-input/attachments.tsx
+msgid "Retry {0}"
+msgstr "Retry {0}"
 
 #: src/settings/ai/shared/index.tsx
 #: src/settings/ai/stt/select.tsx

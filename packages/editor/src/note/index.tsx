@@ -48,6 +48,7 @@ import {
 import {
   autolinkPlugin,
   type FileHandlerConfig,
+  type FileUploadCandidate,
   type PlaceholderFunction,
   SearchQuery,
   clearMarksOnEnterPlugin,
@@ -59,6 +60,7 @@ import {
   ensureImageTrailingParagraphs,
   fileHandlerPlugin,
   handleFileDrop,
+  handleNativeFileDrop,
   getSearchState,
   hashtagPlugin,
   imageTrailingParagraphPlugin,
@@ -104,8 +106,13 @@ import {
   trailingEmptyLineClickPlugin,
 } from "./trailing-empty-line-click";
 
-export type { MentionConfig, FileHandlerConfig, PlaceholderFunction };
-export { handleFileDrop };
+export type {
+  MentionConfig,
+  FileHandlerConfig,
+  FileUploadCandidate,
+  PlaceholderFunction,
+};
+export { handleFileDrop, handleNativeFileDrop };
 export {
   normalizePortableAttachmentUrls,
   parsePortableAttachmentSrc,

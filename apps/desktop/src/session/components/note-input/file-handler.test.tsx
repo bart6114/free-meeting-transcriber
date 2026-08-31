@@ -1,11 +1,4 @@
-import {
-  cleanup,
-  createEvent,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-} from "@testing-library/react";
+import { act, cleanup, render, screen } from "@testing-library/react";
 import type { EditorView } from "prosemirror-view";
 import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,25 +9,22 @@ import { FileDropTarget } from "./file-drop-target";
 import { useNoteFileHandlerConfig } from "./file-handler";
 
 const mocks = vi.hoisted(() => ({
+  config: null as FileHandlerConfig | null,
   fileUpload: vi.fn(),
-  focusWindow: vi.fn(),
-  handleFileDrop: vi.fn(),
+  handleNativeFileDrop: vi.fn(),
+  nativeCallbacks: null as any,
   processAudioFile: vi.fn(),
-  showWindow: vi.fn(),
+  processAudioPath: vi.fn(),
+  removeUpload: vi.fn(),
   toastError: vi.fn(),
 }));
 
-vi.mock("@tauri-apps/api/core", () => ({ isTauri: () => true }));
-
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: () => ({
-    setFocus: mocks.focusWindow,
-    show: mocks.showWindow,
-  }),
+vi.mock("@tauri-apps/api/core", () => ({
+  convertFileSrc: (path: string) => `asset:${path}`,
 }));
 
 vi.mock("@hypr/editor/note", () => ({
-  handleFileDrop: mocks.handleFileDrop,
+  handleNativeFileDrop: mocks.handleNativeFileDrop,
 }));
 
 vi.mock("@hypr/ui/components/ui/toast", () => ({
@@ -43,214 +33,141 @@ vi.mock("@hypr/ui/components/ui/toast", () => ({
 
 vi.mock("~/shared/hooks/useFileUpload", () => ({
   useFileUpload: () => mocks.fileUpload,
+  useFileUploadStates: () => ({ states: [], remove: mocks.removeUpload }),
+}));
+
+vi.mock("~/shared/hooks/useNativeFileDrop", () => ({
+  useNativeFileDrop: (_ref: unknown, callbacks: unknown) => {
+    mocks.nativeCallbacks = callbacks;
+    return { isHovering: false };
+  },
 }));
 
 vi.mock("~/stt/useUploadFile", () => ({
   AUDIO_EXTENSIONS: ["wav", "mp3", "m4a"],
   isAudioUploadFile: (file: Pick<File, "name" | "type">) =>
     file.type.startsWith("audio/") || /\.(wav|mp3|m4a)$/i.test(file.name),
-  useUploadFile: () => ({ processAudioFile: mocks.processAudioFile }),
+  useUploadFile: () => ({
+    processAudioFile: mocks.processAudioFile,
+    processAudioPath: mocks.processAudioPath,
+  }),
 }));
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocks.showWindow.mockResolvedValue(undefined);
-  mocks.focusWindow.mockResolvedValue(undefined);
+  mocks.config = null;
+  mocks.nativeCallbacks = null;
 });
 
-afterEach(() => {
-  cleanup();
-});
+afterEach(cleanup);
 
 describe("useNoteFileHandlerConfig", () => {
-  it("shows the attachment hint for a Finder file drag before files are readable", async () => {
+  it("shows native attachment, audio, and mixed hover hints", () => {
     render(<Harness />);
-    const target = screen.getByTestId("drop-target");
-    const dataTransfer = createDataTransfer([], [""]);
 
-    fireEvent.dragEnter(target, { dataTransfer });
+    act(() => mocks.nativeCallbacks.onHoverPaths(["/tmp/script.py"]));
+    expect(screen.getByText("Drop files here to attach to note")).toBeTruthy();
 
-    expect(screen.getByRole("status").className).toContain("bg-background/30");
-    expect(
-      screen.getByText("Drop files here to attach to note"),
-    ).not.toBeNull();
-    expect(dataTransfer.dropEffect).toBe("copy");
-    await waitFor(() => expect(mocks.focusWindow).toHaveBeenCalledOnce());
-  });
-
-  it("shows adaptive hints for audio and mixed drags", () => {
-    const view = render(<Harness />);
-    const target = screen.getByTestId("drop-target");
-    const audio = new File(["audio"], "clip.mp3", { type: "audio/mpeg" });
-
-    fireEvent.dragEnter(target, {
-      dataTransfer: createDataTransfer([audio]),
-    });
+    act(() => mocks.nativeCallbacks.onHoverPaths(["/tmp/clip.mp3"]));
     expect(
       screen.getByText("Drop to upload and transcribe audio"),
-    ).not.toBeNull();
+    ).toBeTruthy();
 
-    view.unmount();
-    render(<Harness />);
-    const mixedTarget = screen.getByTestId("drop-target");
-    fireEvent.dragEnter(mixedTarget, {
-      dataTransfer: createDataTransfer([
-        audio,
-        new File(["code"], "script.py"),
-      ]),
-    });
+    act(() =>
+      mocks.nativeCallbacks.onHoverPaths(["/tmp/clip.mp3", "/tmp/script.py"]),
+    );
     expect(
       screen.getByText(
         "Audio will be transcribed; other files will be attached.",
       ),
-    ).not.toBeNull();
-  });
+    ).toBeTruthy();
 
-  it("keeps the overlay active across nested drag boundaries", () => {
-    render(<Harness />);
-    const target = screen.getByTestId("drop-target");
-    const dataTransfer = createDataTransfer([new File(["code"], "script.py")]);
-
-    fireEvent.dragEnter(target, { dataTransfer });
-    fireEvent.dragEnter(target, { dataTransfer });
-    fireEvent.dragLeave(target, { dataTransfer });
-
-    expect(screen.getByRole("status")).not.toBeNull();
-
-    fireEvent.dragLeave(target, { dataTransfer });
+    act(() => mocks.nativeCallbacks.onHoverEnd());
     expect(screen.queryByRole("status")).toBeNull();
   });
 
-  it("uses the pointer position and appends when the pointer is outside the editor", () => {
-    const mappedView = createEditorView(7);
-    const view = render(<Harness view={mappedView} />);
-    const file = new File(["code"], "script.py");
-    const mappedTransfer = createDataTransfer([file]);
+  it("uses logical pointer coordinates and preserves native path order", () => {
+    const view = createEditorView(7);
+    render(<Harness view={view} />);
 
-    fireEvent.drop(screen.getByTestId("drop-target"), {
-      clientX: 12,
-      clientY: 34,
-      dataTransfer: mappedTransfer,
-    });
-    expect(mocks.handleFileDrop).toHaveBeenLastCalledWith(
-      mappedView,
-      expect.any(Object),
-      [file],
-      7,
-      mappedTransfer.items,
+    act(() =>
+      mocks.nativeCallbacks.onDrop(["/tmp/two.pdf", "/tmp/one.png"], {
+        x: 12,
+        y: 34,
+      }),
     );
 
-    view.unmount();
-    const blankView = createEditorView(null);
-    render(<Harness view={blankView} />);
-    const blankTransfer = createDataTransfer([file]);
-    const dropEvent = createEvent.drop(screen.getByTestId("drop-target"), {
-      dataTransfer: blankTransfer,
-    });
-    fireEvent(screen.getByTestId("drop-target"), dropEvent);
-
-    expect(dropEvent.defaultPrevented).toBe(true);
-    expect(mocks.handleFileDrop).toHaveBeenLastCalledWith(
-      blankView,
+    expect(view.posAtCoords).toHaveBeenCalledWith({ left: 12, top: 34 });
+    expect(mocks.handleNativeFileDrop).toHaveBeenCalledWith(
+      view,
       expect.any(Object),
-      [file],
-      42,
-      blankTransfer.items,
+      [
+        {
+          kind: "path",
+          path: "/tmp/two.pdf",
+          name: "two.pdf",
+          previewUrl: undefined,
+        },
+        {
+          kind: "path",
+          path: "/tmp/one.png",
+          name: "one.png",
+          previewUrl: "asset:/tmp/one.png",
+        },
+      ],
+      7,
     );
   });
 
-  it("routes audio through the shared drop config exactly once", () => {
-    mocks.handleFileDrop.mockImplementation(
-      (
-        _view: EditorView,
-        config: FileHandlerConfig,
-        files: File[],
-        pos: number,
-        items: DataTransferItemList,
-      ) => config.onDrop?.(files, pos, items),
+  it("routes one native audio path and leaves the other files to attach", () => {
+    mocks.handleNativeFileDrop.mockImplementation(
+      (_view: EditorView, config: FileHandlerConfig, candidates: any[]) =>
+        config.onNativeDrop?.(candidates),
     );
     render(<Harness />);
-    const audio = new File(["audio"], "clip.mp3", { type: "audio/mpeg" });
 
-    fireEvent.drop(screen.getByTestId("drop-target"), {
-      dataTransfer: createDataTransfer([audio]),
+    act(() =>
+      mocks.nativeCallbacks.onDrop(["/tmp/clip.mp3", "/tmp/script.py"], {
+        x: 1,
+        y: 1,
+      }),
+    );
+
+    expect(mocks.processAudioPath).toHaveBeenCalledOnce();
+    expect(mocks.processAudioPath).toHaveBeenCalledWith("/tmp/clip.mp3");
+    expect(mocks.handleNativeFileDrop.mock.results[0]?.value).toEqual({
+      remainingCandidates: [
+        expect.objectContaining({ path: "/tmp/script.py" }),
+      ],
     });
-
-    expect(mocks.processAudioFile).toHaveBeenCalledOnce();
-    expect(mocks.processAudioFile).toHaveBeenCalledWith(audio);
   });
 
-  it("uses drag item MIME when routing mixed audio and attachments", () => {
-    mocks.handleFileDrop.mockImplementation(
-      (
-        _view: EditorView,
-        config: FileHandlerConfig,
-        files: File[],
-        pos: number,
-        items: DataTransferItemList,
-      ) => config.onDrop?.(files, pos, items),
-    );
+  it("keeps MIME-based audio classification for clipboard files", () => {
     render(<Harness />);
     const audio = new File(["audio"], "clip");
     const attachment = new File(["code"], "script.py");
+    const items = createItems(["audio/mpeg", "text/x-python"]);
 
-    fireEvent.drop(screen.getByTestId("drop-target"), {
-      dataTransfer: createDataTransfer(
-        [audio, attachment],
-        ["audio/mpeg", "text/x-python"],
-      ),
-    });
+    const result = mocks.config?.onPaste?.([audio, attachment], items);
 
     expect(mocks.processAudioFile).toHaveBeenCalledWith(audio, {
       allowUnknownAudio: true,
       contentType: "audio/mpeg",
     });
-    expect(mocks.handleFileDrop.mock.results[0]?.value).toEqual({
-      remainingFiles: [attachment],
-    });
+    expect(result).toEqual({ remainingFiles: [attachment] });
   });
 
-  it("reports unreadable drops and upload failures", () => {
-    const view = render(<Harness />);
-    fireEvent.drop(screen.getByTestId("drop-target"), {
-      dataTransfer: createDataTransfer([], [""]),
-    });
-    expect(mocks.toastError).toHaveBeenCalledWith(
-      "Loofah couldn’t access the dropped files",
-      expect.any(Object),
+  it("reports upload failures using the candidate name", () => {
+    render(<Harness />);
+    mocks.config?.onFileUploadError?.(
+      { kind: "path", path: "/tmp/script.py", name: "script.py" },
+      new Error("disk full"),
     );
 
-    view.unmount();
-    mocks.handleFileDrop.mockImplementation(
-      (_view: EditorView, config: FileHandlerConfig, files: File[]) => {
-        config.onFileUploadError?.(files[0], new Error("disk full"));
-        return true;
-      },
-    );
-    render(<Harness />);
-    const file = new File(["code"], "script.py");
-    fireEvent.drop(screen.getByTestId("drop-target"), {
-      dataTransfer: createDataTransfer([file]),
-    });
-    expect(mocks.toastError).toHaveBeenLastCalledWith(
+    expect(mocks.toastError).toHaveBeenCalledWith(
       "Couldn’t attach “script.py”: disk full",
       expect.any(Object),
     );
-  });
-
-  it("ignores non-file drags", () => {
-    render(<Harness />);
-    fireEvent.dragEnter(screen.getByTestId("drop-target"), {
-      dataTransfer: {
-        dropEffect: "none",
-        files: [],
-        items: [],
-        types: ["text/plain"],
-      },
-    });
-
-    expect(screen.queryByRole("status")).toBeNull();
-    expect(mocks.focusWindow).not.toHaveBeenCalled();
   });
 });
 
@@ -260,14 +177,12 @@ function Harness({ view = createEditorView(null) }: { view?: EditorView }) {
     flushPendingChanges: vi.fn(),
     view,
   });
-  const { fileDragKind, fileDropTargetProps } = useNoteFileHandlerConfig(
-    "session-1",
-    editorRef,
-  );
+  const result = useNoteFileHandlerConfig("session-1", editorRef);
+  mocks.config = result.fileHandlerConfig;
 
   return (
-    <div data-testid="drop-target" {...fileDropTargetProps}>
-      <FileDropTarget kind={fileDragKind} />
+    <div ref={result.fileDropTargetRef} data-testid="drop-target">
+      <FileDropTarget kind={result.fileDragKind} />
     </div>
   );
 }
@@ -279,17 +194,10 @@ function createEditorView(pos: number | null) {
   } as unknown as EditorView;
 }
 
-function createDataTransfer(files: File[], itemTypes?: string[]) {
-  const types = itemTypes ?? files.map((file) => file.type);
-  const itemCount = Math.max(files.length, types.length);
-  return {
-    dropEffect: "none",
-    files,
-    items: Array.from({ length: itemCount }, (_, index) => ({
-      getAsFile: () => files[index] ?? null,
-      kind: "file",
-      type: types[index] ?? files[index]?.type ?? "",
-    })),
-    types: ["Files"],
-  } as unknown as DataTransfer;
+function createItems(types: string[]) {
+  return types.map((type) => ({
+    getAsFile: () => null,
+    kind: "file",
+    type,
+  })) as unknown as DataTransferItemList;
 }

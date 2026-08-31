@@ -63,6 +63,14 @@ pub struct AttachmentInfo {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
+pub struct AudioImportSourceInfo {
+    pub path: String,
+    pub name: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Type)]
+#[serde(rename_all = "camelCase")]
 pub struct SessionMetaParticipant {
     pub id: String,
     pub user_id: String,

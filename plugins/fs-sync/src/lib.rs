@@ -36,6 +36,8 @@ fn make_specta_builder<R: tauri::Runtime>() -> tauri_specta::Builder<R> {
             commands::chat_dir::<tauri::Wry>,
             commands::entity_dir::<tauri::Wry>,
             commands::attachment_save::<tauri::Wry>,
+            commands::attachment_import_path::<tauri::Wry>,
+            commands::audio_collect_import_sources,
             commands::attachment_dir::<tauri::Wry>,
             commands::attachment_list::<tauri::Wry>,
             commands::attachment_read::<tauri::Wry>,

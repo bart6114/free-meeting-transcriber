@@ -26,6 +26,8 @@ permissions = [
     "allow-chat-dir",
     "allow-entity-dir",
     "allow-attachment-save",
+    "allow-attachment-import-path",
+    "allow-audio-collect-import-sources",
     "allow-attachment-dir",
     "allow-attachment-list",
     "allow-attachment-read",

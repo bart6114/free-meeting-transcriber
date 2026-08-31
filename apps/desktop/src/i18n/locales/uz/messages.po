@@ -32,7 +32,7 @@ msgstr ""
 msgid "{0} AI summaries"
 msgstr ""
 
-#. placeholder {0}: attachments.length
+#. placeholder {0}: attachments.length + uploadStates.states.length
 #: src/session/components/note-input/attachments.tsx
 msgid "{0} files"
 msgstr ""
@@ -157,10 +157,6 @@ msgstr "Og'zaki til qo'shing"
 
 #: src/session/components/note-input/enhanced/config-error.tsx
 msgid "Add your own LLM API key to generate a summary from this transcript."
-msgstr ""
-
-#: src/session/components/note-input/attachments.tsx
-msgid "Adding…"
 msgstr ""
 
 #: src/settings/general/spoken-languages.tsx
@@ -319,6 +315,10 @@ msgstr ""
 msgid "Choose template icon"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Choosing…"
+msgstr ""
+
 #: src/main/audio-import-dialog.tsx
 msgid "Clear"
 msgstr ""
@@ -378,12 +378,20 @@ msgstr ""
 msgid "Continue"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Copy failed"
+msgstr ""
+
 #: src/settings/general/storage/change-location.tsx
 msgid "Copy my vault"
 msgstr ""
 
 #: src/settings/general/storage/change-location.tsx
 msgid "Copy my vault here"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Copying…"
 msgstr ""
 
 #: src/sidebar/timeline/item.tsx
@@ -400,6 +408,10 @@ msgstr ""
 
 #: src/session/components/note-input/attachments.tsx
 msgid "Couldn’t add 1 attachment"
+msgstr ""
+
+#: src/session/components/note-input/attachments.tsx
+msgid "Couldn’t choose attachments"
 msgstr ""
 
 #: src/session/components/note-input/attachments.tsx
@@ -1156,7 +1168,12 @@ msgstr ""
 msgid "Reminders"
 msgstr ""
 
+#: src/session/components/note-input/attachments.tsx
+msgid "Remove"
+msgstr ""
+
 #. placeholder {0}: attachment.attachmentId
+#. placeholder {0}: upload.candidate.name
 #: src/session/components/note-input/attachments.tsx
 msgid "Remove {0}"
 msgstr ""
@@ -1248,9 +1265,15 @@ msgid "Resume listening"
 msgstr ""
 
 #: src/main/audio-import-dialog.tsx
+#: src/session/components/note-input/attachments.tsx
 #: src/session/components/note-input/enhanced/enhance-error.tsx
 #: src/settings/ai/stt/diarization-status.tsx
 msgid "Retry"
+msgstr ""
+
+#. placeholder {0}: upload.candidate.name
+#: src/session/components/note-input/attachments.tsx
+msgid "Retry {0}"
 msgstr ""
 
 #: src/settings/ai/shared/index.tsx

@@ -524,6 +524,91 @@ pub(crate) async fn attachment_save<R: tauri::Runtime>(
 
 #[tauri::command]
 #[specta::specta]
+pub(crate) async fn attachment_import_path<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    session_id: String,
+    source_path: String,
+) -> Result<crate::AttachmentInfo, String> {
+    spawn_blocking!({
+        app.fs_sync()
+            .attachment_import_path(&session_id, std::path::Path::new(&source_path))
+            .map_err(|e| e.to_string())
+    })
+}
+
+#[tauri::command]
+#[specta::specta]
+pub(crate) async fn audio_collect_import_sources(
+    paths: Vec<String>,
+) -> Result<Vec<crate::AudioImportSourceInfo>, String> {
+    spawn_blocking!({ collect_audio_import_sources(&paths).map_err(|e| e.to_string()) })
+}
+
+fn collect_audio_import_sources(
+    paths: &[String],
+) -> std::io::Result<Vec<crate::AudioImportSourceInfo>> {
+    let mut sources = Vec::new();
+    for path in paths {
+        let path = std::path::PathBuf::from(path);
+        if !path.is_absolute() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "audio source path must be absolute",
+            ));
+        }
+        collect_audio_import_source(&path, &mut sources)?;
+    }
+    Ok(sources)
+}
+
+fn collect_audio_import_source(
+    path: &std::path::Path,
+    sources: &mut Vec<crate::AudioImportSourceInfo>,
+) -> std::io::Result<()> {
+    let link_metadata = std::fs::symlink_metadata(path)?;
+    let metadata = std::fs::metadata(path)?;
+    if metadata.is_file() {
+        let name = match path.file_name().and_then(|name| name.to_str()) {
+            Some(name) if !name.starts_with('.') => name,
+            _ => return Ok(()),
+        };
+        if is_audio_import_source(name) {
+            sources.push(crate::AudioImportSourceInfo {
+                path: path.to_string_lossy().to_string(),
+                name: name.to_string(),
+                size: metadata.len(),
+            });
+        }
+        return Ok(());
+    }
+    if !metadata.is_dir() || link_metadata.file_type().is_symlink() {
+        return Ok(());
+    }
+
+    let mut entries = std::fs::read_dir(path)?.collect::<std::io::Result<Vec<_>>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        if entry.file_name().to_string_lossy().starts_with('.') {
+            continue;
+        }
+        collect_audio_import_source(&entry.path(), sources)?;
+    }
+    Ok(())
+}
+
+fn is_audio_import_source(name: &str) -> bool {
+    matches!(
+        std::path::Path::new(name)
+            .extension()
+            .and_then(|extension| extension.to_str())
+            .map(|extension| extension.to_ascii_lowercase())
+            .as_deref(),
+        Some("wav" | "mp3" | "ogg" | "mp4" | "m4a" | "flac" | "webm" | "aac" | "qta")
+    )
+}
+
+#[tauri::command]
+#[specta::specta]
 pub(crate) async fn attachment_dir<R: tauri::Runtime>(
     app: tauri::AppHandle<R>,
     session_id: String,
@@ -600,6 +685,28 @@ mod tests {
         assert_eq!(
             audio_import_source_extension("Brian Shin", Some("audio/quicktime")),
             "m4a"
+        );
+    }
+
+    #[test]
+    fn audio_collect_import_sources_expands_folders_in_order() {
+        let temp = tempfile::tempdir().unwrap();
+        let folder = temp.path().join("recordings");
+        std::fs::create_dir_all(folder.join("nested")).unwrap();
+        std::fs::write(folder.join("b.mp3"), b"bb").unwrap();
+        std::fs::write(folder.join("a.wav"), b"a").unwrap();
+        std::fs::write(folder.join("notes.txt"), b"skip").unwrap();
+        std::fs::write(folder.join("nested").join("c.m4a"), b"ccc").unwrap();
+
+        let sources =
+            collect_audio_import_sources(&[folder.to_string_lossy().to_string()]).unwrap();
+
+        assert_eq!(
+            sources
+                .iter()
+                .map(|source| (source.name.as_str(), source.size))
+                .collect::<Vec<_>>(),
+            vec![("a.wav", 1), ("b.mp3", 2), ("c.m4a", 3)]
         );
     }
 }

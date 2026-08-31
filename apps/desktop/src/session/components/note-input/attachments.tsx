@@ -1,6 +1,7 @@
 import { useLingui } from "@lingui/react/macro";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { open as selectFile } from "@tauri-apps/plugin-dialog";
 import {
   FileArchiveIcon,
   FileIcon,
@@ -11,17 +12,10 @@ import {
   PaperclipIcon,
   PlusIcon,
   PresentationIcon,
+  RotateCcwIcon,
   Trash2Icon,
 } from "lucide-react";
-import {
-  type DragEvent,
-  type ChangeEvent,
-  type ReactNode,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   type AttachmentInfo,
@@ -46,7 +40,13 @@ import {
   sessionAttachmentPathsQueryKey,
   useSessionAttachments,
 } from "~/session/hooks/useAttachmentResolver";
-import { useFileUpload } from "~/shared/hooks/useFileUpload";
+import {
+  type FileUploadCandidate,
+  type FileUploadState,
+  useFileUpload,
+  useFileUploadStates,
+} from "~/shared/hooks/useFileUpload";
+import { useNativeFileDrop } from "~/shared/hooks/useNativeFileDrop";
 
 const IMAGE_EXTENSIONS = new Set([
   "avif",
@@ -93,8 +93,8 @@ export function Attachments({
   const queryClient = useQueryClient();
   const attachmentsQuery = useSessionAttachments(sessionId);
   const uploadFile = useFileUpload(sessionId);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const uploadStates = useFileUploadStates(sessionId);
+  const targetRef = useRef<HTMLDivElement>(null);
   const [attachmentToDelete, setAttachmentToDelete] =
     useState<AttachmentInfo | null>(null);
 
@@ -109,29 +109,70 @@ export function Attachments({
     [attachmentsQuery.data],
   );
 
-  const addMutation = useMutation({
-    mutationFn: async (files: File[]) => {
-      const results = await Promise.allSettled(
-        files.map((file) => uploadFile(file)),
-      );
-      return {
-        added: results.filter((result) => result.status === "fulfilled").length,
-        failed: results.filter((result) => result.status === "rejected").length,
-      };
+  const addCandidates = (candidates: FileUploadCandidate[]) => {
+    if (candidates.length === 0) return;
+    void Promise.allSettled(
+      candidates.map((candidate) => uploadFile(candidate)),
+    )
+      .then((results) => {
+        return {
+          added: results.filter((result) => result.status === "fulfilled")
+            .length,
+          failed: results.filter((result) => result.status === "rejected")
+            .length,
+        };
+      })
+      .then(({ added, failed }) => {
+        if (added > 0) {
+          sonnerToast.success(
+            added === 1 ? t`Attachment added` : t`${added} attachments added`,
+          );
+        }
+        if (failed > 0) {
+          sonnerToast.error(
+            failed === 1
+              ? t`Couldn’t add 1 attachment`
+              : t`Couldn’t add ${failed} attachments`,
+          );
+        }
+      });
+  };
+
+  const { isHovering: isDraggingFiles } = useNativeFileDrop(targetRef, {
+    onDrop: (paths) =>
+      addCandidates(
+        paths.map((path) => ({
+          kind: "path",
+          path,
+          name: fileNameFromPath(path),
+        })),
+      ),
+  });
+
+  const pickerMutation = useMutation({
+    mutationFn: async () => {
+      const selection = await selectFile({
+        title: t`Add attachments`,
+        multiple: true,
+        directory: false,
+      });
+      return Array.isArray(selection)
+        ? selection
+        : selection
+          ? [selection]
+          : [];
     },
-    onSuccess: ({ added, failed }) => {
-      if (added > 0) {
-        sonnerToast.success(
-          added === 1 ? t`Attachment added` : t`${added} attachments added`,
-        );
-      }
-      if (failed > 0) {
-        sonnerToast.error(
-          failed === 1
-            ? t`Couldn’t add 1 attachment`
-            : t`Couldn’t add ${failed} attachments`,
-        );
-      }
+    onSuccess: (paths) =>
+      addCandidates(
+        paths.map((path) => ({
+          kind: "path",
+          path,
+          name: fileNameFromPath(path),
+        })),
+      ),
+    onError: (error) => {
+      console.error("[attachments] file dialog failed", error);
+      sonnerToast.error(t`Couldn’t choose attachments`);
     },
   });
 
@@ -207,65 +248,15 @@ export function Attachments({
     };
   }, [queryClient, sessionId]);
 
-  const addFiles = (files: File[]) => {
-    if (files.length > 0 && !addMutation.isPending) {
-      addMutation.mutate(files);
-    }
-  };
-
-  const handleFileSelection = (event: ChangeEvent<HTMLInputElement>) => {
-    addFiles(Array.from(event.currentTarget.files ?? []));
-    event.currentTarget.value = "";
-  };
-
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-    setIsDraggingFiles(false);
-    addFiles(Array.from(event.dataTransfer.files ?? []));
-  };
-
   return (
     <div
+      ref={targetRef}
       data-allow-file-drop="true"
       className={cn([
         "relative min-h-full rounded-lg border border-transparent pb-6 transition-colors",
         isDraggingFiles && "border-primary bg-accent/50 border-dashed",
       ])}
-      onDragEnterCapture={(event) => {
-        if (hasExternalFileDrag(event.dataTransfer)) {
-          event.preventDefault();
-          event.stopPropagation();
-          setIsDraggingFiles(true);
-        }
-      }}
-      onDragOverCapture={(event) => {
-        if (hasExternalFileDrag(event.dataTransfer)) {
-          event.preventDefault();
-          event.stopPropagation();
-          event.dataTransfer.dropEffect = "copy";
-        }
-      }}
-      onDragLeaveCapture={(event) => {
-        const nextTarget = event.relatedTarget;
-        if (
-          !(nextTarget instanceof Node) ||
-          !event.currentTarget.contains(nextTarget)
-        ) {
-          setIsDraggingFiles(false);
-        }
-      }}
-      onDropCapture={handleDrop}
-      onDragEndCapture={() => setIsDraggingFiles(false)}
     >
-      <input
-        ref={fileInputRef}
-        type="file"
-        multiple
-        className="hidden"
-        onChange={handleFileSelection}
-      />
-
       {children}
 
       <div className="mb-3 flex items-center justify-between gap-3">
@@ -273,9 +264,9 @@ export function Attachments({
           <h2 className="text-sm font-semibold">{t`Attachments`}</h2>
           {!attachmentsQuery.isLoading && !attachmentsQuery.isError ? (
             <p className="text-muted-foreground text-xs">
-              {attachments.length === 1
+              {attachments.length + uploadStates.states.length === 1
                 ? t`1 file`
-                : t`${attachments.length} files`}
+                : t`${attachments.length + uploadStates.states.length} files`}
             </p>
           ) : null}
         </div>
@@ -297,26 +288,26 @@ export function Attachments({
           <Button
             type="button"
             size="sm"
-            disabled={addMutation.isPending}
-            onClick={() => fileInputRef.current?.click()}
+            disabled={pickerMutation.isPending}
+            onClick={() => pickerMutation.mutate()}
           >
-            {addMutation.isPending ? (
+            {pickerMutation.isPending ? (
               <Spinner size={14} />
             ) : (
               <PlusIcon className="size-3.5" />
             )}
-            {addMutation.isPending ? t`Adding…` : t`Add attachments`}
+            {pickerMutation.isPending ? t`Choosing…` : t`Add attachments`}
           </Button>
         </div>
       </div>
 
-      {attachmentsQuery.isLoading ? (
+      {attachmentsQuery.isLoading && uploadStates.states.length === 0 ? (
         <div className="flex flex-col gap-2">
           {[0, 1, 2].map((row) => (
             <div key={row} className="bg-muted h-11 animate-pulse rounded-md" />
           ))}
         </div>
-      ) : attachmentsQuery.isError ? (
+      ) : attachmentsQuery.isError && uploadStates.states.length === 0 ? (
         <div className="border-border flex min-h-40 flex-col items-center justify-center gap-3 rounded-lg border border-dashed px-6 text-center">
           <p className="text-muted-foreground text-sm">
             {t`Couldn’t load attachments.`}
@@ -330,7 +321,7 @@ export function Attachments({
             {t`Try again`}
           </Button>
         </div>
-      ) : attachments.length === 0 ? (
+      ) : attachments.length === 0 && uploadStates.states.length === 0 ? (
         <div className="border-border flex min-h-40 flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-6 text-center">
           <PaperclipIcon className="text-muted-foreground size-5" />
           <p className="text-sm font-medium">{t`No attachments yet`}</p>
@@ -346,6 +337,18 @@ export function Attachments({
             <span className="text-right">{t`Size`}</span>
             <span className="sr-only">{t`Actions`}</span>
           </div>
+          {uploadStates.states.map((upload) => (
+            <PendingAttachmentRow
+              key={upload.clientId}
+              upload={upload}
+              onRetry={() => {
+                void uploadFile(upload.candidate, upload.clientId).catch(
+                  () => {},
+                );
+              }}
+              onRemove={() => uploadStates.remove(upload.clientId)}
+            />
+          ))}
           {attachments.map((attachment) => (
             <AttachmentRow
               key={attachment.attachmentId}
@@ -409,14 +412,6 @@ export function Attachments({
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-function hasExternalFileDrag(dataTransfer: DataTransfer) {
-  return (
-    Array.from(dataTransfer.types ?? []).includes("Files") ||
-    Array.from(dataTransfer.items ?? []).some((item) => item.kind === "file") ||
-    Array.from(dataTransfer.files ?? []).length > 0
   );
 }
 
@@ -484,6 +479,87 @@ function AttachmentRow({
   );
 }
 
+function PendingAttachmentRow({
+  upload,
+  onRetry,
+  onRemove,
+}: {
+  upload: FileUploadState;
+  onRetry: () => void;
+  onRemove: () => void;
+}) {
+  const { t } = useLingui();
+  const extension = extensionOfName(upload.candidate.name);
+  const Icon = getFileIcon(extension);
+  const size =
+    upload.candidate.kind === "file" ? upload.candidate.file.size : null;
+
+  return (
+    <div className="border-border flex items-center border-b last:border-b-0">
+      <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_7rem_6rem] items-center gap-3 px-3 py-2.5 text-left">
+        <span className="flex min-w-0 items-center gap-2.5">
+          {upload.status === "pending" ? (
+            <Spinner size={16} className="shrink-0" />
+          ) : (
+            <Icon className="text-destructive size-4 shrink-0" />
+          )}
+          <span className="min-w-0">
+            <span className="block truncate text-sm font-medium">
+              {upload.candidate.name}
+            </span>
+            <span
+              className={cn([
+                "block truncate text-xs",
+                upload.status === "error"
+                  ? "text-destructive"
+                  : "text-muted-foreground",
+              ])}
+              title={
+                upload.status === "error"
+                  ? errorMessage(upload.error)
+                  : undefined
+              }
+            >
+              {upload.status === "pending" ? t`Copying…` : t`Copy failed`}
+            </span>
+          </span>
+        </span>
+        <span className="text-muted-foreground truncate text-xs">
+          {formatFileType(extension)}
+        </span>
+        <span className="text-muted-foreground text-right text-xs tabular-nums">
+          {size == null ? "—" : formatFileSize(size)}
+        </span>
+      </div>
+      {upload.status === "error" ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="text-muted-foreground size-7"
+          aria-label={t`Retry ${upload.candidate.name}`}
+          title={t`Retry`}
+          onClick={onRetry}
+        >
+          <RotateCcwIcon className="size-3.5" />
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon"
+        className="text-muted-foreground mr-1 size-7"
+        aria-label={t`Remove ${upload.candidate.name}`}
+        title={t`Remove`}
+        disabled={upload.status === "pending"}
+        onClick={onRemove}
+      >
+        <Trash2Icon className="size-3.5" />
+      </Button>
+    </div>
+  );
+}
+
 function getFileIcon(extension: string) {
   const normalized = extension.toLowerCase();
   if (IMAGE_EXTENSIONS.has(normalized)) return ImageIcon;
@@ -505,4 +581,17 @@ export function formatFileSize(bytes: number) {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
   return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function fileNameFromPath(path: string) {
+  return path.split("/").pop() ?? path;
+}
+
+function extensionOfName(name: string) {
+  const index = name.lastIndexOf(".");
+  return index > 0 ? name.slice(index + 1) : "";
+}
+
+function errorMessage(error: unknown) {
+  return error instanceof Error ? error.message : String(error);
 }

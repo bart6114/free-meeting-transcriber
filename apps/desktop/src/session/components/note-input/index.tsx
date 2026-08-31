@@ -169,6 +169,7 @@ const NoteInputContent = forwardRef<
     const {
       fileDragKind,
       fileDropTargetProps,
+      fileDropTargetRef,
       fileHandlerConfig,
       resetFileDrag,
     } = useNoteFileHandlerConfig(sessionId, internalEditorRef);
@@ -395,6 +396,7 @@ const NoteInputContent = forwardRef<
         {topAudioPlayer && <div className="px-3 pt-1.5">{topAudioPlayer}</div>}
 
         <div
+          ref={isEditableTab ? fileDropTargetRef : undefined}
           {...(isEditableTab ? fileDropTargetProps : {})}
           className="relative flex-1 overflow-hidden"
         >

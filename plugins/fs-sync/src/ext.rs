@@ -84,6 +84,14 @@ impl<'a, R: tauri::Runtime, M: tauri::Manager<R>> FsSync<'a, R, M> {
         self.core()?.attachment_save(session_id, data, filename)
     }
 
+    pub fn attachment_import_path(
+        &self,
+        session_id: &str,
+        source_path: &std::path::Path,
+    ) -> Result<crate::AttachmentInfo, crate::Error> {
+        self.core()?.attachment_import_path(session_id, source_path)
+    }
+
     pub fn attachment_dir(&self, session_id: &str) -> Result<std::path::PathBuf, crate::Error> {
         self.core()?.attachment_dir(session_id)
     }

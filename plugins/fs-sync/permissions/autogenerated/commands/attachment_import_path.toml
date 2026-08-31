@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-attachment-import-path"
+description = "Enables the attachment_import_path command without any pre-configured scope."
+commands.allow = ["attachment_import_path"]
+
+[[permission]]
+identifier = "deny-attachment-import-path"
+description = "Denies the attachment_import_path command without any pre-configured scope."
+commands.deny = ["attachment_import_path"]

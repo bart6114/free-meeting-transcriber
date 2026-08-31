@@ -23,8 +23,10 @@ export {
 } from "./clip-paste";
 export {
   type FileHandlerConfig,
+  type FileUploadCandidate,
   fileHandlerPlugin,
   handleFileDrop,
+  handleNativeFileDrop,
 } from "./file-handler";
 export { findHashtags, hashtagPlugin, hashtagPluginKey } from "./hashtag";
 export {

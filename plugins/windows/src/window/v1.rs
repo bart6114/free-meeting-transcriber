@@ -63,9 +63,8 @@ impl AppWindow {
             .unwrap_or_else(|| self.title());
 
         #[allow(unused_mut)]
-        let mut builder = WebviewWindow::builder(app, self.label(), WebviewUrl::App(url.into()))
-            .title(title)
-            .disable_drag_drop_handler();
+        let mut builder =
+            WebviewWindow::builder(app, self.label(), WebviewUrl::App(url.into())).title(title);
 
         #[cfg(target_os = "macos")]
         {

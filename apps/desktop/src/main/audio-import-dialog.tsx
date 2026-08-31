@@ -2,8 +2,9 @@ import { Trans, useLingui } from "@lingui/react/macro";
 import { downloadDir } from "@tauri-apps/api/path";
 import { open as selectFile } from "@tauri-apps/plugin-dialog";
 import { CheckIcon, RotateCcwIcon } from "lucide-react";
-import { useCallback, useState, type DragEvent } from "react";
+import { useCallback, useRef, useState } from "react";
 
+import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 import { Button } from "@hypr/ui/components/ui/button";
 import { Checkbox } from "@hypr/ui/components/ui/checkbox";
 import {
@@ -18,13 +19,14 @@ import { Progress } from "@hypr/ui/components/ui/progress";
 import { Spinner } from "@hypr/ui/components/ui/spinner";
 import { cn } from "@hypr/utils";
 
+import { useNativeFileDrop } from "~/shared/hooks/useNativeFileDrop";
 import {
   type AudioImportItem,
   type AudioImportSource,
   isFinishedAudioImportStatus,
   useAudioImport,
 } from "~/store/zustand/audio-import";
-import { AUDIO_EXTENSIONS, isAudioUploadFile } from "~/stt/useUploadFile";
+import { AUDIO_EXTENSIONS } from "~/stt/useUploadFile";
 
 type Candidate = {
   key: string;
@@ -43,7 +45,7 @@ export function AudioImportDialog() {
   const clearFinished = useAudioImport((state) => state.clearFinished);
 
   const [candidates, setCandidates] = useState<Candidate[]>([]);
-  const [isDragActive, setIsDragActive] = useState(false);
+  const dropTargetRef = useRef<HTMLDivElement>(null);
 
   const addCandidates = useCallback((incoming: Candidate[]) => {
     setCandidates((current) => {
@@ -87,34 +89,33 @@ export function AudioImportDialog() {
     }
   }, [addCandidates, t]);
 
-  const handleDrop = useCallback(
-    (event: DragEvent<HTMLDivElement>) => {
-      event.preventDefault();
-      event.stopPropagation();
-      setIsDragActive(false);
-
-      // webkitGetAsEntry/getAsFile must be captured synchronously during the
-      // drop event; the recursive folder traversal happens afterwards.
-      const dropped = Array.from(event.dataTransfer.items ?? [])
-        .filter((item) => item.kind === "file")
-        .map((item) => ({
-          entry: item.webkitGetAsEntry(),
-          file: item.getAsFile(),
-        }));
-
-      void collectDroppedAudioFiles(dropped).then((files) => {
-        addCandidates(
-          files.map((file) => ({
-            key: `${file.name}:${file.size}:${file.lastModified}`,
-            source: { kind: "file", file, name: file.name },
-            size: file.size,
-            selected: true,
-          })),
-        );
-      });
+  const { isHovering: isDragActive } = useNativeFileDrop(dropTargetRef, {
+    onDrop: (paths) => {
+      void fsSyncCommands
+        .audioCollectImportSources(paths)
+        .then((result) => {
+          if (result.status === "error") throw new Error(result.error);
+          addCandidates(
+            result.data.map((source) => ({
+              key: source.path,
+              source: {
+                kind: "path",
+                path: source.path,
+                name: source.name,
+              },
+              size: source.size,
+              selected: true,
+            })),
+          );
+        })
+        .catch((error) => {
+          console.error(
+            "[audio-import] failed to inspect dropped paths:",
+            error,
+          );
+        });
     },
-    [addCandidates],
-  );
+  });
 
   const toggleCandidate = useCallback((key: string) => {
     setCandidates((current) =>
@@ -148,17 +149,7 @@ export function AudioImportDialog() {
 
   return (
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-      <DialogContent
-        className="max-w-xl"
-        onDragOver={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          event.dataTransfer.dropEffect = "copy";
-          setIsDragActive(true);
-        }}
-        onDragLeave={() => setIsDragActive(false)}
-        onDrop={handleDrop}
-      >
+      <DialogContent ref={dropTargetRef} className="max-w-xl">
         <DialogHeader>
           <DialogTitle>
             <Trans>Import audio files</Trans>
@@ -338,59 +329,4 @@ function formatFileSize(bytes: number) {
     return `${(bytes / 1_000_000).toFixed(1)} MB`;
   }
   return `${Math.max(1, Math.round(bytes / 1_000))} KB`;
-}
-
-async function collectDroppedAudioFiles(
-  dropped: Array<{ entry: FileSystemEntry | null; file: File | null }>,
-) {
-  const collected: File[] = [];
-
-  for (const { entry, file } of dropped) {
-    if (entry) {
-      await collectEntry(entry, collected);
-    } else if (file) {
-      collected.push(file);
-    }
-  }
-
-  return collected.filter(
-    (file) => !file.name.startsWith(".") && isAudioUploadFile(file),
-  );
-}
-
-async function collectEntry(entry: FileSystemEntry, out: File[]) {
-  if (entry.isFile) {
-    try {
-      out.push(
-        await new Promise<File>((resolve, reject) =>
-          (entry as FileSystemFileEntry).file(resolve, reject),
-        ),
-      );
-    } catch (error) {
-      console.error("[audio-import] failed to read dropped entry:", error);
-    }
-    return;
-  }
-
-  if (!entry.isDirectory) {
-    return;
-  }
-
-  const reader = (entry as FileSystemDirectoryEntry).createReader();
-  // readEntries returns batches (WebKit caps them at ~100); keep reading
-  // until an empty batch marks the end of the directory.
-  while (true) {
-    const batch = await new Promise<FileSystemEntry[]>((resolve, reject) =>
-      reader.readEntries(resolve, reject),
-    );
-    if (batch.length === 0) {
-      return;
-    }
-    for (const child of batch) {
-      if (child.name.startsWith(".")) {
-        continue;
-      }
-      await collectEntry(child, out);
-    }
-  }
 }
