@@ -1,5 +1,10 @@
 import { Trans, useLingui } from "@lingui/react/macro";
 import {
+  defaultRangeExtractor,
+  type Range,
+  useVirtualizer,
+} from "@tanstack/react-virtual";
+import {
   ArrowDownIcon,
   ArrowUpIcon,
   ChevronDownIcon,
@@ -11,19 +16,16 @@ import {
 import {
   type ReactNode,
   memo,
-  type RefCallback,
   type WheelEvent as ReactWheelEvent,
   useCallback,
   useEffect,
   useMemo,
   useRef,
-  useState,
 } from "react";
 
 import { Button } from "@hypr/ui/components/ui/button";
 import { cn } from "@hypr/utils";
 
-import { useAnchor, useAutoScrollToAnchor } from "./anchor";
 import { TimelineItemComponent } from "./item";
 import { useTimelineSessionsTable } from "./queries";
 import {
@@ -32,20 +34,21 @@ import {
   useSmartCurrentTime,
 } from "./realtime";
 import {
+  buildTimelineRows,
+  getTimelineRowHeight,
+  type TimelineRow,
+} from "./rows";
+import {
   useUpcomingMeetingStatus,
   useUpcomingMeetingLabelFormatter,
 } from "./upcoming-meeting";
 import {
   buildTagTimelineBuckets,
   buildTimelineBuckets,
-  calculateTodayIndicatorPlacement,
   deriveTimelineWindowData,
   getItemTimestamp,
   hasFutureTimelineItems,
   type TimelineBucket,
-  type TimelineIndicatorPlacement,
-  type TimelineItem,
-  type TimelinePrecision,
   type TimelineSessionsTable,
 } from "./utils";
 
@@ -75,7 +78,6 @@ export const TimelineView = memo(function TimelineView({
     useConfigValue("sidebar_group_by") === "tag" ? "tag" : "date";
   const expandedTags = useConfigValue("sidebar_expanded_tags");
   const timelineSessionsTable = useTimelineSessionsTable();
-  const [isScrolledToBottom, setIsScrolledToBottom] = useState(true);
 
   const { buckets: allBuckets, hasMoreFutureItems } = useTimelineData({
     timelineSessionsTable,
@@ -148,15 +150,6 @@ export const TimelineView = memo(function TimelineView({
     groupBy === "date" ? buckets : EMPTY_BUCKETS,
     formatUpcomingMeetingLabel,
   );
-  const [isUpcomingMeetingVisible, setIsUpcomingMeetingVisible] =
-    useState(false);
-  const upcomingMeetingNodeRef = useRef<HTMLDivElement | null>(null);
-  const setUpcomingMeetingNodeRef = useCallback<RefCallback<HTMLDivElement>>(
-    (node) => {
-      upcomingMeetingNodeRef.current = node;
-    },
-    [],
-  );
   const activeSessionId = useListener((state) =>
     state.live.status === "active" || state.live.status === "finalizing"
       ? state.live.sessionId
@@ -185,6 +178,7 @@ export const TimelineView = memo(function TimelineView({
   }, [currentTab]);
 
   const selectedIds = useTimelineSelection((s) => s.selectedIds);
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const anchorId = useTimelineSelection((s) => s.anchorId);
   const selectAll = useTimelineSelection((s) => s.selectAll);
   const clearSelection = useTimelineSelection((s) => s.clear);
@@ -223,105 +217,203 @@ export const TimelineView = memo(function TimelineView({
     selectAll,
   };
 
-  const {
-    containerRef,
-    isAnchorVisible: isTodayVisible,
-    isScrolledPastAnchor: isScrolledPastToday,
-    scrollToAnchor: scrollToToday,
-    registerAnchor: setCurrentTimeIndicatorRef,
-    anchorNode: todayAnchorNode,
-  } = useAnchor();
-  const showUpcomingMeetingChip =
-    Boolean(upcomingMeetingStatus) && !isUpcomingMeetingVisible;
-  const showTopNowChip =
-    !showUpcomingMeetingChip && !isTodayVisible && isScrolledPastToday;
+  const indicatorIndex = useMemo(() => {
+    if (groupBy === "tag" || hasToday) {
+      return -1;
+    }
+    return getFallbackIndicatorIndex(buckets, Date.now());
+  }, [buckets, groupBy, hasToday, indicatorTimeMs]);
+  const hasFutureItems = useMemo(
+    () => hasFutureTimelineItems(buckets, Date.now()),
+    [buckets, indicatorTimeMs],
+  );
+  const suppressCurrentTimeIndicator =
+    groupBy === "tag" || hasActiveVisibleSession || !hasFutureItems;
+  const rows = useMemo(
+    () =>
+      buildTimelineRows({
+        buckets,
+        currentTimeMs: indicatorTimeMs,
+        fallbackIndicatorIndex: indicatorIndex,
+        groupBy,
+        hasToday,
+        suppressCurrentTimeIndicator,
+      }),
+    [
+      buckets,
+      groupBy,
+      hasToday,
+      indicatorIndex,
+      indicatorTimeMs,
+      suppressCurrentTimeIndicator,
+    ],
+  );
+  const bucketHeaderIndexes = useMemo(
+    () =>
+      rows.flatMap((row, index) =>
+        row.kind === "bucket-header" ? [index] : [],
+      ),
+    [rows],
+  );
+  const currentTimeRowIndex = rows.findIndex(
+    (row) => row.kind === "current-time",
+  );
+  const selectedSessionRowIndex = rows.findIndex(
+    (row) => row.kind === "session" && row.item.id === selectedSessionId,
+  );
+  const upcomingMeetingRowIndex = rows.findIndex(
+    (row) =>
+      row.kind === "session" &&
+      `session-${row.item.id}` === upcomingMeetingStatus?.itemKey,
+  );
+  const activeStickyIndexRef = useRef<number | null>(null);
+  const extractTimelineRange = useCallback(
+    (range: Range) => {
+      activeStickyIndexRef.current = null;
+      for (let index = bucketHeaderIndexes.length - 1; index >= 0; index--) {
+        const headerIndex = bucketHeaderIndexes[index];
+        if (headerIndex !== undefined && headerIndex <= range.startIndex) {
+          activeStickyIndexRef.current = headerIndex;
+          break;
+        }
+      }
+      return [
+        ...new Set([
+          ...(activeStickyIndexRef.current === null
+            ? []
+            : [activeStickyIndexRef.current]),
+          ...(currentTimeRowIndex < 0 ? [] : [currentTimeRowIndex]),
+          ...(upcomingMeetingRowIndex < 0 ? [] : [upcomingMeetingRowIndex]),
+          ...defaultRangeExtractor(range),
+        ]),
+      ].sort((left, right) => left - right);
+    },
+    [bucketHeaderIndexes, currentTimeRowIndex, upcomingMeetingRowIndex],
+  );
   const topSpacerClassName = topChromeInset
     ? "h-12"
     : topChipsOverlapHeader
       ? "h-9"
       : "h-8";
-  const bucketHeaderTopClassName = topChromeInset ? "top-12" : "top-0";
+  const topSpacerHeight = topChromeInset ? 48 : topChipsOverlapHeader ? 36 : 32;
+  const showTopSpacer = topChromeInset || hasMoreFutureItems;
+  const timelinePreludeHeight = (showTopSpacer ? topSpacerHeight : 0) + 27;
   const topChipStackTopClassName = topChromeInset
     ? "top-4"
     : topChipsOverlapHeader
       ? "top-1"
       : "top-2";
-  const selectedSessionScrollFrameRef = useRef<number | null>(null);
-  const scrollSelectedSessionIntoView = useCallback<
-    RefCallback<HTMLDivElement>
-  >(
-    (node) => {
-      if (selectedSessionScrollFrameRef.current !== null) {
-        cancelAnimationFrame(selectedSessionScrollFrameRef.current);
-        selectedSessionScrollFrameRef.current = null;
-      }
-
-      if (!node || currentTab?.type !== "sessions") {
-        return;
-      }
-
-      selectedSessionScrollFrameRef.current = requestAnimationFrame(() => {
-        selectedSessionScrollFrameRef.current = null;
-        scrollTimelineItemIntoView(containerRef.current, node);
-      });
-    },
-    [containerRef, currentTab],
+  const containerRef = useRef<HTMLDivElement>(null);
+  const rowVirtualizer = useVirtualizer({
+    count: rows.length,
+    estimateSize: (index) => getTimelineRowHeight(rows[index]!),
+    getItemKey: (index) => rows[index]?.key ?? index,
+    getScrollElement: () => containerRef.current,
+    overscan: 8,
+    rangeExtractor: extractTimelineRange,
+    scrollMargin: timelinePreludeHeight,
+  });
+  const virtualRows = rowVirtualizer.getVirtualItems();
+  const isTodayVisible = isVirtualRowVisible(
+    rowVirtualizer,
+    virtualRows,
+    currentTimeRowIndex,
   );
+  const currentTimeVirtualRow = virtualRows.find(
+    (row) => row.index === currentTimeRowIndex,
+  );
+  const isScrolledPastToday =
+    currentTimeVirtualRow !== undefined &&
+    currentTimeVirtualRow.end <= (rowVirtualizer.scrollOffset ?? 0);
+  const isUpcomingMeetingVisible = isVirtualRowVisible(
+    rowVirtualizer,
+    virtualRows,
+    upcomingMeetingRowIndex,
+  );
+  const scrollElement = containerRef.current;
+  const isScrolledToBottom =
+    scrollElement === null ||
+    scrollElement.scrollHeight -
+      scrollElement.clientHeight -
+      scrollElement.scrollTop <=
+      12;
+  const showUpcomingMeetingChip =
+    Boolean(upcomingMeetingStatus) && !isUpcomingMeetingVisible;
+  const showTopNowChip =
+    !showUpcomingMeetingChip && !isTodayVisible && isScrolledPastToday;
+  const scrollToToday = useCallback(() => {
+    if (currentTimeRowIndex >= 0) {
+      rowVirtualizer.scrollToIndex(currentTimeRowIndex, {
+        align: "center",
+        behavior: "smooth",
+      });
+    }
+  }, [currentTimeRowIndex, rowVirtualizer]);
   const scrollToUpcomingMeeting = useCallback(() => {
-    const node = upcomingMeetingNodeRef.current;
-    if (!node) {
-      return;
+    if (upcomingMeetingRowIndex >= 0) {
+      rowVirtualizer.scrollToIndex(upcomingMeetingRowIndex, {
+        align: "center",
+        behavior: "smooth",
+      });
     }
-
-    scrollTimelineItemIntoView(containerRef.current, node);
-  }, [containerRef]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const updateScrollPosition = () => {
-      const maxScrollTop = Math.max(
-        0,
-        container.scrollHeight - container.clientHeight,
-      );
-      const nextScrollTop = container.scrollTop;
-
-      setIsScrolledToBottom(maxScrollTop - nextScrollTop <= 12);
-      setIsUpcomingMeetingVisible(
-        isTimelineItemVisible(container, upcomingMeetingNodeRef.current),
-      );
-    };
-
-    updateScrollPosition();
-    container.addEventListener("scroll", updateScrollPosition, {
-      passive: true,
-    });
-
-    return () => {
-      container.removeEventListener("scroll", updateScrollPosition);
-    };
-  }, [
-    containerRef,
-    buckets.length,
-    flatItemKeys.length,
-    upcomingMeetingStatus?.itemKey,
-  ]);
-
+  }, [rowVirtualizer, upcomingMeetingRowIndex]);
   const todayBucketLength = useMemo(() => {
     const b = buckets.find((bucket) => bucket.label === "Today");
     return b?.items.length ?? 0;
   }, [buckets]);
-  const autoScrollAnchorNode = hasToday ? todayAnchorNode : null;
+  const initialNowScrollDoneRef = useRef(false);
+  const previousTodayBucketLengthRef = useRef(todayBucketLength);
+  useEffect(() => {
+    if (!hasToday || currentTimeRowIndex < 0) {
+      previousTodayBucketLengthRef.current = todayBucketLength;
+      return;
+    }
 
-  useAutoScrollToAnchor({
-    scrollFn: scrollToToday,
-    isVisible: isTodayVisible,
-    anchorNode: autoScrollAnchorNode,
-    deps: [todayBucketLength],
-  });
+    const todayLengthChanged =
+      previousTodayBucketLengthRef.current !== todayBucketLength;
+    previousTodayBucketLengthRef.current = todayBucketLength;
+    if (initialNowScrollDoneRef.current && !todayLengthChanged) {
+      return;
+    }
+    initialNowScrollDoneRef.current = true;
+
+    const frame = requestAnimationFrame(() => {
+      if (!isTodayVisible) {
+        rowVirtualizer.scrollToIndex(currentTimeRowIndex, {
+          align: "center",
+          behavior: todayLengthChanged ? "smooth" : "auto",
+        });
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    currentTimeRowIndex,
+    hasToday,
+    isTodayVisible,
+    rowVirtualizer,
+    todayBucketLength,
+  ]);
+  useEffect(() => {
+    if (
+      currentTab?.type !== "sessions" ||
+      selectedSessionRowIndex < 0 ||
+      isVirtualRowVisible(
+        rowVirtualizer,
+        rowVirtualizer.getVirtualItems(),
+        selectedSessionRowIndex,
+      )
+    ) {
+      return;
+    }
+
+    const frame = requestAnimationFrame(() => {
+      rowVirtualizer.scrollToIndex(selectedSessionRowIndex, {
+        align: "center",
+        behavior: "smooth",
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [currentTab?.type, rowVirtualizer, selectedSessionRowIndex]);
 
   useMountEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -367,20 +459,6 @@ export const TimelineView = memo(function TimelineView({
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
     };
   });
-
-  const indicatorIndex = useMemo(() => {
-    if (groupBy === "tag" || hasToday) {
-      return -1;
-    }
-    return getFallbackIndicatorIndex(buckets, Date.now());
-  }, [buckets, groupBy, hasToday, indicatorTimeMs]);
-
-  const hasFutureItems = useMemo(
-    () => hasFutureTimelineItems(buckets, Date.now()),
-    [buckets, indicatorTimeMs],
-  );
-  const suppressCurrentTimeIndicator =
-    groupBy === "tag" || hasActiveVisibleSession || !hasFutureItems;
 
   const handleDeleteSelected = useCallback(() => {
     const sessionIds = selectedIds
@@ -448,10 +526,7 @@ export const TimelineView = memo(function TimelineView({
         ref={containerRef}
         data-sidebar-timeline-scroll
         onContextMenu={showContextMenu}
-        className={cn([
-          "scrollbar-hide flex h-full flex-col overflow-y-auto",
-          "rounded-xl",
-        ])}
+        className={cn(["flex h-full flex-col overflow-y-auto", "rounded-xl"])}
       >
         {(topChromeInset || hasMoreFutureItems) && (
           <div
@@ -498,142 +573,59 @@ export const TimelineView = memo(function TimelineView({
             </button>
           )}
         </div>
-        {buckets.map((bucket, index) => {
-          const isToday = bucket.label === "Today";
-          const shouldPlaceIndicatorBefore =
-            !hasToday && indicatorIndex === index;
-          const shouldRenderIndicatorBefore =
-            shouldPlaceIndicatorBefore && !suppressCurrentTimeIndicator;
-          const shouldRenderIndicatorAnchorBefore =
-            shouldPlaceIndicatorBefore && suppressCurrentTimeIndicator;
-          const isTopIndicator = shouldRenderIndicatorBefore && index === 0;
+        <div
+          data-sidebar-timeline-virtual-canvas
+          className="relative w-full shrink-0"
+          style={{ height: rowVirtualizer.getTotalSize() }}
+        >
+          {virtualRows.map((virtualRow) => {
+            const row = rows[virtualRow.index];
+            if (!row) {
+              return null;
+            }
+            const activeStickyHeader =
+              row.kind === "bucket-header" &&
+              activeStickyIndexRef.current === virtualRow.index;
 
-          return (
-            <div key={bucket.id} className={cn([isTopIndicator && "pt-3"])}>
-              {shouldRenderIndicatorBefore && (
-                <div data-sidebar-current-time-header-gap className="py-3">
-                  <CurrentTimeIndicator
-                    ref={setCurrentTimeIndicatorRef}
-                    timezone={timezone}
-                  />
-                </div>
-              )}
-              {shouldRenderIndicatorAnchorBefore && (
-                <CurrentTimeAnchor
-                  registerIndicator={setCurrentTimeIndicatorRef}
-                />
-              )}
+            return (
               <div
-                data-sidebar-timeline-bucket-header
+                key={virtualRow.key}
+                data-index={virtualRow.index}
+                data-sidebar-timeline-virtual-row={row.kind}
                 className={cn([
-                  "sticky z-20",
-                  bucketHeaderTopClassName,
-                  "bg-background pt-0 pr-1 pb-1 pl-3",
+                  "left-0 w-full",
+                  activeStickyHeader ? "z-20" : "absolute top-0",
                 ])}
+                style={
+                  activeStickyHeader
+                    ? {
+                        height: virtualRow.size,
+                        position: "sticky",
+                        top: topChromeInset ? 48 : 0,
+                      }
+                    : {
+                        height: virtualRow.size,
+                        transform: `translateY(${virtualRow.start - rowVirtualizer.options.scrollMargin}px)`,
+                      }
+                }
               >
-                {bucket.kind === "tag" ? (
-                  <button
-                    type="button"
-                    aria-expanded={expandedTagSet.has(bucket.id)}
-                    onClick={() => toggleTagExpanded(bucket.id)}
-                    style={
-                      bucket.depth
-                        ? { paddingLeft: bucket.depth * 12 }
-                        : undefined
-                    }
-                    className={cn([
-                      "text-muted-foreground/70 hover:text-foreground flex w-full items-center gap-1",
-                      "pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase transition-colors",
-                    ])}
-                  >
-                    {expandedTagSet.has(bucket.id) ? (
-                      <ChevronDownIcon size={12} className="shrink-0" />
-                    ) : (
-                      <ChevronRightIcon size={12} className="shrink-0" />
-                    )}
-                    <span className="truncate">{bucket.label}</span>
-                    <span className="tracking-normal">
-                      ({bucketItemCounts.get(bucket.id) ?? 0})
-                    </span>
-                  </button>
-                ) : (
-                  <div className="text-muted-foreground/70 pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase">
-                    {bucket.label}
-                  </div>
-                )}
-              </div>
-              {isToday ? (
-                <TodayBucket
-                  items={bucket.items}
-                  precision={bucket.precision}
-                  registerIndicator={setCurrentTimeIndicatorRef}
-                  selectedSessionId={selectedSessionId}
-                  selectedNodeRef={scrollSelectedSessionIntoView}
-                  suppressCurrentTimeIndicator={suppressCurrentTimeIndicator}
-                  timezone={timezone}
-                  selectedIds={selectedIds}
-                  getFlatItemKeys={getFlatItemKeys}
+                <TimelineVirtualRow
+                  row={row}
+                  bucketItemCounts={bucketItemCounts}
                   enhancingSessionIds={enhancingSessionIdSet}
-                  upcomingItemKey={upcomingMeetingStatus?.itemKey}
-                  upcomingItemLabel={upcomingMeetingStatus?.label}
-                  upcomingItemProgress={upcomingMeetingStatus?.progress}
-                  upcomingItemNodeRef={setUpcomingMeetingNodeRef}
+                  expandedTagSet={expandedTagSet}
+                  getFlatItemKeys={getFlatItemKeys}
+                  selectedIdSet={selectedIdSet}
+                  selectedSessionId={selectedSessionId}
+                  topChromeInset={topChromeInset}
+                  timezone={timezone}
+                  toggleTagExpanded={toggleTagExpanded}
+                  upcomingMeetingStatus={upcomingMeetingStatus}
                 />
-              ) : (
-                bucket.items.map((item) => {
-                  const itemKey = `${item.type}-${item.id}`;
-                  const selected =
-                    item.type === "session" && item.id === selectedSessionId;
-                  return (
-                    <TimelineItemComponent
-                      key={itemKey}
-                      item={item}
-                      precision={bucket.precision}
-                      selected={selected}
-                      timezone={timezone}
-                      multiSelected={selectedIds.includes(itemKey)}
-                      getFlatItemKeys={getFlatItemKeys}
-                      isEnhancing={
-                        item.type === "session" &&
-                        enhancingSessionIdSet.has(item.id)
-                      }
-                      selectedNodeRef={
-                        selected ? scrollSelectedSessionIntoView : undefined
-                      }
-                      itemNodeRef={
-                        itemKey === upcomingMeetingStatus?.itemKey
-                          ? setUpcomingMeetingNodeRef
-                          : undefined
-                      }
-                      isUpcoming={itemKey === upcomingMeetingStatus?.itemKey}
-                      upcomingLabel={
-                        itemKey === upcomingMeetingStatus?.itemKey
-                          ? upcomingMeetingStatus.label
-                          : undefined
-                      }
-                      upcomingProgress={
-                        itemKey === upcomingMeetingStatus?.itemKey
-                          ? upcomingMeetingStatus.progress
-                          : undefined
-                      }
-                    />
-                  );
-                })
-              )}
-            </div>
-          );
-        })}
-        {groupBy === "date" &&
-          !hasToday &&
-          (indicatorIndex === -1 || indicatorIndex === buckets.length) &&
-          (suppressCurrentTimeIndicator ? (
-            <CurrentTimeAnchor registerIndicator={setCurrentTimeIndicatorRef} />
-          ) : (
-            <CurrentTimeIndicator
-              ref={setCurrentTimeIndicatorRef}
-              timezone={timezone}
-            />
-          ))}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {!isScrolledToBottom && (
@@ -686,6 +678,124 @@ export const TimelineView = memo(function TimelineView({
     </div>
   );
 });
+
+function TimelineVirtualRow({
+  row,
+  bucketItemCounts,
+  enhancingSessionIds,
+  expandedTagSet,
+  getFlatItemKeys,
+  selectedIdSet,
+  selectedSessionId,
+  topChromeInset,
+  timezone,
+  toggleTagExpanded,
+  upcomingMeetingStatus,
+}: {
+  row: TimelineRow;
+  bucketItemCounts: Map<string, number>;
+  enhancingSessionIds: Set<string>;
+  expandedTagSet: Set<string>;
+  getFlatItemKeys: () => string[];
+  selectedIdSet: Set<string>;
+  selectedSessionId: string | undefined;
+  topChromeInset: boolean;
+  timezone?: string;
+  toggleTagExpanded: (bucketId: string) => void;
+  upcomingMeetingStatus: ReturnType<typeof useUpcomingMeetingStatus>;
+}) {
+  if (row.kind === "bucket-header") {
+    const { bucket } = row;
+    return (
+      <div
+        data-sidebar-timeline-bucket-header
+        className={cn([
+          "bg-background z-20 h-[27px] pr-1 pb-1 pl-3",
+          topChromeInset ? "top-12" : "top-0",
+        ])}
+      >
+        {bucket.kind === "tag" ? (
+          <button
+            type="button"
+            aria-expanded={expandedTagSet.has(bucket.id)}
+            onClick={() => toggleTagExpanded(bucket.id)}
+            style={
+              bucket.depth ? { paddingLeft: bucket.depth * 12 } : undefined
+            }
+            className={cn([
+              "text-muted-foreground/70 hover:text-foreground flex w-full items-center gap-1",
+              "pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase transition-colors",
+            ])}
+          >
+            {expandedTagSet.has(bucket.id) ? (
+              <ChevronDownIcon size={12} className="shrink-0" />
+            ) : (
+              <ChevronRightIcon size={12} className="shrink-0" />
+            )}
+            <span className="truncate">{bucket.label}</span>
+            <span className="tracking-normal">
+              ({bucketItemCounts.get(bucket.id) ?? 0})
+            </span>
+          </button>
+        ) : (
+          <div className="text-muted-foreground/70 pt-2 text-[10px] font-semibold tracking-[0.09em] uppercase">
+            {bucket.label}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (row.kind === "current-time") {
+    const indicator = row.suppressed ? (
+      <CurrentTimeAnchor />
+    ) : (
+      <CurrentTimeIndicator timezone={timezone} />
+    );
+    if (row.gap === "top-bucket") {
+      return (
+        <div className="pt-3">
+          <div data-sidebar-current-time-header-gap className="py-3">
+            {indicator}
+          </div>
+        </div>
+      );
+    }
+    return row.gap === "bucket" ? (
+      <div data-sidebar-current-time-header-gap className="py-3">
+        {indicator}
+      </div>
+    ) : (
+      indicator
+    );
+  }
+
+  if (row.kind === "empty-today") {
+    return (
+      <div className="text-muted-foreground px-3 py-4 text-center text-sm">
+        <Trans>No items today</Trans>
+      </div>
+    );
+  }
+
+  const itemKey = `${row.item.type}-${row.item.id}`;
+  const isUpcoming = itemKey === upcomingMeetingStatus?.itemKey;
+  return (
+    <TimelineItemComponent
+      item={row.item}
+      precision={row.precision}
+      selected={row.item.id === selectedSessionId}
+      timezone={timezone}
+      multiSelected={selectedIdSet.has(itemKey)}
+      getFlatItemKeys={getFlatItemKeys}
+      isEnhancing={enhancingSessionIds.has(row.item.id)}
+      isUpcoming={isUpcoming}
+      upcomingProgress={
+        isUpcoming ? upcomingMeetingStatus?.progress : undefined
+      }
+    />
+  );
+}
 
 function SidebarUpcomingMeetingStatus({
   label,
@@ -887,14 +997,9 @@ function TimelineNowChip({
   );
 }
 
-function CurrentTimeAnchor({
-  registerIndicator,
-}: {
-  registerIndicator: (node: HTMLDivElement | null) => void;
-}) {
+function CurrentTimeAnchor() {
   return (
     <div
-      ref={registerIndicator}
       aria-hidden
       data-sidebar-current-time-anchor
       className={cn(["pointer-events-none opacity-0", "relative z-20 h-px"])}
@@ -902,216 +1007,27 @@ function CurrentTimeAnchor({
   );
 }
 
-function TodayBucket({
-  items,
-  precision,
-  registerIndicator,
-  selectedSessionId,
-  selectedNodeRef,
-  suppressCurrentTimeIndicator,
-  timezone,
-  selectedIds,
-  getFlatItemKeys,
-  enhancingSessionIds,
-  upcomingItemKey,
-  upcomingItemLabel,
-  upcomingItemProgress,
-  upcomingItemNodeRef,
-}: {
-  items: TimelineItem[];
-  precision: TimelinePrecision;
-  registerIndicator: (node: HTMLDivElement | null) => void;
-  selectedSessionId: string | undefined;
-  selectedNodeRef: RefCallback<HTMLDivElement>;
-  suppressCurrentTimeIndicator: boolean;
-  timezone?: string;
-  selectedIds: string[];
-  getFlatItemKeys: () => string[];
-  enhancingSessionIds: Set<string>;
-  upcomingItemKey?: string;
-  upcomingItemLabel?: string;
-  upcomingItemProgress?: number;
-  upcomingItemNodeRef: RefCallback<HTMLDivElement>;
-}) {
-  const currentTimeMs = useCurrentTimeMs();
-
-  const entries = useMemo(
-    () =>
-      items.map((timelineItem) => ({
-        item: timelineItem,
-        timestamp: getItemTimestamp(timelineItem),
-      })),
-    [items],
-  );
-
-  const indicatorPlacement = useMemo<TimelineIndicatorPlacement>(
-    // currentTimeMs in deps triggers updates as time passes,
-    // but we use fresh Date() so indicator positions correctly when entries change immediately (new note).
-    () => calculateTodayIndicatorPlacement(entries, new Date()),
-    [entries, currentTimeMs],
-  );
-
-  const renderedEntries = useMemo(() => {
-    if (entries.length === 0) {
-      return (
-        <>
-          {suppressCurrentTimeIndicator ? (
-            <CurrentTimeAnchor registerIndicator={registerIndicator} />
-          ) : (
-            <CurrentTimeIndicator ref={registerIndicator} timezone={timezone} />
-          )}
-          <div className="text-muted-foreground px-3 py-4 text-center text-sm">
-            <Trans>No items today</Trans>
-          </div>
-        </>
-      );
-    }
-
-    const nodes: ReactNode[] = [];
-
-    entries.forEach((entry, index) => {
-      if (
-        indicatorPlacement.type === "before" &&
-        index === indicatorPlacement.index
-      ) {
-        nodes.push(
-          suppressCurrentTimeIndicator ? (
-            <CurrentTimeAnchor
-              key="current-time-anchor"
-              registerIndicator={registerIndicator}
-            />
-          ) : (
-            <CurrentTimeIndicator
-              ref={registerIndicator}
-              key="current-time-indicator"
-              timezone={timezone}
-            />
-          ),
-        );
-      }
-
-      const itemKey = `${entry.item.type}-${entry.item.id}`;
-      const selected =
-        entry.item.type === "session" && entry.item.id === selectedSessionId;
-
-      const itemNode = (
-        <TimelineItemComponent
-          key={itemKey}
-          item={entry.item}
-          precision={precision}
-          selected={selected}
-          timezone={timezone}
-          multiSelected={selectedIds.includes(itemKey)}
-          getFlatItemKeys={getFlatItemKeys}
-          isEnhancing={
-            entry.item.type === "session" &&
-            enhancingSessionIds.has(entry.item.id)
-          }
-          selectedNodeRef={selected ? selectedNodeRef : undefined}
-          itemNodeRef={
-            itemKey === upcomingItemKey ? upcomingItemNodeRef : undefined
-          }
-          isUpcoming={itemKey === upcomingItemKey}
-          upcomingLabel={
-            itemKey === upcomingItemKey ? upcomingItemLabel : undefined
-          }
-          upcomingProgress={
-            itemKey === upcomingItemKey ? upcomingItemProgress : undefined
-          }
-        />
-      );
-
-      nodes.push(itemNode);
-    });
-
-    if (indicatorPlacement.type === "after") {
-      nodes.push(
-        suppressCurrentTimeIndicator ? (
-          <CurrentTimeAnchor
-            key="current-time-anchor-end"
-            registerIndicator={registerIndicator}
-          />
-        ) : (
-          <CurrentTimeIndicator
-            ref={registerIndicator}
-            key="current-time-indicator-end"
-            timezone={timezone}
-          />
-        ),
-      );
-    }
-
-    return <>{nodes}</>;
-  }, [
-    entries,
-    indicatorPlacement,
-    precision,
-    registerIndicator,
-    selectedSessionId,
-    selectedNodeRef,
-    suppressCurrentTimeIndicator,
-    timezone,
-    selectedIds,
-    getFlatItemKeys,
-    enhancingSessionIds,
-    upcomingItemKey,
-    upcomingItemLabel,
-    upcomingItemProgress,
-    upcomingItemNodeRef,
-  ]);
-
-  return renderedEntries;
-}
-
-function scrollTimelineItemIntoView(
-  container: HTMLDivElement | null,
-  item: HTMLDivElement,
+function isVirtualRowVisible(
+  virtualizer: {
+    scrollOffset: number | null;
+    scrollRect: { height: number } | null;
+  },
+  virtualRows: Array<{ end: number; index: number; start: number }>,
+  targetIndex: number,
 ) {
-  if (!container) {
-    return;
-  }
-
-  const containerRect = container.getBoundingClientRect();
-  const itemRect = item.getBoundingClientRect();
-  const margin = 12;
-  const aboveViewport = itemRect.top < containerRect.top + margin;
-  const belowViewport = itemRect.bottom > containerRect.bottom - margin;
-
-  if (!aboveViewport && !belowViewport) {
-    return;
-  }
-
-  const itemCenter =
-    itemRect.top -
-    containerRect.top +
-    container.scrollTop +
-    itemRect.height / 2;
-  const targetScrollTop = Math.max(
-    itemCenter - container.clientHeight * 0.45,
-    0,
-  );
-
-  container.scrollTo({
-    top: targetScrollTop,
-    behavior: "smooth",
-  });
-}
-
-function isTimelineItemVisible(
-  container: HTMLDivElement | null,
-  item: HTMLDivElement | null,
-) {
-  if (!container || !item) {
+  if (targetIndex < 0) {
     return false;
   }
-
-  const containerRect = container.getBoundingClientRect();
-  const itemRect = item.getBoundingClientRect();
+  const row = virtualRows.find((item) => item.index === targetIndex);
+  if (!row) {
+    return false;
+  }
+  const scrollOffset = virtualizer.scrollOffset ?? 0;
+  const viewportHeight = virtualizer.scrollRect?.height ?? 0;
   const margin = 8;
-
   return (
-    itemRect.bottom > containerRect.top + margin &&
-    itemRect.top < containerRect.bottom - margin
+    row.end > scrollOffset + margin &&
+    row.start < scrollOffset + viewportHeight - margin
   );
 }
 

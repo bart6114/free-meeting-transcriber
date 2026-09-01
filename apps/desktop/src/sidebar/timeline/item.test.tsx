@@ -180,9 +180,7 @@ describe("TimelineItemComponent", () => {
     expect(mocks.openCurrent).not.toHaveBeenCalled();
   });
 
-  it("exposes the selected session row for sidebar scroll anchoring", () => {
-    const selectedNodeRef = vi.fn();
-
+  it("marks the selected session row with its session id", () => {
     render(
       <TimelineItemComponent
         item={makeTimelineItem("session-live", {
@@ -191,7 +189,6 @@ describe("TimelineItemComponent", () => {
         })}
         precision="time"
         selected
-        selectedNodeRef={selectedNodeRef}
         timezone="UTC"
         multiSelected={false}
         flatItemKeys={["session-session-live"]}
@@ -205,11 +202,7 @@ describe("TimelineItemComponent", () => {
     expect(row?.getAttribute("data-sidebar-timeline-session-id")).toBe(
       "session-live",
     );
-    expect(row?.className).toContain("[content-visibility:auto]");
-    expect(row?.className).toContain("[contain-intrinsic-size:auto_36px]");
-    expect(selectedNodeRef.mock.calls.some(([node]) => node === row)).toBe(
-      true,
-    );
+    expect(row?.className).not.toContain("[content-visibility:auto]");
   });
 
   it("highlights an upcoming meeting row", () => {
@@ -296,32 +289,6 @@ describe("TimelineItemComponent", () => {
     expect(
       document.querySelector("[data-sidebar-timeline-upcoming-gauge]"),
     ).toBeNull();
-  });
-
-  it("exposes an arbitrary timeline row for visibility checks", () => {
-    mocks.storeTitle = "Team standup";
-    const itemNodeRef = vi.fn();
-
-    render(
-      <TimelineItemComponent
-        item={makeTimelineItem("session-standup", {
-          title: "Team standup",
-          created_at: "2024-01-15T10:30:00.000Z",
-        })}
-        precision="time"
-        selected={false}
-        timezone="UTC"
-        multiSelected={false}
-        flatItemKeys={["session-session-standup"]}
-        itemNodeRef={itemNodeRef}
-      />,
-    );
-
-    const row = screen
-      .getByText("Team standup")
-      .closest("button")?.parentElement;
-
-    expect(itemNodeRef.mock.calls.some(([node]) => node === row)).toBe(true);
   });
 
   it("renders finalizing session spinner at the end of the row", () => {

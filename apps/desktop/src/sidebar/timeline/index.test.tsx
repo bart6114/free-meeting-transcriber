@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
   timelineSelectionAnchorId: null as string | null,
   timelineSelectionSelectedIds: [] as string[],
   timelineSessionsTable: {} as Record<string, Record<string, unknown>>,
+  virtualRange: null as null | { startIndex: number; endIndex: number },
+  virtualScrollToIndex: vi.fn(),
 }));
 
 const lingui = vi.hoisted(() => {
@@ -99,6 +101,89 @@ vi.mock("@lingui/react", () => ({
     t: lingui.t,
   }),
 }));
+
+vi.mock("@tanstack/react-virtual", async () => {
+  const React = await vi.importActual<typeof import("react")>("react");
+
+  return {
+    defaultRangeExtractor: ({
+      startIndex,
+      endIndex,
+    }: {
+      startIndex: number;
+      endIndex: number;
+    }) =>
+      Array.from(
+        { length: Math.max(0, endIndex - startIndex + 1) },
+        (_, index) => startIndex + index,
+      ),
+    useVirtualizer: (options: {
+      count: number;
+      estimateSize: (index: number) => number;
+      getItemKey: (index: number) => string | number;
+      getScrollElement: () => HTMLDivElement | null;
+      rangeExtractor: (range: {
+        startIndex: number;
+        endIndex: number;
+        overscan: number;
+        count: number;
+      }) => number[];
+      scrollMargin: number;
+    }) => {
+      const [, rerender] = React.useReducer((count) => count + 1, 0);
+      React.useEffect(() => {
+        const element = options.getScrollElement();
+        if (!element) return;
+        element.addEventListener("scroll", rerender);
+        return () => element.removeEventListener("scroll", rerender);
+      }, [options.getScrollElement]);
+
+      let start = options.scrollMargin;
+      const measurements = Array.from({ length: options.count }, (_, index) => {
+        const size = options.estimateSize(index);
+        const measurement = {
+          end: start + size,
+          index,
+          key: options.getItemKey(index),
+          size,
+          start,
+        };
+        start += size;
+        return measurement;
+      });
+      const range = mocks.virtualRange ?? {
+        startIndex: 0,
+        endIndex: Math.max(0, options.count - 1),
+      };
+      const indexes = options.rangeExtractor({
+        ...range,
+        overscan: 0,
+        count: options.count,
+      });
+      const element = options.getScrollElement();
+      const scrollOffset = mocks.isScrolledPastAnchor
+        ? 10_000
+        : (element?.scrollTop ?? 0);
+      const viewportHeight = mocks.isAnchorVisible
+        ? 100_000
+        : (element?.clientHeight ?? 0);
+
+      return {
+        getTotalSize: () => Math.max(0, start - options.scrollMargin),
+        getVirtualItems: () =>
+          indexes.flatMap((index) => measurements[index] ?? []),
+        isAtEnd: (threshold = 0) =>
+          !element ||
+          element.scrollHeight - element.clientHeight - element.scrollTop <=
+            threshold,
+        options,
+        scrollOffset,
+        scrollRect: { height: viewportHeight, width: 240 },
+        scrollToIndex: mocks.virtualScrollToIndex,
+      };
+    },
+  };
+});
 
 vi.mock("~/shared/config", () => ({
   // mocks.configValue keeps serving the timezone key for the older tests;
@@ -174,41 +259,19 @@ vi.mock("~/stt/contexts", () => ({
     }),
 }));
 
-vi.mock("./anchor", async () => {
-  const React = await vi.importActual<typeof import("react")>("react");
-
-  return {
-    useAnchor: () => ({
-      anchorNode: mocks.anchorNode,
-      containerRef: React.useRef<HTMLDivElement>(null),
-      isAnchorVisible: mocks.isAnchorVisible,
-      isScrolledPastAnchor: mocks.isScrolledPastAnchor,
-      registerAnchor: mocks.registerAnchor,
-      scrollToAnchor: vi.fn(),
-    }),
-    useAutoScrollToAnchor: mocks.useAutoScrollToAnchor,
-  };
-});
-
 vi.mock("./item", () => ({
   TimelineItemComponent: ({
     isUpcoming,
     item,
-    itemNodeRef,
-    upcomingLabel,
     upcomingProgress,
   }: {
     isUpcoming?: boolean;
     item: { id: string };
-    itemNodeRef?: (node: HTMLDivElement | null) => void;
-    upcomingLabel?: string;
     upcomingProgress?: number;
   }) => (
     <div
-      ref={itemNodeRef}
       data-testid={`timeline-item-${item.id}`}
       data-upcoming={isUpcoming ? "true" : undefined}
-      data-upcoming-label={upcomingLabel}
       data-upcoming-progress={upcomingProgress}
     />
   ),
@@ -260,6 +323,7 @@ describe("TimelineView", () => {
     mocks.timelineSelectionAnchorId = null;
     mocks.timelineSelectionSelectedIds = [];
     mocks.timelineSessionsTable = {};
+    mocks.virtualRange = null;
   });
 
   afterEach(() => {
@@ -273,6 +337,52 @@ describe("TimelineView", () => {
     expect(screen.queryByRole("button", { name: "New note" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
     expect(getSidebarActionTabsOrNull()).toBeNull();
+  });
+
+  it("keeps the native timeline scrollbar available", () => {
+    const { container } = render(<TimelineView />);
+    const scroller = container.querySelector("[data-sidebar-timeline-scroll]");
+
+    expect(scroller?.className).toContain("overflow-y-auto");
+    expect(scroller?.className).not.toContain("scrollbar-hide");
+  });
+
+  it("keeps a 3,500-session timeline bounded to the virtual window", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
+    mocks.currentTimeMs = Date.now();
+    mocks.smartCurrentTimeMs = Date.now();
+    mocks.isAnchorVisible = false;
+    mocks.virtualRange = { startIndex: 0, endIndex: 20 };
+    mocks.timelineSessionsTable = Object.fromEntries(
+      Array.from({ length: 3_500 }, (_, index) => [
+        `session-${index}`,
+        {
+          title: `Note ${index}`,
+          created_at: new Date(
+            Date.UTC(2024, 0, 14, 12, 0) - index * 60_000,
+          ).toISOString(),
+        },
+      ]),
+    );
+
+    const { container, rerender } = render(<TimelineView />);
+    const renderedRows = () =>
+      container.querySelectorAll("[data-sidebar-timeline-virtual-row]");
+
+    expect(renderedRows().length).toBeLessThanOrEqual(23);
+    expect(
+      container
+        .querySelector("[data-sidebar-timeline-virtual-canvas]")
+        ?.getAttribute("style"),
+    ).toContain("height:");
+    expect(screen.queryByTestId("timeline-item-session-3499")).toBeNull();
+
+    mocks.virtualRange = { startIndex: 1_500, endIndex: 1_520 };
+    rerender(<TimelineView topChipsOverlapHeader />);
+
+    expect(renderedRows().length).toBeLessThanOrEqual(23);
+    expect(container.querySelector("[data-index='1500']")).toBeTruthy();
   });
 
   it("keeps the first bucket below the sidebar action chrome", () => {
@@ -581,13 +691,13 @@ describe("TimelineView", () => {
     ) as HTMLDivElement;
     Object.defineProperty(scroller, "clientHeight", {
       configurable: true,
-      value: 200,
+      value: 20,
     });
     Object.defineProperty(scroller, "scrollHeight", {
       configurable: true,
       value: 1200,
     });
-    scroller.scrollTop = 120;
+    scroller.scrollTop = 0;
     fireEvent.scroll(scroller);
     const nowChip = screen.getByRole("button", { name: "Go back to now" });
 
@@ -654,9 +764,6 @@ describe("TimelineView", () => {
       "true",
     );
     expect(
-      screen.getByTestId("timeline-item-standup").dataset.upcomingLabel,
-    ).toBe("In 51s");
-    expect(
       screen.getByTestId("timeline-item-standup").dataset.upcomingProgress,
     ).toBe("0.17");
     expect(
@@ -670,10 +777,10 @@ describe("TimelineView", () => {
 
     fireEvent.click(chip!);
 
-    expect(scroller!.scrollTo).toHaveBeenCalledWith({
-      top: 636,
-      behavior: "smooth",
-    });
+    expect(mocks.virtualScrollToIndex).toHaveBeenCalledWith(
+      expect.any(Number),
+      { align: "center", behavior: "smooth" },
+    );
   });
 
   it("hides the imminent meeting chip when the meeting row is visible", () => {
@@ -726,6 +833,7 @@ describe("TimelineView", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
     mocks.currentTimeMs = Date.now();
+    mocks.isAnchorVisible = false;
     mocks.smartCurrentTimeMs = Date.now();
     mocks.timelineSessionsTable = {
       standup: sessionRow({
@@ -746,6 +854,7 @@ describe("TimelineView", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-15T12:00:00.000Z"));
     mocks.currentTimeMs = Date.now();
+    mocks.isAnchorVisible = false;
     mocks.smartCurrentTimeMs = Date.now();
     mocks.timelineSessionsTable = {
       later: sessionRow({
@@ -879,11 +988,7 @@ describe("TimelineView", () => {
     render(<TimelineView topChromeInset />);
 
     expect(screen.getByTestId("current-time-indicator")).toBeTruthy();
-    expect(mocks.useAutoScrollToAnchor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        anchorNode: null,
-      }),
-    );
+    expect(mocks.virtualScrollToIndex).not.toHaveBeenCalled();
   });
 
   it("auto-scrolls to the current-time anchor when a today bucket exists", () => {
@@ -891,6 +996,7 @@ describe("TimelineView", () => {
     vi.setSystemTime(new Date("2024-01-15T15:54:00.000Z"));
 
     mocks.configValue = "UTC";
+    mocks.isAnchorVisible = false;
     const anchorNode = document.createElement("div");
     mocks.anchorNode = anchorNode;
     mocks.timelineSessionsTable = {
@@ -901,12 +1007,12 @@ describe("TimelineView", () => {
     };
 
     render(<TimelineView topChromeInset />);
+    vi.runOnlyPendingTimers();
 
     expect(screen.getByText("Today")).toBeTruthy();
-    expect(mocks.useAutoScrollToAnchor).toHaveBeenCalledWith(
-      expect.objectContaining({
-        anchorNode,
-      }),
+    expect(mocks.virtualScrollToIndex).toHaveBeenCalledWith(
+      expect.any(Number),
+      { align: "center", behavior: "auto" },
     );
   });
 
@@ -933,7 +1039,6 @@ describe("TimelineView", () => {
       "[data-sidebar-current-time-anchor]",
     );
     expect(anchor).toBeTruthy();
-    expect(mocks.registerAnchor).toHaveBeenCalledWith(anchor);
   });
 
   it("hides the now indicator while a finalizing meeting is visible", () => {
@@ -959,7 +1064,6 @@ describe("TimelineView", () => {
       "[data-sidebar-current-time-anchor]",
     );
     expect(anchor).toBeTruthy();
-    expect(mocks.registerAnchor).toHaveBeenCalledWith(anchor);
   });
 
   it("places the fallback now indicator with fresh time after data refreshes", () => {
@@ -1030,7 +1134,6 @@ describe("TimelineView", () => {
     expect(anchor).toBeTruthy();
     expect(isBefore(staleTomorrowItem, anchor!)).toBe(true);
     expect(isBefore(anchor!, yesterdayHeading)).toBe(true);
-    expect(mocks.registerAnchor).toHaveBeenCalledWith(anchor);
   });
 
   it("hides the now indicator when nothing in the timeline is upcoming", () => {
@@ -1053,7 +1156,6 @@ describe("TimelineView", () => {
       "[data-sidebar-current-time-anchor]",
     );
     expect(anchor).toBeTruthy();
-    expect(mocks.registerAnchor).toHaveBeenCalledWith(anchor);
   });
 
   it("shows the now indicator between future and past items today", () => {

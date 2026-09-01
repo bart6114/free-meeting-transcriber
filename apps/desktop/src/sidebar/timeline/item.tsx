@@ -1,12 +1,6 @@
 import { useLingui } from "@lingui/react/macro";
 import { BotIcon, SquareIcon } from "lucide-react";
-import {
-  memo,
-  type DragEvent,
-  type RefCallback,
-  useCallback,
-  useMemo,
-} from "react";
+import { memo, type DragEvent, useCallback, useMemo } from "react";
 
 import { commands as fsSyncCommands } from "@hypr/plugin-fs-sync";
 import { commands as openerCommands } from "@hypr/plugin-opener2";
@@ -52,8 +46,6 @@ type ItemBaseProps = {
   onDragStart?: (event: DragEvent<HTMLElement>) => void;
   contextMenu: MenuItemDef[];
   draggable?: boolean;
-  selectedNodeRef?: RefCallback<HTMLDivElement>;
-  itemNodeRef?: RefCallback<HTMLDivElement>;
   timelineSessionId?: string;
   isUpcoming?: boolean;
   upcomingProgress?: number;
@@ -68,8 +60,6 @@ export const TimelineItemComponent = memo(
     multiSelected,
     flatItemKeys,
     getFlatItemKeys,
-    selectedNodeRef,
-    itemNodeRef,
     isUpcoming,
     upcomingProgress,
     isEnhancing,
@@ -81,10 +71,7 @@ export const TimelineItemComponent = memo(
     multiSelected: boolean;
     flatItemKeys?: string[];
     getFlatItemKeys?: () => string[];
-    selectedNodeRef?: RefCallback<HTMLDivElement>;
-    itemNodeRef?: RefCallback<HTMLDivElement>;
     isUpcoming?: boolean;
-    upcomingLabel?: string;
     upcomingProgress?: number;
     isEnhancing?: boolean;
   }) => {
@@ -99,8 +86,6 @@ export const TimelineItemComponent = memo(
         timezone={timezone}
         multiSelected={multiSelected}
         getFlatItemKeys={readFlatItemKeys}
-        selectedNodeRef={selectedNodeRef}
-        itemNodeRef={itemNodeRef}
         isUpcoming={isUpcoming}
         upcomingProgress={upcomingProgress}
         isEnhancing={isEnhancing}
@@ -109,7 +94,7 @@ export const TimelineItemComponent = memo(
   },
 );
 
-const ItemBase = memo(function ItemBase({
+function ItemBase({
   title,
   displayTime,
   author,
@@ -127,8 +112,6 @@ const ItemBase = memo(function ItemBase({
   onDragStart,
   contextMenu,
   draggable,
-  selectedNodeRef,
-  itemNodeRef,
   timelineSessionId,
   isUpcoming,
   upcomingProgress,
@@ -146,19 +129,11 @@ const ItemBase = memo(function ItemBase({
       ? Math.round(Math.max(0, Math.min(upcomingProgress, 1)) * 100)
       : 0;
   const showTrailingStatus = showLiveStop || showSpinner;
-  const setItemRef = useCallback(
-    (node: HTMLDivElement | null) => {
-      selectedNodeRef?.(node);
-      itemNodeRef?.(node);
-    },
-    [selectedNodeRef, itemNodeRef],
-  );
 
   return (
     <div
-      ref={setItemRef}
       data-sidebar-timeline-session-id={timelineSessionId}
-      className="group/sidebar-live-item relative [contain-intrinsic-size:auto_36px] [content-visibility:auto]"
+      className="group/sidebar-live-item relative"
     >
       <InteractiveButton
         onClick={onClick}
@@ -281,33 +256,6 @@ const ItemBase = memo(function ItemBase({
       ) : null}
     </div>
   );
-}, itemBasePropsAreEqual);
-
-function itemBasePropsAreEqual(prev: ItemBaseProps, next: ItemBaseProps) {
-  return (
-    prev.title === next.title &&
-    prev.displayTime === next.displayTime &&
-    prev.author === next.author &&
-    prev.isLive === next.isLive &&
-    prev.amplitude === next.amplitude &&
-    prev.showSpinner === next.showSpinner &&
-    prev.selected === next.selected &&
-    prev.muted === next.muted &&
-    prev.multiSelected === next.multiSelected &&
-    prev.onClick === next.onClick &&
-    prev.onDoubleClick === next.onDoubleClick &&
-    prev.onCmdClick === next.onCmdClick &&
-    prev.onShiftClick === next.onShiftClick &&
-    prev.onStop === next.onStop &&
-    prev.onDragStart === next.onDragStart &&
-    prev.contextMenu === next.contextMenu &&
-    prev.draggable === next.draggable &&
-    prev.selectedNodeRef === next.selectedNodeRef &&
-    prev.itemNodeRef === next.itemNodeRef &&
-    prev.timelineSessionId === next.timelineSessionId &&
-    prev.isUpcoming === next.isUpcoming &&
-    prev.upcomingProgress === next.upcomingProgress
-  );
 }
 
 const SessionItem = memo(
@@ -318,8 +266,6 @@ const SessionItem = memo(
     timezone,
     multiSelected,
     getFlatItemKeys,
-    selectedNodeRef,
-    itemNodeRef,
     isUpcoming,
     upcomingProgress,
     isEnhancing = false,
@@ -330,8 +276,6 @@ const SessionItem = memo(
     timezone?: string;
     multiSelected: boolean;
     getFlatItemKeys: () => string[];
-    selectedNodeRef?: RefCallback<HTMLDivElement>;
-    itemNodeRef?: RefCallback<HTMLDivElement>;
     isUpcoming?: boolean;
     upcomingProgress?: number;
     isEnhancing?: boolean;
@@ -473,8 +417,6 @@ const SessionItem = memo(
         onStop={stop}
         onDragStart={handleDragStart}
         contextMenu={contextMenu}
-        selectedNodeRef={selected ? selectedNodeRef : undefined}
-        itemNodeRef={itemNodeRef}
         timelineSessionId={sessionId}
         isUpcoming={isUpcoming}
         upcomingProgress={upcomingProgress}

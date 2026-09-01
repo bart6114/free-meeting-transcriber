@@ -76,7 +76,6 @@ type MainAreaWindowDragStart = {
   dragging: boolean;
 };
 type LeftSidebarSizeStyle = CSSProperties & {
-  "--left-sidebar-content-width": string;
   "--left-sidebar-panel-size": string;
   "--left-sidebar-panel-width": string;
 };
@@ -95,9 +94,6 @@ export function ClassicMainBody() {
   const leftSidebarPanelConstraintsRef = useRef(leftSidebarPanelConstraints);
   const leftSidebarPanelSizeRef = useRef(leftSidebarPanelSize);
   const lastExpandedLeftSidebarPanelSizeRef = useRef(leftSidebarPanelSize);
-  const lastExpandedLeftSidebarWidthPxRef = useRef(
-    LEFT_SIDEBAR_DEFAULT_WIDTH_PX,
-  );
   const leftSidebarResizeDraggingRef = useRef(false);
   const leftSidebarDefaultSizeTrackingRef = useRef(true);
   const pendingLeftSidebarDefaultSizeRef = useRef<number | null>(null);
@@ -196,18 +192,6 @@ export function ClassicMainBody() {
 
     bodyRoot.style.setProperty("--left-sidebar-panel-size", `${size}`);
     bodyRoot.style.setProperty("--left-sidebar-panel-width", `${size}%`);
-
-    if (size > LEFT_SIDEBAR_COLLAPSED_SIZE) {
-      const widthPx = leftSidebarWidthPxFromPercentage(
-        size,
-        getMeasuredMainAreaWidthPx(bodyRoot),
-      );
-      lastExpandedLeftSidebarWidthPxRef.current = widthPx;
-      bodyRoot.style.setProperty(
-        "--left-sidebar-content-width",
-        `${widthPx}px`,
-      );
-    }
   }, []);
   const commitLeftSidebarPanelSize = useCallback((size: number) => {
     setLeftSidebarPanelSize(size);
@@ -484,7 +468,6 @@ export function ClassicMainBody() {
     ? leftSidebarPanelSizeRef.current
     : leftSidebarPanelSize;
   const leftSidebarSizeStyle = {
-    "--left-sidebar-content-width": `${lastExpandedLeftSidebarWidthPxRef.current}px`,
     "--left-sidebar-panel-size": `${renderedLeftSidebarPanelSize}`,
     "--left-sidebar-panel-width": `${renderedLeftSidebarPanelSize}%`,
   } as LeftSidebarSizeStyle;
@@ -638,10 +621,7 @@ export function ClassicMainBody() {
                 aria-hidden={!leftsidebar.expanded}
                 inert={!leftsidebar.expanded ? true : undefined}
                 className={cn([
-                  "h-full transition-[opacity,transform] duration-200 ease-out",
-                  showSidebarTimelineChrome
-                    ? "w-[var(--left-sidebar-content-width)] [contain:layout]"
-                    : "w-full",
+                  "h-full w-full transition-[opacity,transform] duration-200 ease-out",
                   leftsidebar.expanded
                     ? "translate-x-0 opacity-100"
                     : "-translate-x-3 opacity-0",
@@ -752,17 +732,6 @@ function getInitialMainAreaWidthPx() {
 function percentageFromPixels(widthPx: number, containerWidthPx: number) {
   const percentage = Math.min((widthPx / containerWidthPx) * 100, 100);
   return Math.round(percentage * 10_000) / 10_000;
-}
-
-function leftSidebarWidthPxFromPercentage(
-  percentage: number,
-  containerWidthPx: number,
-) {
-  const widthPx = Math.min(
-    Math.max((percentage / 100) * containerWidthPx, LEFT_SIDEBAR_MIN_WIDTH_PX),
-    LEFT_SIDEBAR_MAX_WIDTH_PX,
-  );
-  return Math.round(widthPx * 1_000) / 1_000;
 }
 
 function panelSizesAreEqual(left: number, right: number) {
