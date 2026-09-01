@@ -48,6 +48,7 @@ export default defineConfig({
             "automatic-capture",
             "import-recordings",
             "notes",
+            "obsidian",
             "syncing",
             "customize-summaries",
             "languages",

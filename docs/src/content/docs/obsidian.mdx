@@ -1,0 +1,34 @@
+---
+title: "Use Loofah with Obsidian"
+description: "Open the same local Markdown vault in Obsidian without copying or converting your notes."
+---
+
+Loofah and Obsidian can open the same folder. You do not need an export, plugin, or second copy of your notes.
+
+Loofah keeps each meeting or standalone note in its own session directory. Your editable note is `sessions/<id>/notes.md`; generated documents are Markdown files under `sessions/<id>/enhanced/`. Obsidian can read and search those files while Loofah keeps the transcript, recording, and session metadata beside them.
+
+## Open the vault in Obsidian
+
+1. In Loofah, open **Settings → App → Storage** and note the current vault location.
+2. In Obsidian, open the vault switcher and choose **Open folder as vault**. Select the same folder. See Obsidian's [Manage vaults](https://obsidian.md/help/manage-vaults) guide if you have not opened an existing folder before.
+3. Let Obsidian finish indexing. Your notes are under `sessions/`; generated summaries and other AI documents are under each session's `enhanced/` folder.
+
+Obsidian creates a `.obsidian` configuration directory at the vault root. Loofah ignores dot-prefixed files and directories, so the two apps can keep their settings in the same folder.
+
+## Edit without breaking a session
+
+You can edit the contents of `notes.md` in either app. Loofah watches the vault for external changes and refreshes its index. If Loofah is about to overwrite a note version it did not write, it moves that version to `.trash/` first.
+
+Keep the session structure intact:
+
+- Do not rename or move `notes.md`, `_meta.json`, `transcript.json`, or the `enhanced/` and `attachments/` directories.
+- Do not edit `_meta.json` or transcript JSON by hand. Use Loofah or the `loof` CLI for tags, titles, transcripts, and other session data.
+- Avoid editing the same note in Loofah and Obsidian at the same time.
+
+The repeated `notes.md` filenames can look odd in Obsidian's file explorer. The parent session directories provide the unique identity. Loofah remains the better view for the title, date, speakers, transcript, and recording attached to a session.
+
+## Sync and back up the whole vault
+
+If you sync the folder between Macs, keep the complete vault available offline. Copying only the Markdown files drops the metadata and transcripts Loofah needs. The [sync guide](/syncing) covers iCloud Drive, Dropbox, Google Drive, OneDrive, and Syncthing.
+
+Sync is not a backup. Keep a separate backup of the vault, especially if more than one app can edit its files.
