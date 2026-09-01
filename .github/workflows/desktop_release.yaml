@@ -209,6 +209,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - name: Publish updater feed
         env:
           GH_TOKEN: ${{ github.token }}
@@ -234,6 +237,52 @@ jobs:
           gh release download "$TAG" --pattern "Loofah_${version}_aarch64.dmg" --dir "$release_dir"
           cp "$release_dir/Loofah_${version}_aarch64.dmg" "$release_dir/Loofah_latest_aarch64.dmg"
           cp "$release_dir/Loofah_${version}_aarch64.dmg" "$release_dir/FreeMeetingTranscriber_latest_aarch64.dmg"
+
+          snapshot_stable=false
+          release_id="$(gh api "repos/$GH_REPO/releases/tags/updater" --jq .id)"
+          for attempt in 1 2 3; do
+            asset_json="$(gh api --paginate "repos/$GH_REPO/releases/$release_id/assets?per_page=100" \
+              --jq '.[] | select(.name == "Loofah_latest_aarch64.dmg") | {id, download_count}')"
+            if [ -z "$asset_json" ]; then
+              snapshot_stable=true
+              break
+            fi
+            asset_id="$(jq -r .id <<< "$asset_json")"
+
+            downloads="$(jq -r .download_count <<< "$asset_json")"
+            snapshot_name="dmg-download-metrics-${asset_id}-${downloads}.json"
+            snapshot="$release_dir/$snapshot_name"
+            python3 .github/scripts/archive_dmg_download_metrics.py \
+              --path "$snapshot" \
+              --asset-id "$asset_id" \
+              --asset-name Loofah_latest_aarch64.dmg \
+              --downloads "$downloads" \
+              --archived-at "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+            snapshot_id="$(gh api --paginate "repos/$GH_REPO/releases/$release_id/assets?per_page=100" \
+              --jq ".[] | select(.name == \"$snapshot_name\") | .id")"
+            if [ -z "$snapshot_id" ]; then
+              gh release upload updater "$snapshot"
+            fi
+            gh release download updater --pattern "$snapshot_name" -O - \
+              | jq -e \
+                --argjson asset_id "$asset_id" \
+                --argjson downloads "$downloads" \
+                '.schema_version == 1 and .asset_id == $asset_id and .downloads == $downloads' \
+              >/dev/null
+
+            observed_downloads="$(gh api "repos/$GH_REPO/releases/assets/$asset_id" --jq .download_count)"
+            if [ "$observed_downloads" = "$downloads" ]; then
+              snapshot_stable=true
+              break
+            fi
+            echo "Download count changed during snapshot attempt $attempt; retrying"
+          done
+          if [ "$snapshot_stable" != true ]; then
+            echo "::error::Could not capture a stable rolling DMG download count"
+            exit 1
+          fi
+
           gh release upload updater \
             "$release_dir/latest.json" \
             "$release_dir/Loofah_latest_aarch64.dmg" \
