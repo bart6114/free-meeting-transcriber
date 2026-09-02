@@ -1,4 +1,4 @@
-import { EditorState } from "prosemirror-state";
+import { EditorState, TextSelection } from "prosemirror-state";
 import { describe, expect, it } from "vitest";
 
 import { schema } from "../note/schema";
@@ -28,6 +28,19 @@ describe("imageTrailingParagraphPlugin", () => {
         { type: "paragraph" },
       ],
     });
+  });
+
+  it("moves the caret after an image inserted at the selection", () => {
+    const image = schema.nodes.image.create({ src: "image.png" });
+    let state = createState([schema.node("paragraph")]);
+
+    const result = state.applyTransaction(state.tr.insert(1, image));
+    state = result.state;
+
+    expect(state.selection).toBeInstanceOf(TextSelection);
+    expect(state.selection.from).toBe(4);
+    expect(state.selection.$from.parent.type).toBe(schema.nodes.paragraph);
+    expect(result.transactions.at(-1)?.scrolledIntoView).toBe(true);
   });
 
   it("restores a trailing paragraph when the one after an image is removed", () => {

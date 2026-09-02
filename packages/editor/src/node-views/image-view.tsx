@@ -121,6 +121,22 @@ export const ResizableImageView = forwardRef<
       view.dispatch(tr);
     },
   );
+  const scrollCaretIntoView = useEditorEventCallback((view) => {
+    if (!view) return;
+    const pos = getSafeNodePos(getPos);
+    if (pos === null) return;
+
+    const { selection } = view.state;
+    if (
+      !selection.empty ||
+      !selection.$from.parent.isTextblock ||
+      selection.$from.before(selection.$from.depth) !== pos + node.nodeSize
+    ) {
+      return;
+    }
+
+    view.dispatch(view.state.tr.scrollIntoView());
+  });
 
   const isSelected = useIsNodeSelected();
 
@@ -199,6 +215,7 @@ export const ResizableImageView = forwardRef<
           src={resolvedAttachment?.src ?? node.attrs.src}
           alt={node.attrs.alt || ""}
           title={parseImageMetadata(node.attrs.title).title ?? undefined}
+          onLoad={scrollCaretIntoView}
           className={cn([
             "prosemirror-image bg-card max-w-full rounded-md transition-[box-shadow,border-color] select-none",
             isSelected

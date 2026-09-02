@@ -1,9 +1,15 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  waitFor,
+} from "@testing-library/react";
 import { EditorState, TextSelection } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
-import { createElement, createRef } from "react";
+import { createElement, createRef, StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { JSONContent, NoteEditorRef } from "./index";
@@ -195,6 +201,72 @@ describe("createReadOnlyPlugin", () => {
 });
 
 describe("browser-safe editor controls", () => {
+  it("renders an image upload started at the caret", async () => {
+    const ref = createRef<NoteEditorRef>();
+    let resolveUpload!: (value: {
+      attachmentId: string;
+      path: string;
+      url: string;
+    }) => void;
+    const fileHandlerConfig = {
+      onFileUpload: vi.fn(
+        () =>
+          new Promise<{
+            attachmentId: string;
+            path: string;
+            url: string;
+          }>((resolve) => {
+            resolveUpload = resolve;
+          }),
+      ),
+    };
+    const rendered = render(
+      createElement(
+        StrictMode,
+        null,
+        createElement(NoteEditor, {
+          ref,
+          initialContent: {
+            type: "doc",
+            content: [
+              { type: "heading", attrs: { level: 1 } },
+              { type: "paragraph" },
+            ],
+          },
+          fileHandlerConfig,
+        }),
+      ),
+    );
+    await waitFor(() => expect(ref.current?.view).not.toBeNull());
+    const file = new File(["png"], "diagram.png", { type: "image/png" });
+
+    fireEvent.paste(rendered.getByRole("textbox"), {
+      clipboardData: {
+        files: [file],
+        getData: () => "",
+        items: [],
+      },
+    });
+
+    expect(rendered.getByText("diagram.png")).not.toBeNull();
+    await act(async () => {
+      resolveUpload({
+        attachmentId: "diagram.png",
+        path: "/vault/attachments/diagram.png",
+        url: "asset:/diagram.png",
+      });
+    });
+    await waitFor(() => {
+      expect(ref.current?.view?.state.doc.child(1).type).toBe(
+        schema.nodes.image,
+      );
+    });
+    expect(ref.current?.view?.state.selection.$from.parent.type).toBe(
+      schema.nodes.paragraph,
+    );
+    expect(ref.current?.view?.state.selection.$from.index(0)).toBe(2);
+  });
+
   it("flushes the current document through the change handler immediately", async () => {
     const ref = createRef<NoteEditorRef>();
     const handleChange = vi.fn();

@@ -372,8 +372,10 @@ export function fileHandlerPlugin(config: FileHandlerConfig) {
           | UploadDecorationMeta
           | undefined;
         if (!meta) return next;
-        if (meta.type === "add")
-          return next.add(transaction.doc, meta.decorations);
+        if (meta.type === "add") {
+          // DecorationSet building mutates its input, while React may replay this reducer.
+          return next.add(transaction.doc, meta.decorations.slice());
+        }
 
         const existing = next.find(
           undefined,

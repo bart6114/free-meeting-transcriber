@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { waitFor } from "@testing-library/react";
-import { EditorState } from "prosemirror-state";
+import { EditorState, TextSelection } from "prosemirror-state";
 import { EditorView } from "prosemirror-view";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,6 +11,7 @@ import {
   fileHandlerPlugin,
   handleFileDrop,
 } from "./file-handler";
+import { imageTrailingParagraphPlugin } from "./image-trailing-paragraph";
 
 const views: EditorView[] = [];
 
@@ -21,21 +22,85 @@ afterEach(() => {
 });
 
 describe("handleFileDrop", () => {
-  it("inserts GIF files as images", async () => {
+  it("inserts GIF files as images and moves the caret after the image", async () => {
     const config = { onFileUpload: createUploader() };
-    const view = createView(config);
+    const view = createView(config, { imageTrailingParagraphs: true });
     const file = new File(["gif"], "motion.gif", { type: "image/gif" });
 
-    expect(
-      handleFileDrop(view, config, [file], view.state.doc.content.size),
-    ).toBe(true);
+    expect(handleFileDrop(view, config, [file])).toBe(true);
 
-    await waitFor(() => expect(view.state.doc.childCount).toBe(2));
+    await waitFor(() => expect(view.state.doc.childCount).toBe(3));
     expect(view.state.doc.child(1).type).toBe(schema.nodes.image);
     expect(view.state.doc.child(1).attrs).toMatchObject({
       attachmentId: "motion.gif",
       src: "asset:/motion.gif",
     });
+    expect(view.state.doc.child(2).type).toBe(schema.nodes.paragraph);
+    expect(view.state.selection).toBeInstanceOf(TextSelection);
+    expect(view.state.selection.$from.parent).toBe(view.state.doc.child(2));
+  });
+
+  it("preserves a selection moved while an image upload is pending", async () => {
+    let resolveUpload!: (value: {
+      attachmentId: string;
+      path: string;
+      url: string;
+    }) => void;
+    const config = {
+      onFileUpload: vi.fn(
+        () =>
+          new Promise<{
+            attachmentId: string;
+            path: string;
+            url: string;
+          }>((resolve) => {
+            resolveUpload = resolve;
+          }),
+      ),
+    };
+    const later = schema.node("paragraph", null, [schema.text("later")]);
+    const view = createView(config, {
+      content: [schema.node("paragraph"), later],
+      imageTrailingParagraphs: true,
+    });
+    const file = new File(["png"], "diagram.png", { type: "image/png" });
+
+    handleFileDrop(view, config, [file]);
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, 3)),
+    );
+
+    resolveUpload({
+      attachmentId: "diagram.png",
+      path: "/vault/attachments/diagram.png",
+      url: "asset:/diagram.png",
+    });
+
+    await waitFor(() =>
+      expect(view.state.doc.child(1).type).toBe(schema.nodes.image),
+    );
+    expect(view.state.selection.$from.parent.textContent).toBe("later");
+  });
+
+  it("moves the caret after an image inserted between paragraphs", async () => {
+    const config = { onFileUpload: createUploader() };
+    const before = schema.node("paragraph", null, [schema.text("before")]);
+    const after = schema.node("paragraph", null, [schema.text("after")]);
+    const view = createView(config, {
+      content: [before, after],
+      imageTrailingParagraphs: true,
+    });
+    view.dispatch(
+      view.state.tr.setSelection(TextSelection.create(view.state.doc, 7)),
+    );
+    const file = new File(["png"], "diagram.png", { type: "image/png" });
+
+    handleFileDrop(view, config, [file]);
+
+    await waitFor(() => expect(view.state.doc.childCount).toBe(3));
+    expect(view.state.doc.child(1).type).toBe(schema.nodes.image);
+    expect(view.state.selection.$from.parent.textContent).toBe("after");
+    expect(view.state.selection.$from.parentOffset).toBe(0);
   });
 
   it("inserts arbitrary files as attachment cards in drop order", async () => {
@@ -148,13 +213,28 @@ describe("handleFileDrop", () => {
   });
 });
 
-function createView(config: FileHandlerConfig) {
+function createView(
+  config: FileHandlerConfig,
+  options: {
+    content?: Parameters<typeof schema.node>[2];
+    imageTrailingParagraphs?: boolean;
+  } = {},
+) {
   const host = document.createElement("div");
   document.body.append(host);
   const state = EditorState.create({
     schema,
-    doc: schema.node("doc", null, [schema.node("paragraph")]),
-    plugins: [fileHandlerPlugin(config)],
+    doc: schema.node(
+      "doc",
+      null,
+      options.content ?? [schema.node("paragraph")],
+    ),
+    plugins: [
+      ...(options.imageTrailingParagraphs
+        ? [imageTrailingParagraphPlugin()]
+        : []),
+      fileHandlerPlugin(config),
+    ],
   });
   const view = new EditorView(host, {
     state,

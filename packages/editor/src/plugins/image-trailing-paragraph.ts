@@ -1,7 +1,16 @@
 import type { Node as PMNode } from "prosemirror-model";
-import { Plugin, PluginKey } from "prosemirror-state";
+import {
+  Plugin,
+  PluginKey,
+  type Selection,
+  TextSelection,
+} from "prosemirror-state";
 
-import { getChangedRanges, type ChangedRange } from "./changed-ranges";
+import {
+  getChangedRanges,
+  type ChangedRange,
+  hasChangedRange,
+} from "./changed-ranges";
 
 type JSONContent = {
   type?: string;
@@ -39,20 +48,54 @@ export function imageTrailingParagraphPlugin() {
       const paragraphType = schema.nodes.paragraph;
       if (!imageType || !paragraphType) return null;
 
+      const changedRanges = getChangedRanges(transactions);
       const insertions = getImageTrailingParagraphInsertions(
         doc,
-        getChangedRanges(transactions),
+        changedRanges,
+      );
+      const selectionImageEnd = getChangedImageEndAfterSelection(
+        doc,
+        newState.selection,
+        changedRanges,
       );
 
-      if (insertions.length === 0) return null;
+      if (insertions.length === 0 && selectionImageEnd === null) return null;
 
       const tr = newState.tr;
       for (let i = insertions.length - 1; i >= 0; i--) {
         tr.insert(insertions[i], paragraphType.create());
       }
+      if (selectionImageEnd !== null) {
+        const paragraphStart = tr.mapping.map(selectionImageEnd, -1);
+        tr.setSelection(
+          TextSelection.create(tr.doc, paragraphStart + 1),
+        ).scrollIntoView();
+      }
       return tr;
     },
   });
+}
+
+function getChangedImageEndAfterSelection(
+  doc: PMNode,
+  selection: Selection,
+  changedRanges: ChangedRange[],
+) {
+  const { $from } = selection;
+  if (
+    !selection.empty ||
+    !$from.parent.isTextblock ||
+    $from.parentOffset !== $from.parent.content.size
+  ) {
+    return null;
+  }
+
+  const imagePos = $from.after($from.depth);
+  const image = doc.nodeAt(imagePos);
+  return image?.type === doc.type.schema.nodes.image &&
+    hasChangedRange(changedRanges, imagePos, imagePos + image.nodeSize)
+    ? imagePos + image.nodeSize
+    : null;
 }
 
 function getImageTrailingParagraphInsertions(
