@@ -7,9 +7,11 @@ use tauri::Manager;
 use tauri_plugin_settings::SettingsPluginExt;
 use tauri_plugin_tantivy::TantivyPluginExt;
 
-use crate::session_store::{SessionStore, TagSuggestionItem, TagSuggestionStatus};
+use crate::session_store::{
+    SessionStore, TagSuggestionItem, TagSuggestionStatus, is_tag_automation_candidate,
+};
 
-pub const ALGORITHM_VERSION: u32 = 2;
+pub const ALGORITHM_VERSION: u32 = 3;
 const CANDIDATE_LIMIT: usize = 50;
 const SUGGESTION_LIMIT: usize = 3;
 const SUGGESTION_THRESHOLD: f32 = 0.35;
@@ -411,7 +413,7 @@ fn rank_tags(
             let Some(tag) = hypr_vault_read::normalize_tag_name(tag) else {
                 continue;
             };
-            if !attached.contains(&tag) {
+            if is_tag_automation_candidate(&tag) && !attached.contains(&tag) {
                 evidence.entry(tag).or_default().push(similarity);
             }
         }
@@ -578,6 +580,33 @@ mod tests {
         );
 
         assert!(suggestions.is_empty());
+    }
+
+    #[test]
+    fn tags_containing_import_are_omitted() {
+        let target = source(
+            "atlas launch rollout customer acme migration timeline readiness deployment milestones ownership support",
+            "",
+            "",
+        );
+        let candidates = (0..2)
+            .map(|_| {
+                (
+                    vec![
+                        "import".to_string(),
+                        "important".to_string(),
+                        "project/import-review".to_string(),
+                        "customer/acme".to_string(),
+                    ],
+                    target.clone(),
+                )
+            })
+            .collect();
+
+        let suggestions = rank_tags(&[], &target, candidates);
+
+        assert_eq!(suggestions.len(), 1);
+        assert_eq!(suggestions[0].name, "customer/acme");
     }
 
     #[test]

@@ -26,6 +26,7 @@ pub mod transcript;
 pub use attachments::SavedAttachment;
 pub use content::{
     SessionMeta, SessionMetaPatch, TagSuggestionItem, TagSuggestionState, TagSuggestionStatus,
+    is_tag_automation_candidate,
 };
 pub use enhanced::{EnhancedDoc, EnhancedDocPatch};
 pub use index::{IndexChanged, IndexEntity, SessionListEntry, SessionListHeader, SessionRecord};

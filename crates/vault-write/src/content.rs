@@ -8,6 +8,10 @@ use super::{SessionStore, StoreError, WriteGuard, paths, validate_session_id};
 pub use hypr_vault_read::SessionMeta;
 pub use hypr_vault_read::{TagSuggestionItem, TagSuggestionState, TagSuggestionStatus};
 
+pub fn is_tag_automation_candidate(name: &str) -> bool {
+    !name.to_lowercase().contains("import")
+}
+
 /// Partial update for `_meta.json`: `None` means "leave as-is", so callers can patch a single
 /// field without knowing the rest. There is deliberately no way to clear a field back to
 /// absent -- no mutation site needs that today.
@@ -215,7 +219,10 @@ impl SessionStore {
         let dismissed = current.dismissed.clone();
         let mut remaining = Vec::new();
         for suggestion in suggestions {
-            if meta.tags.contains(&suggestion.name) || dismissed.contains(&suggestion.name) {
+            if !is_tag_automation_candidate(&suggestion.name)
+                || meta.tags.contains(&suggestion.name)
+                || dismissed.contains(&suggestion.name)
+            {
                 continue;
             }
             if auto_accept_threshold.is_some_and(|threshold| suggestion.confidence >= threshold) {
@@ -769,7 +776,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn auto_accept_keeps_lower_confidence_suggestions_pending_for_review() {
+    async fn auto_accept_ignores_import_tags_and_keeps_lower_confidence_suggestions_pending() {
         let (store, _) = test_store().await;
         store.write_meta(&meta("s1", "Atlas launch")).await.unwrap();
         store
@@ -788,6 +795,14 @@ mod tests {
                     },
                     TagSuggestionItem {
                         name: "customer/acme".to_string(),
+                        confidence: 0.6,
+                    },
+                    TagSuggestionItem {
+                        name: "Imported".to_string(),
+                        confidence: 0.95,
+                    },
+                    TagSuggestionItem {
+                        name: "project/import-review".to_string(),
                         confidence: 0.6,
                     },
                 ],
