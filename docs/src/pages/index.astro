@@ -77,15 +77,152 @@ const downloadUrl =
 
       <figure class="home-hero__product">
         <div class="home-hero__product-bar">
-          <span>Loofah on macOS</span>
-          <span>no cloud required</span>
+          <div class="home-hero__traffic-lights" aria-hidden="true">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <span>Loofah</span>
+          <span class="home-hero__local-status">
+            <svg viewBox="0 0 16 16" aria-hidden="true">
+              <path
+                d="M4.5 7V5.5a3.5 3.5 0 0 1 7 0V7m-8 0h9v6.5h-9V7Z"
+              ></path>
+            </svg>
+            Saved locally
+          </span>
         </div>
-        <img
-          src="/screenshots/loofah-primary.png"
-          alt="Loofah showing a meeting brief, notes, and sessions stored in a local vault"
-        />
+        <div
+          class="product-demo"
+          role="img"
+          aria-label="A Loofah session showing a product launch meeting brief, tasks, and a recording saved locally"
+        >
+          <aside class="product-demo__sidebar">
+            <div class="product-demo__sidebar-tools" aria-hidden="true">
+              <span>◧</span><span>⚙</span><span>⌁</span>
+            </div>
+            <div class="product-demo__sidebar-heading">
+              <span><b aria-hidden="true">＋</b> New note</span>
+              <kbd>⌘N</kbd>
+            </div>
+            <div class="product-demo__search">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <circle cx="7" cy="7" r="4.25"></circle>
+                <path d="m10.25 10.25 3 3"></path>
+              </svg>
+              <span>Search notes…</span>
+            </div>
+            <div class="product-demo__browse">
+              <span class="is-active">By date</span>
+              <span>By tag</span>
+            </div>
+            <div class="product-demo__day">Today</div>
+            <div class="product-demo__session is-active">
+              <span class="product-demo__session-mark"></span>
+              <span>
+                <strong>Plan the September product launch</strong>
+                <small>7:56 PM · 42 min</small>
+              </span>
+            </div>
+            <div class="product-demo__session">
+              <span class="product-demo__session-mark"></span>
+              <span>
+                <strong>Local-first research</strong>
+                <small>3:20 PM · Notes</small>
+              </span>
+            </div>
+            <div class="product-demo__day">Yesterday</div>
+            <div class="product-demo__session">
+              <span class="product-demo__session-mark"></span>
+              <span>
+                <strong>Weekly technology brief</strong>
+                <small>36 min</small>
+              </span>
+            </div>
+            <div class="product-demo__vault">
+              <svg viewBox="0 0 18 18" aria-hidden="true">
+                <path d="M2.5 5.5h5l1.5 2h6.5v7h-13v-9Z"></path>
+              </svg>
+              <span>
+                <strong>My Loofah Vault</strong>
+                <small>Markdown · On this Mac</small>
+              </span>
+              <span class="product-demo__vault-check">✓</span>
+            </div>
+          </aside>
+
+          <section class="product-demo__document">
+            <div class="product-demo__tabs">
+              <span class="is-active">Launch brief</span>
+              <span>Note</span>
+              <span>Transcript</span>
+              <span class="product-demo__resume"><i></i> Resume</span>
+            </div>
+            <div class="product-demo__document-body">
+              <div class="product-demo__meta">
+                <span>Aug 26</span>
+                <span>7:56 PM</span>
+                <span class="product-demo__recording">
+                  <i></i>
+                  Recording saved
+                </span>
+              </div>
+              <h2>Plan the September product launch</h2>
+              <div class="product-demo__people">
+                <span>Product lead</span>
+                <span>Engineering lead</span>
+                <span>Marketing lead</span>
+              </div>
+
+              <div class="product-demo__summary">
+                <div>
+                  <span class="product-demo__label">Meeting brief</span>
+                  <span class="product-demo__sparkle" aria-hidden="true">✦</span>
+                </div>
+                <p>
+                  The team is targeting <strong>September 17</strong> with a
+                  one-week feature freeze and a staged beta rollout.
+                </p>
+              </div>
+
+              <div class="product-demo__details">
+                <div class="product-demo__decisions">
+                  <span class="product-demo__label">Decisions</span>
+                  <div>
+                    <span class="product-demo__check">✓</span>
+                    <p><strong>Ship in stages</strong><small>Beta first, then general release</small></p>
+                  </div>
+                  <div>
+                    <span class="product-demo__check">✓</span>
+                    <p><strong>Freeze one week early</strong><small>September 10 deadline</small></p>
+                  </div>
+                </div>
+                <div class="product-demo__next">
+                  <span class="product-demo__label">Next up</span>
+                  <strong>Beta exit review</strong>
+                  <span>Sep 8 · 2:00 PM</span>
+                  <div class="product-demo__avatars" aria-hidden="true">
+                    <i>AM</i><i>SK</i><i>JL</i>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="product-demo__audio">
+              <span class="product-demo__play" aria-hidden="true">▶</span>
+              <span>18:24</span>
+              <div class="product-demo__wave" aria-hidden="true">
+                <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+                ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i
+                ><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+              </div>
+              <span>42:06</span>
+              <span class="product-demo__transcribed">Transcribed on-device</span>
+            </div>
+          </section>
+        </div>
         <figcaption>
-          Your recordings, transcripts, and notes stay on your Mac.
+          Capture the conversation. Keep the useful parts. Own every file.
         </figcaption>
       </figure>
     </main>
