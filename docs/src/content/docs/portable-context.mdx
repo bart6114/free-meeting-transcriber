@@ -1,0 +1,73 @@
+---
+title: "Build portable personal context"
+description: "Keep notes, meetings, research, and agent-created work in a Markdown vault you can carry between tools."
+---
+
+Portable context starts with files you can keep. In Loofah, a recorded meeting and a standalone note are both sessions in the same local vault. Notes and generated summaries are Markdown, while transcripts and metadata sit beside them as JSON. Attachments stay with the session that uses them.
+
+There is no account or Loofah cloud copy. You choose where the vault lives on your Mac, which means you can back it up, sync it with the file tool you already use, and inspect it without asking Loofah for an export.
+
+## Keep what will matter later
+
+You do not need to save everything. Keep the decisions and context you will need after the current chat, meeting, or project disappears from view. That might be a meeting note, a piece of research, project history, reference material, or work an agent produced for you.
+
+Use a clear title and a few stable tags. "Onboarding research: activation drop-off" will be easier to find in two years than "Research notes". If a source document matters, attach it instead of leaving the note disconnected from its evidence.
+
+:::caution
+Portability is not permission to take confidential material with you. Keep only information you own or are allowed to retain. Leave employer-confidential files in the storage and systems required by your employer.
+:::
+
+## Put the vault somewhere you control
+
+1. Open **Settings → App → Storage**.
+2. Click **Change** and choose an empty folder.
+3. Select **Move my vault here**. Loofah moves the complete vault and restarts.
+4. Add that folder to your normal backup routine.
+
+If you want the same vault on several Macs, follow [Sync your notes](/syncing). Sync the complete folder, not only the Markdown files. Loofah also needs each session's metadata, transcript, attachments, and retained audio.
+
+## Bring older material into the timeline
+
+Create a standalone note in the app when you have Markdown or text worth keeping. For an older note, the CLI can preserve its original date:
+
+```bash
+loof --json sessions new \
+  --title "Project decision: choose SQLite" \
+  --note decision.md \
+  --created-at 2024-05-17T09:30:00Z \
+  --tag decisions
+```
+
+The note appears in the same timeline and search results as recorded meetings. You can also [import audio, SRT, or VTT files](/import-recordings) when the transcript itself is the useful record.
+
+To keep a source file beside a note, use the session ID returned by `sessions new`:
+
+```bash
+loof --json sessions attach SESSION_ID architecture-review.pdf
+```
+
+## Let agents read and add context deliberately
+
+Loofah offers two local interfaces. MCP can search and read the vault but cannot change it. The CLI can create notes, append to them, add tags, and store attachments.
+
+[Connect Claude, Codex, or Hermes over MCP](/agents/connect-clients) when an agent needs existing context. Ask it to save new work through the CLI only when you want that result in the vault. Agent-created sessions carry an author name, so they are not presented as your own writing.
+
+For example, an agent can save a research brief and its source file:
+
+```bash
+loof --json sessions new \
+  --title "Research: local speech models" \
+  --note findings.md \
+  --tag research \
+  --author claude-code
+
+loof --json sessions attach SESSION_ID source-report.pdf
+```
+
+The agent still needs permission to read the source. Loofah does not connect to other services or scrape them on the agent's behalf.
+
+## Keep the handoff boring
+
+You do not need to predict which notes app or agent you will use next year. Keep descriptive titles, retain the complete vault, and make a separate backup. Those habits matter more than building an elaborate folder system you will stop maintaining.
+
+Loofah is [open source on GitHub](https://github.com/bart6114/loofah). Browse the code, report an issue, or star the repository if this approach is useful to you.

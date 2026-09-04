@@ -48,6 +48,7 @@ export default defineConfig({
             "automatic-capture",
             "import-recordings",
             "notes",
+            "portable-context",
             "syncing",
             "customize-summaries",
             "languages",
