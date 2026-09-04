@@ -400,7 +400,8 @@ export async function softDeleteSession(
 }
 
 // The emptiness semantics (title, note content after trimming, transcript/
-// enhanced-doc/tag counts) live on the Rust side now -- see `SessionStore::session_is_empty`.
+// enhanced-doc/tag counts, and attachments) live on the Rust side now -- see
+// `SessionStore::session_is_empty`.
 export async function isSessionEmpty(sessionId: string): Promise<boolean> {
   const result = await commands.sessionIsEmpty(sessionId);
   if (result.status === "error") {

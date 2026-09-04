@@ -285,8 +285,8 @@ describe("session store operations", () => {
   });
 
   // The emptiness semantics themselves (title/event interplay, &nbsp; placeholder,
-  // transcript/doc/tag counts) are covered by the Rust store's session_is_empty tests;
-  // the frontend is a passthrough now.
+  // transcript/doc/tag counts, and attachments) are covered by the Rust store's
+  // session_is_empty tests; the frontend is a passthrough now.
   it("delegates emptiness to the store command", async () => {
     mocks.sessionIsEmpty.mockResolvedValueOnce({ status: "ok", data: true });
     await expect(isSessionEmpty("session-1")).resolves.toBe(true);

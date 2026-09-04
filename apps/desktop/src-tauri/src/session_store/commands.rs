@@ -448,7 +448,10 @@ pub async fn session_is_empty<R: tauri::Runtime>(
     app: AppHandle<R>,
     session_id: String,
 ) -> Result<bool, String> {
-    Ok(store(&app)?.session_is_empty(&session_id))
+    store(&app)?
+        .session_is_empty(&session_id)
+        .await
+        .map_err(|error| error.to_string())
 }
 
 #[tauri::command]

@@ -129,6 +129,67 @@ pub struct TranscriptSummary {
     pub content_hash: u64,
 }
 
+fn session_has_attachments(session_dir: &std::path::Path) -> Result<bool, StoreError> {
+    let entries = std::fs::read_dir(session_dir).map_err(|error| {
+        StoreError::Io(format!(
+            "failed to inspect session directory {}: {error}",
+            session_dir.display()
+        ))
+    })?;
+
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            StoreError::Io(format!(
+                "failed to inspect session directory {}: {error}",
+                session_dir.display()
+            ))
+        })?;
+        let name = entry.file_name();
+        let is_owned = name
+            .to_str()
+            .is_some_and(hypr_vault_read::is_session_owned_name);
+        if !is_owned
+            && entry
+                .file_type()
+                .map_err(|error| {
+                    StoreError::Io(format!(
+                        "failed to inspect session entry {}: {error}",
+                        entry.path().display()
+                    ))
+                })?
+                .is_file()
+        {
+            return Ok(true);
+        }
+    }
+
+    let attachments_dir = session_dir.join("attachments");
+    let entries = match std::fs::read_dir(&attachments_dir) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+        Err(error) => {
+            return Err(StoreError::Io(format!(
+                "failed to inspect attachments directory {}: {error}",
+                attachments_dir.display()
+            )));
+        }
+    };
+
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            StoreError::Io(format!(
+                "failed to inspect attachments directory {}: {error}",
+                attachments_dir.display()
+            ))
+        })?;
+        if !entry.file_name().to_string_lossy().starts_with('.') {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
+}
+
 /// The in-memory mirror of the vault. Maps are kept independent rather than nested
 /// under one session struct, so a ghost session's transcripts can exist without a meta
 /// exactly like the write path allows
@@ -317,36 +378,43 @@ impl SessionStore {
             .map(|(session_id, _)| session_id.clone())
     }
 
-    /// Old `isSessionEmpty` semantics, translated to file truth: unknown session is
-    /// empty; a non-empty title marks it non-empty (the calendar-integration-era
-    /// "auto-titled event session" exception died with the event envelope);
-    /// note content counts after trimming (the editor's `&nbsp;` placeholder doesn't);
-    /// otherwise empty iff no transcripts, no summary/template_output docs and no tags
-    /// (`_meta.json` tags stand in for the SQL `session_tags` table).
-    pub fn session_is_empty(&self, session_id: &str) -> bool {
-        let index = self.index.read().unwrap();
-        let Some(entry) = index.sessions.get(session_id) else {
-            return true;
-        };
+    /// Whether tab-close cleanup may discard this session. Unknown sessions are empty;
+    /// title, meaningful note content, transcripts, enhanced docs and tags are answered
+    /// from the index. Only an otherwise-empty session pays for a directory probe so
+    /// loose user attachments and editor-managed `attachments/` files also protect it.
+    pub async fn session_is_empty(&self, session_id: &str) -> Result<bool, StoreError> {
+        {
+            let index = self.index.read().unwrap();
+            let Some(entry) = index.sessions.get(session_id) else {
+                return Ok(true);
+            };
 
-        if !entry.meta.title.trim().is_empty() {
-            return false;
-        }
-        if let Some(note) = &entry.note_markdown {
-            let trimmed = note.trim();
-            if !trimmed.is_empty() && trimmed != "&nbsp;" {
-                return false;
+            if !entry.meta.title.trim().is_empty() {
+                return Ok(false);
+            }
+            if let Some(note) = &entry.note_markdown {
+                let trimmed = note.trim();
+                if !trimmed.is_empty() && trimmed != "&nbsp;" {
+                    return Ok(false);
+                }
+            }
+
+            let transcript_count = index
+                .transcripts
+                .get(session_id)
+                .map(|summary| summary.transcript_ids.len())
+                .unwrap_or_default();
+            let enhanced_count = index.docs.get(session_id).map(Vec::len).unwrap_or_default();
+            if transcript_count > 0 || enhanced_count > 0 || !entry.meta.tags.is_empty() {
+                return Ok(false);
             }
         }
 
-        let transcript_count = index
-            .transcripts
-            .get(session_id)
-            .map(|summary| summary.transcript_ids.len())
-            .unwrap_or_default();
-        let enhanced_count = index.docs.get(session_id).map(Vec::len).unwrap_or_default();
-
-        transcript_count == 0 && enhanced_count == 0 && entry.meta.tags.is_empty()
+        let session_dir = self.vault_base.join(self.session_dir(session_id).await?);
+        tokio::task::spawn_blocking(move || session_has_attachments(&session_dir))
+            .await
+            .map_err(|error| StoreError::Io(format!("attachment probe task failed: {error}")))?
+            .map(|has_attachments| !has_attachments)
     }
 
     /// Welcome-note lookup: the first session (by `created_at`, id) carrying this
@@ -1314,22 +1382,25 @@ mod tests {
     #[tokio::test]
     async fn session_is_empty_matches_the_old_sql_semantics() {
         let (store, _vault) = test_store().await;
-        assert!(store.session_is_empty("ghost"), "unknown session is empty");
+        assert!(
+            store.session_is_empty("ghost").await.unwrap(),
+            "unknown session is empty"
+        );
 
         store.write_meta(&meta("s1", "")).await.unwrap();
         assert!(
-            store.session_is_empty("s1"),
+            store.session_is_empty("s1").await.unwrap(),
             "untitled contentless session is empty"
         );
 
         store.write_note("s1", "  &nbsp;  ").await.unwrap();
         assert!(
-            store.session_is_empty("s1"),
+            store.session_is_empty("s1").await.unwrap(),
             "the editor's &nbsp; placeholder is not content"
         );
 
         store.write_note("s1", "real words").await.unwrap();
-        assert!(!store.session_is_empty("s1"));
+        assert!(!store.session_is_empty("s1").await.unwrap());
         store.write_note("s1", "").await.unwrap();
 
         // A bare title makes it non-empty...
@@ -1343,7 +1414,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(!store.session_is_empty("s1"));
+        assert!(!store.session_is_empty("s1").await.unwrap());
 
         // Clear the title again so the tags check below stands on its own.
         store
@@ -1356,7 +1427,7 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(store.session_is_empty("s1"));
+        assert!(store.session_is_empty("s1").await.unwrap());
 
         // tags count as content (session_tags stand-in)
         store
@@ -1369,7 +1440,56 @@ mod tests {
             )
             .await
             .unwrap();
-        assert!(!store.session_is_empty("s1"));
+        assert!(!store.session_is_empty("s1").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn session_is_empty_counts_loose_and_managed_attachments() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "")).await.unwrap();
+        let session_dir = vault.path().join(store.session_dir("s1").await.unwrap());
+
+        std::fs::write(session_dir.join("contract.pdf"), b"attachment").unwrap();
+        assert!(!store.session_is_empty("s1").await.unwrap());
+        std::fs::remove_file(session_dir.join("contract.pdf")).unwrap();
+
+        let attachments_dir = session_dir.join("attachments");
+        std::fs::create_dir(&attachments_dir).unwrap();
+        assert!(store.session_is_empty("s1").await.unwrap());
+
+        std::fs::write(attachments_dir.join(".DS_Store"), b"hidden").unwrap();
+        assert!(store.session_is_empty("s1").await.unwrap());
+
+        std::fs::write(attachments_dir.join("shot.png"), b"attachment").unwrap();
+        assert!(!store.session_is_empty("s1").await.unwrap());
+        std::fs::remove_file(attachments_dir.join("shot.png")).unwrap();
+
+        std::fs::create_dir(attachments_dir.join("bundle")).unwrap();
+        assert!(!store.session_is_empty("s1").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn session_is_empty_ignores_owned_files_hidden_files_and_unknown_directories() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "")).await.unwrap();
+        let session_dir = vault.path().join(store.session_dir("s1").await.unwrap());
+
+        std::fs::write(session_dir.join(".DS_Store"), b"hidden").unwrap();
+        std::fs::write(session_dir.join("audio.mp3"), b"recording").unwrap();
+        std::fs::write(session_dir.join("audio.peaks.json"), b"cache").unwrap();
+        std::fs::create_dir(session_dir.join("user-folder")).unwrap();
+
+        assert!(store.session_is_empty("s1").await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn session_is_empty_fails_closed_when_an_indexed_session_cannot_be_inspected() {
+        let (store, vault) = test_store().await;
+        store.write_meta(&meta("s1", "")).await.unwrap();
+        let session_dir = vault.path().join(store.session_dir("s1").await.unwrap());
+        std::fs::remove_dir_all(session_dir).unwrap();
+
+        assert!(store.session_is_empty("s1").await.is_err());
     }
 
     #[tokio::test]
