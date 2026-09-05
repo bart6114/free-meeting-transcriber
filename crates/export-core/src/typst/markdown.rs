@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use pulldown_cmark::{Event, HeadingLevel, Parser, Tag, TagEnd};
+use pulldown_cmark::{Alignment, Event, HeadingLevel, Options, Parser, Tag, TagEnd};
 
 use super::utils::escape_typst_string;
 
@@ -33,12 +33,14 @@ fn image_width_percent(title: &str) -> u32 {
 }
 
 pub fn markdown_to_typst(md: &str, images: &HashMap<String, String>) -> String {
-    let parser = Parser::new(md);
+    let parser = Parser::new_ext(md, Options::ENABLE_TABLES);
     let mut result = String::new();
     let mut list_stack: Vec<Option<u64>> = Vec::new();
     // Events between Start(Image) and End(Image) are the alt text; swallow
     // them so they never render as body text.
     let mut image_depth = 0usize;
+    let mut in_table_head = false;
+    let mut in_table_cell = false;
 
     for event in parser {
         match event {
@@ -67,9 +69,52 @@ pub fn markdown_to_typst(md: &str, images: &HashMap<String, String>) -> String {
             Event::End(TagEnd::Heading(_)) => {
                 result.push_str("\n\n");
             }
+            Event::Start(Tag::Table(alignments)) => {
+                let column_alignments = alignments
+                    .iter()
+                    .map(|alignment| match alignment {
+                        Alignment::None | Alignment::Left => "left",
+                        Alignment::Center => "center",
+                        Alignment::Right => "right",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                result.push_str(&format!(
+                    "#table(\n  columns: {},\n  align: ({}),\n  inset: 6pt,\n  stroke: 0.5pt + rgb(\"#d1d5db\"),\n",
+                    alignments.len(), column_alignments
+                ));
+            }
+            Event::End(TagEnd::Table) => result.push_str(")\n\n"),
+            Event::Start(Tag::TableHead) => {
+                in_table_head = true;
+                result.push_str("  table.header(\n");
+            }
+            Event::End(TagEnd::TableHead) => {
+                in_table_head = false;
+                result.push_str("  ),\n");
+            }
+            Event::Start(Tag::TableRow) | Event::End(TagEnd::TableRow) => {}
+            Event::Start(Tag::TableCell) => {
+                in_table_cell = true;
+                if in_table_head {
+                    result.push_str("    [#strong[");
+                } else {
+                    result.push_str("  [");
+                }
+            }
+            Event::End(TagEnd::TableCell) => {
+                in_table_cell = false;
+                if in_table_head {
+                    result.push_str("]],\n");
+                } else {
+                    result.push_str("],\n");
+                }
+            }
             Event::Start(Tag::Paragraph) => {}
             Event::End(TagEnd::Paragraph) => {
-                result.push_str("\n\n");
+                if !in_table_cell {
+                    result.push_str("\n\n");
+                }
             }
             Event::Start(Tag::Strong) => result.push('*'),
             Event::End(TagEnd::Strong) => result.push('*'),
@@ -117,6 +162,12 @@ pub fn markdown_to_typst(md: &str, images: &HashMap<String, String>) -> String {
             }
             Event::SoftBreak => result.push('\n'),
             Event::HardBreak => result.push_str("\\\n"),
+            Event::InlineHtml(html) if html.trim().eq_ignore_ascii_case("<br>") => {
+                result.push_str("\\\n");
+            }
+            Event::InlineHtml(html) if html.trim().eq_ignore_ascii_case("<br/>") => {
+                result.push_str("\\\n");
+            }
             _ => {}
         }
     }
@@ -167,5 +218,27 @@ mod tests {
         let map = images(&[("a", "/att-0.png")]);
         let out = markdown_to_typst("![x](a \"char-editor-width=7\")", &map);
         assert!(out.contains("width: 15%"));
+    }
+
+    #[test]
+    fn markdown_table_becomes_typst_table() {
+        let out = markdown_to_typst(
+            "| Household penetration | Subscribers | Annual gross billings |\n| :--- | ---: | ---: |\n| 0.01% | 4,767 | €1.71m |\n| 1.00% | **476,720** | €171.05m |",
+            &HashMap::new(),
+        );
+
+        assert!(out.contains("columns: 3"));
+        assert!(out.contains("align: (left, right, right)"));
+        assert!(out.contains("[#strong[Household penetration]]"));
+        assert!(out.contains("[0.01%]"));
+        assert!(out.contains("[\u{20ac}171.05m]"));
+        assert!(!out.contains("| ---"));
+    }
+
+    #[test]
+    fn table_cell_line_breaks_are_preserved() {
+        let out = markdown_to_typst("| Summary |\n| --- |\n| First<br>Second |", &HashMap::new());
+
+        assert!(out.contains("[First\\\nSecond]"));
     }
 }

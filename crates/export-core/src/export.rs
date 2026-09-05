@@ -81,4 +81,21 @@ mod tests {
         let pdf = crate::typst::compile_to_pdf(&content, files).unwrap();
         assert!(pdf.starts_with(b"%PDF"));
     }
+
+    #[test]
+    fn pdf_compiles_with_markdown_table() {
+        let input = ExportInput {
+            enhanced_md: "| Household penetration | Subscribers | Annual gross billings |\n| :--- | ---: | ---: |\n| 0.01% | 4,767 | €1.71m |\n| 1.00% | **476,720** | €171.05m |"
+                .to_string(),
+            note_md: None,
+            transcript: None,
+            metadata: None,
+            attachments: vec![],
+        };
+
+        let content = crate::typst::build_typst_content(&input, &HashMap::new());
+        let pdf = crate::typst::compile_to_pdf(&content, HashMap::new()).unwrap();
+
+        assert!(pdf.starts_with(b"%PDF"));
+    }
 }
