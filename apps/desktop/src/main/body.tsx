@@ -480,7 +480,7 @@ export function ClassicMainBody() {
     >
       <div
         data-tauri-drag-region
-        className="flex h-9 items-start pt-[9px] pr-1 pl-[var(--traffic-lights-inset)]"
+        className="flex h-9 items-start pt-[var(--sidebar-chrome-padding-top)] pr-1 pl-[var(--traffic-lights-inset)]"
       >
         {showSidebarTimeline ? (
           <SidebarTimelineChromeWithUpcomingMeeting
@@ -536,7 +536,7 @@ export function ClassicMainBody() {
         >
           <div
             data-tauri-drag-region
-            className="flex h-full min-w-0 items-start pt-[9px] pr-1 pl-[var(--traffic-lights-inset)]"
+            className="flex h-full min-w-0 items-start pt-[var(--sidebar-chrome-padding-top)] pr-1 pl-[var(--traffic-lights-inset)]"
           >
             <SidebarTimelineChromeWithUpcomingMeeting
               currentSessionId={currentSessionId}
@@ -576,7 +576,7 @@ export function ClassicMainBody() {
         >
           <div
             data-tauri-drag-region
-            className="flex h-full min-w-0 items-start pt-[9px] pl-[var(--traffic-lights-inset)]"
+            className="flex h-full min-w-0 items-start pt-[var(--sidebar-chrome-padding-top)] pl-[var(--traffic-lights-inset)]"
           >
             <LeftSurfaceChromeButton
               ariaLabel="Go back"
@@ -1087,7 +1087,7 @@ function LeftSurfaceChromeButton({
       data-tauri-drag-region="false"
       disabled={disabled}
       className={cn([
-        "pointer-events-auto relative flex size-7 items-center justify-center rounded-full",
+        "pointer-events-auto relative flex size-[var(--sidebar-chrome-button-size)] shrink-0 items-center justify-center rounded-full",
         "text-muted-foreground hover:bg-accent hover:text-foreground transition-colors",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-hidden",
         "disabled:text-muted-foreground/70 disabled:hover:text-muted-foreground/70 disabled:hover:bg-transparent",

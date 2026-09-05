@@ -42,7 +42,9 @@ export function OuterHeader({
       data-tauri-drag-region
       className={cn([
         "relative flex w-full items-center",
-        "h-12",
+        showSidebarTimelineHeaderGutter
+          ? "h-[calc(var(--sidebar-chrome-center-y)*2)]"
+          : "h-12",
         showSidebarTimelineHeaderGutter &&
           "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
       ])}

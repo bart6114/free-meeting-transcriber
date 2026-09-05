@@ -152,7 +152,7 @@ describe("OuterHeader", () => {
     expect(titleSlot?.className).not.toContain("right-[153px]");
   });
 
-  it("raises the tightened title field when the sidebar is collapsed", () => {
+  it("aligns the title and actions with window controls when the sidebar is collapsed", () => {
     mocks.leftsidebar.expanded = false;
 
     render(
@@ -171,7 +171,9 @@ describe("OuterHeader", () => {
     expect(header?.className).toContain(
       "pl-[calc(var(--traffic-lights-inset)_+_80px)]",
     );
-    expect(header?.className).toContain("h-12");
+    expect(header?.className).toContain(
+      "h-[calc(var(--sidebar-chrome-center-y)*2)]",
+    );
     expect(header?.className).not.toContain("pb-1");
     expect(titleWrapper?.classList.contains("w-full")).toBe(false);
     expect(titleWrapper?.className).toContain("max-w-full");
@@ -241,7 +243,7 @@ describe("OuterHeader", () => {
     );
   });
 
-  it("keeps the session header at 48px tall", () => {
+  it("keeps the expanded session header at its existing height", () => {
     const { container } = render(
       <OuterHeader
         sessionId="session-1"

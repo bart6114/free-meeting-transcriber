@@ -11,10 +11,18 @@
    fullscreen and the system hides them (data-fullscreen set by main-app-layout). */
 :root {
   --traffic-lights-inset: 76px;
+  /* Preserve size-7 at the app's 13px root font size. */
+  --sidebar-chrome-button-size: 22.75px;
+  /* Native AppKit center with the configured traffic-light inset on macOS 26. */
+  --sidebar-chrome-center-y: 23px;
+  --sidebar-chrome-padding-top: calc(
+    var(--sidebar-chrome-center-y) - var(--sidebar-chrome-button-size) / 2
+  );
 }
 
 :root[data-fullscreen] {
   --traffic-lights-inset: 12px;
+  --sidebar-chrome-center-y: 20.375px;
 }
 
 .undo-delete-toast-gauge {

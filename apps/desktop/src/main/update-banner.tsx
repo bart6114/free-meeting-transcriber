@@ -356,7 +356,7 @@ export function SidebarTimelineUpdateButton({
       data-tauri-drag-region="false"
       disabled={isDownloading || update.downloadStarting || update.installing}
       className={cn([
-        "relative flex h-7 min-h-7 w-7 min-w-7 shrink-0 items-center justify-center rounded-full p-0",
+        "relative flex size-[var(--sidebar-chrome-button-size)] shrink-0 items-center justify-center rounded-full p-0",
         "bg-brand/10 text-brand hover:bg-brand/20 shadow-sm transition-colors",
         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-hidden",
         "disabled:bg-brand/10 disabled:text-brand disabled:hover:bg-brand/10 disabled:cursor-default disabled:opacity-70",

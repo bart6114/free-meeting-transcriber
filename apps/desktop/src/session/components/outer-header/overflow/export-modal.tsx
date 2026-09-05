@@ -68,7 +68,7 @@ export function ExportModal({
 }) {
   const { t } = useLingui();
   const [format, setFormat] = useState<FileFormat>("pdf");
-  const [includeNote, setIncludeNote] = useState(false);
+  const [includeNote, setIncludeNote] = useState(true);
   const [includeSummary, setIncludeSummary] = useState(true);
   const [includeTranscript, setIncludeTranscript] = useState(false);
 

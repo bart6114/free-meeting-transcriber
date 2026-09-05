@@ -179,7 +179,11 @@ describe("SidebarTimelineUpdateButton", () => {
     });
 
     expect(button.className.split(" ")).toEqual(
-      expect.arrayContaining(["h-7", "w-7", "min-h-7", "min-w-7", "p-0"]),
+      expect.arrayContaining([
+        "size-[var(--sidebar-chrome-button-size)]",
+        "shrink-0",
+        "p-0",
+      ]),
     );
     expect(button.className.split(" ")).toEqual(
       expect.arrayContaining(["bg-brand/10", "hover:bg-brand/20"]),
