@@ -168,10 +168,7 @@ impl Notification {
 impl NotificationSource {
     pub fn default_icon(&self) -> Option<NotificationIcon> {
         match self {
-            Self::Session { .. } => None,
-            Self::MicDetected { app_ids, .. } => app_ids
-                .iter()
-                .find_map(|app_id| NotificationIcon::from_app_id(app_id)),
+            Self::Session { .. } | Self::MicDetected { .. } => None,
         }
     }
 }
@@ -303,19 +300,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn mic_notifications_default_to_first_resolvable_app_icon() {
+    fn mic_notifications_use_application_icon_fallback() {
         let source = NotificationSource::MicDetected {
             app_names: vec!["Zoom".to_string()],
             app_ids: vec!["pid:42".to_string(), "us.zoom.xos".to_string()],
             event_ids: vec![],
         };
 
-        assert_eq!(
-            source.default_icon(),
-            Some(NotificationIcon::BundleId {
-                bundle_id: "us.zoom.xos".to_string(),
-            })
-        );
+        assert_eq!(source.default_icon(), None);
     }
 
     #[test]
@@ -329,7 +321,7 @@ mod tests {
     }
 
     #[test]
-    fn notifications_fill_in_source_default_icon_when_missing() {
+    fn mic_notifications_do_not_use_detected_app_path_as_main_icon() {
         let notification = Notification::builder()
             .title("Title")
             .message("Message")
@@ -340,12 +332,7 @@ mod tests {
             })
             .build();
 
-        assert_eq!(
-            notification.icon,
-            Some(NotificationIcon::Path {
-                path: "/Applications/Zoom.app".to_string(),
-            })
-        );
+        assert_eq!(notification.icon, None);
     }
 
     #[test]
@@ -353,8 +340,10 @@ mod tests {
         let notification = Notification::builder()
             .title("Title")
             .message("Message")
-            .source(NotificationSource::Session {
-                session_id: "session-1".to_string(),
+            .source(NotificationSource::MicDetected {
+                app_names: vec!["Zoom".to_string()],
+                app_ids: vec!["us.zoom.xos".to_string()],
+                event_ids: vec![],
             })
             .icon(NotificationIcon::Hidden)
             .build();
@@ -370,10 +359,19 @@ mod tests {
             .footer(NotificationFooter {
                 text: "Ignore this app?".to_string(),
                 action_label: "YES".to_string(),
-                icon: None,
+                icon: NotificationIcon::from_app_id("us.zoom.xos"),
             })
             .build();
 
+        assert_eq!(
+            notification
+                .footer
+                .as_ref()
+                .and_then(|footer| footer.icon.as_ref()),
+            Some(&NotificationIcon::BundleId {
+                bundle_id: "us.zoom.xos".to_string(),
+            })
+        );
         assert_eq!(
             notification
                 .footer
