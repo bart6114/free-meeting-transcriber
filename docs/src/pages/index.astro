@@ -20,6 +20,18 @@ const downloadUrl =
   }}
 >
   <div class="home-page not-content">
+    <div class="home-hero__backdrop" aria-hidden="true">
+      <img src="/images/forest-leaves.jpg" alt="" fetchpriority="high" />
+      <video
+        id="forest-video"
+        muted
+        loop
+        playsinline
+        preload="none"
+        poster="/images/forest-leaves.jpg"
+        data-src="/videos/forest-leaves.mp4"
+      ></video>
+    </div>
     <main class="home-hero">
       <div class="home-hero__copy">
         <a class="home-hero__brand" href={githubUrl}>
@@ -225,6 +237,65 @@ const downloadUrl =
           Capture the conversation. Keep the useful parts. Own every file.
         </figcaption>
       </figure>
+      <div class="home-hero__ambient-controls">
+        <a href="https://www.pexels.com/video/serene-sunlight-through-lush-forest-leaves-31883946/">
+          Forest film by Joshua Woroniecki / Pexels
+        </a>
+        <button type="button" aria-controls="forest-video" hidden>
+          Play background video
+        </button>
+      </div>
     </main>
   </div>
 </StarlightPage>
+
+<script>
+  const video = document.querySelector<HTMLVideoElement>("#forest-video");
+  const toggle = document.querySelector<HTMLButtonElement>(
+    ".home-hero__ambient-controls button",
+  );
+
+  if (video && toggle) {
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    let wantsPlayback = !reducedMotion.matches;
+
+    const syncToggle = () => {
+      toggle.textContent = video.paused
+        ? "Play background video"
+        : "Pause background video";
+    };
+
+    const play = async () => {
+      if (!video.src) video.src = video.dataset.src!;
+      try {
+        await video.play();
+      } catch {
+        syncToggle();
+      }
+    };
+
+    toggle.hidden = false;
+    video.addEventListener("play", syncToggle);
+    video.addEventListener("pause", syncToggle);
+    video.addEventListener("error", () => {
+      video.hidden = true;
+      toggle.hidden = true;
+    });
+    toggle.addEventListener("click", () => {
+      wantsPlayback = video.paused;
+      if (wantsPlayback) void play();
+      else video.pause();
+    });
+    reducedMotion.addEventListener("change", () => {
+      wantsPlayback = !reducedMotion.matches;
+      if (wantsPlayback && !document.hidden) void play();
+      else video.pause();
+    });
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) video.pause();
+      else if (wantsPlayback) void play();
+    });
+
+    if (wantsPlayback && !document.hidden) void play();
+  }
+</script>
